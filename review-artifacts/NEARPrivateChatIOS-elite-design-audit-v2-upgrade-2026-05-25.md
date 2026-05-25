@@ -3,6 +3,7 @@
 Date: 2026-05-25
 Status: Supplements `NEARPrivateChatIOS-elite-design-product-audit-2026-05-25.md`. Does not replace it.
 Execution brief: use `NEARPrivateChatIOS-next-design-pass-brief-2026-05-25.md` for the next implementation/design pass. That brief resynthesizes this memo into priority order and deliberately defers platform-moat work like Live Activities until P0 visual/product-truth issues are fixed.
+Live-app correction: `NEARPrivateChatIOS-live-app-review-next-pass-2026-05-25.md` and `review-artifacts/live-app-review-2026-05-25/` supersede the screenshot-only assumptions in this memo. Treat this v2 upgrade as strategic background, not the controlling current-state review.
 Inputs: existing audit doc, latest-smoke screenshots, latest-screenshot-index, deep web research (May 2026 cutoff) across ChatGPT, Claude, Perplexity, Gemini, Copilot, Grok, Le Chat, Poe, DeepSeek, Linear, Things 3, Notion, Cash App, Stripe, Signal, 1Password, Apple Wallet, iOS 26 / Liquid Glass HIG, Codex Mobile, Claude Code Mobile, Gemini Spark, NN/g, Smashing, Honeycomb, plus accessibility guidance from Apple HIG / Codakuma / Use Your Loaf.
 
 ## Why a v2
@@ -19,6 +20,8 @@ This document is the deltas to apply on top of the existing audit.
 
 ## Latest screenshot reality check
 
+This section is historical. A later live-app run captured the actual current app under `review-artifacts/live-app-review-2026-05-25/`. Use that pack and `NEARPrivateChatIOS-live-app-review-next-pass-2026-05-25.md` first. The live review confirms the app is materially improved on Home, Composer, Model Picker, More Menu, and Project Context, while exposing new P0 state-truth bugs around setup readiness, Cloud selection, Hosted IronClaw copy, and proof-chip truncation.
+
 The newest captures in `latest-smoke/` show only the Setup screen across four points in time:
 
 - `iphone17pro-current.png` (07:21) — original "Make it yours" setup with Skip/Setup/Finish header + the dense survey below.
@@ -26,7 +29,7 @@ The newest captures in `latest-smoke/` show only the Setup screen across four po
 - `iphone17pro-2026-05-25-post-four-docs.png` (07:37) — same screen, but CTA reads "Start an LLM Council question" while Private Chat is selected. **The CTA/selection mismatch bug is reproduced in screenshot evidence.**
 - `iphone17pro-2026-05-25-after-setup-card-font-fix.png` (08:49) — post-font-fix, same hero, "Ask a private question" CTA. The "Ready on day one" preview card is below fold and not captured.
 
-**Implication.** Whatever the audit says about Home, Composer, Model Picker, Project, Security, Council, Agent, and Share is still working from 2026-05-24 captures. Before the next design pass lands, capture a fresh full set against the current build. The audit's gap section already notes this — fix it before reviewing.
+**Implication.** The 2026-05-24 captures are no longer enough for current-state judgment. Keep the strategic recommendations, but validate every screen-specific critique against the live-app pack before implementing.
 
 ---
 

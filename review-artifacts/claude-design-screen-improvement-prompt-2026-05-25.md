@@ -1,6 +1,6 @@
 # Claude Design Prompt - NEAR Private Chat iOS Screen Improvement Pass
 
-Update: use `review-artifacts/NEARPrivateChatIOS-next-design-pass-brief-2026-05-25.md` as the source-of-truth execution brief. This prompt remains useful background, but the next-design-pass brief supersedes it where priorities differ.
+Update: use `review-artifacts/NEARPrivateChatIOS-live-app-review-next-pass-2026-05-25.md`, `review-artifacts/NEARPrivateChatIOS-next-design-pass-brief-2026-05-25.md`, and `review-artifacts/NEARPrivateChatIOS-capability-setup-next-level-pass-2026-05-25.md` as the source-of-truth execution briefs. This prompt remains useful background, but those briefs supersede it where priorities differ.
 
 Use this as a design/research prompt. Do not start by adding features. Start by making the existing app feel calmer, more premium, and more internally consistent.
 
@@ -22,11 +22,18 @@ Target design principle:
 
 > Ask first. Proof always. Advanced power exactly when needed.
 
+Capability principle:
+
+> Connect capabilities, not routes.
+
+Private chat must work immediately. NEAR AI Cloud and IronClaw should be optional capabilities the user can connect, test, and use inside the same conversation without digging through Account plumbing.
+
 ## What To Review
 
 Review the app screen by screen, using current simulator screenshots and source:
 
 - Setup / onboarding
+- Capabilities / Cloud + IronClaw connection states
 - Home
 - New chat / empty composer
 - Chat thread
@@ -40,14 +47,25 @@ Review the app screen by screen, using current simulator screenshots and source:
 
 Latest screenshot sources to check first:
 
-- `/Users/abhishekvaidyanathan/Desktop/Screenshot 2026-05-25 at 8.38.12 am.png`
+- `review-artifacts/live-app-review-2026-05-25/`
+- `review-artifacts/NEARPrivateChatIOS-live-app-review-next-pass-2026-05-25.md`
+- `/Users/abhishekvaidyanathan/Desktop/Screenshot 2026-05-25 at 8.38.12 am.png`
 - `review-artifacts/latest-smoke/iphone17pro-2026-05-25-after-setup-card-font-fix.png`
 - `review-artifacts/latest-smoke/iphone17pro-2026-05-25-setup-polish-booted.png`
 - `review-artifacts/latest-smoke/iphone17pro-2026-05-25-setup-polish.png`
 - `review-artifacts/latest-smoke/iphone17pro-2026-05-25-post-four-docs.png`
 - `review-artifacts/screenshots-2026-05-24-fresh/`
 
-Use `review-artifacts/latest-screenshot-index-2026-05-25.md` as the screenshot inventory and regenerate any missing post-patch screens before making final calls.
+Use `review-artifacts/latest-screenshot-index-2026-05-25.md` as the screenshot inventory. The 2026-05-24 pack is historical reference only. Regenerate missing post-push screens before making final calls.
+
+Live app bugs to treat as P0 design/product-truth issues, not mere copy polish:
+
+- Setup can show `Ready: LLM Council` while the CTA says `Ask a private question`.
+- `Skip setup` currently applies defaults, opens chat, and preloads a draft; decide whether this is a true skip or a named quick-start action.
+- Selecting a Cloud single model can leave the header in `LLM Council 2` state.
+- Hosted IronClaw can show `Mobile agent ready` empty-state copy.
+- The proof chip can truncate into ambiguous labels like `No model`.
+- Cloud icons can inherit irrelevant accessibility labels such as `Mostly Cloudy`.
 
 Use the screenshot issue below as a representative bug:
 
@@ -104,9 +122,17 @@ Propose a concrete redesign for:
 
 - Make setup feel like a launchpad, not settings.
 - Keep goal text, Beginner/Power, and source style.
-- Hide advanced route toggles unless Power is selected.
+- Hide advanced route/capability setup unless the user opens `Connect more capabilities`.
 - Make "Ready on day one" compact, readable, and consequence-based.
 - CTA must always match the selected route and be sendable.
+
+#### Capabilities
+
+- Add a user-facing surface for Private Inference, NEAR AI Cloud, IronClaw Agent, and Council.
+- Make Cloud and IronClaw easy to connect, test, and recover from when missing.
+- Show capability status without raw developer plumbing.
+- Clearly separate Private proof from Cloud/hosted-agent route labels.
+- Deep-link here from model rows, Agent setup, and route-readiness recovery cards.
 
 #### Home
 
@@ -199,9 +225,10 @@ Return:
 3. `Screen-by-screen findings`: include severity and reason.
 4. `Top 10 design changes`: ordered by leverage.
 5. `Component specs`: Setup plan card, Home hero, Composer, Model row, Proof capsule, Council artifact, Agent run card.
-6. `Copy improvements`: exact replacement copy.
-7. `Implementation map`: Swift files/components likely touched.
-8. `Test plan`: screenshot and accessibility checks.
+6. `Capability setup specs`: Private Inference, NEAR AI Cloud, IronClaw Agent, Council cards; status states; recovery paths.
+7. `Copy improvements`: exact replacement copy.
+8. `Implementation map`: Swift files/components likely touched.
+9. `Test plan`: screenshot and accessibility checks.
 
 ## Constraints
 

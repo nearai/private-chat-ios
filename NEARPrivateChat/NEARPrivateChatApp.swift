@@ -65,24 +65,34 @@ private struct RootView: View {
     @State private var setupAccountID: String?
     @State private var setupInitialProfile = UserSetupProfile.defaults
     @State private var showingSetup = false
+    @State private var legalTermsAccepted = true
 
     var body: some View {
         Group {
             if sessionStore.isSignedIn {
-                AppShellView {
-                    beginSetupRerun()
+                if legalTermsAccepted {
+                    AppShellView {
+                        beginSetupRerun()
+                    }
+                } else {
+                    LegalTermsRequiredView {
+                        acceptLegalTermsForCurrentAccount()
+                    }
                 }
             } else {
                 AuthView()
             }
         }
         .onAppear {
+            refreshLegalTermsAcceptance()
             refreshSetupPresentation()
         }
         .onChange(of: sessionStore.session?.token) { _, _ in
+            refreshLegalTermsAcceptance()
             refreshSetupPresentation()
         }
-        .onChange(of: sessionStore.setupAccountID) { oldAccountID, _ in
+        .onChange(of: sessionStore.setupAccountID) { oldAccountID, accountID in
+            refreshLegalTermsAcceptance(previousAccountID: oldAccountID, currentAccountID: accountID)
             refreshSetupPresentation(previousAccountID: oldAccountID)
         }
         .fullScreenCover(isPresented: $showingSetup) {
@@ -174,9 +184,43 @@ private struct RootView: View {
         try? store.record(.setupCompletedOrSkipped(outcome), context: context)
     }
 
+    private func refreshLegalTermsAcceptance(previousAccountID: String? = nil, currentAccountID: String? = nil) {
+        guard sessionStore.isSignedIn, let accountID = currentAccountID ?? sessionStore.setupAccountID else {
+            legalTermsAccepted = true
+            return
+        }
+
+        if let previousAccountID, previousAccountID != accountID {
+            LegalTermsAcceptanceStore.migrate(from: previousAccountID, to: accountID)
+        }
+
+        if LegalTermsAcceptanceStore.hasAcceptedCurrentVersion(for: accountID) ||
+            LegalTermsAcceptanceStore.consumePendingAcceptance(for: accountID) {
+            legalTermsAccepted = true
+            return
+        }
+
+        legalTermsAccepted = false
+        showingSetup = false
+    }
+
+    private func acceptLegalTermsForCurrentAccount() {
+        guard let accountID = sessionStore.setupAccountID else { return }
+        LegalTermsAcceptanceStore.acceptCurrentVersion(for: accountID)
+        legalTermsAccepted = true
+        refreshSetupPresentation()
+    }
+
     private func refreshSetupPresentation(previousAccountID: String? = nil) {
         guard sessionStore.isSignedIn, let accountID = sessionStore.setupAccountID else {
             setupAccountID = nil
+            setupCompleted = true
+            showingSetup = false
+            return
+        }
+
+        guard LegalTermsAcceptanceStore.hasAcceptedCurrentVersion(for: accountID) else {
+            setupAccountID = accountID
             setupCompleted = true
             showingSetup = false
             return
@@ -194,6 +238,76 @@ private struct RootView: View {
         guard !setupCompleted else { return }
         setupInitialProfile = UserSetupStorage.load(for: accountID) ?? currentSetupProfile
         showingSetup = true
+    }
+}
+
+private struct LegalTermsRequiredView: View {
+    let onAccept: () -> Void
+    @State private var showingTerms = false
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 18) {
+                AuthHeroCard()
+
+                VStack(alignment: .leading, spacing: 14) {
+                    Label("Legal attestation required", systemImage: "checkmark.shield")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(.primary)
+
+                    Text("Accept the current Terms before using private chat, Cloud models, files, sharing, web grounding, LLM Council, or IronClaw agents.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(LegalTerms.signupSummary, id: \.self) { item in
+                            Label(item, systemImage: "checkmark.circle")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Button {
+                        showingTerms = true
+                    } label: {
+                        Label("Review terms", systemImage: "doc.text.magnifyingglass")
+                            .font(.subheadline.weight(.bold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.brandBlue)
+                    .background(Color.brandBlue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                    Button {
+                        onAccept()
+                    } label: {
+                        Text("Accept and continue")
+                            .font(.headline.weight(.bold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white)
+                    .background(Color.brandBlue, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .padding(18)
+                .frame(maxWidth: 390, alignment: .leading)
+                .background(.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.brandBlue.opacity(0.16), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.04), radius: 12, y: 5)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(28)
+        }
+        .background { HomeSurfaceBackground().ignoresSafeArea() }
+        .sheet(isPresented: $showingTerms) {
+            LegalTermsSheet()
+        }
     }
 }
 

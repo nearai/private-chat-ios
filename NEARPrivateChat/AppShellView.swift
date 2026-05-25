@@ -1826,20 +1826,22 @@ private struct ChatToolbar: View {
         } label: {
             let status = chatStore.currentAttestationStatus
             let copy = status.userFacingCopy()
+            let isCloudTrust = chatStore.selectedRouteUsesNearCloud || (chatStore.isCouncilModeEnabled && chatStore.activeCouncilHasNearCloudRoutes)
+            let tint = isCloudTrust ? Color.brandBlue : status.tintColor
             HStack(spacing: 5) {
-                Image(systemName: status.symbolName)
+                Image(systemName: isCloudTrust ? "eye.slash" : status.symbolName)
                     .font(.caption.weight(.bold))
-                Text(compactAttestationLabel(copy.badge))
+                Text(isCloudTrust ? "Anonymized" : compactAttestationLabel(copy.badge))
                     .font(.caption2.weight(.semibold))
                     .lineLimit(1)
             }
-            .foregroundStyle(status.tintColor)
+            .foregroundStyle(tint)
             .padding(.horizontal, 9)
             .frame(height: 34)
-            .background(status.tintColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(status.tintColor.opacity(0.16), lineWidth: 1)
+                    .stroke(tint.opacity(0.16), lineWidth: 1)
             }
         }
         .accessibilityLabel(chatStore.currentAttestationStatus.accessibilityLabel())
@@ -1871,6 +1873,7 @@ private struct ChatToolbar: View {
                 )
             }
             if chatStore.selectedRouteUsesNearCloud || (chatStore.isCouncilModeEnabled && chatStore.activeCouncilHasNearCloudRoutes) {
+                MetadataPill(title: "Anonymized", symbolName: "eye.slash", isPrimary: true)
                 MetadataPill(
                     title: chatStore.effectiveAppWebGroundingEnabled ? "App web on" : "App web off",
                     symbolName: chatStore.effectiveAppWebGroundingEnabled ? "globe" : "globe.slash",
@@ -2341,6 +2344,14 @@ private struct ModelPickerView: View {
         filtered(chatStore.pinnedPickerModels)
     }
 
+    private var recommendedModelIDs: Set<String> {
+        Set(unpinned(featuredModels).map(\.id))
+    }
+
+    private var isSearchingModels: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var councilCandidateModels: [ModelOption] {
         let candidates = filtered(chatStore.pickerModels.filter { chatStore.canUseInCouncil($0.id) })
         let activeIDs = chatStore.activeCouncilModels.map(\.id)
@@ -2364,66 +2375,82 @@ private struct ModelPickerView: View {
                     .listRowBackground(Color.clear)
                 }
                 if selectedTab == .models {
-                    Section {
-                        ModelPickerSummary(
-                            selectedModelName: chatStore.activeModelDisplayName,
-                            selectedModelID: chatStore.selectedModel,
-                            providerName: chatStore.selectedProviderDisplayName,
-                            modelCount: chatStore.pickerModels.count,
-                            councilModelNames: chatStore.councilModelNames,
-                            webSearchEnabled: chatStore.effectiveWebSearchEnabled,
-                            appWebGroundingEnabled: chatStore.effectiveAppWebGroundingEnabled,
-                            planName: chatStore.currentBillingPlanName,
-                            hiddenPlanLockedModelCount: chatStore.hiddenPlanLockedModelCount,
-                            ironclawRemoteWorkstationAvailable: chatStore.ironclawRemoteWorkstationAvailable,
-                            ironclawTokenConfigured: chatStore.ironclawTokenConfigured
-                        )
-                        .listRowInsets(EdgeInsets(top: 4, leading: 14, bottom: 8, trailing: 14))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                    }
-                    Section {
-                        ModelCapabilityFilterBar(activeFilters: $activeFilters)
+                    if !isSearchingModels {
+                        Section {
+                            ModelPickerSummary(
+                                selectedModelName: chatStore.activeModelDisplayName,
+                                selectedModelID: chatStore.selectedModel,
+                                providerName: chatStore.selectedProviderDisplayName,
+                                modelCount: chatStore.pickerModels.count,
+                                councilModelNames: chatStore.councilModelNames,
+                                webSearchEnabled: chatStore.effectiveWebSearchEnabled,
+                                appWebGroundingEnabled: chatStore.effectiveAppWebGroundingEnabled,
+                                planName: chatStore.currentBillingPlanName,
+                                hiddenPlanLockedModelCount: chatStore.hiddenPlanLockedModelCount,
+                                ironclawRemoteWorkstationAvailable: chatStore.ironclawRemoteWorkstationAvailable,
+                                ironclawTokenConfigured: chatStore.ironclawTokenConfigured
+                            )
+                            .listRowInsets(EdgeInsets(top: 4, leading: 14, bottom: 8, trailing: 14))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                        }
+                        Section {
+                            ReasoningEffortPickerCard(
+                                selectedEffort: chatStore.advancedModelParams.reasoningEffort,
+                                appliesToCurrentRoute: chatStore.selectedRouteUsesNearCloud || chatStore.activeCouncilHasNearCloudRoutes,
+                                onSelect: { effort in
+                                    chatStore.setReasoningEffort(effort)
+                                }
+                            )
                             .listRowInsets(EdgeInsets(top: 0, leading: 14, bottom: 8, trailing: 14))
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
+                        }
+                        Section {
+                            ModelCapabilityFilterBar(activeFilters: $activeFilters)
+                                .listRowInsets(EdgeInsets(top: 0, leading: 14, bottom: 8, trailing: 14))
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                        }
                     }
                     modelSection("Pinned", models: pinnedModels, showsCouncilButton: false)
                     modelSection("Recommended", models: unpinned(featuredModels), showsCouncilButton: false)
-                    modelSection("Open / Reasoning", models: unpinned(openWeightModels), showsCouncilButton: false)
-                    modelSection("Private / Verifiable", models: unpinned(privateModels), showsCouncilButton: false)
-                    modelSection("Frontier", models: unpinned(eliteModels), showsCouncilButton: false)
-                    modelSection("NEAR Cloud", models: unpinned(cloudModels), showsCouncilButton: false)
-                    modelSection("General", models: unpinned(standardModels), showsCouncilButton: false)
-                    modelSection("Agents", models: unpinned(agentModels), showsCouncilButton: false)
+                    modelSection("Open / Reasoning", models: secondaryModels(openWeightModels), showsCouncilButton: false)
+                    modelSection("Private / Verifiable", models: secondaryModels(privateModels), showsCouncilButton: false)
+                    modelSection("Frontier", models: secondaryModels(eliteModels), showsCouncilButton: false)
+                    modelSection("NEAR Cloud", models: secondaryModels(cloudModels), showsCouncilButton: false)
+                    modelSection("General", models: secondaryModels(standardModels), showsCouncilButton: false)
+                    modelSection("Agents", models: secondaryModels(agentModels), showsCouncilButton: false)
                 } else {
-                    Section {
-                        CouncilPickerCard(
-                            models: chatStore.activeCouncilModels,
-                            defaultModels: chatStore.defaultCouncilModels,
-                            presets: chatStore.councilPresets,
-                            maxModels: 4,
-                            isCustomizing: $showingCouncilCustomizer,
-                            onUseDefault: {
-                                chatStore.useDefaultCouncilLineup()
-                                dismiss()
-                            },
-                            onUsePreset: { presetID in
-                                chatStore.useCouncilPreset(presetID)
-                            },
-                            onClear: {
-                                chatStore.clearCouncilMode()
-                            },
-                            onRemoveModel: { modelID in
-                                chatStore.toggleCouncilModel(modelID)
-                            }
-                        )
-                        .listRowInsets(EdgeInsets(top: 4, leading: 14, bottom: 8, trailing: 14))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+                    if !isSearchingModels {
+                        Section {
+                            CouncilPickerCard(
+                                models: chatStore.activeCouncilModels,
+                                defaultModels: chatStore.defaultCouncilModels,
+                                presets: chatStore.councilPresets,
+                                maxModels: 4,
+                                isCustomizing: $showingCouncilCustomizer,
+                                onUseDefault: {
+                                    chatStore.useDefaultCouncilLineup()
+                                    dismiss()
+                                },
+                                onUsePreset: { presetID in
+                                    chatStore.useCouncilPreset(presetID)
+                                },
+                                onClear: {
+                                    chatStore.clearCouncilMode()
+                                },
+                                onRemoveModel: { modelID in
+                                    chatStore.toggleCouncilModel(modelID)
+                                }
+                            )
+                            .listRowInsets(EdgeInsets(top: 4, leading: 14, bottom: 8, trailing: 14))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                        }
                     }
-                    if showingCouncilCustomizer {
-                        modelSection("Customize Models", models: councilCandidateModels, showsCouncilButton: true, dismissOnSelect: false)
+                    if showingCouncilCustomizer || isSearchingModels {
+                        modelSection("Choose Council Models", models: councilCandidateModels, showsCouncilButton: true, dismissOnSelect: false)
                     }
                 }
             }
@@ -2437,11 +2464,6 @@ private struct ModelPickerView: View {
                     Button("Done") {
                         dismiss()
                     }
-                }
-            }
-            .onAppear {
-                if chatStore.isCouncilModeEnabled {
-                    selectedTab = .council
                 }
             }
             .task {
@@ -2482,6 +2504,11 @@ private struct ModelPickerView: View {
         models.filter { !chatStore.isPinnedModel($0.id) }
     }
 
+    private func secondaryModels(_ models: [ModelOption]) -> [ModelOption] {
+        let primaryIDs = recommendedModelIDs
+        return unpinned(models).filter { !primaryIDs.contains($0.id) }
+    }
+
     @ViewBuilder
     private func modelSection(_ title: String, models: [ModelOption], showsCouncilButton: Bool, dismissOnSelect: Bool = true) -> some View {
         if !models.isEmpty {
@@ -2514,6 +2541,56 @@ private struct ModelPickerView: View {
                 }
             }
         }
+    }
+}
+
+private struct ReasoningEffortPickerCard: View {
+    let selectedEffort: ModelReasoningEffort
+    let appliesToCurrentRoute: Bool
+    let onSelect: (ModelReasoningEffort) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Image(systemName: "brain.head.profile")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.brandBlue)
+                    .frame(width: 24, height: 24)
+                    .background(Color.brandBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Reasoning effort")
+                        .font(.caption.weight(.semibold))
+                    Text(appliesToCurrentRoute ? "Applied to NEAR Cloud requests when supported" : "Saved for Cloud models and mixed Council runs")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 6) {
+                ForEach(ModelReasoningEffort.allCases) { effort in
+                    Button {
+                        onSelect(effort)
+                    } label: {
+                        Text(effort.title)
+                            .font(.caption.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 32)
+                            .foregroundStyle(effort == selectedEffort ? Color.white : Color.textSecondary)
+                            .background(effort == selectedEffort ? Color.primaryAction : Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Reasoning effort \(effort.title)")
+                    .accessibilityHint(effort.detail)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -2597,9 +2674,9 @@ private struct CouncilPickerCard: View {
                     .background(Color.brandSky.opacity(0.34), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Auto-Council")
+                    Text("Council")
                         .font(.subheadline.weight(.semibold))
-                    Text("Picks a private-first lineup for comparison and synthesis")
+                    Text("Choose models manually, or start from a recommended lineup")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -2647,7 +2724,7 @@ private struct CouncilPickerCard: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(!isCouncilActive)
-                        .accessibilityLabel(isCouncilActive ? "Remove \(model.displayName) from Council" : "Auto-Council includes \(model.displayName)")
+                        .accessibilityLabel(isCouncilActive ? "Remove \(model.displayName) from Council" : "Recommended lineup includes \(model.displayName)")
                     }
                 } else {
                     StatusChip(title: "Waiting for available models", symbolName: "clock", isPrimary: false)
@@ -2672,7 +2749,7 @@ private struct CouncilPickerCard: View {
                     Button {
                         isCustomizing.toggle()
                     } label: {
-                        Label(isCustomizing ? "Hide Models" : "Add / Remove", systemImage: "slider.horizontal.3")
+                        Label(isCustomizing ? "Hide Models" : "Choose Models", systemImage: "slider.horizontal.3")
                             .font(.caption.weight(.semibold))
                             .frame(maxWidth: .infinity, minHeight: 40)
                     }
@@ -2741,17 +2818,17 @@ private struct CouncilPickerCard: View {
     }
 
     private var autoCouncilButtonTitle: String {
-        isAutoCouncilActive ? "Auto-Council On" : "Use Auto-Council"
+        isAutoCouncilActive ? "Recommended On" : "Use Recommended"
     }
 
     private var councilStateTitle: String {
         if isAutoCouncilActive {
-            return "Auto-Council active"
+            return "Recommended lineup active"
         }
         if isCouncilActive {
             return "Custom Council active"
         }
-        return defaultModels.count > 1 ? "Auto-Council ready" : "Council unavailable"
+        return defaultModels.count > 1 ? "Recommended lineup ready" : "Council unavailable"
     }
 
     private var councilStateDetail: String {
@@ -2841,6 +2918,9 @@ private struct ModelPickerSummary: View {
             ChipFlowLayout(spacing: 6, lineSpacing: 6) {
                 StatusChip(title: providerChipTitle, symbolName: providerChipSymbol, isPrimary: false)
                 StatusChip(title: routeCostTitle, symbolName: routeCostSymbol, isPrimary: isNearCloudProvider || isIronclawProvider)
+                if isNearCloudProvider {
+                    StatusChip(title: "Not attested", symbolName: "shield.slash", isPrimary: false)
+                }
                 if councilModelNames.count > 1, !isNearCloudProvider, !isIronclawProvider {
                     StatusChip(title: "Council \(councilModelNames.count)", symbolName: "square.grid.2x2", isPrimary: true)
                 }
@@ -2875,10 +2955,10 @@ private struct ModelPickerSummary: View {
 
     private var summaryText: String {
         if isIronclawProvider {
-            return isHostedIronclaw ? "Remote git, code, shell, and research route" : "Phone-safe agent with hosted handoff"
+            return isHostedIronclaw ? "Hosted git, code, shell, and research route" : "Phone-safe agent with hosted handoff"
         }
         if isNearCloudProvider {
-            return "External cloud route"
+            return "Anonymized provider route, outside TEE proof"
         }
         if councilModelNames.count > 1 {
             return councilModelNames.prefix(3).joined(separator: " · ") +
@@ -2910,7 +2990,7 @@ private struct ModelPickerSummary: View {
             return ironclawTokenConfigured ? "Token saved" : "Connect token"
         }
         if isNearCloudProvider {
-            return "Bring key"
+            return "Anonymized"
         }
         return "\(planName.capitalized) plan"
     }
@@ -2920,7 +3000,7 @@ private struct ModelPickerSummary: View {
             return ironclawTokenConfigured ? "key.fill" : "key"
         }
         if isNearCloudProvider {
-            return "key"
+            return "eye.slash"
         }
         return "creditcard"
     }
@@ -3096,10 +3176,10 @@ private struct ModelPickerRow: View {
 
     private var routeFactTitle: String {
         if model.isNearCloudModel {
-            return "Bring key"
+            return "NEAR Cloud"
         }
         if model.isIronclawModel {
-            return "Agent route"
+            return model.isIronclawHostedModel ? "Hosted agent" : "Phone agent"
         }
         if model.isLowerPriorityModel {
             return "Older"
@@ -3109,7 +3189,7 @@ private struct ModelPickerRow: View {
 
     private var routeFactSymbol: String {
         if model.isNearCloudModel {
-            return "key"
+            return "cloud"
         }
         if model.isIronclawModel {
             return "terminal"
@@ -3135,7 +3215,7 @@ private struct ModelPickerRow: View {
 
     private var proofFactTitle: String? {
         if model.isNearCloudModel {
-            return "External"
+            return "Anonymized"
         }
         if model.isIronclawModel {
             return model.isIronclawHostedModel ? "Hosted" : "On phone"
@@ -3158,7 +3238,7 @@ private struct ModelPickerRow: View {
 
     private var proofFactSymbol: String {
         if model.isNearCloudModel {
-            return "arrow.triangle.branch"
+            return "eye.slash"
         }
         if model.isIronclawModel {
             return model.isIronclawHostedModel ? "network" : "iphone"
@@ -6339,6 +6419,7 @@ private struct AccountSettingsView: View {
     @State private var isSavingSettings = false
     @State private var showingChatImporter = false
     @State private var showingShareGroups = false
+    @State private var showingCapabilities = false
     @State private var isImportingChats = false
     @State private var powerToolsUnlocked = false
     @FocusState private var focusedPowerToolField: PowerToolField?
@@ -6376,6 +6457,18 @@ private struct AccountSettingsView: View {
                         }
                     }
                     .padding(.vertical, 4)
+                }
+
+                Section("Capabilities") {
+                    Button {
+                        showingCapabilities = true
+                    } label: {
+                        CapabilitiesEntryRow(
+                            statusLine: capabilitySummary,
+                            detail: "See what is ready now, what needs setup, and which routes keep proof."
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 Section("Composer Setup") {
@@ -6715,6 +6808,16 @@ private struct AccountSettingsView: View {
                 ShareGroupsView()
                     .environmentObject(chatStore)
             }
+            .sheet(isPresented: $showingCapabilities) {
+                CapabilitiesView(
+                    onOpenAccountSettings: nil,
+                    onOpenSecurity: nil,
+                    onOpenAgentWorkspace: nil,
+                    onRunSetupAgain: nil
+                )
+                .environmentObject(chatStore)
+                .environmentObject(sessionStore)
+            }
         }
         .platformLargeDetent()
     }
@@ -6751,6 +6854,14 @@ private struct AccountSettingsView: View {
 
     private var showsPowerTools: Bool {
         powerToolsUnlocked || isPowerMode || chatStore.routeReadinessIssue != nil
+    }
+
+    private var capabilitySummary: String {
+        [
+            "Private ready",
+            chatStore.nearCloudKeyConfigured ? "Cloud connected" : "Cloud not connected",
+            chatStore.ironclawRemoteWorkstationAvailable ? "Agent connected" : "Agent phone ready"
+        ].joined(separator: " · ")
     }
 
     private func revealPowerTools(focus: PowerToolField? = nil) {
@@ -6824,6 +6935,485 @@ private struct AccountSettingsView: View {
             parts.append("\(trialDays)d trial")
         }
         return parts.isEmpty ? "Plan details unavailable" : parts.joined(separator: " · ")
+    }
+}
+
+private struct CapabilitiesEntryRow: View {
+    let statusLine: String
+    let detail: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "square.grid.2x2")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.brandBlue)
+                .frame(width: 34, height: 34)
+                .background(Color.brandBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Capability Center")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(statusLine)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.brandBlue)
+                    .lineLimit(2)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+private struct CapabilitiesView: View {
+    @EnvironmentObject private var chatStore: ChatStore
+    @EnvironmentObject private var sessionStore: SessionStore
+    @Environment(\.dismiss) private var dismiss
+
+    let onOpenAccountSettings: (() -> Void)?
+    let onOpenSecurity: (() -> Void)?
+    let onOpenAgentWorkspace: (() -> Void)?
+    let onRunSetupAgain: (() -> Void)?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    capabilityHeader
+                    CapabilityStatusStrip(items: statusItems)
+
+                    CapabilityCard(
+                        iconName: "lock.shield",
+                        title: "Private Inference",
+                        status: privateStatus,
+                        statusColor: privateStatusColor,
+                        summary: "Private chat works immediately on iPhone and can attach proof when the selected route supports it.",
+                        trustLine: "Trust boundary: attestation proves the serving environment, not that an answer is true.",
+                        detail: privateDetail,
+                        primaryAction: privatePrimaryAction,
+                        secondaryAction: nil
+                    )
+
+                    CapabilityCard(
+                        iconName: "cloud.fill",
+                        title: "NEAR AI Cloud",
+                        status: cloudStatus,
+                        statusColor: cloudStatusColor,
+                        summary: "Connect Cloud when you want more external models inside the same conversation flow.",
+                        trustLine: "Trust boundary: Cloud turns are anonymized or proxied, but they are not NEAR Private TEE proof.",
+                        detail: cloudDetail,
+                        primaryAction: cloudPrimaryAction,
+                        secondaryAction: nil
+                    )
+
+                    CapabilityCard(
+                        iconName: "terminal.fill",
+                        title: "IronClaw Agent",
+                        status: agentStatus,
+                        statusColor: agentStatusColor,
+                        summary: "Use phone-safe agent skills now, then hand off repo, shell, and workstation tasks when hosted IronClaw is connected.",
+                        trustLine: "Trust boundary: agent runs can read files, use tools, and act with any connected credentials.",
+                        detail: agentDetail,
+                        primaryAction: agentPrimaryAction,
+                        secondaryAction: agentSecondaryAction
+                    )
+
+                    CapabilityCard(
+                        iconName: "square.grid.2x2.fill",
+                        title: "Council",
+                        status: councilStatus,
+                        statusColor: councilStatusColor,
+                        summary: "Compare private and Cloud models in one chat, then synthesize the strongest answer.",
+                        trustLine: "Trust boundary: mixed councils can include both proof-backed private legs and external Cloud legs.",
+                        detail: councilDetail,
+                        primaryAction: councilPrimaryAction,
+                        secondaryAction: nil
+                    )
+
+                    if let footerAction = footerAction {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Next step")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            CapabilityActionButton(action: footerAction)
+                        }
+                        .padding(.top, 4)
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 20)
+                .frame(maxWidth: 640, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .background(HomeSurfaceBackground().ignoresSafeArea())
+            .navigationTitle("Capabilities")
+            .platformInlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .platformLargeDetent()
+    }
+
+    private var capabilityHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Private chat is ready now. Connect Cloud and IronClaw only when you need broader model coverage or agent runs.")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(headerStatusLine)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let email = sessionStore.profile?.user.email {
+                Text(email)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var statusItems: [CapabilityStatusItemModel] {
+        [
+            CapabilityStatusItemModel(title: "Private", value: privateStatus, tint: privateStatusColor),
+            CapabilityStatusItemModel(title: "Cloud", value: cloudStatus, tint: cloudStatusColor),
+            CapabilityStatusItemModel(title: "Agent", value: agentStatus, tint: agentStatusColor),
+            CapabilityStatusItemModel(title: "Council", value: councilStatus, tint: councilStatusColor)
+        ]
+    }
+
+    private var headerStatusLine: String {
+        [
+            "Private ready",
+            chatStore.nearCloudKeyConfigured ? "Cloud connected" : "Cloud not connected",
+            chatStore.ironclawRemoteWorkstationAvailable ? "Agent connected" : "Agent phone ready"
+        ].joined(separator: " · ")
+    }
+
+    private var privateStatus: String {
+        guard let snapshot = chatStore.attestationSnapshot else { return "Ready" }
+        switch AttestationFreshness.classify(attestedAt: snapshot.fetchedAt) {
+        case .underTwoMinutes:
+            return "Proof fresh"
+        case .underOneHour:
+            return "Proof checked"
+        case .stale:
+            return "Proof stale"
+        }
+    }
+
+    private var privateStatusColor: Color {
+        guard let snapshot = chatStore.attestationSnapshot else { return Color.brandBlue }
+        switch AttestationFreshness.classify(attestedAt: snapshot.fetchedAt) {
+        case .underTwoMinutes, .underOneHour:
+            return Color.proofVerified
+        case .stale:
+            return Color.proofStale
+        }
+    }
+
+    private var privateDetail: String {
+        guard let snapshot = chatStore.attestationSnapshot else {
+            return "Current route: \(chatStore.selectedProviderDisplayName). Fetch proof from Security when you need a signed private-route report."
+        }
+
+        let coveredCount = max(snapshot.modelAttestationCount, snapshot.coveredModelIDs.count)
+        let freshness = AttestationFreshness.classify(attestedAt: snapshot.fetchedAt).shortLabel
+        let countLabel = "\(coveredCount) model\(coveredCount == 1 ? "" : "s")"
+        return "Last report: \(countLabel) covered · \(freshness) · current route \(chatStore.selectedProviderDisplayName)."
+    }
+
+    private var cloudStatus: String {
+        chatStore.nearCloudKeyConfigured ? "Connected" : "Not connected"
+    }
+
+    private var cloudStatusColor: Color {
+        chatStore.nearCloudKeyConfigured ? Color.brandBlue : Color.proofStale
+    }
+
+    private var cloudDetail: String {
+        if chatStore.nearCloudKeyConfigured {
+            let plan = chatStore.billingSnapshot?.activeSubscription?.plan ?? "API key saved"
+            return chatStore.selectedRouteUsesNearCloud
+                ? "Current route uses \(chatStore.selectedModelDisplayName) through NEAR Cloud. \(plan)."
+                : "Cloud unlocks premium external model rows in the picker. \(plan)."
+        }
+        return "Add a NEAR Cloud key before sending with locked Cloud routes or mixed Cloud councils."
+    }
+
+    private var agentStatus: String {
+        if chatStore.ironclawRemoteWorkstationAvailable {
+            return "Workstation connected"
+        }
+        if chatStore.agentModels.contains(where: { $0.id == ModelOption.ironclawMobileModelID }) {
+            return "Phone ready"
+        }
+        return "Not ready"
+    }
+
+    private var agentStatusColor: Color {
+        if chatStore.ironclawRemoteWorkstationAvailable {
+            return Color.proofVerified
+        }
+        return chatStore.agentModels.contains(where: { $0.id == ModelOption.ironclawMobileModelID }) ? Color.brandBlue : Color.proofStale
+    }
+
+    private var agentDetail: String {
+        if let verifiedAt = chatStore.ironclawLastVerifiedAt, chatStore.ironclawRemoteWorkstationAvailable {
+            return "Hosted tools last verified \(verifiedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()))."
+        }
+        return chatStore.ironclawStatusText
+    }
+
+    private var councilStatus: String {
+        let activeCount = chatStore.councilModelIDs.count
+        if activeCount >= 2 {
+            return "Current lineup ready"
+        }
+        if chatStore.defaultCouncilModels.count >= 2 {
+            return "Auto lineup ready"
+        }
+        return "Needs one more model"
+    }
+
+    private var councilStatusColor: Color {
+        (chatStore.councilModelIDs.count >= 2 || chatStore.defaultCouncilModels.count >= 2) ? Color.brandBlue : Color.proofStale
+    }
+
+    private var councilDetail: String {
+        let models = chatStore.councilModelNames.isEmpty ? chatStore.defaultCouncilModels.map(\.displayName) : chatStore.councilModelNames
+        let lineup = models.prefix(3).joined(separator: " · ")
+        let suffix = models.count > 3 ? " +\(models.count - 3) more" : ""
+
+        if models.isEmpty {
+            return "Council turns on once at least two compatible chat models are available."
+        }
+
+        if !chatStore.nearCloudKeyConfigured,
+           chatStore.defaultCouncilModels.contains(where: \.isNearCloudModel) {
+            return "Auto lineup is available, but Cloud legs stay locked until a key is added. \(lineup)\(suffix)."
+        }
+
+        return "Lineup: \(lineup)\(suffix)."
+    }
+
+    private var privatePrimaryAction: CapabilityCardAction? {
+        guard let onOpenSecurity else { return nil }
+        return CapabilityCardAction(title: "Open Security", systemImage: "checkmark.shield", role: .primary) {
+            dismissThen(onOpenSecurity)
+        }
+    }
+
+    private var cloudPrimaryAction: CapabilityCardAction? {
+        guard let onOpenAccountSettings else { return nil }
+        return CapabilityCardAction(
+            title: chatStore.nearCloudKeyConfigured ? "Manage Cloud" : "Add Cloud Key",
+            systemImage: chatStore.nearCloudKeyConfigured ? "slider.horizontal.3" : "key",
+            role: .primary
+        ) {
+            dismissThen(onOpenAccountSettings)
+        }
+    }
+
+    private var agentPrimaryAction: CapabilityCardAction? {
+        if chatStore.ironclawRemoteWorkstationAvailable, let onOpenAgentWorkspace {
+            return CapabilityCardAction(title: "Open Agent", systemImage: "terminal", role: .primary) {
+                dismissThen(onOpenAgentWorkspace)
+            }
+        }
+        guard let onOpenAccountSettings else { return nil }
+        return CapabilityCardAction(title: "Connect Agent", systemImage: "point.3.connected.trianglepath.dotted", role: .primary) {
+            dismissThen(onOpenAccountSettings)
+        }
+    }
+
+    private var agentSecondaryAction: CapabilityCardAction? {
+        guard chatStore.ironclawRemoteWorkstationAvailable, let onOpenAccountSettings else { return nil }
+        return CapabilityCardAction(title: "Manage Endpoint", systemImage: "slider.horizontal.3", role: .secondary) {
+            dismissThen(onOpenAccountSettings)
+        }
+    }
+
+    private var councilPrimaryAction: CapabilityCardAction? {
+        guard chatStore.councilModelIDs.count < 2, chatStore.defaultCouncilModels.count >= 2 else { return nil }
+        return CapabilityCardAction(title: "Use Auto-Council", systemImage: "square.grid.2x2", role: .primary) {
+            chatStore.useDefaultCouncilLineup()
+        }
+    }
+
+    private var footerAction: CapabilityCardAction? {
+        guard let onRunSetupAgain else { return nil }
+        return CapabilityCardAction(title: "Run Setup Again", systemImage: "slider.horizontal.3", role: .secondary) {
+            dismissThen(onRunSetupAgain)
+        }
+    }
+
+    private func dismissThen(_ action: @escaping () -> Void) {
+        dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            action()
+        }
+    }
+}
+
+private struct CapabilityStatusItemModel: Identifiable {
+    let title: String
+    let value: String
+    let tint: Color
+
+    var id: String { title }
+}
+
+private struct CapabilityStatusStrip: View {
+    let items: [CapabilityStatusItemModel]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(items) { item in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.title)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Text(item.value)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(item.tint)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(Color.appPanelBackground, in: Capsule())
+                }
+            }
+        }
+    }
+}
+
+private struct CapabilityCardAction {
+    enum Role {
+        case primary
+        case secondary
+    }
+
+    let title: String
+    let systemImage: String
+    let role: Role
+    let action: () -> Void
+}
+
+private struct CapabilityCard: View {
+    let iconName: String
+    let title: String
+    let status: String
+    let statusColor: Color
+    let summary: String
+    let trustLine: String
+    let detail: String
+    let primaryAction: CapabilityCardAction?
+    let secondaryAction: CapabilityCardAction?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: iconName)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(statusColor)
+                    .frame(width: 38, height: 38)
+                    .background(statusColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(status)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(statusColor)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            Text(summary)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(trustLine)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if primaryAction != nil || secondaryAction != nil {
+                HStack(spacing: 8) {
+                    if let primaryAction {
+                        CapabilityActionButton(action: primaryAction)
+                    }
+                    if let secondaryAction {
+                        CapabilityActionButton(action: secondaryAction)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.border, lineWidth: 1)
+        }
+    }
+}
+
+private struct CapabilityActionButton: View {
+    let action: CapabilityCardAction
+
+    var body: some View {
+        Button(action: action.action) {
+            Label(action.title, systemImage: action.systemImage)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .foregroundStyle(action.role == .primary ? Color.white : Color.primaryAction)
+                .frame(maxWidth: .infinity)
+                .frame(height: 36)
+                .background(backgroundShape)
+                .overlay {
+                    if action.role == .secondary {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.appBorder, lineWidth: 1)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var backgroundShape: some View {
+        if action.role == .primary {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.primaryAction)
+        } else {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.appSecondaryBackground)
+        }
     }
 }
 
@@ -7258,12 +7848,16 @@ private struct SecurityView: View {
     }
 
     private var attestationSummary: some View {
+        if chatStore.selectedRouteUsesNearCloud || (chatStore.isCouncilModeEnabled && chatStore.activeCouncilHasNearCloudRoutes) {
+            return AnyView(cloudTrustSummary)
+        }
+
         let proof = ProofCapsuleViewModel(
             status: chatStore.currentAttestationStatus,
             isLoading: chatStore.isLoadingAttestation,
             modelID: chatStore.selectedModel
         )
-        return VStack(alignment: .leading, spacing: 12) {
+        return AnyView(VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: proof.symbolName)
                     .font(.title3.weight(.semibold))
@@ -7274,6 +7868,8 @@ private struct SecurityView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(proof.title)
                         .font(.headline)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.86)
                     Text(proof.detail)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -7281,18 +7877,46 @@ private struct SecurityView: View {
                 }
             }
 
-            HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
                 ProofCapsule(viewModel: proof)
                 Text(AttestationEducation.standard.summary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(chatStore.currentAttestationStatus.accessibilityLabel())
-        .accessibilityHint(chatStore.currentAttestationStatus.accessibilityHint())
+        .accessibilityHint(chatStore.currentAttestationStatus.accessibilityHint()))
+    }
+
+    private var cloudTrustSummary: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "eye.slash")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(Color.brandBlue)
+                    .frame(width: 44, height: 44)
+                    .background(Color.brandBlue.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Anonymized cloud route")
+                        .font(.headline)
+                    Text("NEAR Cloud forwards the request without provider-facing app identity. It is not NEAR Private TEE-attested.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            StatusChip(title: "Anonymized · not attested", symbolName: "cloud", isPrimary: true)
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("NEAR Cloud route anonymized, not TEE-attested")
     }
 
     private var canFetchAttestation: Bool {
@@ -9440,6 +10064,7 @@ private struct InputBar: View {
     @State private var showingSecurity = false
     @State private var showingAgentWorkspace = false
     @State private var showingAccountSettings = false
+    @State private var showingCapabilities = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -9471,7 +10096,8 @@ private struct InputBar: View {
                 RouteReadinessRecoveryCard(
                     issue: issue,
                     onPrimaryAction: { handleRouteReadinessRecovery(issue.recoveryAction) },
-                    onSwitchPrivate: { chatStore.performRouteReadinessRecovery(.switchToPrivate) }
+                    onSwitchPrivate: { chatStore.performRouteReadinessRecovery(.switchToPrivate) },
+                    onViewCapabilities: { showingCapabilities = true }
                 )
             } else if let notice = chatStore.selectedRouteNotice {
                 Label(notice, systemImage: chatStore.selectedRouteUsesNearCloud ? "cloud" : "point.3.connected.trianglepath.dotted")
@@ -9584,6 +10210,22 @@ private struct InputBar: View {
             AccountSettingsView(onRunSetupAgain: {})
                 .environmentObject(chatStore)
                 .environmentObject(sessionStore)
+        }
+        .sheet(isPresented: $showingCapabilities) {
+            CapabilitiesView(
+                onOpenAccountSettings: {
+                    showingAccountSettings = true
+                },
+                onOpenSecurity: {
+                    showingSecurity = true
+                },
+                onOpenAgentWorkspace: {
+                    showingAgentWorkspace = true
+                },
+                onRunSetupAgain: nil
+            )
+            .environmentObject(chatStore)
+            .environmentObject(sessionStore)
         }
     }
 
@@ -9900,6 +10542,7 @@ private struct RouteReadinessRecoveryCard: View {
     let issue: ChatStore.RouteReadinessIssue
     let onPrimaryAction: () -> Void
     let onSwitchPrivate: () -> Void
+    let onViewCapabilities: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -9950,6 +10593,13 @@ private struct RouteReadinessRecoveryCard: View {
                     .buttonStyle(.plain)
                 }
             }
+
+            Button(action: onViewCapabilities) {
+                Label("View Capabilities", systemImage: "square.grid.2x2")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.primaryAction)
+            }
+            .buttonStyle(.plain)
         }
         .padding(10)
         .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -10568,7 +11218,7 @@ private struct SearchContextStrip: View {
         }
         value = value
             .replacingOccurrences(
-                of: #"(?i)^IronClaw Agent Mission:\s*(?:[^:]+:\s*)?"#,
+                of: #"(?i)^(?:IronClaw Agent|Hosted IronClaw) Mission:\s*(?:[^:]+:\s*)?"#,
                 with: "",
                 options: .regularExpression
             )
@@ -10646,7 +11296,7 @@ private extension ChatMessage {
             return "IronClaw Mobile"
         }
         if model == ModelOption.ironclawModelID {
-            return "IronClaw Agent"
+            return "Hosted IronClaw"
         }
         if model == ModelOption.llmCouncilSynthesisModelID {
             return "Council Synthesis"

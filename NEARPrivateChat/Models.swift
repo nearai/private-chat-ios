@@ -141,6 +141,141 @@ struct AuthSession: Codable, Equatable {
     var isNewUser: Bool
 }
 
+struct LegalTermsSection: Identifiable, Hashable {
+    var id: String { title }
+    let title: String
+    let body: String
+}
+
+enum LegalTerms {
+    static let version = "2026-05-25"
+    static let effectiveDate = "May 25, 2026"
+    static let appTermsDocumentName = "TERMS_AND_CONDITIONS.md"
+    static let nearAIServicesTermsURL = URL(string: "https://near.ai/terms-of-service")!
+    static let nearAICloudTermsURL = URL(string: "https://near.ai/near-ai-cloud-terms-of-service")!
+    static let nearAIAcceptableUseURL = URL(string: "https://near.ai/acceptable-use-policy")!
+    static let nearAIPrivacyPolicyURL = URL(string: "https://near.ai/privacy-policy")!
+    static let ironclawRepositoryURL = URL(string: "https://github.com/nearai/ironclaw")!
+
+    static let acceptanceText = "I attest that I am at least 18, I agree to the NEAR Private Chat iOS Terms, NEAR AI Services Terms, NEAR AI Cloud Terms, Acceptable Use Policy, and applicable IronClaw/third-party terms, and I understand that networked models, web search, files, and agents can send selected content off this device."
+
+    static let signupSummary = [
+        "Required before sign in.",
+        "Applies to private chat, NEAR AI Cloud, LLM Council, files, sharing, web, and IronClaw.",
+        "Cloud premium models are anonymized/proxied, not attested.",
+        "Attestation is proof of serving environment, not proof that an answer is true.",
+        "Agent actions and connected keys remain your responsibility."
+    ]
+
+    static let sections: [LegalTermsSection] = [
+        LegalTermsSection(
+            title: "Acceptance",
+            body: "You must accept these Terms before signing in or using the App. If you use the App for an organization, you represent that you are authorized to bind that organization. The App stores the accepted Terms version and acceptance time locally, and it may require renewed acceptance after material updates."
+        ),
+        LegalTermsSection(
+            title: "Connected Terms",
+            body: "The App may connect to NEAR AI Services, NEAR AI Cloud, and IronClaw. Your use is also subject to the current NEAR AI Services Terms, NEAR AI Cloud Terms, NEAR AI Acceptable Use Policy, NEAR AI Privacy Policy, IronClaw licenses, App Store terms, and applicable third-party model/provider terms. Upstream terms control for the upstream service they govern."
+        ),
+        LegalTermsSection(
+            title: "Age, Eligibility, and Account Security",
+            body: "You must be at least 18 and legally permitted to use the App and connected services. You are responsible for your account, device, API keys, session tokens, SSH keys, repositories, connected workstations, agent endpoints, backups, and recovery methods."
+        ),
+        LegalTermsSection(
+            title: "Privacy, Cloud, and Proof",
+            body: "Private or attested routes may provide verification metadata when supported by the service. NEAR AI Cloud routes can include open-weight and premium closed-source models; premium routes may be anonymously proxied to third-party providers and may not have TEE attestation in the App. Attestation is cryptographic evidence about where a request was served, not a guarantee that an answer is accurate, safe, lawful, complete, or suitable."
+        ),
+        LegalTermsSection(
+            title: "Files, Search, and Context",
+            body: "Prompts, files, extracted text, saved links, project instructions, memory, source packs, imports, and web queries may leave your device when you enable or use networked routes. Search results, links, snippets, and imported content are untrusted and may be inaccurate, malicious, copyrighted, private, or prompt-injection material."
+        ),
+        LegalTermsSection(
+            title: "IronClaw Agents",
+            body: "IronClaw Mobile and hosted IronClaw can inspect or modify files, interact with repositories, run commands and tests, call tools, browse, use configured credentials, or operate on a local or hosted workstation. You are responsible for every instruction, approval, connected permission, credential, repository, endpoint, and resulting action."
+        ),
+        LegalTermsSection(
+            title: "Acceptable Use",
+            body: "You may not use the App for illegal, harmful, infringing, abusive, deceptive, unsafe, sanctioned, privacy-invasive, credential-theft, malware, unauthorized-access, spam, harassment, or high-risk activity without required legal basis, approvals, safeguards, and human oversight. You must comply with the NEAR AI Acceptable Use Policy and all applicable laws."
+        ),
+        LegalTermsSection(
+            title: "Outputs and Professional Advice",
+            body: "AI outputs can be wrong, incomplete, outdated, biased, unsafe, or unsuitable. You are responsible for reviewing and validating outputs before relying on them, publishing them, or using them in consequential contexts. The App does not provide legal, medical, financial, tax, investment, safety-critical, or other professional advice."
+        ),
+        LegalTermsSection(
+            title: "Billing, Sharing, and Exports",
+            body: "Some routes require API keys, usage credits, subscriptions, or rate limits. You are responsible for usage caused by your account, keys, agents, and connected users. Shared links, write grants, imports, exports, signed transcripts, file previews, pasteboard actions, and screenshots can expose private data; confirm recipients and contents before sharing."
+        ),
+        LegalTermsSection(
+            title: "Disclaimer",
+            body: "The App and experimental features are provided as is and as available to the fullest extent permitted by law. Features may fail, change, stall, be unavailable, or produce unintended outputs or actions. Limitations of liability, indemnity, governing law, dispute, contact, and regional clauses must be finalized by counsel before public release."
+        )
+    ]
+}
+
+enum LegalTermsAcceptanceStore {
+    private static let pendingVersionKey = "legalTerms.pending.version"
+    private static let pendingAcceptedAtKey = "legalTerms.pending.acceptedAt"
+    private static let scopedVersionPrefix = "legalTerms.accepted.version"
+    private static let scopedAcceptedAtPrefix = "legalTerms.accepted.at"
+
+    static func hasPendingCurrentVersion(defaults: UserDefaults = .standard) -> Bool {
+        defaults.string(forKey: pendingVersionKey) == LegalTerms.version
+    }
+
+    static func recordPendingAcceptance(defaults: UserDefaults = .standard, now: Date = Date()) {
+        defaults.set(LegalTerms.version, forKey: pendingVersionKey)
+        defaults.set(ISO8601DateFormatter().string(from: now), forKey: pendingAcceptedAtKey)
+    }
+
+    static func clearPendingAcceptance(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: pendingVersionKey)
+        defaults.removeObject(forKey: pendingAcceptedAtKey)
+    }
+
+    static func hasAcceptedCurrentVersion(for accountID: String, defaults: UserDefaults = .standard) -> Bool {
+        defaults.string(forKey: scopedVersionKey(for: accountID)) == LegalTerms.version
+    }
+
+    @discardableResult
+    static func consumePendingAcceptance(for accountID: String, defaults: UserDefaults = .standard) -> Bool {
+        guard hasPendingCurrentVersion(defaults: defaults) else { return false }
+        let acceptedAt = defaults.string(forKey: pendingAcceptedAtKey) ?? ISO8601DateFormatter().string(from: Date())
+        defaults.set(LegalTerms.version, forKey: scopedVersionKey(for: accountID))
+        defaults.set(acceptedAt, forKey: scopedAcceptedAtKey(for: accountID))
+        clearPendingAcceptance(defaults: defaults)
+        return true
+    }
+
+    static func acceptCurrentVersion(for accountID: String, defaults: UserDefaults = .standard, now: Date = Date()) {
+        defaults.set(LegalTerms.version, forKey: scopedVersionKey(for: accountID))
+        defaults.set(ISO8601DateFormatter().string(from: now), forKey: scopedAcceptedAtKey(for: accountID))
+    }
+
+    static func migrate(from oldAccountID: String, to newAccountID: String, defaults: UserDefaults = .standard) {
+        guard oldAccountID != newAccountID,
+              hasAcceptedCurrentVersion(for: oldAccountID, defaults: defaults),
+              !hasAcceptedCurrentVersion(for: newAccountID, defaults: defaults) else { return }
+        defaults.set(LegalTerms.version, forKey: scopedVersionKey(for: newAccountID))
+        let acceptedAt = defaults.string(forKey: scopedAcceptedAtKey(for: oldAccountID)) ?? ISO8601DateFormatter().string(from: Date())
+        defaults.set(acceptedAt, forKey: scopedAcceptedAtKey(for: newAccountID))
+    }
+
+    private static func scopedVersionKey(for accountID: String) -> String {
+        "\(scopedVersionPrefix).\(normalizedAccountID(accountID))"
+    }
+
+    private static func scopedAcceptedAtKey(for accountID: String) -> String {
+        "\(scopedAcceptedAtPrefix).\(normalizedAccountID(accountID))"
+    }
+
+    private static func normalizedAccountID(_ accountID: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        let scalars = accountID.unicodeScalars.map { scalar in
+            allowed.contains(scalar) ? Character(scalar).description : "_"
+        }
+        return String(scalars.joined()).prefix(96).description
+    }
+}
+
 struct UserProfile: Decodable, Identifiable, Hashable {
     struct User: Decodable, Hashable {
         let id: String
@@ -2839,7 +2974,7 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             return "IronClaw Mobile"
         }
         if isIronclawHostedModel {
-            return "IronClaw Agent"
+            return "Hosted IronClaw"
         }
         if isNearCloudModel {
             if metadata?.modelDisplayName?.isEmpty == false {
@@ -2982,35 +3117,44 @@ struct ModelOption: Decodable, Identifiable, Hashable {
     }
 
     var isDeprecatedPickerModel: Bool {
-        guard !isExternalModel else { return false }
-        let lowercasedID = modelID.lowercased()
+        guard !isIronclawModel else { return false }
+        let comparableID = isNearCloudModel ? (nearCloudUnderlyingModelID ?? modelID) : modelID
+        let lowercasedID = comparableID.lowercased()
         let lowercased = searchText.lowercased()
 
         if [
             "openai/gpt-5",
             "openai/gpt-5.1",
+            "openai/gpt-5.4",
             "openai/gpt-4.1",
             "google/gemini-2.5-pro",
+            "google/gemini-2.5-flash",
             "anthropic/claude-opus-4-5",
             "anthropic/claude-sonnet-4-5",
-            "qwen/qwen3.7-max",
+            "anthropic/claude-haiku-4-5",
             "qwen/qwen3-30b-a3b-instruct-2507",
             "qwen/qwen3-vl-30b-a3b-instruct"
         ].contains(lowercasedID) {
             return true
         }
 
-        if lowercased.contains("gpt-5.4-mini") ||
-            lowercased.contains("gpt-oss") ||
+        if lowercasedID == "google/gemini-3.5-flash" {
+            return false
+        }
+
+        if lowercased.contains("gpt-5.4") ||
+            lowercased.contains("gpt-5.4-mini") ||
             lowercased.contains("gpt-4.1") ||
             lowercased.contains("o3") ||
             lowercased.contains("o4-mini") ||
             lowercased.contains("haiku") ||
+            lowercased.contains("sonnet-4-5") ||
+            lowercased.contains("sonnet 4.5") ||
             lowercasedID.contains("-mini") ||
             lowercasedID.contains("/mini") ||
             lowercased.contains("nano") ||
             lowercased.contains("lite") ||
-            lowercased.contains("flash") ||
+            (lowercased.contains("flash") && !lowercasedID.contains("gemini-3.5-flash")) ||
             lowercased.contains("gemma") {
             return true
         }
@@ -3074,7 +3218,7 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             badges.append("Hosted")
         } else if isNearCloudModel {
             badges.append("NEAR Cloud")
-            badges.append("External")
+            badges.append("Not attested")
         }
         if isRecommendedReasoningModel {
             badges.append("Reasoning")

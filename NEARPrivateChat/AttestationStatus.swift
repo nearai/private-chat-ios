@@ -257,13 +257,13 @@ enum AttestationStatus: Codable, Equatable, Sendable {
             let freshnessText = freshness(at: now)?.shortLabel ?? "fresh"
             return AttestationStatusCopy(
                 title: "Proof fetched",
-                detail: "A proof report is on this device and covers the current private route/model metadata. On-device verification is separate, and this does not prove that the answer is true, complete, or safe.",
+                detail: "Route and model proof is on this device. Proof does not verify answer quality or truth.",
                 badge: "Fetched \(freshnessText)"
             )
         case .stale:
             return AttestationStatusCopy(
-                title: "Verification stale",
-                detail: "The last proof is old. Refresh attestation before relying on route or model coverage.",
+                title: "Proof stale",
+                detail: "The last proof is old. Refresh before relying on route or model coverage.",
                 badge: "Stale proof"
             )
         case .unavailable:
@@ -277,7 +277,7 @@ enum AttestationStatus: Codable, Equatable, Sendable {
         case .unknown:
             return AttestationStatusCopy(
                 title: "No proof yet",
-                detail: "No attestation has been checked yet. The model may still run, but there is no local proof to inspect until attestation is fetched.",
+                detail: "No attestation report is on this device yet.",
                 badge: "No proof"
             )
         }
@@ -289,33 +289,33 @@ enum AttestationStatus: Codable, Equatable, Sendable {
             switch reason {
             case .routeNotSupported:
                 return AttestationStatusCopy(
-                    title: "External route not attested",
-                    detail: "NEAR Cloud, IronClaw, and mixed Cloud/Private Council routes are outside this app's NEAR Private model TEE proof. Use a NEAR Private model or an all-private Council lineup to fetch attestation.",
-                    badge: "External"
+                    title: "Not TEE-attested",
+                    detail: "This route is outside NEAR Private TEE proof. Use a private model for attestation.",
+                    badge: "No TEE proof"
                 )
             case .serviceUnavailable:
                 return AttestationStatusCopy(
-                    title: "Attestation service unavailable",
-                    detail: "The app could not fetch proof from the attestation service. This is a service or network failure, not evidence that the selected model lacks proof.",
+                    title: "Proof service down",
+                    detail: "Could not fetch attestation right now. This is a network or service issue, not a model failure.",
                     badge: "Service down"
                 )
             case .modelCoverageUnavailable:
                 return AttestationStatusCopy(
                     title: "Model proof unavailable",
-                    detail: "The report was fetched, but the endpoint did not include model coverage metadata for this proof. GLM and other current private models can still run; this only means route/model coverage is not provable from this report.",
+                    detail: "The report did not include model coverage metadata. The model can still run.",
                     badge: "No model proof"
                 )
             case .notFetched:
                 return AttestationStatusCopy(
-                    title: "Verification unavailable",
-                    detail: "No proof is available in the app yet. Fetch attestation on a NEAR Private model to check route and model coverage on this device.",
+                    title: "No proof yet",
+                    detail: "Fetch attestation on a NEAR Private model to inspect route and model proof.",
                     badge: "No proof"
                 )
             }
         default:
             return AttestationStatusCopy(
-                title: "Verification unavailable",
-                detail: "This route does not currently have proof in the app. That is not evidence that an answer is unsafe or untrue.",
+                title: "No proof yet",
+                detail: "No local proof is available for this route.",
                 badge: "No proof"
             )
         }
@@ -374,7 +374,7 @@ struct AttestationEducation: Codable, Equatable, Sendable {
 
     static let standard = AttestationEducation(
         headline: "Proof, not a promise.",
-        summary: "Your messages are processed inside a secure chip that runs sealed code - the operator of the server cannot read what you send, even if they wanted to. NEAR Private Chat checks this chip's signature before each session, so you can prove that nothing else was running on the machine.",
+        summary: "Proof checks the private route and model coverage. It does not prove that an answer is true, safe, or complete.",
         sections: [
             AttestationEducationSection(
                 title: "What is verified",

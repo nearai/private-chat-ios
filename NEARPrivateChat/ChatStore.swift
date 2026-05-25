@@ -593,7 +593,7 @@ final class ChatStore: ObservableObject {
             ModelOption.nearCloudModelID(for: "qwen/qwen3.7-max"),
             ModelOption.nearCloudModelID(for: "moonshotai/kimi-k2.6"),
             ModelOption.nearCloudModelID(for: "google/gemini-3.5-flash"),
-            ModelOption.nearCloudModelID(for: "openai/gpt-oss-120b"),
+            ModelOption.ironclawModelID,
             ModelOption.ironclawMobileModelID
         ]
         let available = pickerModels
@@ -798,7 +798,7 @@ final class ChatStore: ObservableObject {
             return nil
         }
         if selectedModelOption?.isNearCloudModel == true {
-            return "\(selectedModelDisplayName) runs through NEAR Cloud. This route is external to NEAR Private TEE inference and does not have NEAR Private native web tools."
+            return "\(selectedModelDisplayName) runs through NEAR Cloud with anonymized provider forwarding. It is not NEAR Private TEE-attested and does not have native private web tools."
         }
         return nil
     }
@@ -818,7 +818,7 @@ final class ChatStore: ObservableObject {
                 : "Ask a Council of NEAR Private models to compare answers and synthesize the strongest response."
         }
         if selectedModelOption?.isNearCloudModel == true {
-            return "Use \(selectedModelDisplayName) through NEAR Cloud for external model coverage. Switch to a NEAR Private model when you need native private web tools."
+            return "Use \(selectedModelDisplayName) through NEAR Cloud for anonymized external model coverage. Switch to NEAR Private when you need TEE attestation or native private web tools."
         }
         if researchModeEnabled && !selectedRouteUsesNearCloud {
             return "Ask with \(selectedModelDisplayName), web search, files, and project context."
@@ -868,20 +868,13 @@ final class ChatStore: ObservableObject {
     }
 
     var externalModels: [ModelOption] {
-        var external: [ModelOption] = [Self.ironclawMobileModel()]
-        if ironclawSettings.isEnabled && ironclawSettings.hasUsableHostedEndpoint {
-            external.append(Self.ironclawModel())
-        }
+        var external: [ModelOption] = [Self.ironclawMobileModel(), Self.ironclawModel()]
         external.append(contentsOf: cloudRouteModels)
         return external
     }
 
     var agentModels: [ModelOption] {
-        var routes: [ModelOption] = [Self.ironclawMobileModel()]
-        if ironclawSettings.isEnabled && ironclawSettings.hasUsableHostedEndpoint {
-            routes.append(Self.ironclawModel())
-        }
-        return routes
+        [Self.ironclawMobileModel(), Self.ironclawModel()]
     }
 
     var cloudModels: [ModelOption] {
@@ -889,7 +882,7 @@ final class ChatStore: ObservableObject {
     }
 
     private var cloudRouteModels: [ModelOption] {
-        let routes = nearCloudModels.isEmpty ? Self.fallbackNearCloudModels() : nearCloudModels
+        let routes = Self.uniqueModels(nearCloudModels + Self.fallbackNearCloudModels())
         return routes.filter { !$0.isUtilityModel }
     }
 
@@ -1440,6 +1433,16 @@ final class ChatStore: ObservableObject {
         } else {
             showBanner("Using \(modelDisplayName(for: modelID)).")
         }
+    }
+
+    func setReasoningEffort(_ effort: ModelReasoningEffort) {
+        advancedModelParams = AdvancedModelParams(
+            temperature: advancedModelParams.temperature,
+            topP: advancedModelParams.topP,
+            maxTokens: advancedModelParams.maxTokens,
+            reasoningEffort: effort
+        ).sanitized
+        showBanner(effort == .automatic ? "Reasoning effort set to Auto." : "Reasoning effort set to \(effort.title).")
     }
 
     func toggleWebSearch() {
@@ -4333,12 +4336,15 @@ final class ChatStore: ObservableObject {
     }
 
     private static func agentMissionConversationTitle(from text: String) -> String? {
-        guard text.localizedCaseInsensitiveContains("IronClaw Agent Mission:") else {
+        let missionMarkers = ["Hosted IronClaw Mission:", "IronClaw Agent Mission:"]
+        guard missionMarkers.contains(where: { text.localizedCaseInsensitiveContains($0) }) else {
             return nil
         }
         let lines = text.components(separatedBy: .newlines)
         let missionTitle = lines
-            .first { $0.range(of: "IronClaw Agent Mission:", options: [.caseInsensitive]) != nil }?
+            .first { line in
+                missionMarkers.contains { line.range(of: $0, options: [.caseInsensitive]) != nil }
+            }?
             .components(separatedBy: ":")
             .dropFirst()
             .joined(separator: ":")
@@ -5146,10 +5152,10 @@ final class ChatStore: ObservableObject {
             metadata: ModelOption.Metadata(
                 verifiable: false,
                 contextLength: nil,
-                modelDisplayName: "IronClaw Agent",
-                modelDescription: "Runs a configured hosted IronClaw HTTPS workstation for remote research, git, code, shell, and software tasks, then returns the final answer here.",
+                modelDisplayName: "Hosted IronClaw",
+                modelDescription: "Connect a hosted IronClaw HTTPS workstation for git, code, shell, research, and software tasks.",
                 modelIcon: nil,
-                aliases: ["IronClaw", "agent", "hosted endpoint", "workstation", "git", "code", "shell"]
+                aliases: ["IronClaw", "Hosted IronClaw", "agent", "hosted endpoint", "workstation", "git", "code", "shell"]
             )
         )
     }
@@ -5162,9 +5168,9 @@ final class ChatStore: ObservableObject {
                 verifiable: false,
                 contextLength: nil,
                 modelDisplayName: "Qwen 3.7 Max",
-                modelDescription: "Runs qwen/qwen3.7-max through NEAR Cloud. Closed-source requests are anonymously forwarded to Alibaba.",
+                modelDescription: "Runs qwen/qwen3.7-max through NEAR Cloud. Requests are anonymized before provider forwarding; this route is not TEE-attested.",
                 modelIcon: nil,
-                aliases: ["NEAR Cloud", "Qwen", "Qwen 3.7 Max", "Alibaba", "closed-source"]
+                aliases: ["NEAR Cloud", "Qwen", "Qwen 3.7 Max", "Alibaba", "closed-source", "anonymized"]
             )
         )
     }
@@ -5174,32 +5180,32 @@ final class ChatStore: ObservableObject {
             nearCloudFallbackModel(
                 cloudModelID: "anthropic/claude-opus-4-7",
                 displayName: "Claude Opus 4.7",
-                description: "Runs Claude Opus 4.7 through NEAR Cloud for high-end reasoning, writing, and coding."
+                description: "Runs Claude Opus 4.7 through NEAR Cloud with anonymized provider forwarding. Not TEE-attested."
             ),
             nearCloudFallbackModel(
                 cloudModelID: "openai/gpt-5.5",
                 displayName: "GPT-5.5",
-                description: "Runs GPT-5.5 through NEAR Cloud for frontier reasoning and general chat."
+                description: "Runs GPT-5.5 through NEAR Cloud with anonymized provider forwarding. Not TEE-attested."
             ),
             nearCloudFallbackModel(
                 cloudModelID: "qwen/qwen3.7-max",
                 displayName: "Qwen3.7 Max",
-                description: "Runs Qwen3.7 Max through NEAR Cloud. Closed-source requests are anonymously forwarded to Alibaba."
+                description: "Runs Qwen3.7 Max through NEAR Cloud with anonymized provider forwarding. Not TEE-attested."
             ),
             nearCloudFallbackModel(
                 cloudModelID: "moonshotai/kimi-k2.6",
                 displayName: "Kimi K2.6",
-                description: "Runs Kimi K2.6 through NEAR Cloud for long-context reasoning and coding."
+                description: "Runs Kimi K2.6 through NEAR Cloud with anonymized provider forwarding. Not TEE-attested."
             ),
             nearCloudFallbackModel(
                 cloudModelID: "google/gemini-3.5-flash",
                 displayName: "Gemini 3.5 Flash",
-                description: "Runs Gemini 3.5 Flash through NEAR Cloud for fast, low-latency answers."
+                description: "Runs Gemini 3.5 Flash through NEAR Cloud with anonymized provider forwarding. Not TEE-attested."
             ),
             nearCloudFallbackModel(
                 cloudModelID: "openai/gpt-oss-120b",
                 displayName: "GPT OSS 120B",
-                description: "Runs GPT OSS 120B through NEAR Cloud."
+                description: "Runs GPT OSS 120B through NEAR Cloud with anonymized provider forwarding. Not TEE-attested."
             )
         ]
     }
@@ -5218,7 +5224,7 @@ final class ChatStore: ObservableObject {
                 modelDisplayName: displayName,
                 modelDescription: description,
                 modelIcon: nil,
-                aliases: ["NEAR Cloud", cloudModelID, displayName]
+                aliases: ["NEAR Cloud", cloudModelID, displayName, "anonymized", "not attested"]
             )
         )
     }
@@ -5231,11 +5237,11 @@ final class ChatStore: ObservableObject {
             guard !normalizedID.isEmpty, seen.insert(normalizedID.lowercased()).inserted else {
                 return nil
             }
-            let aliases = uniqueStrings(["NEAR Cloud", normalizedID, model.displayName] + (model.metadata?.aliases ?? []))
+            let aliases = uniqueStrings(["NEAR Cloud", "anonymized", "not attested", normalizedID, model.displayName] + (model.metadata?.aliases ?? []))
             let description = model.metadata?.modelDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
             let routeDescription = description?.isEmpty == false
-                ? "\(description!) Runs through NEAR Cloud."
-                : "Runs \(model.displayName) through NEAR Cloud."
+                ? "\(description!) Runs through NEAR Cloud with anonymized provider forwarding. Not TEE-attested."
+                : "Runs \(model.displayName) through NEAR Cloud with anonymized provider forwarding. Not TEE-attested."
             return ModelOption(
                 modelID: nearCloudRouteModelID(for: normalizedID),
                 publicModel: model.publicModel,
@@ -5268,6 +5274,21 @@ final class ChatStore: ObservableObject {
                 continue
             }
             output.append(trimmed)
+        }
+        return output
+    }
+
+    nonisolated private static func uniqueModels(_ models: [ModelOption]) -> [ModelOption] {
+        var seen = Set<String>()
+        var output: [ModelOption] = []
+        for model in models {
+            let key = (model.nearCloudUnderlyingModelID ?? model.id)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            guard !key.isEmpty, seen.insert(key).inserted else {
+                continue
+            }
+            output.append(model)
         }
         return output
     }
@@ -5574,7 +5595,8 @@ final class ChatStore: ObservableObject {
         guard !trimmed.isEmpty else {
             return nil
         }
-        if trimmed.localizedCaseInsensitiveContains("IronClaw Agent Mission:") {
+        if trimmed.localizedCaseInsensitiveContains("IronClaw Agent Mission:") ||
+            trimmed.localizedCaseInsensitiveContains("Hosted IronClaw Mission:") {
             return nil
         }
 
@@ -5582,7 +5604,7 @@ final class ChatStore: ObservableObject {
         let mission = phoneAgentMissionKind(for: brief)
         let skillPrompt = IronclawSkillCatalog.promptSection(for: brief)
         return """
-        IronClaw Agent Mission: \(mission.title)
+        Hosted IronClaw Mission: \(mission.title)
 
         Mission brief from phone:
         \(brief)
@@ -5605,6 +5627,8 @@ final class ChatStore: ObservableObject {
     private static func strippedAgentLaunchPrefix(from text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let prefixes = [
+            "Hosted IronClaw:",
+            "Hosted IronClaw agent:",
             "IronClaw agent:",
             "Agent mission:",
             "Phone agent:",

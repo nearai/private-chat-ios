@@ -8,21 +8,25 @@ Status: Resynthesis of:
 - `claude-design-screen-improvement-prompt-2026-05-25.md`
 - `latest-screenshot-index-2026-05-25.md`
 - current source review and the 8:38 setup-card screenshot
+- `NEARPrivateChatIOS-capability-setup-next-level-pass-2026-05-25.md`
+- `NEARPrivateChatIOS-live-app-review-next-pass-2026-05-25.md`
 
 This brief is the recommended working spec for the next design pass. It is intentionally more execution-shaped than the v2 upgrade memo.
 
+Live-app correction: the 2026-05-25 live Simulator review supersedes the older screenshot-only assumptions. Use `NEARPrivateChatIOS-live-app-review-next-pass-2026-05-25.md` and `review-artifacts/live-app-review-2026-05-25/` as the first source of truth before applying any older audit recommendation.
+
 ## The Decision
 
-The v2 upgrade is directionally right: the app needs stricter color discipline, proof-state truthfulness, simpler onboarding, a designed Council artifact, and a better Agent run surface.
+The v2 upgrade is directionally right, but the live app has already improved substantially. Home, Project Context, model search labels, proof truthfulness, and overflow grouping are better than the older screenshot pack suggested.
 
-But the next pass should not start with platform moats like Live Activities. It should start with visible product quality:
+The next pass should not start with platform moats like Live Activities or another broad visual reset. It should start with **state truth and capability connection**:
 
-1. Fresh screenshots.
-2. Typography hierarchy.
-3. One-screen setup with a state-derived CTA.
-4. Proof language that never overclaims.
-5. Semantic color/intensity tokens.
-6. Core screen density reduction.
+1. Fix live route/setup/proof mismatches.
+2. Add a user-facing Capabilities surface.
+3. Make NEAR AI Cloud and IronClaw connectable from obvious places.
+4. Preserve the improved Home and Project Context.
+5. Keep proof language truthful.
+6. Then continue typography/color/intensity cleanup.
 
 Only after those land should the team move to CouncilArtifact, AgentRunCard, Share proof footer, and then Live Activities / BackgroundTasks.
 
@@ -30,32 +34,42 @@ North star:
 
 > Ask first. Proof always. Advanced power exactly when needed.
 
+2026-05-25 capability addendum:
+
+> Connect capabilities, not routes.
+
+The next pass should make Private Inference, NEAR AI Cloud, IronClaw Agent, and Council feel like one coherent capability system. Private chat must work immediately; Cloud and IronClaw should be optional capabilities the user can connect, test, and use inside the same conversation. Use `NEARPrivateChatIOS-capability-setup-next-level-pass-2026-05-25.md` as the detailed spec for the new `Capabilities` surface, Cloud/IronClaw connection flows, route/trust labels, and missing-dependency recovery cards.
+
 ## Hard Rules For The Next Pass
 
 ### 1. Screenshot Truth First
 
-Do not make final design calls from stale screenshots. The freshest full multi-screen set is still from 2026-05-24; the latest 2026-05-25 captures are mostly setup.
+Do not make final design calls from stale screenshots. A fresh live app pack now exists:
 
-Before changing screens broadly, regenerate this set against the current build:
+`review-artifacts/live-app-review-2026-05-25/`
+
+Use it first. The older 2026-05-24 screenshots are historical reference only.
+
+Before shipping the design push, regenerate the live set against the post-push build:
 
 - setup top
-- setup `Ready on day one`
 - home
 - new chat composer
 - chat thread with proof shield
 - model picker
 - council picker
-- council answer
+- Cloud search result
+- IronClaw search result
 - project context
 - security/proof
-- agent workspace
-- agent run in thread
+- connect agent / agent workspace
 - share
 - account/settings
+- capabilities / Cloud + IronClaw connection states
 
 Save them under:
 
-`review-artifacts/screenshots-2026-05-25-next-design-pass/`
+`review-artifacts/live-app-review-2026-05-25-post-design-push/`
 
 Update `latest-screenshot-index-2026-05-25.md` after capture.
 
@@ -133,21 +147,45 @@ If Agent must be top-level later, add a fourth. Do not exceed four.
 
 ## Immediate P0 Work
 
-### P0.1 - Fresh Screenshot Pack
+### P0.1 - State Truth Fixes
 
-This is required because the current design critique is mixing:
+Fix the live mismatches from `NEARPrivateChatIOS-live-app-review-next-pass-2026-05-25.md`:
 
-- latest setup captures from 2026-05-25
-- full app captures from 2026-05-24
-- a user desktop screenshot of the bad setup preview card
+- Setup shows `Ready: LLM Council` while CTA says `Ask a private question`.
+- `Skip setup` applies defaults and starts a draft instead of skipping.
+- Selecting `Claude Opus 4.7` appears to put the user into `LLM Council 2`.
+- Hosted IronClaw selection says `Mobile agent ready`.
+- Header proof chip can truncate to `No model`.
 
 Deliverable:
 
-- A fresh screenshot folder.
-- A short screenshot index with timestamps.
-- A note for each screen: `current`, `stale`, `blocked`, or `needs account/config`.
+- Shared route/setup state source.
+- Snapshot tests for setup CTA/readiness combinations.
+- Tests for Cloud single-model vs Council selection behavior.
+- Tests for IronClaw hosted/mobile empty-state copy.
 
-### P0.2 - Typography Ladder And Setup Cleanup
+### P0.2 - Post-Push Live Screenshot Pack
+
+After the design implementation lands, capture:
+
+- setup
+- home default
+- home with project selected
+- composer private
+- model picker
+- Cloud search result
+- Cloud selected / missing-key state
+- IronClaw search result
+- Hosted IronClaw missing-workstation state
+- Connect Agent
+- Project Context
+- Security/Proof
+- Account top
+- Capabilities states
+
+Update `latest-screenshot-index-2026-05-25.md`.
+
+### P0.3 - Typography Ladder And Setup Cleanup
 
 The `Ready on day one` screenshot is the proof that the app lacks a strict type ladder. The card had large metadata values fighting the section title and the route title.
 
@@ -175,7 +213,7 @@ Apply this first to:
 - Council status/header
 - Agent run status/card
 
-### P0.3 - Setup As A Launchpad
+### P0.4 - Setup As A Launchpad
 
 The current setup is better than before, but still too much like a preference form.
 
@@ -205,7 +243,7 @@ Engineering requirement:
 - CTA text and selected route must be computed from the same state object.
 - Add snapshot tests for setup states so `Private Chat selected / Start Council` never regresses.
 
-### P0.4 - Proof Truth Layer
+### P0.5 - Proof Truth Layer
 
 Build one `ProofCapsule` and use it everywhere:
 
@@ -232,7 +270,7 @@ Canonical two-sentence explainer:
 
 If the implementation cannot yet cryptographically verify the proof, update the copy to say metadata/proof fetched rather than verified.
 
-### P0.5 - Semantic Color And Intensity Tokens
+### P0.6 - Semantic Color And Intensity Tokens
 
 Create real semantic tokens before polishing individual screens.
 
@@ -270,6 +308,42 @@ Definition of done:
 - No direct `Color.brandBlue` in feature views.
 - `brandBlue` only exists in the token definition file.
 - Each main screen has at most one `commandPrimary`.
+
+### P0.7 - Capability Center Shell
+
+Add a user-facing `Capabilities` surface. It can be a sheet or Settings sub-screen in the first pass, but it must be reachable from Account, route-readiness recovery, Cloud-locked model rows, and Agent setup.
+
+Minimum cards:
+
+- Private Inference
+- NEAR AI Cloud
+- IronClaw Agent
+- Council
+
+Each card must show:
+
+- status
+- one-sentence purpose
+- primary action
+- secondary action where useful
+- trust-boundary copy
+- last checked / needs setup / unavailable state
+
+Critical copy rule:
+
+> NEAR Cloud is a capability, not the same privacy/proof boundary as NEAR Private verified inference.
+
+Do not imply Cloud or hosted IronClaw turns have private proof unless the selected route actually has proof.
+
+### P0.8 - Capability Recovery Cards
+
+Missing dependencies must produce persistent recovery cards, not only banners:
+
+- Cloud model without key -> `Connect NEAR AI Cloud`
+- Hosted IronClaw without endpoint -> `Connect IronClaw`
+- Council with too few models -> `Customize Council`
+
+The recovery action should deep-link into the relevant `Capabilities` card or setup sub-flow while preserving the user's draft and attachments.
 
 ## P1 Work After P0 Lands
 
@@ -400,23 +474,28 @@ Do not let these distract from the P0 visual/product truth work.
 
 Use this prompt for Claude or another design agent:
 
-> You are doing the next elite design pass for NEAR Private Chat iOS. Use `NEARPrivateChatIOS-next-design-pass-brief-2026-05-25.md` as the source of truth. First regenerate a fresh post-patch screenshot set for setup, home, composer, chat, model picker, council, project context, security, agent, share, and settings. Then audit against five hard rules: one saturated brand blue per scene, one primary action per screen, fetched is not verified, advanced features are contextual upgrades, and setup is a one-screen launchpad. Produce component-level specs for Setup, Home, Composer, ProofCapsule, CouncilArtifact, AgentRunCard, Project Context, and Share proof footer. Include exact typography roles, semantic color tokens, copy changes, Swift files to touch, and screenshot/AX tests. Do not start with Live Activities or new platform surfaces until P0 visual/product truth work is complete.
+> You are doing the next elite design pass for NEAR Private Chat iOS. Use the actual live app captures in `review-artifacts/live-app-review-2026-05-25/` and `NEARPrivateChatIOS-live-app-review-next-pass-2026-05-25.md` first; older screenshot audits are background only. The app is already better than the old pack implied, so do not restart Home or Project Context. Prioritize live state truth: setup readiness/CTA mismatch, Skip behavior, Cloud single-model vs Council selection, Hosted IronClaw showing Mobile readiness, proof-chip truncation, Connect Agent lacking a real action, and Account hiding Cloud/IronClaw setup. Then design Capabilities for Private Inference, NEAR AI Cloud, IronClaw Agent, and Council. Keep SF Pro, one saturated primary blue per scene, truthful proof language, route/trust labels, and persistent recovery cards.
 
 ## Updated Codex Build Prompt
 
 Use this prompt for implementation:
 
-> Implement the P0 next-design-pass work in order: fresh screenshot capture script/index, setup one-screen launchpad with single-source CTA derivation and tests, `ProofState`/`ProofCapsule` with truthful copy, semantic color/intensity tokens, and direct `brandBlue` removal from feature views. Keep changes scoped, keep SF Pro, and verify with simulator screenshots at default and accessibility-medium Dynamic Type. Do not add Live Activities, widgets, or App Intents in this pass.
+> Implement against the current live app state. First fix the live mismatches: Setup readiness label must match CTA/selected route; Skip must either truly skip or be renamed Use Defaults; selecting a Cloud model must not silently switch into Council unless the UI says Add to Council; Hosted IronClaw must not show Mobile agent ready; proof chip labels must not truncate into unclear text. Then add a Capabilities shell for Private Inference / NEAR AI Cloud / IronClaw Agent / Council and persistent recovery cards for missing Cloud key and hosted IronClaw endpoint. Keep the improved Home and Project Context structure. Verify by launching the app in Simulator and recapturing `review-artifacts/live-app-review-2026-05-25-post-design-push/`.
 
 ## Acceptance Criteria
 
 The next design pass is complete when:
 
 - There is a fresh full screenshot set from the current build.
+- There is a user-facing Capabilities shell with Private Inference, NEAR AI Cloud, IronClaw Agent, and Council cards.
+- NEAR Cloud and IronClaw are easy to find/connect without digging through Account internals.
+- Missing Cloud key / missing IronClaw endpoint produce persistent recovery cards that preserve the draft.
 - Setup is one screen, one question, one primary CTA.
 - CTA text cannot mismatch selected route because it is derived from the same state.
 - `Verified` only appears when proof state is actually verified.
 - The UI distinguishes `none`, `fetched`, `verifying`, `verified`, `stale`, and `mismatch`.
+- Cloud, Private, IronClaw Mobile, and IronClaw Hosted each have distinct route/trust labels.
+- No Cloud UI implies private proof unless the selected route actually provides it.
 - Feature views no longer reference `Color.brandBlue` directly.
 - Each screen has at most one saturated blue primary action.
 - Home shows Ask and Resume without dashboard clutter.
@@ -440,11 +519,13 @@ The next design pass is complete when:
 
 1. Screenshot capture/index script and fresh screenshots.
 2. Setup simplification and CTA single-source-of-truth tests.
-3. ProofState + ProofCapsule + copy cleanup.
-4. Semantic tokens + remove direct `brandBlue` from Setup/Security/Home first.
-5. Typography ladder pass on Setup, Model Picker, Security, Project rows.
-6. Composer source-chip simplification.
-7. CouncilArtifact skeleton.
-8. AgentRunCard skeleton.
+3. Capabilities shell and Account `Power Tools` -> `Capabilities` rename.
+4. Persistent route-readiness recovery cards for Cloud and IronClaw.
+5. ProofState + ProofCapsule + copy cleanup.
+6. Semantic tokens + remove direct `brandBlue` from Setup/Security/Home first.
+7. Typography ladder pass on Setup, Model Picker, Security, Project rows.
+8. Composer source-chip simplification.
+9. CouncilArtifact skeleton.
+10. AgentRunCard skeleton.
 
 This sequence turns the design pass from "taste critique" into a controlled product-quality upgrade.

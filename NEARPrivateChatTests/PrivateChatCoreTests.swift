@@ -480,6 +480,44 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(UserSetupStorage.load(for: userAccount, defaults: defaults), agentProfile)
     }
 
+    func testLegalTermsAcceptanceIsPendingThenAccountScoped() throws {
+        let defaults = try makeIsolatedDefaults()
+        let accountA = "user:account-a"
+        let accountB = "user:account-b"
+
+        XCTAssertFalse(LegalTermsAcceptanceStore.hasPendingCurrentVersion(defaults: defaults))
+        XCTAssertFalse(LegalTermsAcceptanceStore.hasAcceptedCurrentVersion(for: accountA, defaults: defaults))
+
+        LegalTermsAcceptanceStore.recordPendingAcceptance(defaults: defaults, now: Date(timeIntervalSince1970: 1_700_000_000))
+
+        XCTAssertTrue(LegalTermsAcceptanceStore.hasPendingCurrentVersion(defaults: defaults))
+        XCTAssertTrue(LegalTermsAcceptanceStore.consumePendingAcceptance(for: accountA, defaults: defaults))
+        XCTAssertFalse(LegalTermsAcceptanceStore.hasPendingCurrentVersion(defaults: defaults))
+        XCTAssertTrue(LegalTermsAcceptanceStore.hasAcceptedCurrentVersion(for: accountA, defaults: defaults))
+        XCTAssertFalse(LegalTermsAcceptanceStore.hasAcceptedCurrentVersion(for: accountB, defaults: defaults))
+    }
+
+    func testLegalTermsAcceptanceMigratesFallbackAccount() throws {
+        let defaults = try makeIsolatedDefaults()
+        let fallbackAccount = "token:fallback"
+        let userAccount = "user:account-a"
+
+        LegalTermsAcceptanceStore.acceptCurrentVersion(for: fallbackAccount, defaults: defaults, now: Date(timeIntervalSince1970: 1_700_000_000))
+        LegalTermsAcceptanceStore.migrate(from: fallbackAccount, to: userAccount, defaults: defaults)
+
+        XCTAssertTrue(LegalTermsAcceptanceStore.hasAcceptedCurrentVersion(for: userAccount, defaults: defaults))
+    }
+
+    func testLegalTermsReferencesRequiredUpstreamPolicies() {
+        XCTAssertEqual(LegalTerms.version, "2026-05-25")
+        XCTAssertEqual(LegalTerms.nearAIServicesTermsURL.absoluteString, "https://near.ai/terms-of-service")
+        XCTAssertEqual(LegalTerms.nearAICloudTermsURL.absoluteString, "https://near.ai/near-ai-cloud-terms-of-service")
+        XCTAssertEqual(LegalTerms.nearAIAcceptableUseURL.absoluteString, "https://near.ai/acceptable-use-policy")
+        XCTAssertEqual(LegalTerms.ironclawRepositoryURL.absoluteString, "https://github.com/nearai/ironclaw")
+        XCTAssertTrue(LegalTerms.acceptanceText.contains("IronClaw"))
+        XCTAssertTrue(LegalTerms.sections.contains { $0.title == "Privacy, Cloud, and Proof" })
+    }
+
     func testAppSetupPlanReflectsAgentProfile() {
         var profile = UserSetupProfile.defaults
         profile.useCase = .buildAgents
@@ -742,6 +780,34 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertTrue([qwen, opus, gpt, flash, oss].allSatisfy(\.isNearCloudModel))
     }
 
+    func testDeprecatedPickerHidesLegacyRoutesButKeepsCurrentCloudChoices() {
+        let hiddenCloud = [
+            "openai/gpt-5.4",
+            "openai/gpt-5.1",
+            "google/gemini-2.5-flash",
+            "anthropic/claude-sonnet-4-5",
+            "anthropic/claude-haiku-4-5",
+            "openai/o3"
+        ].map { ModelOption(modelID: ModelOption.nearCloudModelID(for: $0), publicModel: true, metadata: nil) }
+        let visibleCloud = [
+            "qwen/qwen3.7-max",
+            "moonshotai/kimi-k2.6",
+            "google/gemini-3.5-flash",
+            "openai/gpt-oss-120b"
+        ].map { ModelOption(modelID: ModelOption.nearCloudModelID(for: $0), publicModel: true, metadata: nil) }
+
+        XCTAssertTrue(hiddenCloud.allSatisfy(\.isDeprecatedPickerModel))
+        XCTAssertFalse(visibleCloud.contains(where: \.isDeprecatedPickerModel))
+    }
+
+    func testHostedIronclawIsDiscoverableAsAgentRoute() {
+        let hosted = ModelOption(modelID: ModelOption.ironclawModelID, publicModel: true, metadata: nil)
+
+        XCTAssertEqual(hosted.displayName, "Hosted IronClaw")
+        XCTAssertTrue(hosted.isIronclawHostedModel)
+        XCTAssertFalse(hosted.isDeprecatedPickerModel)
+    }
+
     func testSourceRoutingSemanticsNearPrivateSeparatesLinksFromNativeWebTool() {
         let links = ChatStore.sourceRoutingSemantics(
             sourceMode: .links,
@@ -998,17 +1064,16 @@ final class PrivateChatCoreTests: XCTestCase {
     func testAttestationCopyExplainsExternalRoutes() {
         let copy = AttestationStatus.unavailable(reason: .routeNotSupported).userFacingCopy()
 
-        XCTAssertEqual(copy.title, "External route not attested")
-        XCTAssertTrue(copy.detail.contains("NEAR Cloud"))
+        XCTAssertEqual(copy.title, "Not TEE-attested")
         XCTAssertTrue(copy.detail.contains("NEAR Private"))
-        XCTAssertEqual(copy.badge, "External")
+        XCTAssertEqual(copy.badge, "No TEE proof")
     }
 
     func testAttestationCopySeparatesServiceFailureFromMissingModelCoverage() {
         let serviceCopy = AttestationStatus.unavailable(reason: .serviceUnavailable).userFacingCopy()
 
-        XCTAssertEqual(serviceCopy.title, "Attestation service unavailable")
-        XCTAssertTrue(serviceCopy.detail.contains("not evidence"))
+        XCTAssertEqual(serviceCopy.title, "Proof service down")
+        XCTAssertTrue(serviceCopy.detail.contains("network"))
         XCTAssertEqual(serviceCopy.badge, "Service down")
 
         let snapshot = AttestationSnapshot(
