@@ -3040,7 +3040,7 @@ private struct ModelPickerRow: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
 
-                Text(model.metadata?.modelDescription?.isEmpty == false ? model.metadata!.modelDescription! : model.id)
+                Text(modelDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
@@ -3160,6 +3160,14 @@ private struct ModelPickerRow: View {
         } else {
             "cpu"
         }
+    }
+
+    private var modelDescription: String {
+        guard let value = model.metadata?.modelDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return model.id
+        }
+        return value
     }
 
     private func modelFact(title: String, symbolName: String, tint: Color) -> some View {
@@ -8203,7 +8211,10 @@ private struct EmptyChatView: View {
             let contextCount = chatStore.activeProjectContextAttachments.count + chatStore.activeProjectContextLinks.count
             return contextCount > 0 ? "\(project.name) context is ready." : "\(project.name) is selected."
         }
-        if chatStore.selectedProviderDisplayName == "IronClaw" {
+        if chatStore.selectedModelOption?.isIronclawHostedModel == true {
+            return chatStore.ironclawRemoteWorkstationAvailable ? "Hosted agent ready." : "Connect hosted IronClaw to run workstation tasks."
+        }
+        if chatStore.selectedModelOption?.isIronclawMobileRuntime == true {
             return chatStore.ironclawRemoteWorkstationAvailable ? "Hosted agent ready." : "Mobile agent ready."
         }
         if chatStore.isCouncilModeEnabled {

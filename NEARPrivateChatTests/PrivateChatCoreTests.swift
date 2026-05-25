@@ -162,6 +162,26 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertTrue(issue?.message.contains("hosted HTTPS IronClaw endpoint") == true)
     }
 
+    @MainActor
+    func testHostedIronclawDisabledEndpointBlocksSend() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        store.ironclawSettings = IronclawSettings(
+            isEnabled: false,
+            baseURL: "https://agent.example.com",
+            threadID: ""
+        )
+        store.selectModel(ModelOption.ironclawModelID)
+        store.draft = "Run the repo tests"
+
+        store.sendDraft()
+
+        XCTAssertEqual(store.routeReadinessIssue?.route, .hostedIronclaw)
+        XCTAssertEqual(store.routeReadinessIssue?.recoveryAction, .configureIronClawEndpoint)
+        XCTAssertTrue(store.routeReadinessIssue?.message.contains("Turn on Hosted Agent") == true)
+        XCTAssertEqual(store.draft, "Run the repo tests")
+        XCTAssertFalse(store.isStreaming)
+    }
+
     func testRouteReadinessBlocksCouncilWithFewerThanTwoUsableModels() {
         let issue = ChatStore.routeReadinessIssue(
             selectedModelID: "zai-org/GLM-5.1-FP8",
@@ -210,6 +230,20 @@ final class PrivateChatCoreTests: XCTestCase {
             nearCloudKeyConfigured: true,
             hostedIronclawEndpointUsable: true
         ))
+    }
+
+    @MainActor
+    func testSelectingSingleModelClearsExistingCouncilLineup() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        store.useDefaultCouncilLineup()
+        XCTAssertTrue(store.isCouncilModeEnabled)
+
+        let cloudModelID = ModelOption.nearCloudModelID(for: "anthropic/claude-opus-4-7")
+        store.selectModel(cloudModelID)
+
+        XCTAssertEqual(store.selectedModel, cloudModelID)
+        XCTAssertEqual(store.councilModelIDs, [cloudModelID])
+        XCTAssertFalse(store.isCouncilModeEnabled)
     }
 
     func testWebSearchSourcesDropUnsafeSchemes() throws {

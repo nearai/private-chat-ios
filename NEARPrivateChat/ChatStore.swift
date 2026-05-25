@@ -1422,12 +1422,7 @@ final class ChatStore: ObservableObject {
         selectedModel = modelID
         routeReadinessIssue = nil
         clearAttestationState()
-        if isCouncilEligible(model) {
-            let ids = normalizedCouncilModelIDs([modelID] + councilModelIDs.filter { $0 != modelID })
-            councilModelIDs = ids.isEmpty ? [modelID] : ids
-        } else {
-            councilModelIDs = []
-        }
+        councilModelIDs = isCouncilEligible(model) ? [modelID] : []
         if model.isNearCloudModel, !nearCloudKeyConfigured {
             showBanner("Using \(model.displayName). Add a NEAR Cloud API key in Account before sending.")
         } else {
@@ -3246,9 +3241,16 @@ final class ChatStore: ObservableObject {
             requestedCouncilModelIDs: requestedCouncilIDs,
             isCouncilRequested: councilRequested,
             nearCloudKeyConfigured: nearCloudKeyConfigured,
-            hostedIronclawEndpointUsable: ironclawSettings.hasUsableHostedEndpoint,
-            hostedIronclawEndpointMessage: ironclawSettings.endpointValidationMessage
+            hostedIronclawEndpointUsable: ironclawRemoteWorkstationAvailable,
+            hostedIronclawEndpointMessage: hostedIronclawReadinessMessage
         )
+    }
+
+    private var hostedIronclawReadinessMessage: String? {
+        if ironclawSettings.hasUsableHostedEndpoint, !ironclawSettings.isEnabled {
+            return "Turn on Hosted Agent in Account before sending."
+        }
+        return ironclawSettings.endpointValidationMessage
     }
 
     private func blockSendForRouteReadiness(_ issue: RouteReadinessIssue) {
@@ -3942,8 +3944,11 @@ final class ChatStore: ObservableObject {
 
         if model == ModelOption.ironclawModelID {
             let settings = ironclawSettingsForConversation(conversationID)
-            guard settings.hasUsableHostedEndpoint else {
-                throw APIError.status(0, settings.endpointValidationMessage ?? "Add a hosted HTTPS IronClaw endpoint first.")
+            guard settings.isEnabled, settings.hasUsableHostedEndpoint else {
+                let message = settings.hasUsableHostedEndpoint
+                    ? "Turn on Hosted Agent in Account before sending."
+                    : settings.endpointValidationMessage ?? "Add a hosted HTTPS IronClaw endpoint first."
+                throw APIError.status(0, message)
             }
             let webContext = try await appWebGroundingContextIfNeeded(
                 model: model,
@@ -6565,23 +6570,53 @@ final class ChatStore: ObservableObject {
 
             case IronclawMobileToolNames.conversationPinSet:
                 let pinned = call.arguments["pinned"] == "true"
-                setPinned(pinned, for: conversationID)
-                results.append(.init(
-                    callName: call.name,
-                    status: .completed,
-                    summary: "\(pinned ? "Pinned" : "Unpinned") this chat.",
-                    detail: nil
-                ))
+                do {
+                    if pinned {
+                        try await api.pinConversation(conversationID)
+                    } else {
+                        try await api.unpinConversation(conversationID)
+                    }
+                    setPinned(pinned, for: conversationID)
+                    await refreshConversations()
+                    results.append(.init(
+                        callName: call.name,
+                        status: .completed,
+                        summary: "\(pinned ? "Pinned" : "Unpinned") this chat.",
+                        detail: nil
+                    ))
+                } catch {
+                    results.append(.init(
+                        callName: call.name,
+                        status: .failed,
+                        summary: Self.displayFailureMessage(error.localizedDescription),
+                        detail: nil
+                    ))
+                }
 
             case IronclawMobileToolNames.conversationArchiveSet:
                 let archived = call.arguments["archived"] == "true"
-                setArchived(archived, for: conversationID)
-                results.append(.init(
-                    callName: call.name,
-                    status: .completed,
-                    summary: "\(archived ? "Archived" : "Unarchived") this chat.",
-                    detail: nil
-                ))
+                do {
+                    if archived {
+                        try await api.archiveConversation(conversationID)
+                    } else {
+                        try await api.unarchiveConversation(conversationID)
+                    }
+                    setArchived(archived, for: conversationID)
+                    await refreshConversations()
+                    results.append(.init(
+                        callName: call.name,
+                        status: .completed,
+                        summary: "\(archived ? "Archived" : "Unarchived") this chat.",
+                        detail: nil
+                    ))
+                } catch {
+                    results.append(.init(
+                        callName: call.name,
+                        status: .failed,
+                        summary: Self.displayFailureMessage(error.localizedDescription),
+                        detail: nil
+                    ))
+                }
 
             case IronclawMobileToolNames.webSearchSet:
                 let enabled = call.arguments["enabled"] == "true"

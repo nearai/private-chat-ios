@@ -733,7 +733,10 @@ final class PrivateChatAPI {
             throw APIError.status(http.statusCode, decodeErrorMessage(from: data))
         }
         if T.self == EmptyResponse.self, data.isEmpty {
-            return EmptyResponse() as! T
+            guard let emptyResponse = EmptyResponse() as? T else {
+                throw APIError.emptyResponse
+            }
+            return emptyResponse
         }
         guard !data.isEmpty else { throw APIError.emptyResponse }
         return try decoder.decode(T.self, from: data)

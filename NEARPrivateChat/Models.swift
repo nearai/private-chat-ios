@@ -2977,8 +2977,8 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             return "Hosted IronClaw"
         }
         if isNearCloudModel {
-            if metadata?.modelDisplayName?.isEmpty == false {
-                return metadata!.modelDisplayName!
+            if let modelDisplayName = sanitizedModelDisplayName {
+                return modelDisplayName
             }
             if isNearCloudQwenMaxModel {
                 return "Qwen 3.7 Max"
@@ -2987,7 +2987,15 @@ struct ModelOption: Decodable, Identifiable, Hashable {
         if modelID == Self.llmCouncilSynthesisModelID {
             return "Council Synthesis"
         }
-        return metadata?.modelDisplayName?.isEmpty == false ? metadata!.modelDisplayName! : modelID
+        return sanitizedModelDisplayName ?? modelID
+    }
+
+    private var sanitizedModelDisplayName: String? {
+        guard let value = metadata?.modelDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
+        return value
     }
 
     var isVerifiable: Bool {
