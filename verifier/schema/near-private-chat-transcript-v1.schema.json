@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://near.ai/schemas/near-private-chat-transcript-v1.json",
+  "title": "NEAR Private Chat Signed Transcript v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "exported_at",
+    "conversation",
+    "route",
+    "attestation",
+    "messages",
+    "hashes",
+    "signature"
+  ],
+  "properties": {
+    "schema": {
+      "const": "near-private-chat-transcript-v1"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "exported_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "exporter": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "app": { "type": "string" },
+        "platform": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    },
+    "conversation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "owner_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["provider", "privacy_route"],
+      "properties": {
+        "provider": { "type": "string" },
+        "privacy_route": { "type": "string" },
+        "source_mode": { "type": "string" },
+        "web_search": { "type": "boolean" },
+        "project_id_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "status": { "enum": ["available", "unavailable"] },
+        "nonce": { "type": "string" },
+        "report_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "model_attestation_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "gateway_signing_address": { "type": "string" },
+        "fetched_at": { "type": "string", "format": "date-time" },
+        "freshness": { "type": "string" },
+        "warning": { "type": "string" }
+      }
+    },
+    "messages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "role", "created_at", "content", "hash"],
+        "properties": {
+          "id": { "type": "string" },
+          "role": { "enum": ["system", "developer", "user", "assistant", "tool"] },
+          "created_at": { "type": "string", "format": "date-time" },
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "required": ["type"],
+              "properties": {
+                "type": { "type": "string" },
+                "text": { "type": "string" }
+              }
+            }
+          },
+          "model_id": { "type": ["string", "null"] },
+          "response_id": { "type": ["string", "null"] },
+          "route": { "type": "object", "additionalProperties": true },
+          "sources": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "attachments": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+        }
+      }
+    },
+    "hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "canonicalization",
+        "message_hash_algorithm",
+        "transcript_hash_algorithm",
+        "transcript_hash"
+      ],
+      "properties": {
+        "canonicalization": { "const": "near-private-chat-jcs-v1" },
+        "message_hash_algorithm": { "const": "sha256" },
+        "transcript_hash_algorithm": { "const": "sha256" },
+        "transcript_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "key_id",
+        "key_scope",
+        "public_key_pem",
+        "signed_payload",
+        "signature"
+      ],
+      "properties": {
+        "algorithm": { "const": "ed25519" },
+        "key_id": { "type": "string" },
+        "key_scope": { "enum": ["device-keychain", "fixture"] },
+        "public_key_pem": { "type": "string" },
+        "signed_payload": { "const": "schema-and-transcript-hash" },
+        "signature": { "type": "string", "contentEncoding": "base64" }
+      }
+    }
+  }
+}

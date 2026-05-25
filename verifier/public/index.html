@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NEAR Private Chat Verifier</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f8fb;
+      --ink: #071013;
+      --muted: #68747e;
+      --line: #d9e2ea;
+      --blue: #0091fd;
+      --green: #14855f;
+      --red: #c62828;
+      --panel: #ffffff;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    main {
+      width: min(920px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 40px 0 56px;
+    }
+
+    header {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 6vw, 4.5rem);
+      line-height: 0.95;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.5;
+      max-width: 680px;
+    }
+
+    .dropzone {
+      display: grid;
+      gap: 18px;
+      place-items: center;
+      min-height: 260px;
+      padding: 28px;
+      border: 1.5px dashed var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      text-align: center;
+      transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+    }
+
+    .dropzone.dragging {
+      border-color: var(--blue);
+      box-shadow: 0 16px 48px rgba(0, 145, 253, 0.14);
+      transform: translateY(-1px);
+    }
+
+    .mark {
+      display: grid;
+      place-items: center;
+      width: 56px;
+      height: 56px;
+      border-radius: 8px;
+      background: #e5f5ff;
+      color: var(--blue);
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    button, label[for="file"] {
+      border: 0;
+      border-radius: 8px;
+      background: var(--blue);
+      color: white;
+      font: inherit;
+      font-weight: 700;
+      padding: 12px 16px;
+      cursor: pointer;
+    }
+
+    input[type="file"] { display: none; }
+
+    .results {
+      display: grid;
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .summary, .check {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .summary strong {
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .status {
+      flex: 0 0 auto;
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      color: white;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .pass { background: var(--green); }
+    .fail { background: var(--red); }
+    .warn { background: #a06b00; }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.88rem;
+      word-break: break-all;
+    }
+
+    .fineprint {
+      margin-top: 22px;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Verify a NEAR Private Chat export</h1>
+      <p>Drop a <code>near-private-chat-transcript-v1.json</code> file here. Verification runs locally in this browser tab and does not upload transcript content.</p>
+    </header>
+
+    <section id="dropzone" class="dropzone" aria-label="Transcript verifier dropzone">
+      <div class="mark">N</div>
+      <div>
+        <p><strong>Drop a signed transcript JSON</strong></p>
+        <p>Checks message hashes, transcript hash, attestation metadata presence, and Ed25519 signature when the browser supports it.</p>
+      </div>
+      <label for="file">Choose file</label>
+      <input id="file" type="file" accept="application/json,.json">
+    </section>
+
+    <section id="results" class="results" aria-live="polite"></section>
+
+    <p class="fineprint">Proof, not a promise: this verifies artifact integrity and route evidence. It does not prove the answer is true, complete, or safe.</p>
+  </main>
+
+  <script>
+    const SCHEMA = "near-private-chat-transcript-v1";
+    const CANONICALIZATION = "near-private-chat-jcs-v1";
+
+    const dropzone = document.getElementById("dropzone");
+    const fileInput = document.getElementById("file");
+    const results = document.getElementById("results");
+
+    dropzone.addEventListener("dragover", event => {
+      event.preventDefault();
+      dropzone.classList.add("dragging");
+    });
+    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragging"));
+    dropzone.addEventListener("drop", event => {
+      event.preventDefault();
+      dropzone.classList.remove("dragging");
+      const [file] = event.dataTransfer.files;
+      if (file) verifyFile(file);
+    });
+    fileInput.addEventListener("change", event => {
+      const [file] = event.target.files;
+      if (file) verifyFile(file);
+    });
+
+    async function verifyFile(file) {
+      results.innerHTML = summary("warn", "Reading file", file.name);
+      try {
+        const transcript = JSON.parse(await file.text());
+        const verification = await verifyTranscript(transcript);
+        render(verification);
+      } catch (error) {
+        results.innerHTML = summary("fail", "Could not verify", error.message);
+      }
+    }
+
+    async function verifyTranscript(transcript) {
+      const checks = [];
+      check(checks, "schema", transcript.schema === SCHEMA, transcript.schema || "(missing)");
+      check(checks, "schema_version", transcript.schema_version === 1, String(transcript.schema_version));
+      check(checks, "canonicalization", transcript.hashes?.canonicalization === CANONICALIZATION, transcript.hashes?.canonicalization || "(missing)");
+      check(checks, "message_hash_algorithm", transcript.hashes?.message_hash_algorithm === "sha256", transcript.hashes?.message_hash_algorithm || "(missing)");
+      check(checks, "transcript_hash_algorithm", transcript.hashes?.transcript_hash_algorithm === "sha256", transcript.hashes?.transcript_hash_algorithm || "(missing)");
+
+      const messages = Array.isArray(transcript.messages) ? transcript.messages : [];
+      const messageFailures = [];
+      for (const message of messages) {
+        const expected = await sha256(stableStringify(withoutKey(message, "hash")));
+        if (message.hash !== expected) {
+          messageFailures.push(`${message.id || "(missing id)"} expected ${expected}`);
+        }
+      }
+      check(checks, "message_hashes", messages.length > 0 && messageFailures.length === 0, messageFailures.join("; ") || `${messages.length} verified`);
+
+      const transcriptHash = await sha256(stableStringify(transcriptPayload(transcript)));
+      check(checks, "transcript_hash", transcript.hashes?.transcript_hash === transcriptHash, `computed ${transcriptHash}`);
+      if (!transcript.attestation) {
+        check(checks, "attestation_metadata", false, "missing");
+      } else if (transcript.attestation.status === "unavailable") {
+        check(checks, "attestation_metadata", true, transcript.attestation.warning || "unavailable at export time");
+      } else {
+        check(checks, "attestation_metadata", Boolean(transcript.attestation?.nonce && transcript.attestation?.report_hash), transcript.attestation?.freshness || "missing");
+      }
+
+      const signatureCheck = await verifySignature(transcript, transcriptHash);
+      checks.push(signatureCheck);
+
+      return {
+        ok: checks.every(entry => entry.ok),
+        transcriptHash,
+        checks
+      };
+    }
+
+    async function verifySignature(transcript, transcriptHash) {
+      const signature = transcript.signature || {};
+      if (signature.algorithm !== "ed25519") {
+        return { name: "signature", ok: false, detail: `unsupported algorithm ${signature.algorithm || "(missing)"}` };
+      }
+      if (signature.signed_payload !== "schema-and-transcript-hash") {
+        return { name: "signature", ok: false, detail: "signature.signed_payload must be schema-and-transcript-hash" };
+      }
+      try {
+        const key = await crypto.subtle.importKey(
+          "spki",
+          pemToArrayBuffer(signature.public_key_pem),
+          { name: "Ed25519" },
+          false,
+          ["verify"]
+        );
+        const ok = await crypto.subtle.verify(
+          { name: "Ed25519" },
+          key,
+          base64ToArrayBuffer(signature.signature),
+          new TextEncoder().encode(`${SCHEMA}\n${transcriptHash}`)
+        );
+        return { name: "signature", ok, detail: ok ? "verified" : "signature did not verify" };
+      } catch (error) {
+        return { name: "signature", ok: false, detail: `browser signature check unavailable: ${error.message}` };
+      }
+    }
+
+    function transcriptPayload(transcript) {
+      const payload = clone(transcript);
+      delete payload.signature;
+      if (payload.hashes) delete payload.hashes.transcript_hash;
+      return payload;
+    }
+
+    function stableStringify(value) {
+      if (value === null) return "null";
+      if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+      switch (typeof value) {
+        case "boolean": return value ? "true" : "false";
+        case "number":
+          if (!Number.isFinite(value)) throw new Error("Canonical JSON cannot encode non-finite numbers.");
+          return JSON.stringify(value);
+        case "string": return JSON.stringify(value);
+        case "object": {
+          const entries = Object.entries(value)
+            .filter(([, entryValue]) => entryValue !== undefined)
+            .sort(([left], [right]) => left.localeCompare(right));
+          return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${stableStringify(entryValue)}`).join(",")}}`;
+        }
+        default:
+          throw new Error(`Canonical JSON cannot encode ${typeof value}.`);
+      }
+    }
+
+    function withoutKey(value, keyToRemove) {
+      if (Array.isArray(value)) return value.map(entry => withoutKey(entry, keyToRemove));
+      if (!value || typeof value !== "object") return value;
+      return Object.fromEntries(
+        Object.entries(value)
+          .filter(([key]) => key !== keyToRemove)
+          .map(([key, entryValue]) => [key, withoutKey(entryValue, keyToRemove)])
+      );
+    }
+
+    function clone(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    async function sha256(text) {
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+      return `sha256:${[...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("")}`;
+    }
+
+    function pemToArrayBuffer(pem) {
+      const base64 = pem.replace(/-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----|\s/g, "");
+      return base64ToArrayBuffer(base64);
+    }
+
+    function base64ToArrayBuffer(base64) {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+      return bytes.buffer;
+    }
+
+    function check(checks, name, ok, detail) {
+      checks.push({ name, ok: Boolean(ok), detail });
+    }
+
+    function render(verification) {
+      const rows = [
+        summary(verification.ok ? "pass" : "fail", verification.ok ? "Verified" : "Verification failed", verification.transcriptHash),
+        ...verification.checks.map(entry => summary(entry.ok ? "pass" : "fail", entry.name, entry.detail || ""))
+      ];
+      results.innerHTML = rows.join("");
+    }
+
+    function summary(kind, title, detail) {
+      const symbol = kind === "pass" ? "✓" : kind === "fail" ? "!" : "i";
+      return `<div class="summary"><span class="status ${kind}">${symbol}</span><div><strong>${escapeHTML(title)}</strong><code>${escapeHTML(detail || "")}</code></div></div>`;
+    }
+
+    function escapeHTML(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+  </script>
+</body>
+</html>

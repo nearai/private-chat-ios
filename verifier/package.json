@@ -1,0 +1,15 @@
+{
+  "name": "near-private-chat-verify",
+  "version": "0.1.0",
+  "description": "Offline verifier for NEAR Private Chat signed transcript exports.",
+  "license": "MIT",
+  "bin": {
+    "near-private-chat-verify": "bin/near-private-chat-verify.js"
+  },
+  "scripts": {
+    "test": "bash scripts/test-fixtures.sh"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

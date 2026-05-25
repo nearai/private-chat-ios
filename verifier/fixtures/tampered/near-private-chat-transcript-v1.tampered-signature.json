@@ -1,0 +1,95 @@
+{
+  "schema": "near-private-chat-transcript-v1",
+  "schema_version": 1,
+  "exported_at": "2026-05-24T12:00:00Z",
+  "exporter": {
+    "app": "NEAR Private Chat iOS",
+    "platform": "ios",
+    "version": "fixture-0.1.0"
+  },
+  "conversation": {
+    "id": "conv_fixture_verified_001",
+    "title": "Tiny verified fixture",
+    "created_at": "2026-05-24T11:58:00Z",
+    "owner_hash": "sha256:d86580dc08ba4d5cb0acdee390906cf4394788545eb490d36da04e02702cb45e"
+  },
+  "route": {
+    "provider": "near-private",
+    "privacy_route": "tee-private",
+    "source_mode": "web",
+    "web_search": true,
+    "project_id_hash": "sha256:a3ddb16102c52d50d5ad009ad0af0dfa54740c915b8f49f99963bda6af3c33e3"
+  },
+  "attestation": {
+    "nonce": "att_nonce_fixture_001",
+    "report_hash": "sha256:dc6f10d35a288acddf6a8a9c70d98b13ca84e818541df974111b165fe6879c43",
+    "model_attestation_hash": "sha256:509cb6f33bb4e4361a7a55a8f5066962433c65e24949d1ccdb84603035424c81",
+    "gateway_signing_address": "ed25519:fixture-gateway-signing-key",
+    "fetched_at": "2026-05-24T11:59:55Z",
+    "freshness": "<2m"
+  },
+  "messages": [
+    {
+      "id": "msg_fixture_user_001",
+      "role": "user",
+      "created_at": "2026-05-24T11:58:03Z",
+      "content": [
+        {
+          "type": "text",
+          "text": "Summarize what this verifier proves in one sentence."
+        }
+      ],
+      "model_id": null,
+      "response_id": null,
+      "route": {
+        "provider": "near-private",
+        "source_mode": "web"
+      },
+      "sources": [],
+      "attachments": [],
+      "hash": "sha256:01a5b694950a3fcdf25f11d0cb4af7869cc44a3987547db77d1febc5f2caae82"
+    },
+    {
+      "id": "msg_fixture_assistant_001",
+      "role": "assistant",
+      "created_at": "2026-05-24T11:58:08Z",
+      "content": [
+        {
+          "type": "text",
+          "text": "It proves this exported transcript has not changed since it was signed by the included key."
+        }
+      ],
+      "model_id": "glm/glm-5.1",
+      "response_id": "resp_fixture_001",
+      "route": {
+        "provider": "near-private",
+        "privacy_route": "tee-private",
+        "web_search": true
+      },
+      "sources": [
+        {
+          "url": "https://near.ai/example/verifier-doc",
+          "title": "Verifier fixture source",
+          "retrieved_at": "2026-05-24T11:58:05Z",
+          "hash": "sha256:17e6730424801226cde66ba5d7f920b7bcbad547628e1b38773895b7f3fa55cd"
+        }
+      ],
+      "attachments": [],
+      "hash": "sha256:238af24d12c6d3fcb75547626d4dedad23f2ba4aa070bcc55814f2872b307940"
+    }
+  ],
+  "hashes": {
+    "canonicalization": "near-private-chat-jcs-v1",
+    "message_hash_algorithm": "sha256",
+    "transcript_hash_algorithm": "sha256",
+    "transcript_hash": "sha256:811148429ac5870a412a355c310f0065360ad7a1b35e80c961bf7e80bbf9c100"
+  },
+  "signature": {
+    "algorithm": "ed25519",
+    "key_id": "fixture-ed25519:1e37fb9a8cfc86209fde2d3e",
+    "key_scope": "fixture",
+    "public_key_pem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAL+BIXTIYzcKxenmnPzwJ/371WqZrZwMYzQiMuk00I5g=\n-----END PUBLIC KEY-----\n",
+    "signed_payload": "schema-and-transcript-hash",
+    "signature": "DgMLBDxSRNDMKd5bmv3u7gvUkQxLz+hwoUaunEc2AZogblbWIBiqtT59LeS3L3MyoBuSxAK51vzFSEvOMRflAA=="
+  }
+}
