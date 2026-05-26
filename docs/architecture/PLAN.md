@@ -4,6 +4,15 @@
 
 Turn current monolithic SwiftUI app into feature-first iOS app that is easy to debug, scale, test, and hand to parallel agents.
 
+## Migration Status
+
+As of 2026-05-26:
+
+- Phase 0 baseline docs exist in `docs/architecture` and `CONTEXT.md`.
+- Phase 1 app shell/routing foundation is complete: root lifecycle, setup, legal gate, status banner, and route/sheet models have moved into `App/`, `Features/Setup/`, and `Core/Routing/`.
+- The earlier UI file-size pass already split many `AppShellView.swift` subviews into top-level Swift files, but they still need to move into final feature/design-system folders in later phases.
+- Next phase: Phase 2 design-system extraction.
+
 ## Guardrails
 
 - Preserve behavior while moving code.

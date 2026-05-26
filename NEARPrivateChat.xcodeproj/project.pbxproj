@@ -45,6 +45,15 @@
 		C1000000000000000000000C /* ChatMessageViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000C /* ChatMessageViews.swift */; };
 		C1000000000000000000000D /* HostedHandoffPreflightSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */; };
 		C1000000000000000000000E /* ChatInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000E /* ChatInputBar.swift */; };
+		D10000000000000000000001 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000001 /* AppEnvironment.swift */; };
+		D10000000000000000000002 /* AppLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000002 /* AppLifecycle.swift */; };
+		D10000000000000000000003 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000003 /* RootView.swift */; };
+		D10000000000000000000004 /* StatusBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000004 /* StatusBanner.swift */; };
+		D10000000000000000000005 /* AppRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000005 /* AppRoute.swift */; };
+		D10000000000000000000006 /* AppSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000006 /* AppSheet.swift */; };
+		D10000000000000000000007 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000007 /* AppRouter.swift */; };
+		D10000000000000000000008 /* LegalTermsRequiredView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000008 /* LegalTermsRequiredView.swift */; };
+		D10000000000000000000009 /* UserSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000009 /* UserSetupView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -99,6 +108,15 @@
 		C2000000000000000000000C /* ChatMessageViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageViews.swift; sourceTree = "<group>"; };
 		C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostedHandoffPreflightSheet.swift; sourceTree = "<group>"; };
 		C2000000000000000000000E /* ChatInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatInputBar.swift; sourceTree = "<group>"; };
+		D20000000000000000000001 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		D20000000000000000000002 /* AppLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLifecycle.swift; sourceTree = "<group>"; };
+		D20000000000000000000003 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		D20000000000000000000004 /* StatusBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBanner.swift; sourceTree = "<group>"; };
+		D20000000000000000000005 /* AppRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRoute.swift; sourceTree = "<group>"; };
+		D20000000000000000000006 /* AppSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSheet.swift; sourceTree = "<group>"; };
+		D20000000000000000000007 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
+		D20000000000000000000008 /* LegalTermsRequiredView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalTermsRequiredView.swift; sourceTree = "<group>"; };
+		D20000000000000000000009 /* UserSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSetupView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -131,6 +149,9 @@
 		A40000000000000000000002 /* NEARPrivateChat */ = {
 			isa = PBXGroup;
 				children = (
+					D40000000000000000000001 /* App */,
+					D40000000000000000000002 /* Core */,
+					D40000000000000000000004 /* Features */,
 					A20000000000000000000001 /* NEARPrivateChatApp.swift */,
 					A20000000000000000000002 /* Models.swift */,
 					A20000000000000000000014 /* AttestationStatus.swift */,
@@ -171,6 +192,52 @@
 				A2000000000000000000000A /* Assets.xcassets */,
 			);
 			path = NEARPrivateChat;
+			sourceTree = "<group>";
+		};
+		D40000000000000000000001 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				D20000000000000000000001 /* AppEnvironment.swift */,
+				D20000000000000000000002 /* AppLifecycle.swift */,
+				D20000000000000000000003 /* RootView.swift */,
+				D20000000000000000000004 /* StatusBanner.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		D40000000000000000000002 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				D40000000000000000000003 /* Routing */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		D40000000000000000000003 /* Routing */ = {
+			isa = PBXGroup;
+			children = (
+				D20000000000000000000005 /* AppRoute.swift */,
+				D20000000000000000000006 /* AppSheet.swift */,
+				D20000000000000000000007 /* AppRouter.swift */,
+			);
+			path = Routing;
+			sourceTree = "<group>";
+		};
+		D40000000000000000000004 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				D40000000000000000000005 /* Setup */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		D40000000000000000000005 /* Setup */ = {
+			isa = PBXGroup;
+			children = (
+				D20000000000000000000008 /* LegalTermsRequiredView.swift */,
+				D20000000000000000000009 /* UserSetupView.swift */,
+			);
+			path = Setup;
 			sourceTree = "<group>";
 		};
 		A40000000000000000000003 /* Products */ = {
@@ -314,6 +381,15 @@
 				C1000000000000000000000C /* ChatMessageViews.swift in Sources */,
 				C1000000000000000000000D /* HostedHandoffPreflightSheet.swift in Sources */,
 				C1000000000000000000000E /* ChatInputBar.swift in Sources */,
+				D10000000000000000000001 /* AppEnvironment.swift in Sources */,
+				D10000000000000000000002 /* AppLifecycle.swift in Sources */,
+				D10000000000000000000003 /* RootView.swift in Sources */,
+				D10000000000000000000004 /* StatusBanner.swift in Sources */,
+				D10000000000000000000005 /* AppRoute.swift in Sources */,
+				D10000000000000000000006 /* AppSheet.swift in Sources */,
+				D10000000000000000000007 /* AppRouter.swift in Sources */,
+				D10000000000000000000008 /* LegalTermsRequiredView.swift in Sources */,
+				D10000000000000000000009 /* UserSetupView.swift in Sources */,
 				A10000000000000000000016 /* MarkdownRenderingViews.swift in Sources */,
 				A10000000000000000000017 /* DemoCaptureViews.swift in Sources */,
 				A10000000000000000000018 /* MessagePresentationHelpers.swift in Sources */,

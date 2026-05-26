@@ -2,9 +2,11 @@
 
 ## Current State
 
-The app works, but architecture is concentrated in a few files:
+The app works, and Phase 1 has started the feature-first migration. Root app shell code now lives in `App/`, setup/legal views live in `Features/Setup/`, and root route/sheet types live in `Core/Routing/`.
 
-- `AppShellView.swift` owns home, chat, model picker, sharing, project context, account, security, agent workspace, composer, markdown, and many design primitives.
+The remaining concentration is still significant:
+
+- `AppShellView.swift` owns home composition and still coordinates chat, model picker, sharing, project context, account, security, agent workspace, and many design primitives through extracted sibling files.
 - `ChatStore.swift` owns conversation state, project state, sharing, files, streaming, source routing, settings, billing, attestation, agent tools, persistence, cache, and banners.
 - `Models.swift` mixes product models, API DTOs, routing semantics, local storage helpers, visual constants, and UI components.
 
@@ -75,6 +77,14 @@ Target state: root app creates one dependency graph:
 SwiftUI views read narrow dependencies. Avoid passing full app store into every feature once extraction starts.
 
 Transition rule: Phase 1 keeps current `SessionStore` and `ChatStore` environment objects. New stores are introduced only when their feature is extracted.
+
+Phase 1 completed on 2026-05-26:
+
+- `NEARPrivateChatApp.swift` is now app construction and dependency install.
+- `App/RootView.swift` owns root auth/setup/legal/banner presentation.
+- `App/AppLifecycle.swift` owns root URL, auth, profile, account-switch, and bootstrap callbacks.
+- `Core/Routing/AppRoute.swift`, `AppSheet.swift`, and `AppRouter.swift` establish the route model for later feature extraction.
+- `Features/Setup/UserSetupView.swift` and `LegalTermsRequiredView.swift` own setup/legal UI.
 
 ## Routing
 

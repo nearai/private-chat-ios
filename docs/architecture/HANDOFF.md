@@ -1,8 +1,8 @@
-# Handoff: Phase 1 App Shell And Routing
+# Handoff: Phase 2 Design System Extraction
 
 ## Focus
 
-Pick up architecture cleanup at Phase 1: create app shell and routing foundation without changing product behavior.
+Pick up architecture cleanup at Phase 2: move reusable visual primitives into design-system/shared-component folders without changing product behavior or visuals.
 
 Reference docs:
 
@@ -12,42 +12,46 @@ Reference docs:
 
 ## Current State
 
-Docs only so far. No Swift refactor done in this pass.
+Phase 1 is complete.
 
-Codebase still has large concentration:
+Created:
 
-- `NEARPrivateChat/AppShellView.swift` owns most UI surfaces.
-- `NEARPrivateChat/ChatStore.swift` owns broad app state, streaming, routing decisions, persistence, sharing, files, projects, agent, settings.
-- `NEARPrivateChat/Models.swift` mixes domain models, DTOs, storage helpers, design constants, and small UI components.
-- `NEARPrivateChat/NEARPrivateChatApp.swift` creates `PrivateChatAPI`, `SessionStore`, `ChatStore`, then wires root auth/setup/legal/banner behavior inline.
-
-## Phase 1 Goal
-
-Create foundation only:
-
-- `NEARPrivateChat/App/RootView.swift`
 - `NEARPrivateChat/App/AppEnvironment.swift`
 - `NEARPrivateChat/App/AppLifecycle.swift`
+- `NEARPrivateChat/App/RootView.swift`
 - `NEARPrivateChat/App/StatusBanner.swift`
-- `NEARPrivateChat/Features/Setup/UserSetupView.swift`
-- `NEARPrivateChat/Features/Setup/LegalTermsRequiredView.swift`
 - `NEARPrivateChat/Core/Routing/AppRoute.swift`
 - `NEARPrivateChat/Core/Routing/AppSheet.swift`
 - `NEARPrivateChat/Core/Routing/AppRouter.swift`
-- corresponding `NEARPrivateChat.xcodeproj/project.pbxproj` file refs/build-phase entries
+- `NEARPrivateChat/Features/Setup/UserSetupView.swift`
+- `NEARPrivateChat/Features/Setup/LegalTermsRequiredView.swift`
 
-Move root-level routing/lifecycle out of `NEARPrivateChatApp.swift`.
+`NEARPrivateChatApp.swift` is now mostly app construction and dependency installation. `AppRouter` is injected as an `EnvironmentObject`, but feature-specific navigation and sheets still remain local until their feature extraction phases.
 
-Keep `ChatStore` as compatibility facade. Do not split `ChatStore` yet.
-Keep `SessionStore` name. Do not rename auth state in Phase 1.
+Codebase still has large concentration:
+
+- `NEARPrivateChat/AppShellView.swift` owns home composition and still coordinates many UI surfaces through extracted sibling files.
+- `NEARPrivateChat/ChatStore.swift` owns broad app state, streaming, routing decisions, persistence, sharing, files, projects, agent, settings.
+- `NEARPrivateChat/Models.swift` mixes domain models, DTOs, storage helpers, design constants, and small UI components.
+
+## Phase 2 Goal
+
+Create:
+
+- `NEARPrivateChat/Core/DesignSystem`
+- `NEARPrivateChat/Shared/Components`
+- `NEARPrivateChat/Shared/Components/Markdown`
+- focused files for colors/tokens, typography helpers, haptics, chips, cards, rows, empty states, loading rows, toolbar/icon helpers, and markdown rendering
+
+Move reusable visual primitives out of root/feature files. Keep visuals unchanged.
 
 ## Constraints
 
 - Preserve behavior.
+- Preserve visuals except for tiny layout glue required by moved code.
 - No DB migrations.
 - No localhost app.
 - Use `pnpm` only for JS verifier work.
-- For non-Codex/manual branches, do not use `codex/` prefix unless a human asks for it; leave Codex-managed branch naming to repo workflow.
 - Keep SwiftUI components small when extracting, but do not split purely for line count.
 - Prefer feature-first/fractal folders.
 - One component per file after extraction.
@@ -55,44 +59,42 @@ Keep `SessionStore` name. Do not rename auth state in Phase 1.
 
 ## Suggested Skills
 
-- `build-ios-apps:swiftui-ui-patterns` for app wiring, `NavigationStack`, enum routes, sheet presentation.
-- `build-ios-apps:swiftui-view-refactor` for moving root view logic without behavior drift.
+- `build-ios-apps:swiftui-view-refactor` for moving SwiftUI components without behavior drift.
+- `build-ios-apps:swiftui-ui-patterns` for keeping components idiomatic and reusable.
 - `grill-with-docs` if a product term or hard architecture decision needs clarification.
 
 ## First Files To Inspect
 
-- `NEARPrivateChat/NEARPrivateChatApp.swift`
 - `NEARPrivateChat/AppShellView.swift`
+- `NEARPrivateChat/AppHaptics.swift`
+- `NEARPrivateChat/ChipFlowLayout.swift`
+- `NEARPrivateChat/MarkdownRenderingViews.swift`
+- `NEARPrivateChat/HomeSupportingViews.swift`
+- `NEARPrivateChat/ChatMessageViews.swift`
 - `NEARPrivateChat/ChatStore.swift`
 - `NEARPrivateChat/Models.swift`
 - `NEARPrivateChat.xcodeproj/project.pbxproj`
 
 ## Implementation Notes
 
-- Start by introducing route/sheet types without replacing every sheet in app.
-- Extract `RootView` from `NEARPrivateChatApp.swift` first.
-- Keep current `EnvironmentObject` injection during Phase 1 to reduce blast radius.
-- Add `AppRouter` as `ObservableObject` owned by `@StateObject` and injected as `@EnvironmentObject`; avoid `@Observable` until later state cleanup.
-- Move setup/legal/banner declarations out of `NEARPrivateChatApp.swift` too, not only `RootView`.
-- Remove `private` from moved declarations only where another file needs to reference them.
+- Move files by ownership, not just line count.
+- Keep reusable primitives in `Core/DesignSystem` only when they are genuinely cross-feature.
+- Keep feature-specific presentation in its feature until that feature extraction happens.
+- Remove `private` from moved declarations only where another file must reference them.
 - Project uses manual Xcode groups, not filesystem-synced groups. Add each new Swift file to `.pbxproj` target membership.
-- Reset route path on sign-out/account switch.
-- Preserve existing `.onOpenURL` behavior: session callback first, app deep link second.
-- Keep setup/legal/banner presentation behavior same.
+- Prefer moving complete small files first (`AppHaptics.swift`, `ChipFlowLayout.swift`, `MarkdownRenderingViews.swift`) before slicing `AppShellView.swift` again.
 
 ## Exit Checks
 
-- `NEARPrivateChatApp.swift` is mostly app construction and dependency install.
-- Root auth/setup/legal/banner behavior lives in `App/RootView.swift` or lifecycle helper.
-- Setup/legal/banner views live in their own files, not a new root monolith.
-- Route and sheet enum files exist.
-- Existing sign-in, sign-out, deep link, setup rerun, delete confirmation, hosted handoff presentation still have clear owner.
-- No Home, Chat, Sharing, Account, Security, Agent, Project, File, or Model Catalog extraction beyond root setup/legal support needed for this phase.
-- Build succeeds after Swift/project changes.
+- Reusable visual primitives no longer default to `AppShellView.swift`.
+- Markdown renderer lives under `Shared/Components/Markdown`.
+- Haptics and layout helpers live under `Core/DesignSystem` or `Shared/Components`.
+- Existing screens render the same.
+- Build succeeds after Swift file/project changes.
 
 ## Known Open Decision
 
-Next feature extraction after Phase 1 is undecided:
+Next feature extraction after Phase 2 remains undecided:
 
 - Recommended correctness path: Sharing first.
 - Recommended fast file-size path: Home first.
