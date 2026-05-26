@@ -140,6 +140,9 @@ final class ChatStore: ObservableObject {
     private var suppressDraftPersistence = false
     private var loadMessagesTask: Task<Void, Never>?
     private var loadMessagesGeneration = 0
+    private var bootstrapInFlightAccountID: String?
+    private var lastBootstrappedAccountID: String?
+    private var accountBackgroundRefreshTask: Task<Void, Never>?
     private struct PersistedDraftState: Codable {
         var text: String
         var attachments: [ChatAttachment]
@@ -1122,7 +1125,7 @@ final class ChatStore: ObservableObject {
         }
         ironclawSettings = .default
         ironclawTokenConfigured = false
-        nearCloudKeyConfigured = true
+        nearCloudKeyConfigured = false
         selectedModel = Self.defaultModelID
         councilModelIDs = [Self.defaultModelID]
         selectedProjectID = nil
@@ -1141,15 +1144,58 @@ final class ChatStore: ObservableObject {
             return
         }
         #endif
-        await withLoading {
-            async let conversationLoad: Void = refreshConversations()
-            async let modelLoad: Void = refreshModels()
-            async let settingsLoad: Void = refreshUserSettings(showErrors: false)
-            async let billingLoad: Void = refreshBilling(showErrors: false)
-            async let ironclawToolsLoad: Void = refreshIronclawTools()
-            async let sharedLoad: Void = refreshSharedWithMe(showErrors: false)
-            _ = await (conversationLoad, modelLoad, settingsLoad, billingLoad, ironclawToolsLoad, sharedLoad)
-            ensureSelectedModelIsAvailable(shouldShowBanner: false)
+        let accountID = storageAccountID
+        if bootstrapInFlightAccountID == accountID {
+            return
+        }
+        if lastBootstrappedAccountID == accountID, !models.isEmpty {
+            scheduleAccountBackgroundRefresh(for: accountID)
+            return
+        }
+
+        bootstrapInFlightAccountID = accountID
+        let shouldShowBlockingLoader = conversations.isEmpty && models.isEmpty
+        if shouldShowBlockingLoader {
+            isLoading = true
+        }
+        defer {
+            if shouldShowBlockingLoader {
+                isLoading = false
+            }
+            if bootstrapInFlightAccountID == accountID {
+                bootstrapInFlightAccountID = nil
+            }
+        }
+
+        async let conversationLoad: Void = refreshConversations()
+        async let modelLoad: Void = refreshModels(loadCloudCatalog: nearCloudKeyConfigured)
+        async let settingsLoad: Void = refreshUserSettings(showErrors: false)
+        _ = await (conversationLoad, modelLoad, settingsLoad)
+
+        guard storageAccountID == accountID else { return }
+        ensureSelectedModelIsAvailable(shouldShowBanner: false)
+        lastBootstrappedAccountID = accountID
+        scheduleAccountBackgroundRefresh(for: accountID)
+    }
+
+    private func scheduleAccountBackgroundRefresh(for accountID: String? = nil) {
+        let resolvedAccountID = accountID ?? storageAccountID
+        accountBackgroundRefreshTask?.cancel()
+        accountBackgroundRefreshTask = Task { @MainActor [weak self] in
+            guard let self, self.storageAccountID == resolvedAccountID else { return }
+            await self.refreshBilling(showErrors: false)
+            guard !Task.isCancelled, self.storageAccountID == resolvedAccountID else { return }
+            await self.refreshSharedWithMe(showErrors: false)
+            guard !Task.isCancelled, self.storageAccountID == resolvedAccountID else { return }
+            if self.ironclawSettings.hasUsableHostedEndpoint {
+                await self.refreshIronclawTools()
+            }
+        }
+    }
+
+    private func scheduleConversationListRefresh() {
+        Task { @MainActor [weak self] in
+            await self?.refreshConversations()
         }
     }
 
@@ -1184,6 +1230,10 @@ final class ChatStore: ObservableObject {
     func reset() {
         streamTask?.cancel()
         streamTask = nil
+        accountBackgroundRefreshTask?.cancel()
+        accountBackgroundRefreshTask = nil
+        bootstrapInFlightAccountID = nil
+        lastBootstrappedAccountID = nil
         currentCouncilAssistantMessageIDs = []
         conversations = []
         messages = []
@@ -1311,15 +1361,17 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    func refreshModels() async {
+    func refreshModels(loadCloudCatalog: Bool = false) async {
         do {
-            async let privateCatalog = api.fetchModels()
-            async let cloudCatalog = api.fetchNearCloudModels()
-            let fetched = try await privateCatalog
-            let fetchedCloud = (try? await cloudCatalog) ?? []
+            let fetched = try await api.fetchModels()
+            let fetchedCloud = loadCloudCatalog
+                ? (try? await api.fetchNearCloudModels(apiKey: loadNearCloudAPIKey())) ?? []
+                : []
             deniedOpenWeightModelIDs.removeAll()
             models = fetched
-            nearCloudModels = Self.nearCloudRouteModels(from: fetchedCloud)
+            if loadCloudCatalog {
+                nearCloudModels = Self.nearCloudRouteModels(from: fetchedCloud)
+            }
             if nearCloudModels.isEmpty {
                 nearCloudModels = Self.fallbackNearCloudModels()
             }
@@ -3686,7 +3738,7 @@ final class ChatStore: ObservableObject {
                 await refreshModels()
             }
             if billingSnapshot == nil {
-                await refreshBilling(showErrors: false)
+                scheduleAccountBackgroundRefresh()
             }
             ensureSelectedModelIsAvailable(shouldShowBanner: true)
             routeCurrentPromptIfNeeded(text, attachments: attachments)
@@ -3697,14 +3749,6 @@ final class ChatStore: ObservableObject {
             routeReadinessIssue = nil
             let routedText = phoneAgentMissionPromptIfNeeded(for: text) ?? text
             let existingConversation = selectedConversation
-            let conversation = try await ensureConversation(for: text, attachments: attachments)
-            selectedConversation = conversation
-            transitionDraftScopeToCurrentSelection(loadDraft: false)
-            organizePhoneAgentConversationIfNeeded(
-                conversation: conversation,
-                originalText: text,
-                routedText: routedText
-            )
             let requestedModel = selectedModel
             let requestModel = requestedModel
             let previousAssistantMessage = messages.last(where: { $0.role == .assistant })
@@ -3713,6 +3757,14 @@ final class ChatStore: ObservableObject {
             let requestInitiator = initiator ?? (existingConversation == nil ? "new_chat" : "new_message")
             let councilModelIDs = appendUserMessage ? requestCouncilModelIDs(for: requestModel) : []
             if councilModelIDs.count > 1 {
+                let conversation = try await ensureConversation(for: text, attachments: attachments)
+                selectedConversation = conversation
+                transitionDraftScopeToCurrentSelection(loadDraft: false)
+                organizePhoneAgentConversationIfNeeded(
+                    conversation: conversation,
+                    originalText: text,
+                    routedText: routedText
+                )
                 try await sendCouncilTurn(
                     text: text,
                     routedText: routedText,
@@ -3755,6 +3807,15 @@ final class ChatStore: ObservableObject {
             }
             messages.append(assistantMessage)
 
+            let conversation = try await ensureConversation(for: text, attachments: attachments)
+            selectedConversation = conversation
+            transitionDraftScopeToCurrentSelection(loadDraft: false)
+            organizePhoneAgentConversationIfNeeded(
+                conversation: conversation,
+                originalText: text,
+                routedText: routedText
+            )
+
             let finalModel = try await streamResponseWithFallback(
                 initialModel: requestModel,
                 text: routedText,
@@ -3777,7 +3838,7 @@ final class ChatStore: ObservableObject {
             } else {
                 await loadMessages(for: conversation)
             }
-            await refreshConversations()
+            scheduleConversationListRefresh()
             return true
         } catch is CancellationError {
             cancelStream()
@@ -3969,7 +4030,7 @@ final class ChatStore: ObservableObject {
         } else {
             showBanner("Council finished with \(successfulResults.count) answers.")
         }
-        await refreshConversations()
+        scheduleConversationListRefresh()
     }
 
     private func waitForCouncilStopSignal(batchID: String) async -> CouncilStreamResult {

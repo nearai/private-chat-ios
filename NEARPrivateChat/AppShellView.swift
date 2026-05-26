@@ -2805,7 +2805,7 @@ private struct ModelPickerView: View {
             }
             .task {
                 if chatStore.models.isEmpty {
-                    await chatStore.refreshModels()
+                    await chatStore.refreshModels(loadCloudCatalog: chatStore.nearCloudKeyConfigured)
                 }
             }
         }
