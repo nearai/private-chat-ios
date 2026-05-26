@@ -31,6 +31,20 @@
 		A10000000000000000000017 /* DemoCaptureViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* DemoCaptureViews.swift */; };
 		A10000000000000000000018 /* MessagePresentationHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* MessagePresentationHelpers.swift */; };
 		B10000000000000000000001 /* PrivateChatCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* PrivateChatCoreTests.swift */; };
+		C10000000000000000000001 /* AppHaptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000001 /* AppHaptics.swift */; };
+		C10000000000000000000002 /* HomeSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000002 /* HomeSearchIndex.swift */; };
+		C10000000000000000000003 /* HomeSupportingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000003 /* HomeSupportingViews.swift */; };
+		C10000000000000000000004 /* ChatScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000004 /* ChatScreenView.swift */; };
+		C10000000000000000000005 /* ModelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000005 /* ModelPickerView.swift */; };
+		C10000000000000000000006 /* ChipFlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000006 /* ChipFlowLayout.swift */; };
+		C10000000000000000000007 /* ShareViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000007 /* ShareViews.swift */; };
+		C10000000000000000000008 /* ProjectContextViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000008 /* ProjectContextViews.swift */; };
+		C10000000000000000000009 /* AccountCapabilitiesViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000009 /* AccountCapabilitiesViews.swift */; };
+		C1000000000000000000000A /* SecurityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000A /* SecurityView.swift */; };
+		C1000000000000000000000B /* AgentWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000B /* AgentWorkspaceView.swift */; };
+		C1000000000000000000000C /* ChatMessageViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000C /* ChatMessageViews.swift */; };
+		C1000000000000000000000D /* HostedHandoffPreflightSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */; };
+		C1000000000000000000000E /* ChatInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000E /* ChatInputBar.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,6 +85,20 @@
 		A2000000000000000000001A /* MessagePresentationHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagePresentationHelpers.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* PrivateChatCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateChatCoreTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* NEARPrivateChatTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NEARPrivateChatTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C20000000000000000000001 /* AppHaptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppHaptics.swift; sourceTree = "<group>"; };
+		C20000000000000000000002 /* HomeSearchIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSearchIndex.swift; sourceTree = "<group>"; };
+		C20000000000000000000003 /* HomeSupportingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSupportingViews.swift; sourceTree = "<group>"; };
+		C20000000000000000000004 /* ChatScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatScreenView.swift; sourceTree = "<group>"; };
+		C20000000000000000000005 /* ModelPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPickerView.swift; sourceTree = "<group>"; };
+		C20000000000000000000006 /* ChipFlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipFlowLayout.swift; sourceTree = "<group>"; };
+		C20000000000000000000007 /* ShareViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViews.swift; sourceTree = "<group>"; };
+		C20000000000000000000008 /* ProjectContextViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectContextViews.swift; sourceTree = "<group>"; };
+		C20000000000000000000009 /* AccountCapabilitiesViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountCapabilitiesViews.swift; sourceTree = "<group>"; };
+		C2000000000000000000000A /* SecurityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityView.swift; sourceTree = "<group>"; };
+		C2000000000000000000000B /* AgentWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentWorkspaceView.swift; sourceTree = "<group>"; };
+		C2000000000000000000000C /* ChatMessageViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageViews.swift; sourceTree = "<group>"; };
+		C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostedHandoffPreflightSheet.swift; sourceTree = "<group>"; };
+		C2000000000000000000000E /* ChatInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatInputBar.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -120,6 +148,20 @@
 				A20000000000000000000006 /* ChatStore.swift */,
 				A20000000000000000000007 /* AuthView.swift */,
 				A20000000000000000000008 /* AppShellView.swift */,
+				C20000000000000000000001 /* AppHaptics.swift */,
+				C20000000000000000000002 /* HomeSearchIndex.swift */,
+				C20000000000000000000003 /* HomeSupportingViews.swift */,
+				C20000000000000000000004 /* ChatScreenView.swift */,
+				C20000000000000000000005 /* ModelPickerView.swift */,
+				C20000000000000000000006 /* ChipFlowLayout.swift */,
+				C20000000000000000000007 /* ShareViews.swift */,
+				C20000000000000000000008 /* ProjectContextViews.swift */,
+				C20000000000000000000009 /* AccountCapabilitiesViews.swift */,
+				C2000000000000000000000A /* SecurityView.swift */,
+				C2000000000000000000000B /* AgentWorkspaceView.swift */,
+				C2000000000000000000000C /* ChatMessageViews.swift */,
+				C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */,
+				C2000000000000000000000E /* ChatInputBar.swift */,
 				A20000000000000000000018 /* MarkdownRenderingViews.swift */,
 				A20000000000000000000019 /* DemoCaptureViews.swift */,
 				A2000000000000000000001A /* MessagePresentationHelpers.swift */,
@@ -258,6 +300,20 @@
 				A10000000000000000000006 /* ChatStore.swift in Sources */,
 				A10000000000000000000007 /* AuthView.swift in Sources */,
 				A10000000000000000000008 /* AppShellView.swift in Sources */,
+				C10000000000000000000001 /* AppHaptics.swift in Sources */,
+				C10000000000000000000002 /* HomeSearchIndex.swift in Sources */,
+				C10000000000000000000003 /* HomeSupportingViews.swift in Sources */,
+				C10000000000000000000004 /* ChatScreenView.swift in Sources */,
+				C10000000000000000000005 /* ModelPickerView.swift in Sources */,
+				C10000000000000000000006 /* ChipFlowLayout.swift in Sources */,
+				C10000000000000000000007 /* ShareViews.swift in Sources */,
+				C10000000000000000000008 /* ProjectContextViews.swift in Sources */,
+				C10000000000000000000009 /* AccountCapabilitiesViews.swift in Sources */,
+				C1000000000000000000000A /* SecurityView.swift in Sources */,
+				C1000000000000000000000B /* AgentWorkspaceView.swift in Sources */,
+				C1000000000000000000000C /* ChatMessageViews.swift in Sources */,
+				C1000000000000000000000D /* HostedHandoffPreflightSheet.swift in Sources */,
+				C1000000000000000000000E /* ChatInputBar.swift in Sources */,
 				A10000000000000000000016 /* MarkdownRenderingViews.swift in Sources */,
 				A10000000000000000000017 /* DemoCaptureViews.swift in Sources */,
 				A10000000000000000000018 /* MessagePresentationHelpers.swift in Sources */,

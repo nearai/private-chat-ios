@@ -846,6 +846,42 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertTrue(store.shouldShowSharedAuthorNames)
     }
 
+    func testSharedConversationPresentationUsesReadableSourceLabels() {
+        XCTAssertEqual(
+            SharedConversationPresentation.sourceBadgeTitle(for: SharedConversationPresentation.accountShareLabel),
+            "NEAR account"
+        )
+        XCTAssertEqual(
+            SharedConversationPresentation.sourceDescription(for: SharedConversationPresentation.accountShareLabel),
+            SharedConversationPresentation.accountShareLabel
+        )
+        XCTAssertEqual(
+            SharedConversationPresentation.sourceBadgeTitle(for: "https://www.private.near.ai/c/conv-shared"),
+            "private.near.ai"
+        )
+        XCTAssertEqual(
+            SharedConversationPresentation.sourceDescription(for: "conv_shared_123"),
+            "Opened from a conversation ID"
+        )
+    }
+
+    func testSharedConversationInfoExposesReadableAccessAndSourceCopy() throws {
+        let payload = Data("""
+        {
+          "conversation_id": "conv-shared",
+          "permission": "read",
+          "title": "Launch sync",
+          "created_at": 1700000000
+        }
+        """.utf8)
+
+        let item = try JSONDecoder().decode(SharedConversationInfo.self, from: payload)
+
+        XCTAssertEqual(item.accessBadgeTitle, "Read-only")
+        XCTAssertEqual(item.sourceLabel, SharedConversationPresentation.accountShareLabel)
+        XCTAssertFalse(item.canWrite)
+    }
+
     func testResponseStreamParserHandlesCoreEvents() throws {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
 

@@ -3543,6 +3543,70 @@ struct SharedConversationSnapshot: Identifiable, Hashable {
     var loadedAt: Date
 
     var id: String { conversation.id }
+
+    var accessBadgeTitle: String {
+        canWrite ? "Can edit" : "Read-only"
+    }
+
+    var accessDescription: String {
+        canWrite ? "You can continue this chat in place or fork it into your own copy." : "Read-only chats cannot be edited. Copy and Continue starts your own draft."
+    }
+
+    var sourceBadgeTitle: String {
+        SharedConversationPresentation.sourceBadgeTitle(for: source)
+    }
+
+    var sourceDescription: String {
+        SharedConversationPresentation.sourceDescription(for: source)
+    }
+}
+
+enum SharedConversationPresentation {
+    static let accountShareLabel = "Shared to your NEAR account"
+
+    static func sourceBadgeTitle(for rawSource: String) -> String {
+        let source = normalizedSource(rawSource)
+        if source == accountShareLabel {
+            return "NEAR account"
+        }
+        if let host = host(from: source) {
+            return host
+        }
+        if source.contains(" ") {
+            return source
+        }
+        return "Conversation ID"
+    }
+
+    static func sourceDescription(for rawSource: String) -> String {
+        let source = normalizedSource(rawSource)
+        if source == accountShareLabel {
+            return accountShareLabel
+        }
+        if let host = host(from: source) {
+            return "Opened from \(host)"
+        }
+        if source.contains(" ") {
+            return source
+        }
+        return "Opened from a conversation ID"
+    }
+
+    private static func normalizedSource(_ rawSource: String) -> String {
+        let trimmed = rawSource.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? accountShareLabel : trimmed
+    }
+
+    private static func host(from source: String) -> String? {
+        guard let url = URL(string: source),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "https" || scheme == "http",
+              let host = url.host?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !host.isEmpty else {
+            return nil
+        }
+        return host.replacingOccurrences(of: #"^www\."#, with: "", options: .regularExpression)
+    }
 }
 
 struct ModelListResponse: Decodable {
@@ -3986,6 +4050,14 @@ struct SharedConversationInfo: Decodable, Identifiable, Hashable {
 
     var canWrite: Bool {
         permission == "write"
+    }
+
+    var accessBadgeTitle: String {
+        canWrite ? "Can edit" : "Read-only"
+    }
+
+    var sourceLabel: String {
+        SharedConversationPresentation.accountShareLabel
     }
 
     enum CodingKeys: String, CodingKey {

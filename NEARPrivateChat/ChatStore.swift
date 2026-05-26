@@ -3125,7 +3125,7 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    func openSharedConversation(from value: String, knownCanWrite: Bool? = nil) async {
+    func openSharedConversation(from value: String, knownCanWrite: Bool? = nil, sourceLabel: String? = nil) async {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let conversationID = Self.conversationID(from: trimmed) else {
             showBanner("Paste a private.near.ai conversation link or conversation ID.")
@@ -3149,7 +3149,7 @@ final class ChatStore: ObservableObject {
             let snapshot = try await SharedConversationSnapshot(
                 conversation: conversation,
                 messages: Self.chatMessages(from: items.data),
-                source: trimmed,
+                source: sourceLabel ?? trimmed,
                 canWrite: canWrite,
                 loadedAt: Date()
             )
