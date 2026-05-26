@@ -47,7 +47,7 @@ Keep `SessionStore` name. Do not rename auth state in Phase 1.
 - No DB migrations.
 - No localhost app.
 - Use `pnpm` only for JS verifier work.
-- Do not use `codex/` branch prefix.
+- For non-Codex/manual branches, do not use `codex/` prefix unless a human asks for it; leave Codex-managed branch naming to repo workflow.
 - Keep SwiftUI components small when extracting, but do not split purely for line count.
 - Prefer feature-first/fractal folders.
 - One component per file after extraction.
