@@ -14,7 +14,8 @@ As of 2026-05-26:
 - Phase 3 feature ownership is materially complete for file placement: Auth, Home, Chat, ModelCatalog, Sharing, Projects, Files, Account, Security, Agent, and Setup now have feature folders.
 - The app shell split is complete enough for continued work: `AppShellView.swift` is down to root navigation/dialog coordination, while `ConversationListView`, shared conversation UI, and `EmptyChatView` live in their owning features.
 - Phase 12 model-file split is complete as a mechanical first pass: the former monolithic `Models.swift` has been replaced by domain model files.
-- Next phase: split `ChatStore` behavior into services/stores, starting with streaming, routing, draft persistence, and sharing.
+- Phases 4-8 now have first-pass service/store owners: `ComposerState`, `MessageTimelineStore`, `RoutePlanner`, `MessageStreamService`, `CouncilStreamService`, `ModelCatalogStore`, `ProjectStore`, `FileStore`, and `ShareStore`.
+- Next phase: continue reducing `ChatStore` beyond the compatibility facade, starting with route mutation, Council fan-out, project persistence, file cache, and sharing API calls.
 
 ## Guardrails
 
@@ -38,6 +39,12 @@ Exit:
 - `ARCHITECTURE.md` defines target folders, routing, state ownership, service seams.
 - `CONTEXT.md` defines product terms.
 - Each future extraction has owner feature.
+
+## Phases 4-8 Shipment
+
+Detailed execution plan: `docs/architecture/PHASE_4_8_SHIPPING_PLAN.md`.
+
+Shipping rule: phases 4-8 move behavior out of `ChatStore` in service/store chunks, not by changing the app's user-facing flow. Each phase must build, test, simulator-smoke, and update docs before being pushed.
 
 ## Phase 1: App Shell And Routing
 
@@ -101,7 +108,7 @@ Exit:
 - Chat UI no longer depends on home/project/account UI code.
 - Message timeline changes test without rendering SwiftUI.
 
-Status: partial/structural complete on 2026-05-26. Chat UI files moved; `MessageTimelineStore` and `ComposerState` remain next-step work.
+Status: first-pass complete on 2026-05-26. Chat UI files moved; `MessageTimelineStore` owns visible transcript grouping and `ComposerState` owns sendability state.
 
 ## Phase 5: Streaming And Route Services
 
@@ -115,6 +122,8 @@ Exit:
 - Response streaming bugs have one owner.
 - Route decisions test without UI.
 
+Status: first-pass complete on 2026-05-26. `RoutePlanner` owns route classification/readiness/source-routing forwarding, `MessageStreamService` owns visible-output timeout policy, and `CouncilStreamService` owns the Council concurrency limit. Deeper streaming mutation/fan-out extraction remains follow-up.
+
 ## Phase 6: Model Catalog And Source Routing
 
 - Create `Features/ModelCatalog`.
@@ -125,6 +134,8 @@ Exit:
 Exit:
 
 - Model catalog and route readiness are independent from chat screen layout.
+
+Status: first-pass complete on 2026-05-26. `ModelCatalogStore` owns cloud route models, external models, picker models, pinned picker derivation, and ranking. Source-routing semantics remain in `ChatRoutingModels.swift` with `RoutePlanner` forwarding.
 
 ## Phase 7: Projects And Files
 
@@ -137,6 +148,8 @@ Exit:
 
 - Project context and file library can evolve without touching composer internals except explicit interfaces.
 
+Status: first-pass complete on 2026-05-26. `ProjectStore` owns selected-project conversation scoping and visible/archived filtering. `FileStore` owns prompt/project attachment limit decisions. Project persistence/file cache/upload are still bridged through `ChatStore`.
+
 ## Phase 8: Sharing
 
 - Create `Features/Sharing`.
@@ -146,6 +159,8 @@ Exit:
 Exit:
 
 - Sharing permission bugs have small surface and fakeable API tests.
+
+Status: first-pass complete on 2026-05-26. `ShareStore` owns shared-author visibility state. Share API mutation and sheet state are still bridged through `ChatStore`.
 
 ## Phase 9: Security And Attestation
 

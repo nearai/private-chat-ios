@@ -44,6 +44,9 @@
 		C1000000000000000000000C /* ChatMessageViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000C /* ChatMessageViews.swift */; };
 		C1000000000000000000000D /* HostedHandoffPreflightSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */; };
 		C1000000000000000000000E /* ChatInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000E /* ChatInputBar.swift */; };
+		C1000000000000000000000F /* MessageTimelineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000F /* MessageTimelineStore.swift */; };
+		C10000000000000000000010 /* ComposerState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000010 /* ComposerState.swift */; };
+		C10000000000000000000011 /* ModelCatalogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000011 /* ModelCatalogStore.swift */; };
 		D10000000000000000000001 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000001 /* AppEnvironment.swift */; };
 		D10000000000000000000002 /* AppLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000002 /* AppLifecycle.swift */; };
 		D10000000000000000000003 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000003 /* RootView.swift */; };
@@ -53,6 +56,7 @@
 		D10000000000000000000007 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000007 /* AppRouter.swift */; };
 		D10000000000000000000008 /* LegalTermsRequiredView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000008 /* LegalTermsRequiredView.swift */; };
 		D10000000000000000000009 /* UserSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000009 /* UserSetupView.swift */; };
+		D1000000000000000000000A /* RoutePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000000000000000000000A /* RoutePlanner.swift */; };
 		E10000000000000000000001 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* DesignTokens.swift */; };
 		E10000000000000000000002 /* BrandMarks.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000002 /* BrandMarks.swift */; };
 		E10000000000000000000003 /* ViewPlatformExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000003 /* ViewPlatformExtensions.swift */; };
@@ -74,6 +78,11 @@
 		F1000000000000000000000F /* SharingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000000F /* SharingModels.swift */; };
 		F10000000000000000000010 /* SecurityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000010 /* SecurityModels.swift */; };
 		F10000000000000000000011 /* ResponseStreamEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000011 /* ResponseStreamEvent.swift */; };
+		F10000000000000000000012 /* ProjectStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000012 /* ProjectStore.swift */; };
+		F10000000000000000000013 /* FileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000013 /* FileStore.swift */; };
+		F10000000000000000000014 /* ShareStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000014 /* ShareStore.swift */; };
+		F10000000000000000000015 /* MessageStreamService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000015 /* MessageStreamService.swift */; };
+		F10000000000000000000016 /* CouncilStreamService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000016 /* CouncilStreamService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -136,6 +145,7 @@
 		D20000000000000000000007 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
 		D20000000000000000000008 /* LegalTermsRequiredView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalTermsRequiredView.swift; sourceTree = "<group>"; };
 		D20000000000000000000009 /* UserSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSetupView.swift; sourceTree = "<group>"; };
+		D2000000000000000000000A /* RoutePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutePlanner.swift; sourceTree = "<group>"; };
 		E20000000000000000000001 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		E20000000000000000000002 /* BrandMarks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandMarks.swift; sourceTree = "<group>"; };
 		E20000000000000000000003 /* ViewPlatformExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewPlatformExtensions.swift; sourceTree = "<group>"; };
@@ -157,6 +167,14 @@
 		F2000000000000000000000F /* SharingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharingModels.swift; sourceTree = "<group>"; };
 		F20000000000000000000010 /* SecurityModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityModels.swift; sourceTree = "<group>"; };
 		F20000000000000000000011 /* ResponseStreamEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseStreamEvent.swift; sourceTree = "<group>"; };
+		C2000000000000000000000F /* MessageTimelineStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageTimelineStore.swift; sourceTree = "<group>"; };
+		C20000000000000000000010 /* ComposerState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerState.swift; sourceTree = "<group>"; };
+		C20000000000000000000011 /* ModelCatalogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogStore.swift; sourceTree = "<group>"; };
+		F20000000000000000000012 /* ProjectStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStore.swift; sourceTree = "<group>"; };
+		F20000000000000000000013 /* FileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileStore.swift; sourceTree = "<group>"; };
+		F20000000000000000000014 /* ShareStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareStore.swift; sourceTree = "<group>"; };
+		F20000000000000000000015 /* MessageStreamService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageStreamService.swift; sourceTree = "<group>"; };
+		F20000000000000000000016 /* CouncilStreamService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilStreamService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -284,6 +302,7 @@
 				D20000000000000000000006 /* AppSheet.swift */,
 				D20000000000000000000007 /* AppRouter.swift */,
 				F20000000000000000000007 /* ChatRoutingModels.swift */,
+				D2000000000000000000000A /* RoutePlanner.swift */,
 				F20000000000000000000004 /* DeepLinkModels.swift */,
 				A20000000000000000000017 /* AskOrchestrator.swift */,
 			);
@@ -303,6 +322,8 @@
 			isa = PBXGroup;
 			children = (
 				F20000000000000000000011 /* ResponseStreamEvent.swift */,
+				F20000000000000000000015 /* MessageStreamService.swift */,
+				F20000000000000000000016 /* CouncilStreamService.swift */,
 			);
 			path = Streaming;
 			sourceTree = "<group>";
@@ -373,6 +394,8 @@
 			isa = PBXGroup;
 			children = (
 				F20000000000000000000009 /* ChatModels.swift */,
+				C20000000000000000000010 /* ComposerState.swift */,
+				C2000000000000000000000F /* MessageTimelineStore.swift */,
 				C20000000000000000000004 /* ChatScreenView.swift */,
 				C2000000000000000000000E /* ChatInputBar.swift */,
 				C2000000000000000000000C /* ChatMessageViews.swift */,
@@ -387,6 +410,7 @@
 			isa = PBXGroup;
 			children = (
 				F20000000000000000000006 /* ModelCatalogModels.swift */,
+				C20000000000000000000011 /* ModelCatalogStore.swift */,
 				C20000000000000000000005 /* ModelPickerView.swift */,
 			);
 			path = ModelCatalog;
@@ -396,6 +420,7 @@
 			isa = PBXGroup;
 			children = (
 				F2000000000000000000000F /* SharingModels.swift */,
+				F20000000000000000000014 /* ShareStore.swift */,
 				F20000000000000000000002 /* SharedConversationSheet.swift */,
 				C20000000000000000000007 /* ShareViews.swift */,
 			);
@@ -406,6 +431,7 @@
 			isa = PBXGroup;
 			children = (
 				F2000000000000000000000E /* ProjectModels.swift */,
+				F20000000000000000000012 /* ProjectStore.swift */,
 				C20000000000000000000008 /* ProjectContextViews.swift */,
 			);
 			path = Projects;
@@ -444,6 +470,7 @@
 			isa = PBXGroup;
 			children = (
 				F2000000000000000000000C /* FileModels.swift */,
+				F20000000000000000000013 /* FileStore.swift */,
 			);
 			path = Files;
 			sourceTree = "<group>";
@@ -641,6 +668,7 @@
 				D10000000000000000000007 /* AppRouter.swift in Sources */,
 				D10000000000000000000008 /* LegalTermsRequiredView.swift in Sources */,
 				D10000000000000000000009 /* UserSetupView.swift in Sources */,
+				D1000000000000000000000A /* RoutePlanner.swift in Sources */,
 				E10000000000000000000001 /* DesignTokens.swift in Sources */,
 				E10000000000000000000002 /* BrandMarks.swift in Sources */,
 				E10000000000000000000003 /* ViewPlatformExtensions.swift in Sources */,
@@ -662,6 +690,14 @@
 				F1000000000000000000000F /* SharingModels.swift in Sources */,
 				F10000000000000000000010 /* SecurityModels.swift in Sources */,
 				F10000000000000000000011 /* ResponseStreamEvent.swift in Sources */,
+				F10000000000000000000012 /* ProjectStore.swift in Sources */,
+				F10000000000000000000013 /* FileStore.swift in Sources */,
+				F10000000000000000000014 /* ShareStore.swift in Sources */,
+				F10000000000000000000015 /* MessageStreamService.swift in Sources */,
+				F10000000000000000000016 /* CouncilStreamService.swift in Sources */,
+				C1000000000000000000000F /* MessageTimelineStore.swift in Sources */,
+				C10000000000000000000010 /* ComposerState.swift in Sources */,
+				C10000000000000000000011 /* ModelCatalogStore.swift in Sources */,
 				A10000000000000000000016 /* MarkdownRenderingViews.swift in Sources */,
 				A10000000000000000000017 /* DemoCaptureViews.swift in Sources */,
 				A10000000000000000000018 /* MessagePresentationHelpers.swift in Sources */,

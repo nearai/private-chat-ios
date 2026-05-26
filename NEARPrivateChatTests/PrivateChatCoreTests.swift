@@ -294,7 +294,7 @@ final class PrivateChatCoreTests: XCTestCase {
     }
 
     func testRouteReadinessBlocksNearCloudWithoutAPIKey() {
-        let issue = ChatStore.routeReadinessIssue(
+        let issue = RoutePlanner.routeReadinessIssue(
             selectedModelID: ModelOption.nearCloudModelID(for: "openai/gpt-5.5"),
             requestedCouncilModelIDs: [],
             isCouncilRequested: false,
@@ -305,6 +305,40 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(issue?.route, .nearCloud)
         XCTAssertEqual(issue?.recoveryAction, .addNearCloudKey)
         XCTAssertTrue(issue?.message.contains("draft and attachments were kept") == true)
+    }
+
+    func testRoutePlannerClassifiesModelRoutesOutsideChatStore() {
+        XCTAssertEqual(RoutePlanner.routeKind(forModelID: ModelOption.ironclawMobileModelID), .ironclawMobile)
+        XCTAssertEqual(RoutePlanner.routeKind(forModelID: ModelOption.ironclawModelID), .ironclawHosted)
+        XCTAssertEqual(RoutePlanner.routeKind(forModelID: ModelOption.nearCloudQwenMaxModelID), .nearCloud)
+        XCTAssertEqual(RoutePlanner.routeKind(forModelID: ModelOption.nearCloudModelID(for: "openai/gpt-5.5")), .nearCloud)
+        XCTAssertEqual(RoutePlanner.routeKind(forModelID: "zai-org/GLM-5.1-FP8"), .nearPrivate)
+    }
+
+    func testMessageStreamServiceOnlyTimesOutPrivateInferenceRoutes() {
+        XCTAssertEqual(MessageStreamService.visibleOutputTimeout(for: "zai-org/GLM-5.1-FP8"), 90)
+        XCTAssertNil(MessageStreamService.visibleOutputTimeout(for: ModelOption.nearCloudModelID(for: "openai/gpt-5.5")))
+        XCTAssertNil(MessageStreamService.visibleOutputTimeout(for: ModelOption.ironclawModelID))
+        XCTAssertEqual(CouncilStreamService.defaultConcurrentStreamLimit, 2)
+    }
+
+    func testModelCatalogStoreBuildsPickerAndPinnedModelsWithoutChatStore() {
+        let glm = ModelOption(modelID: "zai-org/GLM-5.1-FP8", publicModel: true, metadata: nil)
+        let qwen = ModelOption(modelID: "Qwen/Qwen3.5-122B-A10B", publicModel: true, metadata: nil)
+        let utility = ModelOption(modelID: "embedding-model", publicModel: true, metadata: nil)
+        let catalog = ModelCatalogStore(
+            models: [utility, qwen, glm],
+            nearCloudModels: [],
+            allowedModelIDs: nil,
+            preferredModelIDs: ["zai-org/GLM-5.1-FP8", "Qwen/Qwen3.5-122B-A10B"],
+            nearCloudPreferredModelIDs: ["anthropic/claude-opus-4-7"]
+        )
+
+        let rankedPrivateModels = catalog.rankedModels(from: catalog.pickerModels.filter { !$0.isExternalModel })
+        XCTAssertEqual(rankedPrivateModels.first?.id, "zai-org/GLM-5.1-FP8")
+        XCTAssertFalse(catalog.pickerModels.contains { $0.id == "embedding-model" })
+        XCTAssertTrue(catalog.cloudRouteModels.contains { $0.id == ModelOption.nearCloudModelID(for: "anthropic/claude-opus-4-7") })
+        XCTAssertEqual(catalog.pinnedPickerModels(from: ["Qwen/Qwen3.5-122B-A10B"]).map(\.id), ["Qwen/Qwen3.5-122B-A10B"])
     }
 
     func testRouteReadinessBlocksHostedIronclawWithoutUsableEndpoint() {
@@ -765,6 +799,101 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertFalse(ProjectIcon.folder.matches("nonexistent-symbol"))
     }
 
+    func testProjectStoreScopesVisibleAndArchivedConversations() {
+        let selected = ChatProject(
+            id: "project-1",
+            name: "Q3 Launch",
+            createdAt: Date(timeIntervalSince1970: 1_000),
+            conversationIDs: ["pinned", "normal"],
+            iconName: ProjectIcon.folder.symbolName,
+            paletteName: ProjectPalette.sky.rawValue
+        )
+        let pinned = ConversationSummary(
+            id: "pinned",
+            createdAt: 1_000,
+            metadata: ConversationMetadata(title: "Pinned", pinnedAt: "now")
+        )
+        let normal = ConversationSummary(
+            id: "normal",
+            createdAt: 2_000,
+            metadata: ConversationMetadata(title: "Normal")
+        )
+        let archived = ConversationSummary(
+            id: "archived",
+            createdAt: 3_000,
+            metadata: ConversationMetadata(title: "Archived", archivedAt: "then")
+        )
+
+        let store = ProjectStore(
+            projects: [selected],
+            selectedProjectID: selected.id,
+            conversations: [archived, normal, pinned]
+        )
+
+        XCTAssertEqual(store.selectedProject?.name, "Q3 Launch")
+        XCTAssertEqual(store.visibleConversations.map(\.id), ["pinned", "normal"])
+        XCTAssertEqual(store.archivedConversations.map(\.id), ["archived"])
+    }
+
+    func testFileStoreAttachmentLimitsAreExplicitAndReusable() {
+        XCTAssertEqual(
+            FileStore.promptAttachmentLimit(
+                pendingCount: 4,
+                projectContextCount: 0,
+                maxPromptAttachments: 5,
+                maxContextAttachments: 12
+            ),
+            .allowed
+        )
+        XCTAssertEqual(
+            FileStore.promptAttachmentLimit(
+                pendingCount: 5,
+                projectContextCount: 0,
+                maxPromptAttachments: 5,
+                maxContextAttachments: 12
+            ),
+            .blocked(message: "Attach up to five files at once.")
+        )
+        XCTAssertEqual(
+            FileStore.projectAttachmentLimit(projectAttachmentCount: 12, maxProjectAttachments: 12),
+            .blocked(message: "Keep project context to twelve files or fewer.")
+        )
+    }
+
+    func testShareStoreShowsSharedAuthorNamesOnlyWhenNeeded() {
+        XCTAssertFalse(ShareStore.shouldShowSharedAuthorNames(sharedPreview: nil, shareInfo: nil))
+
+        let ownedEmptyShare = ConversationSharesListResponse(
+            isOwner: true,
+            canShare: true,
+            canWrite: true,
+            shares: [],
+            owner: nil
+        )
+        XCTAssertFalse(ShareStore.shouldShowSharedAuthorNames(sharedPreview: nil, shareInfo: ownedEmptyShare))
+
+        let publicShare = ConversationShareInfo(
+            id: "share-1",
+            conversationID: "conv-1",
+            permission: "read",
+            shareType: "public",
+            recipient: nil,
+            groupID: nil,
+            orgEmailPattern: nil,
+            publicToken: "token",
+            createdAt: nil,
+            updatedAt: nil
+        )
+        let ownedPublicShare = ConversationSharesListResponse(
+            isOwner: true,
+            canShare: true,
+            canWrite: true,
+            shares: [publicShare],
+            owner: nil
+        )
+        XCTAssertTrue(ShareStore.shouldShowSharedAuthorNames(sharedPreview: nil, shareInfo: ownedPublicShare))
+    }
+
     func testCouncilMessageProgressTracksFirstTokenAndUsableAnswer() {
         let createdAt = Date(timeIntervalSince1970: 1_000)
         let firstTokenAt = createdAt.addingTimeInterval(1.4)
@@ -795,6 +924,94 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(completed.firstTokenLatency), 1.4, accuracy: 0.01)
         XCTAssertTrue(completed.hasUsableCouncilAnswer)
         XCTAssertFalse(streaming.hasUsableCouncilAnswer)
+    }
+
+    func testMessageTimelineGroupsCouncilBatchOnceAndKeepsChronologicalCouncilOrder() {
+        let baseDate = Date(timeIntervalSince1970: 1_000)
+        let user = makeMessage(id: "user-1", role: .user, text: "Compare this", createdAt: baseDate)
+        let firstCouncil = ChatMessage(
+            id: "council-late",
+            role: .assistant,
+            text: "Second model",
+            model: "qwen",
+            createdAt: baseDate.addingTimeInterval(3),
+            status: "completed",
+            responseID: "resp-late",
+            councilBatchID: "batch-1",
+            isStreaming: false
+        )
+        let secondCouncil = ChatMessage(
+            id: "council-early",
+            role: .assistant,
+            text: "First model",
+            model: "glm",
+            createdAt: baseDate.addingTimeInterval(2),
+            status: "completed",
+            responseID: "resp-early",
+            councilBatchID: "batch-1",
+            isStreaming: false
+        )
+        let standaloneAssistant = makeMessage(
+            id: "assistant-1",
+            role: .assistant,
+            text: "Done",
+            createdAt: baseDate.addingTimeInterval(4)
+        )
+
+        let items = MessageTimelineStore.displayItems(from: [user, firstCouncil, secondCouncil, standaloneAssistant])
+
+        XCTAssertEqual(items.count, 3)
+        XCTAssertEqual(items.first?.id, "user-1")
+        guard case let .council(batchID, messages) = items[1] else {
+            return XCTFail("Expected the Council batch to be grouped into one display item.")
+        }
+        XCTAssertEqual(batchID, "batch-1")
+        XCTAssertEqual(messages.map(\.id), ["council-early", "council-late"])
+        XCTAssertEqual(items.last?.id, "assistant-1")
+    }
+
+    func testComposerStateSendabilityTracksDraftAttachmentsAndStreaming() {
+        let empty = ComposerState(
+            draft: "  ",
+            pendingAttachments: [],
+            isStreaming: false,
+            routeReadinessTitle: nil,
+            routeReadinessMessage: nil
+        )
+        XCTAssertFalse(empty.hasSendableContent)
+        XCTAssertTrue(empty.sendDisabled)
+
+        let withDraft = ComposerState(
+            draft: "hello",
+            pendingAttachments: [],
+            isStreaming: false,
+            routeReadinessTitle: nil,
+            routeReadinessMessage: nil
+        )
+        XCTAssertTrue(withDraft.hasSendableContent)
+        XCTAssertFalse(withDraft.sendDisabled)
+
+        let streamingEmpty = ComposerState(
+            draft: "",
+            pendingAttachments: [],
+            isStreaming: true,
+            routeReadinessTitle: nil,
+            routeReadinessMessage: nil
+        )
+        XCTAssertFalse(streamingEmpty.hasSendableContent)
+        XCTAssertFalse(streamingEmpty.sendDisabled)
+
+        let withAttachment = ComposerState(
+            draft: "",
+            pendingAttachments: [
+                ChatAttachment(id: "file-1", name: "launch-brief.pdf", kind: "file", bytes: 128)
+            ],
+            isStreaming: false,
+            routeReadinessTitle: nil,
+            routeReadinessMessage: nil
+        )
+        XCTAssertTrue(withAttachment.hasSendableContent)
+        XCTAssertEqual(withAttachment.pendingAttachmentCount, 1)
     }
 
     func testRemoteMessagesMergeLocalExternalTurnsOnly() {

@@ -230,15 +230,11 @@ struct InputBar: View {
     }
 
     private var canSend: Bool {
-        !chatStore.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-            !chatStore.pendingAttachments.isEmpty
+        chatStore.composerState.hasSendableContent
     }
 
     private var sendDisabled: Bool {
-        if chatStore.isStreaming {
-            return false
-        }
-        return !canSend
+        chatStore.composerState.sendDisabled
     }
 
     private var sendButtonColor: Color {
