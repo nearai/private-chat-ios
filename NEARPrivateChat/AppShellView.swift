@@ -1676,14 +1676,12 @@ private struct AccountToolbarButton: View {
                 .environmentObject(sessionStore)
                 .environmentObject(chatStore)
         }
-        .task {
-            await sessionStore.refreshProfile()
-        }
     }
 }
 
 struct ChatView: View {
     @EnvironmentObject private var chatStore: ChatStore
+    @State private var lastAutoScrollNanoseconds: UInt64 = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1729,8 +1727,18 @@ struct ChatView: View {
                 }
                 .onChange(of: chatStore.messages) { _, messages in
                     guard let last = messages.last else { return }
-                    withAnimation(.easeOut(duration: 0.2)) {
+                    let now = DispatchTime.now().uptimeNanoseconds
+                    let minimumInterval: UInt64 = chatStore.isStreaming ? 250_000_000 : 0
+                    guard minimumInterval == 0 || now - lastAutoScrollNanoseconds >= minimumInterval else {
+                        return
+                    }
+                    lastAutoScrollNanoseconds = now
+                    if chatStore.isStreaming {
                         proxy.scrollTo(last.id, anchor: .bottom)
+                    } else {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            proxy.scrollTo(last.id, anchor: .bottom)
+                        }
                     }
                 }
             }

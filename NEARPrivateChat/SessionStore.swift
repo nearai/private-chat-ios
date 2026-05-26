@@ -18,10 +18,12 @@ final class SessionStore: NSObject, ObservableObject {
     private let api: PrivateChatAPI
     private var webSession: ASWebAuthenticationSession?
     private let keychainAccount = "session"
+    private let profileCacheAccount = "profile"
     private let simulatorFallbackKey = "debug.session"
     private let pendingAuthStateKey = "pendingAuthState"
     private let simulatorFallbackTTL: TimeInterval = 24 * 60 * 60
     private let pendingAuthTTL: TimeInterval = 10 * 60
+    private var isRefreshingProfile = false
 
     var isSignedIn: Bool { session?.token.isEmpty == false }
     var displayName: String { profile?.user.name ?? profile?.user.email ?? "NEAR AI" }
@@ -44,6 +46,9 @@ final class SessionStore: NSObject, ObservableObject {
         #endif
         session = loadStoredSession()
         api.authToken = session?.token
+        if session != nil {
+            profile = loadCachedProfile()
+        }
     }
 
     #if DEBUG
@@ -82,7 +87,7 @@ final class SessionStore: NSObject, ObservableObject {
         }
         let newSession = AuthSession(token: trimmed, sessionID: "", expiresAt: nil, isNewUser: false)
         save(newSession)
-        Task { await refreshProfile() }
+        Task { await refreshProfile(force: true) }
     }
 
     @discardableResult
@@ -103,7 +108,7 @@ final class SessionStore: NSObject, ObservableObject {
                         codeVerifier: pendingRequest.codeVerifier
                     )
                     save(newSession)
-                    await refreshProfile()
+                    await refreshProfile(force: true)
                     showBanner(newSession.isNewUser ? "Account created." : "Signed in.")
                 } catch {
                     showBanner(error.localizedDescription)
@@ -116,13 +121,26 @@ final class SessionStore: NSObject, ObservableObject {
         return true
     }
 
-    func refreshProfile() async {
+    func refreshProfile(force: Bool = true) async {
         guard isSignedIn else { return }
+        if !force, profile != nil {
+            return
+        }
+        guard !isRefreshingProfile else { return }
+        isRefreshingProfile = true
+        defer { isRefreshingProfile = false }
+
         do {
-            profile = try await api.fetchProfile()
+            let fetchedProfile = try await api.fetchProfile()
+            profile = fetchedProfile
+            saveCachedProfile(fetchedProfile)
         } catch {
             showBanner(error.localizedDescription)
         }
+    }
+
+    func scheduleProfileRefresh(force: Bool = false) {
+        Task { await refreshProfile(force: force) }
     }
 
     func signOut() {
@@ -143,6 +161,7 @@ final class SessionStore: NSObject, ObservableObject {
             profile = nil
             clearPendingAuthState()
             KeychainStore.delete(account: keychainAccount)
+            KeychainStore.delete(account: profileCacheAccount)
             deleteSimulatorFallbackSession()
         }
     }
@@ -168,7 +187,7 @@ final class SessionStore: NSObject, ObservableObject {
             )
             clearPendingAuthState()
             save(newSession)
-            await refreshProfile()
+            await refreshProfile(force: true)
             showBanner(newSession.isNewUser ? "Account created." : "Signed in.")
         } catch {
             clearPendingAuthState()
@@ -230,8 +249,13 @@ final class SessionStore: NSObject, ObservableObject {
     }
 
     private func save(_ newSession: AuthSession) {
+        let sessionChanged = session?.token != newSession.token || session?.sessionID != newSession.sessionID
         session = newSession
         api.authToken = newSession.token
+        if sessionChanged {
+            profile = nil
+            KeychainStore.delete(account: profileCacheAccount)
+        }
 
         do {
             try KeychainStore.save(newSession, account: keychainAccount)
@@ -243,6 +267,14 @@ final class SessionStore: NSObject, ObservableObject {
                 showBanner("Signed in for this launch. Keychain storage is unavailable in this build.")
             }
         }
+    }
+
+    private func loadCachedProfile() -> UserProfile? {
+        (try? KeychainStore.read(UserProfile.self, account: profileCacheAccount)) ?? nil
+    }
+
+    private func saveCachedProfile(_ profile: UserProfile) {
+        try? KeychainStore.save(profile, account: profileCacheAccount)
     }
 
     private func loadStoredSession() -> AuthSession? {

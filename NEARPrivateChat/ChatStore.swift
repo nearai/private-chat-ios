@@ -143,6 +143,8 @@ final class ChatStore: ObservableObject {
     private var bootstrapInFlightAccountID: String?
     private var lastBootstrappedAccountID: String?
     private var accountBackgroundRefreshTask: Task<Void, Never>?
+    private var pendingTextDeltaByMessageID: [String: String] = [:]
+    private var pendingTextDeltaFlushTasks: [String: Task<Void, Never>] = [:]
     private struct PersistedDraftState: Codable {
         var text: String
         var attachments: [ChatAttachment]
@@ -199,6 +201,7 @@ final class ChatStore: ObservableObject {
     nonisolated private static let maxPDFExtractionSeconds: TimeInterval = 5
     private static let maxPromptAttachments = 5
     private static let maxProjectAttachments = 12
+    private static let streamDeltaFlushNanoseconds: UInt64 = 50_000_000
     private static let largePasteThresholdBytes = 8 * 1024
     private static let largePasteThresholdCharacters = 5_000
     private static let staleRunningMessageInterval: TimeInterval = 120
@@ -1230,6 +1233,7 @@ final class ChatStore: ObservableObject {
     func reset() {
         streamTask?.cancel()
         streamTask = nil
+        cancelPendingTextDeltaFlushes()
         accountBackgroundRefreshTask?.cancel()
         accountBackgroundRefreshTask = nil
         bootstrapInFlightAccountID = nil
@@ -1283,10 +1287,14 @@ final class ChatStore: ObservableObject {
 
     func refreshConversations() async {
         do {
-            conversations = try await api.fetchConversations()
-            cacheConversations(conversations)
+            let fetchedConversations = try await api.fetchConversations()
+            if conversations != fetchedConversations {
+                conversations = fetchedConversations
+            }
+            cacheConversations(fetchedConversations)
             if let selectedConversation,
-               let refreshed = conversations.first(where: { $0.id == selectedConversation.id }) {
+               let refreshed = fetchedConversations.first(where: { $0.id == selectedConversation.id }),
+               self.selectedConversation != refreshed {
                 self.selectedConversation = refreshed
             }
         } catch {
@@ -1368,9 +1376,14 @@ final class ChatStore: ObservableObject {
                 ? (try? await api.fetchNearCloudModels(apiKey: loadNearCloudAPIKey())) ?? []
                 : []
             deniedOpenWeightModelIDs.removeAll()
-            models = fetched
+            if models != fetched {
+                models = fetched
+            }
             if loadCloudCatalog {
-                nearCloudModels = Self.nearCloudRouteModels(from: fetchedCloud)
+                let routeModels = Self.nearCloudRouteModels(from: fetchedCloud)
+                if nearCloudModels != routeModels {
+                    nearCloudModels = routeModels
+                }
             }
             if nearCloudModels.isEmpty {
                 nearCloudModels = Self.fallbackNearCloudModels()
@@ -3186,23 +3199,18 @@ final class ChatStore: ObservableObject {
         loadMessagesGeneration += 1
         loadMessagesTask?.cancel()
         loadMessagesTask = nil
-        isLoading = false
     }
 
     private func loadMessages(for conversation: ConversationSummary, preferCached: Bool, generation: Int) async {
-        isLoading = true
-        defer {
-            if loadMessagesGeneration == generation {
-                isLoading = false
-            }
-        }
-        async let fetchedShareInfo = silentShareInfo(for: conversation)
+        scheduleSilentShareInfoRefresh(for: conversation, generation: generation)
 
         let cachedMessages = loadLocalMessages(for: conversation.id)
         if preferCached, let cachedMessages, !cachedMessages.isEmpty {
             let normalizedMessages = Self.normalizedMessages(cachedMessages, assumingStreamLost: true)
             if canApplyMessageLoad(for: conversation.id, generation: generation) {
-                messages = normalizedMessages
+                if messages != normalizedMessages {
+                    messages = normalizedMessages
+                }
                 restoreSelectedModel(from: normalizedMessages)
                 if normalizedMessages != cachedMessages {
                     saveLocalMessages(for: conversation.id)
@@ -3215,28 +3223,38 @@ final class ChatStore: ObservableObject {
 
         do {
             let response = try await api.fetchConversationItems(conversation.id)
-            let loadedShareInfo = await fetchedShareInfo
             guard canApplyMessageLoad(for: conversation.id, generation: generation) else { return }
-            shareInfo = loadedShareInfo
             let preferredResponseID = selectedResponseVariantByConversationID[conversation.id]
             let remoteMessages = Self.chatMessages(from: response.data, preferredResponseID: preferredResponseID)
             let loadedMessages = Self.mergedMessages(remoteMessages: remoteMessages, localCache: cachedMessages)
-            messages = loadedMessages
+            if messages != loadedMessages {
+                messages = loadedMessages
+            }
             restoreSelectedModel(from: loadedMessages)
-            if loadedMessages.contains(where: { Self.isExternalModel($0.model ?? "") }) {
+            if loadedMessages != cachedMessages {
                 saveLocalMessages(for: conversation.id)
             }
         } catch is CancellationError {
             return
         } catch {
-            let loadedShareInfo = await fetchedShareInfo
             guard canApplyMessageLoad(for: conversation.id, generation: generation) else { return }
-            shareInfo = loadedShareInfo
             if cachedMessages?.isEmpty == false {
                 showBanner("Could not refresh this chat. Showing cached messages.")
             } else {
                 showBanner(error.localizedDescription)
             }
+        }
+    }
+
+    private func scheduleSilentShareInfoRefresh(for conversation: ConversationSummary, generation: Int) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let loadedShareInfo = await self.silentShareInfo(for: conversation)
+            guard self.canApplyMessageLoad(for: conversation.id, generation: generation),
+                  self.shareInfo != loadedShareInfo else {
+                return
+            }
+            self.shareInfo = loadedShareInfo
         }
     }
 
@@ -3540,10 +3558,12 @@ final class ChatStore: ObservableObject {
         isStreaming = false
         if let currentAssistantMessageID,
            let index = messages.firstIndex(where: { $0.id == currentAssistantMessageID }) {
+            flushPendingTextDelta(for: currentAssistantMessageID)
             messages[index].isStreaming = false
             messages[index].status = "cancelled"
         }
         for messageID in currentCouncilAssistantMessageIDs {
+            flushPendingTextDelta(for: messageID)
             if let index = messages.firstIndex(where: { $0.id == messageID }) {
                 messages[index].isStreaming = false
                 messages[index].status = "cancelled"
@@ -3836,7 +3856,8 @@ final class ChatStore: ObservableObject {
             if Self.isExternalModel(finalModel) {
                 saveLocalMessages(for: conversation.id)
             } else {
-                await loadMessages(for: conversation)
+                saveLocalMessages(for: conversation.id)
+                scheduleMessageLoad(for: conversation, preferCached: false)
             }
             scheduleConversationListRefresh()
             return true
@@ -4725,12 +4746,14 @@ final class ChatStore: ObservableObject {
 
         switch event {
         case let .created(responseID):
+            flushPendingTextDelta(for: assistantMessageID)
             messages[index].responseID = responseID
         case .reasoningStarted:
             if messages[index].text.isEmpty {
                 messages[index].status = "reasoning"
             }
         case let .approvalNeeded(approval):
+            flushPendingTextDelta(for: assistantMessageID)
             messages[index].pendingApproval = approval
             messages[index].status = "approval"
             messages[index].isStreaming = false
@@ -4748,8 +4771,9 @@ final class ChatStore: ObservableObject {
             if !delta.isEmpty, messages[index].firstTokenAt == nil {
                 messages[index].firstTokenAt = Date()
             }
-            messages[index].text += delta
+            appendBufferedTextDelta(delta, to: assistantMessageID)
         case let .itemDone(text):
+            flushPendingTextDelta(for: assistantMessageID)
             if let text, !text.isEmpty {
                 let existingText = messages[index].text
                 if messages[index].firstTokenAt == nil {
@@ -4773,6 +4797,7 @@ final class ChatStore: ObservableObject {
                 selectedConversation = conversations[conversationIndex]
             }
         case let .completed(responseID):
+            flushPendingTextDelta(for: assistantMessageID)
             guard messages[index].status != "failed", messages[index].status != "approval" else {
                 messages[index].responseID = responseID ?? messages[index].responseID
                 messages[index].isStreaming = false
@@ -4789,6 +4814,7 @@ final class ChatStore: ObservableObject {
                 messages[index].text = localFailure
             }
         case let .failed(message):
+            flushPendingTextDelta(for: assistantMessageID)
             let displayMessage = Self.displayFailureMessage(message)
             messages[index].status = "failed"
             messages[index].isStreaming = false
@@ -4801,6 +4827,7 @@ final class ChatStore: ObservableObject {
     }
 
     private func finishAssistantMessage(_ messageID: String) {
+        flushPendingTextDelta(for: messageID)
         guard let index = messages.firstIndex(where: { $0.id == messageID }) else {
             return
         }
@@ -4815,6 +4842,33 @@ final class ChatStore: ObservableObject {
         if messages[index].sources.isEmpty {
             messages[index].sources = Self.inferredSources(from: messages[index].text)
         }
+    }
+
+    private func appendBufferedTextDelta(_ delta: String, to messageID: String) {
+        guard !delta.isEmpty else { return }
+        pendingTextDeltaByMessageID[messageID, default: ""] += delta
+        guard pendingTextDeltaFlushTasks[messageID] == nil else { return }
+        pendingTextDeltaFlushTasks[messageID] = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: Self.streamDeltaFlushNanoseconds)
+            self?.flushPendingTextDelta(for: messageID)
+        }
+    }
+
+    private func flushPendingTextDelta(for messageID: String) {
+        pendingTextDeltaFlushTasks[messageID]?.cancel()
+        pendingTextDeltaFlushTasks[messageID] = nil
+        guard let delta = pendingTextDeltaByMessageID.removeValue(forKey: messageID),
+              !delta.isEmpty,
+              let index = messages.firstIndex(where: { $0.id == messageID }) else {
+            return
+        }
+        messages[index].text += delta
+    }
+
+    private func cancelPendingTextDeltaFlushes() {
+        pendingTextDeltaFlushTasks.values.forEach { $0.cancel() }
+        pendingTextDeltaFlushTasks.removeAll()
+        pendingTextDeltaByMessageID.removeAll()
     }
 
     func resolveIronclawApproval(
@@ -6774,6 +6828,7 @@ final class ChatStore: ObservableObject {
             return
         }
 
+        flushPendingTextDelta(for: currentAssistantMessageID)
         messages[index].text = preservedText
         messages[index].status = "streaming"
         messages[index].responseID = nil

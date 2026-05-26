@@ -405,8 +405,8 @@ enum LegalTermsAcceptanceStore {
     }
 }
 
-struct UserProfile: Decodable, Identifiable, Hashable {
-    struct User: Decodable, Hashable {
+struct UserProfile: Codable, Identifiable, Hashable {
+    struct User: Codable, Hashable {
         let id: String
         let email: String?
         let name: String?
@@ -420,7 +420,7 @@ struct UserProfile: Decodable, Identifiable, Hashable {
         }
     }
 
-    struct LinkedAccount: Decodable, Hashable {
+    struct LinkedAccount: Codable, Hashable {
         let provider: String
         let linkedAt: String?
 

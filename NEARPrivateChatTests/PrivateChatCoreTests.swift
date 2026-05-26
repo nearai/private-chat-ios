@@ -78,6 +78,26 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertTrue(url.absoluteString.contains("state=nonce-1"))
     }
 
+    func testUserProfileRoundTripsForLaunchCache() throws {
+        let profile = UserProfile(
+            user: UserProfile.User(
+                id: "user-123",
+                email: "demo@example.com",
+                name: "Demo User",
+                avatarURL: "https://example.com/avatar.png"
+            ),
+            linkedAccounts: [
+                UserProfile.LinkedAccount(provider: "google", linkedAt: "2026-05-26T10:00:00Z")
+            ]
+        )
+
+        let data = try JSONEncoder().encode(profile)
+        let decoded = try JSONDecoder().decode(UserProfile.self, from: data)
+
+        XCTAssertEqual(decoded, profile)
+        XCTAssertEqual(decoded.id, "user-123")
+    }
+
     func testAuthURLUsesPKCECodeFlowForProviderLogin() throws {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
 

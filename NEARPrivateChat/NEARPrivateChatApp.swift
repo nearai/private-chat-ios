@@ -179,9 +179,9 @@ struct NEARPrivateChatApp: App {
         #endif
 
         guard sessionStore.isSignedIn else { return }
-        await sessionStore.refreshProfile()
         chatStore.updateCurrentUser(profile: sessionStore.profile)
         chatStore.prepareForAuthenticatedAccount(sessionStore.setupAccountID)
+        sessionStore.scheduleProfileRefresh(force: false)
         await chatStore.bootstrap()
     }
 }
