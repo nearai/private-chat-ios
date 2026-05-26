@@ -22,12 +22,47 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertThrowsError(try api.parseAuthCallback(wrongStateURL, expectedState: "nonce-1"))
     }
 
+    func testAuthCallbackAllowsMissingReturnedStateForOwnedWebSession() throws {
+        let api = PrivateChatAPI(configuration: AppConfiguration.production)
+        let url = URL(string: "nearprivatechat://auth?token=session-token&state=provider-state")!
+
+        let session = try api.parseAuthCallback(
+            url,
+            expectedState: "nonce-1",
+            requiresReturnedState: false
+        )
+
+        XCTAssertEqual(session.token, "session-token")
+    }
+
     func testAuthURLIncludesState() throws {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
 
         let url = try api.authURL(for: OAuthProvider.github, state: "nonce-1")
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let callback = try XCTUnwrap(components.queryItems?.first(where: { $0.name == "frontend_callback" })?.value)
+        let callbackComponents = try XCTUnwrap(URLComponents(string: callback))
 
-        XCTAssertTrue(url.absoluteString.contains("state=nonce-1"))
+        XCTAssertEqual(callbackComponents.path, "/callback/nonce-1")
+        XCTAssertFalse((components.queryItems ?? []).contains { $0.name == "state" })
+    }
+
+    func testAuthCallbackAcceptsMatchingStateWhenCallbackHasDuplicateStateParams() throws {
+        let api = PrivateChatAPI(configuration: AppConfiguration.production)
+        let url = URL(string: "nearprivatechat://auth?token=session-token&state=provider-state&state=nonce-1")!
+
+        let session = try api.parseAuthCallback(url, expectedState: "nonce-1")
+
+        XCTAssertEqual(session.token, "session-token")
+    }
+
+    func testAuthCallbackAcceptsMatchingStateFromCallbackPath() throws {
+        let api = PrivateChatAPI(configuration: AppConfiguration.production)
+        let url = URL(string: "nearprivatechat://auth/callback/nonce-1?token=session-token&state=provider-state")!
+
+        let session = try api.parseAuthCallback(url, expectedState: "nonce-1")
+
+        XCTAssertEqual(session.token, "session-token")
     }
 
     func testAuthURLCanRequestPKCECodeFlow() throws {

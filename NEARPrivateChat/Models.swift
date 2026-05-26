@@ -1378,6 +1378,25 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
     }
 }
 
+extension AppSetupPlan {
+    var launchCardTitle: String {
+        expectedFirstAction
+    }
+
+    var launchCardSubtitle: String {
+        readinessStatus
+    }
+
+    var launchCardMetadata: [String] {
+        [
+            modelRoute.title,
+            focusMode.title,
+            agentEnabled ? "Agent" : nil,
+            councilEnabled ? "Council" : nil
+        ].compactMap { $0 }
+    }
+}
+
 enum UserSetupStorage {
     static let completedKey = "userSetupProfileV1Completed"
     static let profileKey = "userSetupProfileV1Data"
@@ -1385,6 +1404,7 @@ enum UserSetupStorage {
     private static let protectedStoreDirectoryName = "SetupProfiles"
     private static let protectedProfileFilename = "profile.json"
     private static let protectedCompletionFilename = "completed.txt"
+    private static let pendingLaunchCardPrefix = "userSetupProfileV1PendingLaunchCard"
 
     static func accountID(userID: String?, sessionID: String?, token: String?) -> String? {
         if let userID = userID?.trimmingCharacters(in: .whitespacesAndNewlines), !userID.isEmpty {
@@ -1430,6 +1450,7 @@ enum UserSetupStorage {
                 writeProtectedData(data, for: accountID, filename: protectedProfileFilename)
             }
             writeProtectedData(Data("true".utf8), for: accountID, filename: protectedCompletionFilename)
+            defaults.set(true, forKey: pendingLaunchCardKey(for: accountID))
             defaults.removeObject(forKey: scopedProfileKey(for: accountID))
             defaults.removeObject(forKey: scopedCompletedKey(for: accountID))
             return
@@ -1438,15 +1459,26 @@ enum UserSetupStorage {
             defaults.set(data, forKey: scopedProfileKey(for: accountID))
         }
         defaults.set(true, forKey: scopedCompletedKey(for: accountID))
+        defaults.set(true, forKey: pendingLaunchCardKey(for: accountID))
     }
 
     static func clearCompletion(for accountID: String, defaults: UserDefaults = .standard) {
         if usesProtectedStorage(defaults) {
             writeProtectedData(Data("false".utf8), for: accountID, filename: protectedCompletionFilename)
             defaults.removeObject(forKey: scopedCompletedKey(for: accountID))
+            defaults.removeObject(forKey: pendingLaunchCardKey(for: accountID))
             return
         }
         defaults.set(false, forKey: scopedCompletedKey(for: accountID))
+        defaults.removeObject(forKey: pendingLaunchCardKey(for: accountID))
+    }
+
+    static func hasPendingLaunchCard(for accountID: String, defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: pendingLaunchCardKey(for: accountID))
+    }
+
+    static func clearPendingLaunchCard(for accountID: String, defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: pendingLaunchCardKey(for: accountID))
     }
 
     static func migrate(from oldAccountID: String, to newAccountID: String, defaults: UserDefaults = .standard) {
@@ -1489,6 +1521,10 @@ enum UserSetupStorage {
 
     private static func scopedProfileKey(for accountID: String) -> String {
         "\(profileKey).\(scopedVersion).\(normalizedAccountID(accountID))"
+    }
+
+    private static func pendingLaunchCardKey(for accountID: String) -> String {
+        "\(pendingLaunchCardPrefix).\(scopedVersion).\(normalizedAccountID(accountID))"
     }
 
     private static func usesProtectedStorage(_ defaults: UserDefaults) -> Bool {

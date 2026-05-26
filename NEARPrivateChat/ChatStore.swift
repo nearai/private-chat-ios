@@ -3282,10 +3282,16 @@ final class ChatStore: ObservableObject {
         for text: String,
         appendUserMessage: Bool = true
     ) -> RouteReadinessIssue? {
-        let councilRequested = appendUserMessage && isCouncilModeEnabled
+        let promptWantsCouncil = Self.promptRequestsCouncil(text)
+        let councilRequested = appendUserMessage &&
+            (isCouncilModeEnabled || councilModelIDs.count > 1 || promptWantsCouncil)
         let requestedCouncilIDs: [String]
         if councilRequested {
-            requestedCouncilIDs = requestCouncilModelIDs(for: selectedModel)
+            if promptWantsCouncil, !isCouncilModeEnabled, councilModelIDs.count <= 1 {
+                requestedCouncilIDs = defaultCouncilModelIDs()
+            } else {
+                requestedCouncilIDs = requestCouncilModelIDs(for: selectedModel)
+            }
         } else {
             requestedCouncilIDs = []
         }
@@ -6193,18 +6199,49 @@ final class ChatStore: ObservableObject {
     }
 
     private func routeCurrentPromptIfNeeded(_ text: String, attachments: [ChatAttachment]) {
-        _ = AskOrchestrator.decide(
-            AskOrchestrator.Input(
-                prompt: text,
-                selectedRoute: selectedRouteKind,
-                hasProjectContext: selectedProjectID != nil || !activeProjectContextAttachments.isEmpty || !activeProjectContextLinks.isEmpty,
-                hasPromptAttachments: !promptOnlyAttachments(from: attachments).isEmpty,
-                nearCloudKeyConfigured: nearCloudKeyConfigured,
-                hostedAgentAvailable: ironclawRemoteWorkstationAvailable,
-                councilAvailable: defaultCouncilModelIDs().count > 1,
-                councilActive: isCouncilModeEnabled
-            )
-        )
+        if selectedModel != ModelOption.ironclawModelID,
+           selectedModel != ModelOption.ironclawMobileModelID,
+           Self.promptNeedsRemoteWorkstation(text),
+           ironclawRemoteWorkstationAvailable {
+            selectedModel = ModelOption.ironclawModelID
+            clearAttestationState()
+            showBanner("Switched to IronClaw because this prompt needs hosted agent tools.")
+            return
+        }
+
+        if routeCouncilIfNeeded(text) {
+            return
+        }
+
+        guard selectedModelOption?.isNearCloudModel == true,
+              Self.promptNeedsLiveWeb(text),
+              !shouldUseAppWebGrounding(model: selectedModel, prompt: text),
+              let privateModel = preferredAvailableModel() else {
+            return
+        }
+        selectedModel = privateModel
+        clearAttestationState()
+        showBanner("Switched to \(modelDisplayName(for: privateModel)) because this prompt needs NEAR Private web search.")
+    }
+
+    private func routeCouncilIfNeeded(_ text: String) -> Bool {
+        guard Self.promptRequestsCouncil(text),
+              selectedModel != ModelOption.ironclawModelID,
+              selectedModel != ModelOption.ironclawMobileModelID else {
+            return false
+        }
+        if isCouncilModeEnabled {
+            return true
+        }
+        let ids = defaultCouncilModelIDs()
+        guard ids.count > 1 else {
+            return false
+        }
+        selectedModel = ids[0]
+        councilModelIDs = ids
+        clearAttestationState()
+        showBanner("LLM Council selected for a multi-model answer.")
+        return true
     }
 
     private func ensureSelectedModelIsAvailable(shouldShowBanner: Bool) {

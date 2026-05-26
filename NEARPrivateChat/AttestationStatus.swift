@@ -39,8 +39,10 @@ enum AttestationState: String, Codable, Equatable, Sendable {
 }
 
 enum ProofState: String, Codable, Equatable, Sendable {
+    case none
     case unknown
     case verifying
+    case fetched
     case verified
     case stale
     case mismatch
@@ -123,7 +125,7 @@ struct ProofCapsuleViewModel: Codable, Equatable, Sendable {
 
         switch status.effectiveState(at: now) {
         case .valid:
-            state = status.coverage(for: modelID, at: now) == .covered ? .verified : .verified
+            state = status.coverage(for: modelID, at: now) == .covered ? .fetched : .fetched
         case .stale:
             state = .stale
         case .mismatch:
@@ -131,7 +133,7 @@ struct ProofCapsuleViewModel: Codable, Equatable, Sendable {
         case .unavailable:
             state = .unverified
         case .unknown:
-            state = .unknown
+            state = .none
         }
     }
 
@@ -145,11 +147,11 @@ struct ProofCapsuleViewModel: Codable, Equatable, Sendable {
 
     var tintColor: Color {
         switch state {
-        case .unknown, .private_, .proxied, .unverified:
+        case .none, .unknown, .private_, .proxied, .unverified:
             return .secondary
         case .verifying:
             return .proofStale
-        case .verified:
+        case .fetched, .verified:
             return .proofVerified
         case .stale:
             return .proofStale
@@ -266,9 +268,9 @@ enum AttestationStatus: Codable, Equatable, Sendable {
         case .valid:
             let freshnessText = freshness(at: now)?.shortLabel ?? "fresh"
             return AttestationStatusCopy(
-                title: "Verified",
-                detail: "This device verified signed route and model evidence from TEE-backed infrastructure. Verification does not judge answer quality or truth.",
-                badge: "Verified \(freshnessText)"
+                title: "Proof fetched",
+                detail: "This device fetched signed route and model evidence from NEAR Private infrastructure. Proof does not judge answer quality or truth.",
+                badge: "Proof \(freshnessText)"
             )
         case .stale:
             return AttestationStatusCopy(
@@ -286,9 +288,9 @@ enum AttestationStatus: Codable, Equatable, Sendable {
             )
         case .unknown:
             return AttestationStatusCopy(
-                title: "Verification pending",
+                title: "No proof yet",
                 detail: "No signed verification report has been checked on this device yet.",
-                badge: "Pending"
+                badge: "No proof"
             )
         }
     }
@@ -299,9 +301,9 @@ enum AttestationStatus: Codable, Equatable, Sendable {
             switch reason {
             case .routeNotSupported:
                 return AttestationStatusCopy(
-                    title: "Unverified route",
+                    title: "Not TEE-attested",
                     detail: "This route does not carry NEAR Private verification. Use a private model when verification matters.",
-                    badge: "Unverified"
+                    badge: "No TEE proof"
                 )
             case .serviceUnavailable:
                 return AttestationStatusCopy(
@@ -317,16 +319,16 @@ enum AttestationStatus: Codable, Equatable, Sendable {
                 )
             case .notFetched:
                 return AttestationStatusCopy(
-                    title: "Verification pending",
+                    title: "No proof yet",
                     detail: "Fetch verification on a NEAR Private model to inspect route and model proof.",
-                    badge: "Pending"
+                    badge: "No proof"
                 )
             }
         default:
             return AttestationStatusCopy(
-                title: "Verification pending",
+                title: "No proof yet",
                 detail: "No local verification report is available for this route.",
-                badge: "Pending"
+                badge: "No proof"
             )
         }
     }

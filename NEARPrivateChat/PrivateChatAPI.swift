@@ -39,9 +39,6 @@ final class PrivateChatAPI {
         var queryItems = [
             URLQueryItem(name: "frontend_callback", value: callbackURL.absoluteString)
         ]
-        if let state, !state.isEmpty {
-            queryItems.append(URLQueryItem(name: "state", value: state))
-        }
         if let codeChallenge, !codeChallenge.isEmpty {
             queryItems.append(URLQueryItem(name: "response_type", value: "code"))
             queryItems.append(URLQueryItem(name: "code_challenge", value: codeChallenge))
@@ -52,15 +49,22 @@ final class PrivateChatAPI {
         return url
     }
 
-    func parseAuthCallback(_ url: URL, expectedState: String? = nil) throws -> AuthSession {
+    func parseAuthCallback(_ url: URL, expectedState: String? = nil, requiresReturnedState: Bool = true) throws -> AuthSession {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             throw APIError.invalidCallback
         }
-        let values = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        let queryItems = components.queryItems ?? []
+        let values = queryItems.reduce(into: [String: String]()) { values, item in
+            values[item.name] = values[item.name] ?? (item.value ?? "")
+        }
         guard let expectedState, !expectedState.isEmpty else {
             throw APIError.status(401, "Sign-in callbacks must originate from an active app sign-in request.")
         }
-        guard values["state"] == expectedState else {
+        let returnedStates = queryItems
+            .filter { $0.name == "state" }
+            .map { $0.value ?? "" }
+        let callbackStates = Self.callbackPathStates(from: components)
+        guard !requiresReturnedState || (returnedStates + callbackStates).contains(expectedState) else {
             throw APIError.status(401, "Sign-in callback failed state validation.")
         }
         if values["code"]?.isEmpty == false, values["token"]?.isEmpty != false {
@@ -82,11 +86,20 @@ final class PrivateChatAPI {
               var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return url
         }
-        var queryItems = components.queryItems ?? []
-        queryItems.removeAll { $0.name == "state" }
-        queryItems.append(URLQueryItem(name: "state", value: state))
-        components.queryItems = queryItems
+        components.path = "/callback/\(state)"
         return components.url ?? url
+    }
+
+    private static func callbackPathStates(from components: URLComponents) -> [String] {
+        let parts = components.path
+            .split(separator: "/")
+            .map(String.init)
+        guard parts.count == 2,
+              parts[0].lowercased() == "callback",
+              !parts[1].isEmpty else {
+            return []
+        }
+        return [parts[1]]
     }
 
     func fetchProfile() async throws -> UserProfile {

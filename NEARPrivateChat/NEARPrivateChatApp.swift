@@ -143,6 +143,8 @@ private struct RootView: View {
     @EnvironmentObject private var sessionStore: SessionStore
     @EnvironmentObject private var chatStore: ChatStore
     @State private var setupAccountID: String?
+    @State private var setupInitialProfile = UserSetupProfile.defaults
+    @State private var showingSetup = false
     @State private var legalTermsAccepted = true
 
     var body: some View {
@@ -168,6 +170,14 @@ private struct RootView: View {
         .onChange(of: sessionStore.setupAccountID) { oldAccountID, accountID in
             refreshLegalTermsAcceptance(previousAccountID: oldAccountID, currentAccountID: accountID)
             refreshSetupPresentation(previousAccountID: oldAccountID)
+        }
+        .fullScreenCover(isPresented: $showingSetup) {
+            UserSetupView(initialProfile: setupInitialProfile, readiness: setupReadinessSnapshot) { profile in
+                completeSetup(with: profile)
+            } onSkip: {
+                completeSetup(with: .defaults, outcome: .skipped)
+            }
+            .environmentObject(chatStore)
         }
         .overlay(alignment: .top) {
             #if DEBUG
@@ -202,14 +212,28 @@ private struct RootView: View {
     }
 
     private var currentSetupProfile: UserSetupProfile {
-        UserSetupProfile.inferredCurrentDefaults(
-            webSearchEnabled: chatStore.webSearchEnabled,
-            sourceMode: chatStore.sourceMode,
-            selectedModelID: chatStore.selectedModel,
-            hasSelectedProject: chatStore.selectedProjectID != nil,
-            isCouncilModeEnabled: chatStore.isCouncilModeEnabled,
-            researchModeEnabled: chatStore.researchModeEnabled
-        )
+        var profile = UserSetupProfile.defaults
+        profile.wantsWeb = chatStore.webSearchEnabled
+        profile.contextStyle = UserSetupContextStyle(sourceMode: chatStore.sourceMode)
+        profile.wantsIronclaw = chatStore.selectedModel == ModelOption.ironclawMobileModelID ||
+            chatStore.selectedModel == ModelOption.ironclawModelID
+        profile.wantsCouncil = !chatStore.councilModelIDs.isEmpty
+
+        if chatStore.researchModeEnabled {
+            profile.useCase = .research
+            profile.useCases = [.research]
+        } else if profile.wantsIronclaw {
+            profile.useCase = .buildAgents
+            profile.useCases = [.buildAgents]
+        } else if chatStore.selectedProjectID != nil || profile.contextStyle != .simple {
+            profile.useCase = .teamProjects
+            profile.useCases = [.teamProjects]
+        } else {
+            profile.useCase = .privateChat
+            profile.useCases = [.privateChat]
+        }
+
+        return profile
     }
 
     private var setupReadinessSnapshot: AppSetupReadinessSnapshot {
@@ -226,9 +250,25 @@ private struct RootView: View {
     private func beginSetupRerun() {
         guard sessionStore.isSignedIn, let accountID = sessionStore.setupAccountID else { return }
         setupAccountID = accountID
-        UserSetupStorage.save(.defaults, for: accountID)
-        chatStore.resetInteractionDefaults()
-        recordSetupTelemetry(profile: .defaults, outcome: .completed)
+        setupInitialProfile = UserSetupStorage.load(for: accountID) ?? currentSetupProfile
+        showingSetup = true
+    }
+
+    private func completeSetup(
+        with profile: UserSetupProfile,
+        outcome: TelemetrySetupOutcome = .completed
+    ) {
+        guard let accountID = sessionStore.setupAccountID else {
+            showingSetup = false
+            return
+        }
+
+        let profile = profile.normalizedForDefaults
+        chatStore.applySetupProfile(profile)
+        UserSetupStorage.save(profile, for: accountID)
+        recordSetupTelemetry(profile: profile, outcome: outcome)
+        setupAccountID = accountID
+        showingSetup = false
     }
 
     private func recordSetupTelemetry(profile: UserSetupProfile, outcome: TelemetrySetupOutcome) {
@@ -288,6 +328,7 @@ private struct RootView: View {
         if !UserSetupStorage.isCompleted(for: accountID) {
             UserSetupStorage.save(.defaults, for: accountID)
             recordSetupTelemetry(profile: .defaults, outcome: .skipped)
+            showingSetup = false
         }
     }
 }

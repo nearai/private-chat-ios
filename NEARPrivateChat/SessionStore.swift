@@ -55,6 +55,29 @@ final class SessionStore: NSObject, ObservableObject {
         Task { await refreshProfile() }
     }
 
+    #if DEBUG
+    func configureDemoCaptureSession() {
+        let demoSession = AuthSession(
+            token: "demo-capture-token",
+            sessionID: "demo-capture-session",
+            expiresAt: nil,
+            isNewUser: false
+        )
+        save(demoSession)
+        profile = UserProfile(
+            user: UserProfile.User(
+                id: "demo-capture-user",
+                email: "demo@example.com",
+                name: "Demo Account",
+                avatarURL: nil
+            ),
+            linkedAccounts: [
+                UserProfile.LinkedAccount(provider: "near", linkedAt: nil)
+            ]
+        )
+    }
+    #endif
+
     @discardableResult
     func handleIncomingURL(_ url: URL) -> Bool {
         guard url.scheme == api.configuration.callbackScheme,
@@ -121,7 +144,11 @@ final class SessionStore: NSObject, ObservableObject {
                 codeChallenge: pendingRequest.codeChallenge
             )
             let callbackURL = try await startWebAuthentication(url: url)
-            let newSession = try api.parseAuthCallback(callbackURL, expectedState: pendingRequest.state)
+            let newSession = try api.parseAuthCallback(
+                callbackURL,
+                expectedState: pendingRequest.state,
+                requiresReturnedState: false
+            )
             clearPendingAuthState()
             save(newSession)
             await refreshProfile()
