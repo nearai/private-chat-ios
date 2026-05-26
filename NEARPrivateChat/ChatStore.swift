@@ -8299,18 +8299,18 @@ final class ChatStore: ObservableObject {
             role: .assistant,
             text: """
             ## Direct answer
-            The best answer is cautious optimism. GLM anchors the current sourcing and says the conflict is in an endgame phase, not over [1][2]. Qwen Max emphasizes the negotiation mechanics: a framework, Hormuz reopening, and a longer follow-on process [3][4]. Opus is more skeptical and focuses on live military and regional spillover risks [5][6].
+            The best answer is: not over, but closer to an off-ramp. GLM reads the AP/PBS overview as evidence that a deal is emerging [1][2]. Qwen Max focuses on whether the reported framework and Strait of Hormuz terms actually get implemented [3][4]. Opus keeps the caution high because fresh military activity and the Israel-Hezbollah front can still break the diplomatic track [5][6].
 
             ## What the council agrees on
-            Nobody should say the war is already over. The strongest supported statement is: talks appear close to an agreement, but the outcome still depends on signing, implementation, and whether related fronts stay contained [1][5][6].
+            Nobody should say the war is already over. The supported statement is narrower: talks appear close to an agreement, but the outcome still depends on a signed/finalized deal, implementation of the Hormuz reopening, and containment of related military fronts [1][3][5][6].
 
             ## How the models vary
-            - GLM 5.1: treats AP/PBS reporting as meaningful evidence of a possible endgame, while keeping the answer bounded to today's facts [1][2].
-            - Qwen Max: maps the implementation path from "largely negotiated" to durable agreement: Hormuz reopening, ceasefire extension, and follow-on talks [3][4].
-            - Claude Opus: stresses uncertainty and the ways the apparent deal could still fail, especially through fresh strike reports and regional escalation [5][6].
+            - GLM 5.1: weighs the broad AP/PBS explainer coverage and calls this a possible endgame, not a settled peace [1][2].
+            - Qwen Max: reads the deal-specific reporting as an implementation checklist: final text, Hormuz reopening, and follow-on negotiations [3][4].
+            - Claude Opus: reads the security reporting as a warning that diplomacy is still exposed to military and regional shocks [5][6].
 
             ## Disagreements or uncertainty
-            The disagreement is about probability. GLM reads the latest sourcing as a likely off-ramp. Qwen Max is conditional: it needs implementation milestones. Opus is the least willing to call it ending until regional spillover quiets down.
+            The disagreement is about confidence. GLM is the most optimistic because the overview reporting points to a possible deal. Qwen Max is conditional because a framework is not the same as implementation. Opus is the least willing to call it ending while strike reports and spillover risks remain live.
             """,
             model: ModelOption.llmCouncilSynthesisModelID,
             createdAt: created.addingTimeInterval(18),
@@ -8327,7 +8327,7 @@ final class ChatStore: ObservableObject {
             role: .assistant,
             text: """
             ## GLM 5.1
-            The latest AP/PBS reporting supports "close to an endgame," not "ended" [1][2]. The credible path is a near-final framework plus implementation checks: signature, Strait reopening, and sustained ceasefire behavior.
+            The AP/PBS overview supports "possible endgame," not "ended" [1][2]. I would answer that the war appears closer to a diplomatic off-ramp, but the claim should stay bounded until there is a final agreement and visible implementation.
             """,
             model: Self.defaultModelID,
             createdAt: created.addingTimeInterval(19),
@@ -8344,7 +8344,7 @@ final class ChatStore: ObservableObject {
             role: .assistant,
             text: """
             ## Qwen Max
-            The key question is sequencing. If the framework triggers a verifiable reopening of Hormuz and launches the 30-60 day negotiation period, then the war is plausibly ending [1][2]. If those milestones slip, the current optimism is just another negotiation headline.
+            The deal-specific reporting makes this an implementation question [1][2]. If the framework is finalized and the Strait of Hormuz reopening actually starts, then "ending" becomes plausible. If those milestones slip, the headline is only diplomatic momentum.
             """,
             model: ModelOption.nearCloudQwenMaxModelID,
             createdAt: created.addingTimeInterval(20),
@@ -8361,7 +8361,7 @@ final class ChatStore: ObservableObject {
             role: .assistant,
             text: """
             ## Claude Opus 4.7
-            I would be careful with the word "ending." There are strong diplomatic signals, but a war can move from battlefield escalation into coercive negotiation without being settled. Fresh strike reporting and the Israel-Hezbollah front are the main tail risks [1][2].
+            I would be careful with the word "ending." Diplomatic signals can coexist with active coercion. Fresh strike reporting and the Israel-Hezbollah front mean the safer answer is: negotiations may be near an off-ramp, but the conflict is not reliably settled yet [1][2].
             """,
             model: "near-cloud/anthropic/claude-opus-4-7",
             createdAt: created.addingTimeInterval(21),
