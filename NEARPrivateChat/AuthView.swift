@@ -25,13 +25,13 @@ struct AuthView: View {
                 .frame(maxWidth: 360)
 
                 VStack(spacing: 12) {
-                    ProviderButton(provider: .near, isLoading: sessionStore.isAuthenticating, isEnabled: canStartSignIn) {
+                    ProviderButton(provider: .near, isLoading: sessionStore.isAuthenticating, isEnabled: canStartSignIn, onBlocked: promptForTerms) {
                         sessionStore.signIn(with: .near)
                     }
-                    ProviderButton(provider: .google, isLoading: sessionStore.isAuthenticating, isEnabled: canStartSignIn) {
+                    ProviderButton(provider: .google, isLoading: sessionStore.isAuthenticating, isEnabled: canStartSignIn, onBlocked: promptForTerms) {
                         sessionStore.signIn(with: .google)
                     }
-                    ProviderButton(provider: .github, isLoading: sessionStore.isAuthenticating, isEnabled: canStartSignIn) {
+                    ProviderButton(provider: .github, isLoading: sessionStore.isAuthenticating, isEnabled: canStartSignIn, onBlocked: promptForTerms) {
                         sessionStore.signIn(with: .github)
                     }
 
@@ -127,6 +127,11 @@ struct AuthView: View {
             LegalTermsAcceptanceStore.clearPendingAcceptance()
         }
     }
+
+    private func promptForTerms() {
+        guard !hasAcceptedLegalTerms else { return }
+        showingLegalTerms = true
+    }
 }
 
 struct AuthHeroCard: View {
@@ -208,10 +213,17 @@ private struct ProviderButton: View {
     let provider: OAuthProvider
     let isLoading: Bool
     let isEnabled: Bool
+    let onBlocked: () -> Void
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            if isEnabled {
+                action()
+            } else {
+                onBlocked()
+            }
+        } label: {
             HStack(spacing: 10) {
                 Image(systemName: provider.symbolName)
                     .font(.headline)
@@ -235,7 +247,7 @@ private struct ProviderButton: View {
             .opacity(isEnabled ? 1 : 0.48)
         }
         .buttonStyle(.plain)
-        .disabled(!isEnabled || isLoading)
+        .disabled(isLoading)
     }
 }
 

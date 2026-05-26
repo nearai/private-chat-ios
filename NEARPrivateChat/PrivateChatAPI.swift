@@ -56,24 +56,25 @@ final class PrivateChatAPI {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             throw APIError.invalidCallback
         }
-        let values = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        let values = Self.callbackValues(from: components)
         guard let expectedState, !expectedState.isEmpty else {
             throw APIError.status(401, "Sign-in callbacks must originate from an active app sign-in request.")
         }
-        guard values["state"] == expectedState else {
+        guard values["state", default: []].contains(expectedState) else {
             throw APIError.status(401, "Sign-in callback failed state validation.")
         }
-        if values["code"]?.isEmpty == false, values["token"]?.isEmpty != false {
+        if Self.firstNonEmptyValue(named: "code", in: values) != nil,
+           Self.firstNonEmptyValue(named: "token", in: values) == nil {
             throw APIError.status(501, "Authorization-code sign-in requires backend PKCE exchange support.")
         }
-        guard let token = values["token"], !token.isEmpty else {
+        guard let token = Self.firstNonEmptyValue(named: "token", in: values) else {
             throw APIError.invalidCallback
         }
         return AuthSession(
             token: token,
-            sessionID: values["session_id"] ?? "",
-            expiresAt: values["expires_at"],
-            isNewUser: values["is_new_user"] == "true"
+            sessionID: Self.firstNonEmptyValue(named: "session_id", in: values) ?? "",
+            expiresAt: Self.firstNonEmptyValue(named: "expires_at", in: values),
+            isNewUser: Self.firstNonEmptyValue(named: "is_new_user", in: values) == "true"
         )
     }
 
@@ -87,6 +88,28 @@ final class PrivateChatAPI {
         queryItems.append(URLQueryItem(name: "state", value: state))
         components.queryItems = queryItems
         return components.url ?? url
+    }
+
+    private static func callbackValues(from components: URLComponents) -> [String: [String]] {
+        var values: [String: [String]] = [:]
+        append(components.queryItems, to: &values)
+        if let fragment = components.fragment,
+           let fragmentComponents = URLComponents(string: "nearprivatechat://auth?\(fragment)") {
+            append(fragmentComponents.queryItems, to: &values)
+        }
+        return values
+    }
+
+    private static func append(_ queryItems: [URLQueryItem]?, to values: inout [String: [String]]) {
+        for item in queryItems ?? [] {
+            let name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+            values[name, default: []].append(item.value ?? "")
+        }
+    }
+
+    private static func firstNonEmptyValue(named name: String, in values: [String: [String]]) -> String? {
+        values[name]?.first { !$0.isEmpty }
     }
 
     func fetchProfile() async throws -> UserProfile {

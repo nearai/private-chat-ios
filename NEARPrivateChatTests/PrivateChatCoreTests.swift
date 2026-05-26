@@ -23,6 +23,26 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertThrowsError(try api.parseAuthCallback(wrongStateURL, expectedState: "nonce-1"))
     }
 
+    func testAuthCallbackAcceptsFragmentToken() throws {
+        let api = PrivateChatAPI(configuration: AppConfiguration.production)
+        let url = URL(string: "nearprivatechat://auth#token=session-token&session_id=sid&is_new_user=true&state=nonce-1")!
+
+        let session = try api.parseAuthCallback(url, expectedState: "nonce-1")
+
+        XCTAssertEqual(session.token, "session-token")
+        XCTAssertEqual(session.sessionID, "sid")
+        XCTAssertTrue(session.isNewUser)
+    }
+
+    func testAuthCallbackToleratesDuplicateStateValues() throws {
+        let api = PrivateChatAPI(configuration: AppConfiguration.production)
+        let url = URL(string: "nearprivatechat://auth?state=provider-state&token=session-token&state=nonce-1")!
+
+        let session = try api.parseAuthCallback(url, expectedState: "nonce-1")
+
+        XCTAssertEqual(session.token, "session-token")
+    }
+
     func testAuthURLIncludesState() throws {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
 
