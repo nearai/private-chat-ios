@@ -11409,7 +11409,44 @@ private struct MarkdownMessageText: View {
     }
 
     private var blocks: [MarkdownBlock] {
-        MarkdownBlock.parse(Self.linkCitationMarkers(in: text, sources: sources))
+        MarkdownBlock.parse(Self.normalizedMarkdown(text, sources: sources))
+    }
+
+    private static func normalizedMarkdown(_ text: String, sources: [WebSearchSource]) -> String {
+        linkCitationMarkers(in: promoteCouncilSectionLabels(in: text), sources: sources)
+    }
+
+    private static func promoteCouncilSectionLabels(in text: String) -> String {
+        let labels: Set<String> = [
+            "direct answer",
+            "synthesis",
+            "what the council agrees on",
+            "how the models vary",
+            "model differences",
+            "disagreements or uncertainty",
+            "recommended next step",
+            "raw glm view",
+            "raw qwen max view",
+            "raw opus view",
+            "raw claude opus view",
+            "ironclaw output",
+            "inputs",
+            "what changed in the plan",
+            "updated project plan",
+            "risks found",
+            "final recommendation"
+        ]
+        return text
+            .components(separatedBy: .newlines)
+            .map { line in
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.hasPrefix("#"),
+                      labels.contains(trimmed.lowercased()) else {
+                    return line
+                }
+                return "## \(trimmed)"
+            }
+            .joined(separator: "\n")
     }
 
     private static func linkCitationMarkers(in text: String, sources: [WebSearchSource]) -> String {
@@ -11956,14 +11993,7 @@ private struct SourcePill: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            ZStack {
-                Circle()
-                    .fill(Color.trustVerified.opacity(0.18))
-                Text("\(index)")
-                    .font(.caption2.monospacedDigit().weight(.bold))
-                    .foregroundStyle(Color.trustVerified)
-            }
-            .frame(width: 22, height: 22)
+            SourceLogo(source: source, fallbackText: "\(index)")
             Text(source.host)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
@@ -11978,6 +12008,54 @@ private struct SourcePill: View {
                 .stroke(Color.appBorder.opacity(0.55), lineWidth: 1)
         }
         .accessibilityLabel("Source \(index), \(source.title ?? source.host)")
+    }
+}
+
+private struct SourceLogo: View {
+    let source: WebSearchSource
+    let fallbackText: String
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.appSecondaryBackground)
+            if let faviconURL {
+                AsyncImage(url: faviconURL) { phase in
+                    switch phase {
+                    case let .success(image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .padding(3)
+                    case .failure, .empty:
+                        fallback
+                    @unknown default:
+                        fallback
+                    }
+                }
+            } else {
+                fallback
+            }
+        }
+        .frame(width: 22, height: 22)
+        .clipShape(Circle())
+        .overlay {
+            Circle()
+                .stroke(Color.appBorder.opacity(0.65), lineWidth: 1)
+        }
+    }
+
+    private var fallback: some View {
+        Text(fallbackText)
+            .font(.caption2.monospacedDigit().weight(.bold))
+            .foregroundStyle(Color.trustVerified)
+    }
+
+    private var faviconURL: URL? {
+        guard let encodedHost = source.host.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            return nil
+        }
+        return URL(string: "https://www.google.com/s2/favicons?sz=64&domain=\(encodedHost)")
     }
 }
 
@@ -12004,11 +12082,7 @@ private struct SourcesDetailView: View {
                         if let url = source.safeURL {
                             Link(destination: url) {
                                 HStack(spacing: 11) {
-                                    Text("\(index + 1)")
-                                        .font(.caption.monospacedDigit().weight(.bold))
-                                        .foregroundStyle(Color.trustVerified)
-                                        .frame(width: 28, height: 28)
-                                        .background(Color.trustVerified.opacity(0.12), in: Circle())
+                                    SourceLogo(source: source, fallbackText: "\(index + 1)")
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(source.title ?? source.host)
                                             .font(.subheadline.weight(.semibold))
@@ -12235,7 +12309,7 @@ private struct DemoSceneOverlay: View {
                 DemoFocusBox(delay: 1.1, duration: 2.2, x: 0.08, y: 0.35, width: 0.84, height: 0.18, tint: .orange)
             case .council:
                 DemoFocusBox(delay: 1.0, duration: 2.1, x: 0.06, y: 0.28, width: 0.88, height: 0.35, tint: .actionPrimary)
-                DemoFocusBox(delay: 3.7, duration: 1.8, x: 0.06, y: 0.66, width: 0.88, height: 0.15, tint: .trustVerified)
+                DemoFocusBox(delay: 3.7, duration: 1.8, x: 0.08, y: 0.56, width: 0.84, height: 0.14, tint: .trustVerified)
             case .chat:
                 DemoTimedTapPulse(delay: 2.4, x: 0.91, y: 0.09)
             case .agent:
@@ -13190,9 +13264,9 @@ private struct DemoAgentTimelineStep: View {
 
 private struct DemoCouncilLineupView: View {
     private let models = [
-        ("GLM 5.1", "Verification-first", "NEAR Private · verified", "checkmark.shield.fill"),
-        ("Qwen Max", "Negotiation mechanics", "NEAR Cloud · privacy proxy", "list.bullet.rectangle"),
-        ("Claude Opus 4.7", "Failure modes", "NEAR Cloud · privacy proxy", "exclamationmark.triangle")
+        ("GLM 5.1", "Private model answer", "NEAR Private · verified", "checkmark.shield.fill"),
+        ("Qwen Max", "Independent model answer", "NEAR Cloud · privacy proxy", "list.bullet.rectangle"),
+        ("Claude Opus 4.7", "Independent model answer", "NEAR Cloud · privacy proxy", "sparkles")
     ]
 
     var body: some View {
@@ -13399,10 +13473,12 @@ private struct DemoCouncilComparisonView: View {
                         if let synthesis {
                             CouncilFocusedCard(
                                 title: "Synthesis",
-                                subtitle: "Why the combined answer is better",
+                                subtitle: "Combined answer with visible disagreement",
                                 symbolName: "sparkles",
                                 tint: .brandBlue,
-                                text: synthesis.text
+                                text: synthesis.text,
+                                sources: synthesis.sources,
+                                searchQuery: synthesis.searchQuery
                             )
                             .id("synthesis")
                         }
@@ -13419,7 +13495,9 @@ private struct DemoCouncilComparisonView: View {
                                     subtitle: modelAngle(for: message),
                                     symbolName: "cpu",
                                     tint: .trustVerified,
-                                    text: message.text
+                                    text: message.text,
+                                    sources: message.sources,
+                                    searchQuery: message.searchQuery
                                 )
                                 .id(message.id)
                             }
@@ -13469,11 +13547,11 @@ private struct DemoCouncilComparisonView: View {
     private func modelAngle(for message: ChatMessage) -> String {
         switch message.model {
         case "zai-org/GLM-5.1-FP8":
-            return "Verification-first"
+            return "Private model answer"
         case ModelOption.nearCloudQwenMaxModelID:
-            return "Negotiation mechanics"
+            return "Independent model answer"
         case "near-cloud/anthropic/claude-opus-4-7":
-            return "Failure modes"
+            return "Independent model answer"
         default:
             return "Raw model view"
         }
@@ -13521,7 +13599,9 @@ private struct DemoIronClawResultView: View {
                                 subtitle: "Completed agent output returned to chat",
                                 symbolName: "terminal",
                                 tint: .brandBlue,
-                                text: resultMessage.text
+                                text: resultMessage.text,
+                                sources: resultMessage.sources,
+                                searchQuery: resultMessage.searchQuery
                             )
                             .id("result")
                         }
@@ -13584,6 +13664,8 @@ private struct CouncilFocusedCard: View {
     let symbolName: String
     let tint: Color
     let text: String
+    var sources: [WebSearchSource] = []
+    var searchQuery: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -13604,9 +13686,13 @@ private struct CouncilFocusedCard: View {
                 }
             }
 
-            MarkdownMessageText(text: text)
+            MarkdownMessageText(text: text, sources: sources)
                 .font(.subheadline)
                 .lineSpacing(2)
+
+            if !sources.isEmpty {
+                SearchContextStrip(query: searchQuery, sources: sources)
+            }
         }
         .padding(12)
         .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))

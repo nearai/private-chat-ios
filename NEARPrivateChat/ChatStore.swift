@@ -3843,6 +3843,9 @@ final class ChatStore: ObservableObject {
             }
             return (modelDisplayName(for: modelID), message.text)
         }
+        let councilSources = Self.uniqueSources(successfulResults.flatMap { result -> [WebSearchSource] in
+            messages.first(where: { $0.id == result.messageID })?.sources ?? []
+        })
         guard responses.count > 1 else { return }
 
         let synthesisID = "local-council-synthesis-\(UUID().uuidString)"
@@ -3855,7 +3858,9 @@ final class ChatStore: ObservableObject {
             status: "streaming",
             responseID: nil,
             previousResponseID: previousResponseID,
-            isStreaming: true
+            isStreaming: true,
+            searchQuery: prompt,
+            sources: councilSources
         )
         currentCouncilAssistantMessageIDs.append(synthesisID)
         messages.append(synthesisMessage)
@@ -3910,11 +3915,15 @@ final class ChatStore: ObservableObject {
         Council responses:
         \(councilResponses)
 
-        Return a polished final answer with:
-        - Direct answer
-        - What the council agrees on
-        - Disagreements or uncertainty
-        - Recommended next step, if any
+        Return a polished final answer using Markdown headings exactly like this:
+        ## Direct answer
+        ## What the council agrees on
+        ## Disagreements or uncertainty
+        ## Recommended next step
+
+        Preserve source citations where they are useful. If the model answers cite sources with bracket markers like [1], keep those markers in the synthesized answer.
+
+        Do not include a "Why synthesis is better" section.
         """
     }
 
@@ -8278,22 +8287,19 @@ final class ChatStore: ObservableObject {
             id: "demo-assistant-council-synthesis",
             role: .assistant,
             text: """
-            Synthesis
+            ## Direct answer
             The best answer is cautious optimism. GLM anchors the current sourcing and says the conflict is in an endgame phase, not over. Qwen Max emphasizes the negotiation mechanics: a framework, Hormuz reopening, and a longer follow-on process. Opus is more skeptical and focuses on failure modes from wording gaps, sanctions sequencing, nuclear talks, and regional spillover.
 
-            How the models vary
+            ## What the council agrees on
+            Nobody should say the war is already over. The strongest supported statement is: talks appear close to an agreement, but the outcome still depends on signing, implementation, and whether related fronts stay contained.
+
+            ## How the models vary
             - GLM 5.1: treats the latest reports as meaningful evidence of a possible endgame, while keeping the answer bounded to today's facts [1][3].
             - Qwen Max: maps the path from ceasefire/framework to implementation and asks what would make the deal durable [2][3].
             - Claude Opus: stresses uncertainty and the ways the apparent deal could still fail, especially through regional escalation [4].
 
-            What the council agrees on
-            Nobody should say the war is already over. The strongest supported statement is: talks appear close to an agreement, but the outcome still depends on signing, implementation, and whether related fronts stay contained.
-
-            Disagreements or uncertainty
+            ## Disagreements or uncertainty
             The disagreement is about probability. GLM reads the latest sourcing as a likely off-ramp. Qwen Max is conditional: it needs implementation milestones. Opus is the least willing to call it ending until regional spillover quiets down.
-
-            Why synthesis is better
-            A single model can over-index on either the headline or the caveat. Council gives the user the headline, the mechanics, and the risk frame in one answer.
             """,
             model: ModelOption.llmCouncilSynthesisModelID,
             createdAt: created.addingTimeInterval(18),
@@ -8302,13 +8308,14 @@ final class ChatStore: ObservableObject {
             responseID: "demo-response-synthesis",
             councilBatchID: councilBatchID,
             isStreaming: false,
+            searchQuery: "Is the war in Iran ending as of today?",
             sources: iranSources
         )
         let glmMessage = ChatMessage(
             id: "demo-assistant-glm",
             role: .assistant,
             text: """
-            Raw GLM view
+            ## GLM 5.1
             The latest reporting supports "close to an endgame," not "ended." The credible path is a near-final framework plus implementation checks: signature, Strait reopening, and sustained ceasefire behavior.
             """,
             model: Self.defaultModelID,
@@ -8318,13 +8325,14 @@ final class ChatStore: ObservableObject {
             responseID: "demo-response-glm",
             councilBatchID: councilBatchID,
             isStreaming: false,
+            searchQuery: "Is the war in Iran ending as of today?",
             sources: iranSources
         )
         let qwenLargeMessage = ChatMessage(
             id: "demo-assistant-qwen-large",
             role: .assistant,
             text: """
-            Raw Qwen Max view
+            ## Qwen Max
             The key question is sequencing. If the framework triggers a verifiable reopening of Hormuz and launches the 30-60 day negotiation period, then the war is plausibly ending. If those milestones slip, the current optimism is just another negotiation headline.
             """,
             model: ModelOption.nearCloudQwenMaxModelID,
@@ -8334,13 +8342,14 @@ final class ChatStore: ObservableObject {
             responseID: "demo-response-qwen-large",
             councilBatchID: councilBatchID,
             isStreaming: false,
+            searchQuery: "Is the war in Iran ending as of today?",
             sources: iranSources
         )
         let opusMessage = ChatMessage(
             id: "demo-assistant-opus",
             role: .assistant,
             text: """
-            Raw Opus view
+            ## Claude Opus 4.7
             I would be careful with the word "ending." There are strong diplomatic signals, but a war can move from battlefield escalation into coercive negotiation without being settled. The unresolved nuclear file and related Israel-Hezbollah front are the main tail risks.
             """,
             model: "near-cloud/anthropic/claude-opus-4-7",
@@ -8350,6 +8359,7 @@ final class ChatStore: ObservableObject {
             responseID: "demo-response-opus",
             councilBatchID: councilBatchID,
             isStreaming: false,
+            searchQuery: "Is the war in Iran ending as of today?",
             sources: iranSources
         )
         let agentUserMessage = ChatMessage(

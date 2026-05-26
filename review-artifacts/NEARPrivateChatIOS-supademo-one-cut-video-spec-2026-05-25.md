@@ -26,10 +26,10 @@ The video should look like someone calmly using the iOS app. Any tap or focus cu
 3. Home: show Ask NEAR, Resume cards, and the IronClaw Reborn Plan project.
 4. New chat: no files, no project context. Prompt is `Is the war in Iran ending as of today?`
 5. Model picker: show only GLM 5.1 as the selected single-model route. Council is not shown here.
-6. Private GLM answer: show the full answer, web citations, source chips, `View all`, and the green Verified shield card.
+6. Private GLM answer: show the full answer, web citations, favicon source chips, `View all`, and the green Verified shield card.
 7. Verification: immediately after GLM, show the shield proof for GLM 5.1 and the TEE-backed signed evidence copy.
 8. Council lineup: explicitly show the same Iran prompt reviewed by GLM 5.1, Qwen Max, and Claude Opus 4.7.
-9. Council answer: show the synthesis and raw model differences so the viewer can see why synthesis is better.
+9. Council answer: show the synthesis and raw model differences with clean section headings and working source links.
 10. Project Context: switch to the IronClaw Reborn Plan project and show sources/files/instructions.
 11. Files picker: attach `reborn-project-plan.md` and `latest-ironclaw-prs.json`.
 12. Composer with attachments: show the project-plan attachment shelf and the prompt to update the plan from latest IronClaw PRs.
@@ -92,11 +92,11 @@ Accept the Supademo export only if:
 - The first GLM pass is a new chat with no file attachment and no project context.
 - Model picker shows GLM 5.1 as the single selected route. It does not show Council unless the Council scene is active.
 - GLM answer is readable at full simulator size.
-- Web-sourced claims show linked citation markers and a tappable sources row.
+- Web-sourced claims show linked citation markers and a tappable sources row with source favicons/logos.
 - The green Verified badge uses a shield icon.
 - Verification immediately follows the GLM answer and says the device verifies signed TEE-backed evidence, not that inference ran on the phone.
 - Council uses the same Iran prompt and exactly these models: GLM 5.1, Qwen Max, Claude Opus 4.7.
-- Council answer is readable at full simulator size and shows model disagreement plus synthesis.
+- Council answer is readable at full simulator size, uses clean Markdown section headings, shows model disagreement plus synthesis, and does not include a "Why synthesis is better" section.
 - IronClaw attaches a project plan, fetches/latest PR context, and returns a completed updated-plan artifact.
 - Share holds long enough to see public link and proof export.
 - No voice, captions, text overlays, labels, or Supademo-generated UI appears.
