@@ -27,6 +27,9 @@
 		A10000000000000000000013 /* PrivateTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* PrivateTelemetry.swift */; };
 		A10000000000000000000014 /* PrivateTelemetryPolicy.md in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* PrivateTelemetryPolicy.md */; };
 		A10000000000000000000015 /* AskOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* AskOrchestrator.swift */; };
+		A10000000000000000000016 /* MarkdownRenderingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* MarkdownRenderingViews.swift */; };
+		A10000000000000000000017 /* DemoCaptureViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* DemoCaptureViews.swift */; };
+		A10000000000000000000018 /* MessagePresentationHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* MessagePresentationHelpers.swift */; };
 		B10000000000000000000001 /* PrivateChatCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* PrivateChatCoreTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -63,6 +66,9 @@
 		A20000000000000000000015 /* PrivateTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateTelemetry.swift; sourceTree = "<group>"; };
 		A20000000000000000000016 /* PrivateTelemetryPolicy.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PrivateTelemetryPolicy.md; sourceTree = "<group>"; };
 		A20000000000000000000017 /* AskOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskOrchestrator.swift; sourceTree = "<group>"; };
+		A20000000000000000000018 /* MarkdownRenderingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownRenderingViews.swift; sourceTree = "<group>"; };
+		A20000000000000000000019 /* DemoCaptureViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoCaptureViews.swift; sourceTree = "<group>"; };
+		A2000000000000000000001A /* MessagePresentationHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagePresentationHelpers.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* PrivateChatCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateChatCoreTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* NEARPrivateChatTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NEARPrivateChatTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -114,6 +120,9 @@
 				A20000000000000000000006 /* ChatStore.swift */,
 				A20000000000000000000007 /* AuthView.swift */,
 				A20000000000000000000008 /* AppShellView.swift */,
+				A20000000000000000000018 /* MarkdownRenderingViews.swift */,
+				A20000000000000000000019 /* DemoCaptureViews.swift */,
+				A2000000000000000000001A /* MessagePresentationHelpers.swift */,
 				A20000000000000000000009 /* Info.plist */,
 				A20000000000000000000013 /* PrivacyInfo.xcprivacy */,
 				A20000000000000000000016 /* PrivateTelemetryPolicy.md */,
@@ -249,6 +258,9 @@
 				A10000000000000000000006 /* ChatStore.swift in Sources */,
 				A10000000000000000000007 /* AuthView.swift in Sources */,
 				A10000000000000000000008 /* AppShellView.swift in Sources */,
+				A10000000000000000000016 /* MarkdownRenderingViews.swift in Sources */,
+				A10000000000000000000017 /* DemoCaptureViews.swift in Sources */,
+				A10000000000000000000018 /* MessagePresentationHelpers.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

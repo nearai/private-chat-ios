@@ -2674,10 +2674,6 @@ private struct ModelPickerView: View {
         filtered(chatStore.cloudModels)
     }
 
-    private var agentModels: [ModelOption] {
-        filtered(chatStore.agentModels)
-    }
-
     private var featuredModels: [ModelOption] {
         filtered(chatStore.featuredPickerModels)
     }
@@ -2720,11 +2716,11 @@ private struct ModelPickerView: View {
                     if !isSearchingModels {
                         Section {
                             ModelPickerSummary(
-                                selectedModelName: chatStore.activeModelDisplayName,
+                                selectedModelName: chatStore.selectedModelDisplayName,
                                 selectedModelID: chatStore.selectedModel,
                                 providerName: chatStore.selectedProviderDisplayName,
                                 modelCount: chatStore.pickerModels.count,
-                                councilModelNames: chatStore.councilModelNames,
+                                councilModelNames: [],
                                 webSearchEnabled: chatStore.effectiveWebSearchEnabled,
                                 appWebGroundingEnabled: chatStore.effectiveAppWebGroundingEnabled,
                                 planName: chatStore.currentBillingPlanName,
@@ -2762,7 +2758,6 @@ private struct ModelPickerView: View {
                     modelSection("Frontier", models: secondaryModels(eliteModels), showsCouncilButton: false)
                     modelSection("NEAR Cloud", models: secondaryModels(cloudModels), showsCouncilButton: false)
                     modelSection("General", models: secondaryModels(standardModels), showsCouncilButton: false)
-                    modelSection("Agents", models: secondaryModels(agentModels), showsCouncilButton: false)
                 } else {
                     if !isSearchingModels {
                         Section {
@@ -2770,7 +2765,7 @@ private struct ModelPickerView: View {
                                 models: chatStore.activeCouncilModels,
                                 defaultModels: chatStore.defaultCouncilModels,
                                 presets: chatStore.councilPresets,
-                                maxModels: 4,
+                                maxModels: 3,
                                 isCustomizing: $showingCouncilCustomizer,
                                 onUseDefault: {
                                     chatStore.useDefaultCouncilLineup()
@@ -3620,7 +3615,7 @@ private struct ModelPickerRow: View {
     }
 }
 
-private struct ChipFlowLayout: Layout {
+struct ChipFlowLayout: Layout {
     let spacing: CGFloat
     let lineSpacing: CGFloat
 
@@ -3691,7 +3686,7 @@ private enum SharePublicLinkExpiry: String, CaseIterable, Identifiable {
     }
 }
 
-private struct ShareConversationView: View {
+struct ShareConversationView: View {
     @EnvironmentObject private var chatStore: ChatStore
     @Environment(\.dismiss) private var dismiss
     let conversation: ConversationSummary
@@ -5130,7 +5125,7 @@ private struct ProjectIdentityPreview: View {
     }
 }
 
-private struct ProjectFilesView: View {
+struct ProjectFilesView: View {
     @EnvironmentObject private var chatStore: ChatStore
     @Environment(\.dismiss) private var dismiss
     @State private var showingFileImporter = false
@@ -6760,6 +6755,7 @@ private struct AccountSettingsView: View {
     @EnvironmentObject private var sessionStore: SessionStore
     @EnvironmentObject private var chatStore: ChatStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     let onRunSetupAgain: () -> Void
     @State private var systemPrompt = ""
     @State private var webSearchEnabled = true
@@ -7010,10 +7006,20 @@ private struct AccountSettingsView: View {
                     }
 
                     Section("Models") {
-                        InfoRow(
-                            title: "NEAR Cloud models",
-                            value: chatStore.nearCloudKeyConfigured ? "API key saved" : "Add API key",
-                            monospaced: false
+                        NearCloudConnectionCard(
+                            apiKey: $nearCloudAPIKey,
+                            isConnected: chatStore.nearCloudKeyConfigured,
+                            isConnecting: chatStore.isTestingNearCloudKey,
+                            isAutoConnecting: chatStore.isConnectingNearCloudAccount,
+                            modelCount: chatStore.cloudModels.count,
+                            onConnectAccount: connectNearCloudAccount,
+                            onOpenCloud: openNearCloudSignup,
+                            onPasteKey: pasteNearCloudKeyFromClipboard,
+                            onConnect: connectNearCloud,
+                            onRemove: {
+                                chatStore.clearNearCloudAPIKey()
+                                nearCloudAPIKey = ""
+                            }
                         )
 
                         VStack(alignment: .leading, spacing: 8) {
@@ -7042,30 +7048,9 @@ private struct AccountSettingsView: View {
                         }
                         .padding(.vertical, 4)
 
-                        SecureField("sk-...", text: $nearCloudAPIKey)
+                        SecureField("Paste key here", text: $nearCloudAPIKey)
                             .tokenInputTraits()
                             .focused($focusedPowerToolField, equals: .nearCloudKey)
-
-                        HStack {
-                            Button {
-                                chatStore.saveNearCloudAPIKey(nearCloudAPIKey)
-                                nearCloudAPIKey = ""
-                            } label: {
-                                Label("Save Key", systemImage: "key")
-                            }
-                            .disabled(nearCloudAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                            Spacer()
-
-                            if chatStore.nearCloudKeyConfigured {
-                                Button(role: .destructive) {
-                                    chatStore.clearNearCloudAPIKey()
-                                    nearCloudAPIKey = ""
-                                } label: {
-                                    Label("Remove", systemImage: "trash")
-                                }
-                            }
-                        }
                     }
 
                     Section("Integrations") {
@@ -7275,6 +7260,43 @@ private struct AccountSettingsView: View {
         guard let focus else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             focusedPowerToolField = focus
+        }
+    }
+
+    private func openNearCloudSignup() {
+        guard let url = URL(string: "https://cloud.near.ai") else { return }
+        openURL(url)
+    }
+
+    private func pasteNearCloudKeyFromClipboard() {
+        #if canImport(UIKit)
+        let value = UIPasteboard.general.string ?? ""
+        #elseif canImport(AppKit)
+        let value = NSPasteboard.general.string(forType: .string) ?? ""
+        #else
+        let value = ""
+        #endif
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            chatStore.bannerMessage = "Clipboard does not contain a NEAR Cloud key."
+            return
+        }
+        nearCloudAPIKey = trimmed
+        chatStore.bannerMessage = "Key pasted. Tap Connect & Test."
+    }
+
+    private func connectNearCloudAccount() {
+        Task {
+            _ = await chatStore.connectNearCloudAccount()
+        }
+    }
+
+    private func connectNearCloud() {
+        Task {
+            let didConnect = await chatStore.connectNearCloudAPIKey(nearCloudAPIKey)
+            if didConnect {
+                nearCloudAPIKey = ""
+            }
         }
     }
 
@@ -7632,12 +7654,12 @@ private struct CapabilitiesView: View {
 
     private var cloudDetail: String {
         if chatStore.nearCloudKeyConfigured {
-            let plan = chatStore.billingSnapshot?.activeSubscription?.plan ?? "API key saved"
+            let plan = chatStore.billingSnapshot?.activeSubscription?.plan ?? "Cloud connected"
             return chatStore.selectedRouteUsesNearCloud
                 ? "Current route uses \(chatStore.selectedModelDisplayName) through NEAR Cloud. \(plan)."
                 : "Cloud unlocks premium external model rows in the picker. \(plan)."
         }
-        return "Add a NEAR Cloud key before sending with locked Cloud routes or mixed Cloud councils."
+        return "Connect NEAR Cloud before sending with locked Cloud routes or mixed Cloud councils."
     }
 
     private var agentStatus: String {
@@ -7706,7 +7728,7 @@ private struct CapabilitiesView: View {
     private var cloudPrimaryAction: CapabilityCardAction? {
         guard let onOpenAccountSettings else { return nil }
         return CapabilityCardAction(
-            title: chatStore.nearCloudKeyConfigured ? "Manage Cloud" : "Add Cloud Key",
+            title: chatStore.nearCloudKeyConfigured ? "Manage Cloud" : "Connect Cloud",
             systemImage: chatStore.nearCloudKeyConfigured ? "slider.horizontal.3" : "key",
             role: .primary
         ) {
@@ -8044,6 +8066,108 @@ private struct IronclawBridgeReadinessCard: View {
     }
 }
 
+private struct NearCloudConnectionCard: View {
+    @Binding var apiKey: String
+    let isConnected: Bool
+    let isConnecting: Bool
+    let isAutoConnecting: Bool
+    let modelCount: Int
+    let onConnectAccount: () -> Void
+    let onOpenCloud: () -> Void
+    let onPasteKey: () -> Void
+    let onConnect: () -> Void
+    let onRemove: () -> Void
+
+    private var trimmedKey: String {
+        apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: isConnected ? "cloud.fill" : "cloud")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(isConnected ? Color.brandBlue : Color.textSecondary)
+                    .frame(width: 34, height: 34)
+                    .background((isConnected ? Color.brandBlue : Color.secondary).opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("NEAR AI Cloud")
+                        .font(.subheadline.weight(.bold))
+                    Text(isConnected ? "\(max(modelCount, 1)) Cloud models ready." : "Link your NEAR account when supported, or paste a Cloud key and test it before it is saved.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                Text(isConnected ? "Connected" : "Not connected")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(isConnected ? Color.trustVerified : Color.proofStale)
+                    .padding(.horizontal, 8)
+                    .frame(height: 26)
+                    .background((isConnected ? Color.trustVerified : Color.proofStale).opacity(0.12), in: Capsule())
+            }
+
+            if !isConnected {
+                Button(action: onConnectAccount) {
+                    Label(isAutoConnecting ? "Connecting Account" : "Connect with NEAR account", systemImage: isAutoConnecting ? "arrow.triangle.2.circlepath" : "person.crop.circle.badge.checkmark")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isAutoConnecting || isConnecting)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Fallback setup", systemImage: "list.number")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.textSecondary)
+                Text("If one-tap linking is not available yet: open NEAR AI Cloud, sign up or sign in, create an API key, then paste and test it here.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10)
+            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            HStack(spacing: 8) {
+                Button(action: onOpenCloud) {
+                    Label("Open Cloud", systemImage: "arrow.up.forward.app")
+                }
+                .buttonStyle(.bordered)
+
+                Button(action: onPasteKey) {
+                    Label("Paste Key", systemImage: "doc.on.clipboard")
+                }
+                .buttonStyle(.bordered)
+
+                Spacer(minLength: 0)
+            }
+            .font(.caption.weight(.semibold))
+
+            HStack(spacing: 8) {
+                Button(action: onConnect) {
+                    Label(isConnecting ? "Testing" : "Connect & Test", systemImage: isConnecting ? "arrow.triangle.2.circlepath" : "checkmark.seal")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isAutoConnecting || isConnecting || trimmedKey.isEmpty)
+
+                if isConnected {
+                    Button(role: .destructive, action: onRemove) {
+                        Label("Disconnect", systemImage: "trash")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isAutoConnecting || isConnecting)
+                }
+            }
+            .font(.caption.weight(.semibold))
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 private struct PowerToolsUnlockCard: View {
     let onShowAll: () -> Void
     let onCloudKey: () -> Void
@@ -8079,7 +8203,7 @@ private struct PowerToolsUnlockCard: View {
             .tint(Color.actionPrimary)
 
             VStack(spacing: 8) {
-                PowerToolQuickAction(title: "Add NEAR Cloud key", symbolName: "key", action: onCloudKey)
+                PowerToolQuickAction(title: "Connect NEAR Cloud", symbolName: "key", action: onCloudKey)
                 PowerToolQuickAction(title: "Connect IronClaw bridge", symbolName: "terminal", action: onIronclaw)
                 PowerToolQuickAction(title: "Advanced model params", symbolName: "brain.head.profile", action: onAdvanced)
                 PowerToolQuickAction(title: "Run diagnostics", symbolName: "stethoscope", action: onDiagnostics)
@@ -8143,7 +8267,7 @@ private struct AdvancedParamField: View {
     }
 }
 
-private struct SecurityView: View {
+struct SecurityView: View {
     @EnvironmentObject private var chatStore: ChatStore
     @Environment(\.dismiss) private var dismiss
     @State private var localVerificationMessage: String?
@@ -10608,7 +10732,7 @@ private struct IronclawApprovalCard: View {
     }
 }
 
-private struct AssistantAvatar: View {
+struct AssistantAvatar: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -10672,7 +10796,6 @@ private enum ComposerFocusMode: String, CaseIterable, Identifiable {
 
 private enum SlashCommandAction {
     case council
-    case agent
     case verify
     case project
     case sources
@@ -10947,7 +11070,7 @@ private struct InputBar: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Model \(chatStore.activeModelDisplayName)")
-                .accessibilityHint("Choose GLM, IronClaw, NEAR Cloud, or another model for the next message.")
+                .accessibilityHint("Choose GLM, NEAR Cloud, or another model for the next message.")
 
                 Button {
                     if chatStore.isCouncilModeEnabled {
@@ -11087,13 +11210,6 @@ private struct InputBar: View {
                 action: .council
             ),
             SlashCommandSuggestion(
-                command: "/agent",
-                title: "Agent",
-                subtitle: "Prepare an agent run",
-                symbolName: "terminal",
-                action: .agent
-            ),
-            SlashCommandSuggestion(
                 command: "/verify",
                 title: "Verify",
                 subtitle: "Open verification details",
@@ -11205,10 +11321,6 @@ private struct InputBar: View {
             chatStore.useDefaultCouncilLineup()
             chatStore.draft = remainder
             isFocused = true
-        case .agent:
-            chatStore.selectModel(chatStore.ironclawRemoteWorkstationAvailable ? ModelOption.ironclawModelID : ModelOption.ironclawMobileModelID)
-            chatStore.draft = remainder.isEmpty ? "Agent mission: " : "Agent mission: \(remainder)"
-            isFocused = true
         case .verify:
             chatStore.draft = remainder
             showingSecurity = true
@@ -11261,7 +11373,7 @@ private struct InputBar: View {
     }
 }
 
-private struct ComposerRouteChip: View {
+struct ComposerRouteChip: View {
     let title: String
     let symbolName: String
     let isActive: Bool
@@ -11508,2394 +11620,5 @@ private struct AttachmentStrip: View {
             parts.append(displaySize)
         }
         return parts.joined(separator: " · ")
-    }
-}
-
-private struct MarkdownMessageText: View {
-    let text: String
-    let sources: [WebSearchSource]
-
-    init(text: String, sources: [WebSearchSource] = []) {
-        self.text = text
-        self.sources = sources
-    }
-
-    private var blocks: [MarkdownBlock] {
-        MarkdownBlock.parse(Self.normalizedMarkdown(text, sources: sources))
-    }
-
-    private static func normalizedMarkdown(_ text: String, sources: [WebSearchSource]) -> String {
-        linkCitationMarkers(in: promoteCouncilSectionLabels(in: text), sources: sources)
-    }
-
-    private static func promoteCouncilSectionLabels(in text: String) -> String {
-        let labels: Set<String> = [
-            "direct answer",
-            "synthesis",
-            "what the council agrees on",
-            "how the models vary",
-            "model differences",
-            "disagreements or uncertainty",
-            "recommended next step",
-            "raw glm view",
-            "raw qwen max view",
-            "raw opus view",
-            "raw claude opus view",
-            "ironclaw output",
-            "inputs",
-            "what changed in the plan",
-            "updated project plan",
-            "risks found",
-            "final recommendation"
-        ]
-        return text
-            .components(separatedBy: .newlines)
-            .map { line in
-                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.hasPrefix("#"),
-                      labels.contains(trimmed.lowercased()) else {
-                    return line
-                }
-                return "## \(trimmed)"
-            }
-            .joined(separator: "\n")
-    }
-
-    private static func linkCitationMarkers(in text: String, sources: [WebSearchSource]) -> String {
-        guard !sources.isEmpty else { return text }
-        let pattern = #"(?<!\!)\[(\d{1,2})\](?!\()"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        let matches = regex.matches(in: text, range: range)
-        guard !matches.isEmpty else { return text }
-
-        var linked = text
-        for match in matches.reversed() {
-            guard match.numberOfRanges >= 2,
-                  let wholeRange = Range(match.range(at: 0), in: linked),
-                  let numberRange = Range(match.range(at: 1), in: linked),
-                  let index = Int(linked[numberRange]),
-                  index > 0,
-                  sources.indices.contains(index - 1),
-                  let url = sources[index - 1].safeURL else {
-                continue
-            }
-            linked.replaceSubrange(wholeRange, with: "[[\(index)]](\(url.absoluteString))")
-        }
-        return linked
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            ForEach(blocks) { block in
-                switch block.kind {
-                case let .paragraph(value):
-                    InlineMarkdownText(text: value)
-                        .lineSpacing(2)
-                case let .heading(value, level):
-                    InlineMarkdownText(text: value)
-                        .font(level <= 2 ? .headline.weight(.semibold) : .subheadline.weight(.semibold))
-                        .padding(.top, 2)
-                case let .unorderedList(items):
-                    MarkdownBulletList(items: items)
-                case let .orderedList(items):
-                    MarkdownNumberedList(items: items)
-                case let .quote(value):
-                    MarkdownQuote(text: value)
-                case let .code(code, language):
-                    MarkdownCodeBlock(code: code, language: language)
-                case .divider:
-                    Divider()
-                        .padding(.vertical, 3)
-                case let .table(rows):
-                    MarkdownTable(rows: rows)
-                }
-            }
-        }
-        .textSelection(.enabled)
-    }
-}
-
-private struct MarkdownBlock: Identifiable {
-    enum Kind {
-        case paragraph(String)
-        case heading(String, level: Int)
-        case unorderedList([String])
-        case orderedList([(Int, String)])
-        case quote(String)
-        case code(String, language: String?)
-        case divider
-        case table([[String]])
-    }
-
-    let id: Int
-    let kind: Kind
-
-    static func parse(_ text: String) -> [MarkdownBlock] {
-        let lines = text.components(separatedBy: .newlines)
-        var blocks: [MarkdownBlock] = []
-        var index = 0
-        var blockID = 0
-
-        func nextID() -> Int {
-            defer { blockID += 1 }
-            return blockID
-        }
-
-        while index < lines.count {
-            let line = lines[index]
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            if trimmed.isEmpty {
-                index += 1
-                continue
-            }
-
-            if trimmed.hasPrefix("```") {
-                let language = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines)
-                index += 1
-                var codeLines: [String] = []
-                while index < lines.count {
-                    let current = lines[index]
-                    if current.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("```") {
-                        index += 1
-                        break
-                    }
-                    codeLines.append(current)
-                    index += 1
-                }
-                blocks.append(MarkdownBlock(id: nextID(), kind: .code(codeLines.joined(separator: "\n"), language: language.isEmpty ? nil : language)))
-                continue
-            }
-
-            if isDivider(trimmed) {
-                blocks.append(MarkdownBlock(id: nextID(), kind: .divider))
-                index += 1
-                continue
-            }
-
-            if let heading = heading(from: trimmed) {
-                blocks.append(MarkdownBlock(id: nextID(), kind: .heading(heading.text, level: heading.level)))
-                index += 1
-                continue
-            }
-
-            if isTableStart(at: index, lines: lines) {
-                var rows: [[String]] = [tableRow(from: lines[index])]
-                index += 2
-                while index < lines.count {
-                    let current = lines[index].trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard current.contains("|"), !current.isEmpty, !isDivider(current) else { break }
-                    rows.append(tableRow(from: current))
-                    index += 1
-                }
-                blocks.append(MarkdownBlock(id: nextID(), kind: .table(rows)))
-                continue
-            }
-
-            if let firstItem = unorderedListItem(from: trimmed) {
-                var items = [firstItem]
-                index += 1
-                while index < lines.count,
-                      let item = unorderedListItem(from: lines[index].trimmingCharacters(in: .whitespacesAndNewlines)) {
-                    items.append(item)
-                    index += 1
-                }
-                blocks.append(MarkdownBlock(id: nextID(), kind: .unorderedList(items)))
-                continue
-            }
-
-            if let firstItem = orderedListItem(from: trimmed) {
-                var items = [firstItem]
-                index += 1
-                while index < lines.count,
-                      let item = orderedListItem(from: lines[index].trimmingCharacters(in: .whitespacesAndNewlines)) {
-                    items.append(item)
-                    index += 1
-                }
-                blocks.append(MarkdownBlock(id: nextID(), kind: .orderedList(items)))
-                continue
-            }
-
-            if trimmed.hasPrefix(">") {
-                var quoteLines = [String(trimmed.drop(while: { $0 == ">" || $0 == " " }))]
-                index += 1
-                while index < lines.count {
-                    let current = lines[index].trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard current.hasPrefix(">") else { break }
-                    quoteLines.append(String(current.drop(while: { $0 == ">" || $0 == " " })))
-                    index += 1
-                }
-                blocks.append(MarkdownBlock(id: nextID(), kind: .quote(quoteLines.joined(separator: "\n"))))
-                continue
-            }
-
-            var paragraphLines = [trimmed]
-            index += 1
-            while index < lines.count {
-                let current = lines[index].trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !current.isEmpty,
-                      !current.hasPrefix("```"),
-                      !isDivider(current),
-                      heading(from: current) == nil,
-                      unorderedListItem(from: current) == nil,
-                      orderedListItem(from: current) == nil,
-                      !current.hasPrefix(">"),
-                      !isTableStart(at: index, lines: lines) else {
-                    break
-                }
-                paragraphLines.append(current)
-                index += 1
-            }
-            blocks.append(MarkdownBlock(id: nextID(), kind: .paragraph(paragraphLines.joined(separator: " "))))
-        }
-
-        return blocks.isEmpty ? [MarkdownBlock(id: 0, kind: .paragraph(text))] : blocks
-    }
-
-    private static func heading(from line: String) -> (text: String, level: Int)? {
-        guard line.hasPrefix("#") else { return nil }
-        let level = line.prefix(while: { $0 == "#" }).count
-        guard (1...6).contains(level) else { return nil }
-        let stripped = line.dropFirst(level).trimmingCharacters(in: .whitespaces)
-        return stripped.isEmpty ? nil : (stripped, level)
-    }
-
-    private static func unorderedListItem(from line: String) -> String? {
-        for marker in ["- ", "* ", "+ "] where line.hasPrefix(marker) {
-            return String(line.dropFirst(marker.count))
-        }
-        return nil
-    }
-
-    private static func orderedListItem(from line: String) -> (Int, String)? {
-        let digits = line.prefix(while: { $0.isNumber })
-        guard !digits.isEmpty,
-              let number = Int(digits),
-              line.dropFirst(digits.count).hasPrefix(". ") else {
-            return nil
-        }
-        return (number, String(line.dropFirst(digits.count + 2)))
-    }
-
-    private static func isDivider(_ line: String) -> Bool {
-        let normalized = line.replacingOccurrences(of: " ", with: "")
-        return normalized == "---" || normalized == "***" || normalized == "___"
-    }
-
-    private static func isTableStart(at index: Int, lines: [String]) -> Bool {
-        guard lines.indices.contains(index + 1) else { return false }
-        let header = lines[index].trimmingCharacters(in: .whitespacesAndNewlines)
-        let separator = lines[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
-        guard header.contains("|"), separator.contains("|") else { return false }
-        let allowed = CharacterSet(charactersIn: "|:- ")
-        return separator.unicodeScalars.allSatisfy { allowed.contains($0) } &&
-            separator.contains("-")
-    }
-
-    private static func tableRow(from line: String) -> [String] {
-        var columns = line.split(separator: "|", omittingEmptySubsequences: false).map {
-            String($0).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if columns.first?.isEmpty == true {
-            columns.removeFirst()
-        }
-        if columns.last?.isEmpty == true {
-            columns.removeLast()
-        }
-        return columns
-    }
-}
-
-private struct MarkdownBulletList: View {
-    let items: [String]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Image(systemName: "circle.fill")
-                        .font(.system(size: 4, weight: .bold))
-                        .foregroundStyle(.secondary)
-                    InlineMarkdownText(text: item)
-                        .lineSpacing(2)
-                }
-            }
-        }
-    }
-}
-
-private struct MarkdownNumberedList: View {
-    let items: [(Int, String)]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text("\(item.0).")
-                        .font(.callout.monospacedDigit().weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .frame(minWidth: 22, alignment: .trailing)
-                    InlineMarkdownText(text: item.1)
-                        .lineSpacing(2)
-                }
-            }
-        }
-    }
-}
-
-private struct MarkdownQuote: View {
-    let text: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Rectangle()
-                .fill(Color.brandBlue.opacity(0.55))
-                .frame(width: 3)
-            InlineMarkdownText(text: text)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .lineSpacing(2)
-        }
-        .padding(.vertical, 2)
-    }
-}
-
-private struct MarkdownCodeBlock: View {
-    let code: String
-    let language: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                if let language {
-                    Text(language.uppercased())
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-                Button {
-                    Clipboard.copy(code)
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.caption.weight(.semibold))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .accessibilityLabel("Copy Code")
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(Color.brandBlack.opacity(0.035))
-
-            ScrollView(.horizontal, showsIndicators: true) {
-                Text(code.isEmpty ? " " : code)
-                    .font(.system(.footnote, design: .monospaced))
-                    .foregroundStyle(.primary)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.secondary.opacity(0.10), lineWidth: 1)
-        )
-    }
-}
-
-private struct MarkdownTable: View {
-    let rows: [[String]]
-
-    private var columnCount: Int {
-        rows.map(\.count).max() ?? 0
-    }
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: true) {
-            Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
-                    GridRow {
-                        ForEach(0..<columnCount, id: \.self) { columnIndex in
-                            InlineMarkdownText(text: row.indices.contains(columnIndex) ? row[columnIndex] : "")
-                                .font(rowIndex == 0 ? .caption.weight(.semibold) : .caption)
-                                .foregroundStyle(rowIndex == 0 ? .primary : .secondary)
-                                .lineLimit(2)
-                                .minimumScaleFactor(0.82)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 7)
-                                .frame(
-                                    minWidth: columnIndex == 0 ? 74 : 92,
-                                    maxWidth: columnIndex == 0 ? 96 : 128,
-                                    alignment: .leading
-                                )
-                                .background(rowIndex == 0 ? Color.brandBlue.opacity(0.08) : Color.clear)
-                        }
-                    }
-                }
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-        }
-    }
-}
-
-private struct InlineMarkdownText: View {
-    let text: String
-
-    private var attributedText: AttributedString {
-        var attributed = (try? AttributedString(
-            markdown: text,
-            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        )) ?? AttributedString(text)
-        for run in attributed.runs {
-            guard let url = run.link, !Self.isSafeInlineURL(url) else { continue }
-            attributed[run.range].link = nil
-        }
-        return attributed
-    }
-
-    private static func isSafeInlineURL(_ url: URL) -> Bool {
-        guard let scheme = url.scheme?.lowercased(),
-              ["http", "https"].contains(scheme),
-              url.host?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
-            return false
-        }
-        return true
-    }
-
-    var body: some View {
-        Text(attributedText)
-    }
-}
-
-private struct SearchContextStrip: View {
-    let query: String?
-    let sources: [WebSearchSource]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                ZStack {
-                    Circle()
-                        .fill(Color.trustVerified.opacity(0.20))
-                    Image(systemName: "link")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(Color.trustVerified)
-                }
-                .frame(width: 22, height: 22)
-                Text("Sources checked")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
-                Text(headerText)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-                Spacer(minLength: 0)
-            }
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(Array(sources.prefix(4).enumerated()), id: \.element.id) { index, source in
-                        if let url = source.safeURL {
-                            Link(destination: url) {
-                                SourcePill(index: index + 1, source: source)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-
-                    if sources.count > 4 {
-                        Text("\(sources.count - 4) more")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 12)
-                            .frame(height: 34)
-                            .background(Color.appPanelBackground, in: Capsule())
-                    }
-
-                    if !sources.isEmpty {
-                        NavigationLink {
-                            SourcesDetailView(query: query, sources: sources)
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "list.bullet.rectangle")
-                                    .font(.caption2.weight(.bold))
-                                Text("View all")
-                                    .font(.caption.weight(.semibold))
-                            }
-                            .foregroundStyle(Color.actionPrimary)
-                            .padding(.horizontal, 11)
-                            .frame(height: 34)
-                            .background(Color.actionPrimary.opacity(0.08), in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.trailing, 2)
-            }
-        }
-        .padding(10)
-        .frame(maxWidth: 620, alignment: .leading)
-        .background(Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.appBorder.opacity(0.8), lineWidth: 1)
-        )
-    }
-
-    private var headerText: String {
-        let countLabel = "\(sources.count) source\(sources.count == 1 ? "" : "s")"
-        guard let query = displayQuery, !query.isEmpty else {
-            return countLabel
-        }
-        return "\(countLabel) · \(query)"
-    }
-
-    private var displayQuery: String? {
-        guard var value = query?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !value.isEmpty else {
-            return nil
-        }
-        if let range = value.range(of: "Mission brief from phone:", options: .caseInsensitive) {
-            value = String(value[range.upperBound...])
-        }
-        if let range = value.range(of: "Execution contract:", options: .caseInsensitive) {
-            value = String(value[..<range.lowerBound])
-        }
-        value = value
-            .replacingOccurrences(
-                of: #"(?i)^(?:IronClaw Agent|Hosted IronClaw) Mission:\s*(?:[^:]+:\s*)?"#,
-                with: "",
-                options: .regularExpression
-            )
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if value.count > 96 {
-            return "\(value.prefix(93))..."
-        }
-        return value.isEmpty ? nil : value
-    }
-}
-
-private struct SourcePill: View {
-    let index: Int
-    let source: WebSearchSource
-
-    var body: some View {
-        HStack(spacing: 7) {
-            Text("[\(index)]")
-                .font(.caption2.monospacedDigit().weight(.bold))
-                .foregroundStyle(Color.trustVerified)
-            SourceLogo(source: source, fallbackText: "\(index)")
-            Text(source.host)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-        .padding(.leading, 7)
-        .padding(.trailing, 11)
-        .frame(height: 34)
-        .background(Color.appPanelBackground, in: Capsule())
-        .overlay {
-            Capsule()
-                .stroke(Color.appBorder.opacity(0.55), lineWidth: 1)
-        }
-        .accessibilityLabel("Source \(index), \(source.title ?? source.host)")
-    }
-}
-
-private struct SourceLogo: View {
-    let source: WebSearchSource
-    let fallbackText: String
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(Color.appSecondaryBackground)
-            if let faviconURL {
-                AsyncImage(url: faviconURL) { phase in
-                    switch phase {
-                    case let .success(image):
-                        image
-                            .resizable()
-                            .scaledToFit()
-                            .padding(3)
-                    case .failure, .empty:
-                        fallback
-                    @unknown default:
-                        fallback
-                    }
-                }
-            } else {
-                fallback
-            }
-        }
-        .frame(width: 22, height: 22)
-        .clipShape(Circle())
-        .overlay {
-            Circle()
-                .stroke(Color.appBorder.opacity(0.65), lineWidth: 1)
-        }
-    }
-
-    private var fallback: some View {
-        Text(fallbackLabel)
-            .font(fallbackFont)
-            .foregroundStyle(Color.trustVerified)
-    }
-
-    private var fallbackLabel: String {
-        source.sourceInitials == "#" ? fallbackText : source.sourceInitials
-    }
-
-    private var fallbackFont: Font {
-        fallbackLabel == fallbackText
-            ? .caption2.monospacedDigit().weight(.bold)
-            : .caption2.weight(.bold)
-    }
-
-    private var faviconURL: URL? {
-        guard let encodedHost = source.host.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-            return nil
-        }
-        return URL(string: "https://www.google.com/s2/favicons?sz=64&domain=\(encodedHost)")
-    }
-}
-
-private struct SourcesDetailView: View {
-    @Environment(\.dismiss) private var dismiss
-    let query: String?
-    let sources: [WebSearchSource]
-
-    var body: some View {
-        NavigationStack {
-            List {
-                if let query = query?.trimmingCharacters(in: .whitespacesAndNewlines), !query.isEmpty {
-                    Section {
-                        Text(query)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    } header: {
-                        Text("Search")
-                    }
-                }
-
-                Section {
-                    ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
-                        if let url = source.safeURL {
-                            Link(destination: url) {
-                                HStack(spacing: 11) {
-                                    SourceLogo(source: source, fallbackText: "\(index + 1)")
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(source.displayTitle)
-                                            .font(.subheadline.weight(.semibold))
-                                            .foregroundStyle(.primary)
-                                            .lineLimit(2)
-                                        Text(source.displaySubtitle)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer(minLength: 8)
-                                    Image(systemName: "arrow.up.right")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(Color.actionPrimary)
-                                }
-                            }
-                        }
-                    }
-                } header: {
-                    Text("\(sources.count) linked source\(sources.count == 1 ? "" : "s")")
-                }
-            }
-            .navigationTitle("Sources")
-            .platformInlineNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-}
-
-private struct TypingDots: View {
-    @State private var pulse = false
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<3) { index in
-                Circle()
-                    .fill(Color.brandBlue)
-                    .frame(width: 5, height: 5)
-                    .opacity(pulse ? 0.35 : 1)
-                    .animation(
-                        .easeInOut(duration: 0.7)
-                            .repeatForever(autoreverses: true)
-                            .delay(Double(index) * 0.12),
-                        value: pulse
-                    )
-            }
-        }
-        .onAppear {
-            pulse = true
-        }
-    }
-}
-
-#if DEBUG
-struct DemoCaptureRootView: View {
-    @EnvironmentObject private var chatStore: ChatStore
-    let screen: DemoCaptureScreen
-    let autoPlay: Bool
-    @State private var currentScreen: DemoCaptureScreen
-
-    private let autoPlayScreens: [DemoCaptureScreen] = [
-        .onboarding,
-        .login,
-        .home,
-        .composer,
-        .models,
-        .glmResult,
-        .verification,
-        .council,
-        .councilOutput,
-        .project,
-        .fileAttach,
-        .agent,
-        .ironclawThinking,
-        .ironclaw,
-        .share
-    ]
-
-    init(screen: DemoCaptureScreen, autoPlay: Bool) {
-        self.screen = screen
-        self.autoPlay = autoPlay
-        _currentScreen = State(initialValue: screen)
-    }
-
-    var body: some View {
-        DemoCaptureScreenHost(screen: currentScreen)
-            .environmentObject(chatStore)
-            .id(currentScreen.rawValue)
-            .transition(.opacity)
-            .animation(.easeInOut(duration: 0.25), value: currentScreen)
-            .overlay {
-                DemoSceneOverlay(screen: currentScreen)
-                    .allowsHitTesting(false)
-            }
-            .task {
-                guard autoPlay else { return }
-                let delay = DemoCapture.autoPlayDelayNanoseconds
-                if delay > 0 {
-                    try? await Task.sleep(nanoseconds: delay)
-                }
-                for screen in autoPlayScreens {
-                    await MainActor.run {
-                        currentScreen = screen
-                        chatStore.prepareDemoCapture(screen: screen)
-                    }
-                    try? await Task.sleep(nanoseconds: duration(for: screen))
-                }
-            }
-            .onAppear {
-                chatStore.prepareDemoCapture(screen: currentScreen)
-            }
-    }
-
-    private func duration(for screen: DemoCaptureScreen) -> UInt64 {
-        switch screen {
-        case .onboarding:
-            return 2_000_000_000
-        case .login:
-            return 5_000_000_000
-        case .home:
-            return 4_000_000_000
-        case .fileAttach:
-            return 9_000_000_000
-        case .glmResult:
-            return 14_000_000_000
-        case .chat:
-            return 3_500_000_000
-        case .councilOutput:
-            return 12_000_000_000
-        case .verification:
-            return 7_000_000_000
-        case .cloudModels:
-            return 4_000_000_000
-        case .models:
-            return 4_000_000_000
-        case .council:
-            return 6_000_000_000
-        case .composer:
-            return 5_500_000_000
-        case .agent:
-            return 7_000_000_000
-        case .ironclawThinking:
-            return 10_000_000_000
-        case .ironclaw:
-            return 9_000_000_000
-        case .project:
-            return 5_000_000_000
-        case .share:
-            return 6_000_000_000
-        }
-    }
-}
-
-private struct DemoCaptureScreenHost: View {
-    @EnvironmentObject private var chatStore: ChatStore
-    let screen: DemoCaptureScreen
-
-    var body: some View {
-        Group {
-            switch screen {
-            case .onboarding:
-                DemoOnboardingPreviewView()
-            case .login:
-                DemoMockLoginView()
-            case .home:
-                AppShellView()
-            case .fileAttach:
-                DemoFileAttachmentFlowView()
-            case .glmResult:
-                DemoGLMAnswerView()
-            case .councilOutput:
-                DemoCouncilComparisonView()
-            case .chat, .composer:
-                NavigationStack {
-                    ChatView()
-                        .navigationTitle(chatStore.selectedConversationTitle)
-                        .platformInlineNavigationTitle()
-                }
-            case .ironclaw:
-                DemoIronClawResultView()
-            case .ironclawThinking:
-                DemoIronClawThinkingView()
-            case .agent:
-                DemoIronClawModesView()
-            case .verification:
-                SecurityView()
-            case .models:
-                DemoSingleModelPickerView()
-            case .cloudModels:
-                DemoNearCloudModelsView()
-            case .council:
-                DemoCouncilLineupView()
-            case .project:
-                ProjectFilesView()
-            case .share:
-                if let conversation = chatStore.selectedConversation {
-                    ShareConversationView(conversation: conversation)
-                } else {
-                    AppShellView()
-                }
-            }
-        }
-        .tint(.brandBlue)
-    }
-}
-
-private struct DemoSceneOverlay: View {
-    let screen: DemoCaptureScreen
-
-    var body: some View {
-        ZStack {
-            switch screen {
-            case .composer:
-                DemoTimedTapPulse(delay: 4.25, x: 0.79, y: 0.18)
-            case .glmResult:
-                DemoFocusBox(delay: 1.0, duration: 2.0, x: 0.04, y: 0.23, width: 0.92, height: 0.58, tint: .actionPrimary)
-                DemoFocusBox(delay: 11.4, duration: 2.1, x: 0.06, y: 0.76, width: 0.88, height: 0.13, tint: .trustVerified)
-                DemoTimedTapPulse(delay: 12.4, x: 0.14, y: 0.82, tint: .trustVerified)
-            case .verification:
-                DemoFocusBox(delay: 0.8, duration: 2.0, x: 0.07, y: 0.11, width: 0.86, height: 0.13, tint: .trustVerified)
-                DemoFocusBox(delay: 3.3, duration: 2.2, x: 0.07, y: 0.37, width: 0.86, height: 0.30, tint: .actionPrimary)
-            case .cloudModels:
-                DemoFocusBox(delay: 1.1, duration: 2.2, x: 0.08, y: 0.35, width: 0.84, height: 0.18, tint: .orange)
-            case .council:
-                DemoFocusBox(delay: 1.0, duration: 2.1, x: 0.06, y: 0.28, width: 0.88, height: 0.35, tint: .actionPrimary)
-                DemoFocusBox(delay: 3.7, duration: 1.8, x: 0.08, y: 0.56, width: 0.84, height: 0.14, tint: .trustVerified)
-            case .chat:
-                DemoTimedTapPulse(delay: 2.4, x: 0.91, y: 0.09)
-            case .agent:
-                DemoFocusBox(delay: 3.0, duration: 2.2, x: 0.06, y: 0.48, width: 0.88, height: 0.30, tint: .actionPrimary)
-                DemoTimedTapPulse(delay: 5.9, x: 0.50, y: 0.62)
-            case .ironclawThinking:
-                DemoFocusBox(delay: 1.0, duration: 2.0, x: 0.06, y: 0.16, width: 0.88, height: 0.20, tint: .trustVerified)
-                DemoFocusBox(delay: 4.0, duration: 2.0, x: 0.06, y: 0.36, width: 0.88, height: 0.19, tint: .actionPrimary)
-                DemoFocusBox(delay: 7.0, duration: 2.2, x: 0.16, y: 0.60, width: 0.78, height: 0.20, tint: .actionPrimary)
-            case .share:
-                DemoFocusBox(delay: 1.0, duration: 2.0, x: 0.06, y: 0.18, width: 0.88, height: 0.18, tint: .trustVerified)
-                DemoFocusBox(delay: 3.3, duration: 2.1, x: 0.06, y: 0.42, width: 0.88, height: 0.18, tint: .actionPrimary)
-            default:
-                EmptyView()
-            }
-        }
-    }
-}
-
-private struct DemoTimedTapPulse: View {
-    let delay: Double
-    let x: CGFloat
-    let y: CGFloat
-    var tint: Color = .actionPrimary
-
-    @State private var isVisible = false
-    @State private var isExpanded = false
-
-    var body: some View {
-        GeometryReader { geometry in
-            if isVisible {
-                ZStack {
-                    Circle()
-                        .stroke(tint.opacity(0.28), lineWidth: 2)
-                        .frame(width: isExpanded ? 74 : 28, height: isExpanded ? 74 : 28)
-                        .opacity(isExpanded ? 0 : 1)
-                    Circle()
-                        .fill(tint.opacity(0.18))
-                        .frame(width: 32, height: 32)
-                    Circle()
-                        .fill(tint)
-                        .frame(width: 9, height: 9)
-                }
-                .position(x: geometry.size.width * x, y: geometry.size.height * y)
-                .onAppear {
-                    withAnimation(.easeOut(duration: 0.72).repeatCount(3, autoreverses: false)) {
-                        isExpanded = true
-                    }
-                }
-            }
-        }
-        .task {
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            await MainActor.run {
-                isVisible = true
-            }
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            await MainActor.run {
-                isVisible = false
-            }
-        }
-    }
-}
-
-private struct DemoFocusBox: View {
-    let delay: Double
-    let duration: Double
-    let x: CGFloat
-    let y: CGFloat
-    let width: CGFloat
-    let height: CGFloat
-    var tint: Color = .actionPrimary
-
-    @State private var isVisible = false
-    @State private var isExpanded = false
-
-    var body: some View {
-        GeometryReader { geometry in
-            if isVisible {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(tint.opacity(isExpanded ? 0.16 : 0.55), lineWidth: 3)
-                    .background {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(tint.opacity(0.045))
-                    }
-                    .frame(width: geometry.size.width * width, height: geometry.size.height * height)
-                    .position(x: geometry.size.width * (x + width / 2), y: geometry.size.height * (y + height / 2))
-                    .scaleEffect(isExpanded ? 1.018 : 1.0)
-                    .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isExpanded)
-                    .onAppear {
-                        isExpanded = true
-                    }
-            }
-        }
-        .task {
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            await MainActor.run {
-                isVisible = true
-            }
-            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
-            await MainActor.run {
-                isVisible = false
-            }
-        }
-    }
-}
-
-private struct DemoOnboardingPreviewView: View {
-    private let signInRows: [(title: String, symbol: String)] = [
-        ("Continue with NEAR", "sparkles"),
-        ("Continue with Google", "g.circle"),
-        ("Continue with GitHub", "chevron.left.forwardslash.chevron.right")
-    ]
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 18) {
-                AuthHeroCard()
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Label("Terms & Conditions", systemImage: "doc.text.magnifyingglass")
-                        .font(.headline.weight(.semibold))
-                    Text("Review terms once, then sign in with NEAR, Google, or GitHub.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(14)
-                .frame(maxWidth: 360, alignment: .leading)
-                .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.appBorder, lineWidth: 1)
-                }
-
-                VStack(spacing: 10) {
-                    ForEach(signInRows, id: \.title) { row in
-                        HStack(spacing: 10) {
-                            Image(systemName: row.symbol)
-                                .font(.subheadline.weight(.bold))
-                                .frame(width: 24)
-                            Text(row.title)
-                                .font(.subheadline.weight(.bold))
-                            Spacer()
-                        }
-                        .foregroundStyle(row.title.contains("NEAR") ? Color.white : Color.primary)
-                        .padding(.horizontal, 14)
-                        .frame(height: 48)
-                        .background(row.title.contains("NEAR") ? Color.actionPrimary : Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(row.title.contains("NEAR") ? Color.clear : Color.appBorder, lineWidth: 1)
-                        }
-                    }
-
-                    HStack {
-                        Label("Open shared link", systemImage: "link")
-                        Spacer()
-                    }
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.actionPrimary)
-                    .padding(.horizontal, 2)
-
-                    HStack {
-                        Label("More sign-in options", systemImage: "ellipsis.circle")
-                        Spacer()
-                    }
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 2)
-                }
-                .frame(maxWidth: 360)
-
-                Text("https://private.near.ai")
-                    .font(.footnote.monospaced())
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(28)
-        }
-        .background { HomeSurfaceBackground().ignoresSafeArea() }
-    }
-}
-
-private struct DemoMockLoginView: View {
-    @State private var passwordCount = 0
-    @State private var isVerifying = false
-    @State private var isComplete = false
-
-    private let passwordLength = 12
-
-    var body: some View {
-        VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 22) {
-                googleWordmark
-
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("Sign in")
-                        .font(.largeTitle.weight(.regular))
-                    Text("to continue to NEAR Private Chat")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(Color.actionPrimary.opacity(0.12))
-                        .frame(width: 24, height: 24)
-                        .overlay {
-                            Image(systemName: "person.fill")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(Color.actionPrimary)
-                        }
-                    Text("maya.launch@example.com")
-                        .font(.subheadline.weight(.medium))
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 10)
-                .frame(height: 38)
-                .overlay {
-                    Capsule()
-                        .stroke(Color.appBorder, lineWidth: 1)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Enter your password")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.actionPrimary)
-                    HStack {
-                        Text(String(repeating: "•", count: max(passwordCount, 1)))
-                            .font(.title3.monospaced().weight(.semibold))
-                            .foregroundStyle(.primary)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 12)
-                    .frame(height: 54)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(Color.actionPrimary, lineWidth: 1.5)
-                    }
-                }
-
-                HStack {
-                    Button("Forgot password?") {}
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.actionPrimary)
-                    Spacer()
-                    Button {} label: {
-                        HStack(spacing: 7) {
-                            if isVerifying {
-                                ProgressView()
-                                    .controlSize(.mini)
-                                    .tint(.white)
-                            }
-                            Text(isComplete ? "Continue" : "Next")
-                        }
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 22)
-                        .frame(height: 42)
-                        .background(Color.actionPrimary, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(true)
-                }
-
-                if isComplete {
-                    Label("Google account verified", systemImage: "checkmark.shield.fill")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(Color.trustVerified)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                }
-            }
-            .padding(26)
-            .frame(maxWidth: 430, alignment: .leading)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 76)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(red: 0.972, green: 0.974, blue: 0.980).ignoresSafeArea())
-        .task {
-            try? await Task.sleep(nanoseconds: 600_000_000)
-            for count in 1...passwordLength {
-                try? await Task.sleep(nanoseconds: 95_000_000)
-                await MainActor.run {
-                    passwordCount = count
-                }
-            }
-            try? await Task.sleep(nanoseconds: 380_000_000)
-            await MainActor.run {
-                isVerifying = true
-            }
-            try? await Task.sleep(nanoseconds: 900_000_000)
-            await MainActor.run {
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
-                    isVerifying = false
-                    isComplete = true
-                }
-            }
-        }
-    }
-
-    private var googleWordmark: some View {
-        HStack(spacing: 0) {
-            Text("G").foregroundStyle(Color(red: 0.259, green: 0.522, blue: 0.957))
-            Text("o").foregroundStyle(Color(red: 0.918, green: 0.263, blue: 0.208))
-            Text("o").foregroundStyle(Color(red: 0.984, green: 0.737, blue: 0.024))
-            Text("g").foregroundStyle(Color(red: 0.259, green: 0.522, blue: 0.957))
-            Text("l").foregroundStyle(Color(red: 0.204, green: 0.659, blue: 0.325))
-            Text("e").foregroundStyle(Color(red: 0.918, green: 0.263, blue: 0.208))
-        }
-        .font(.title2.weight(.medium))
-        .accessibilityLabel("Google")
-    }
-}
-
-private struct DemoFileAttachmentFlowView: View {
-    @State private var phase = 0
-
-    private let files = [
-        ("reborn-project-plan.md", "Markdown plan · 42 KB", "doc.text"),
-        ("latest-ironclaw-prs.json", "GitHub PR snapshot · 19 KB", "curlybraces")
-    ]
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                if phase < 2 {
-                    List {
-                        Section {
-                            ForEach(Array(files.enumerated()), id: \.offset) { index, file in
-                                HStack(spacing: 12) {
-                                    Image(systemName: file.2)
-                                        .font(.headline.weight(.medium))
-                                        .foregroundStyle(Color.actionPrimary)
-                                        .frame(width: 34, height: 34)
-                                        .background(Color.actionPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(file.0)
-                                            .font(.subheadline.weight(.semibold))
-                                        Text(file.1)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    Image(systemName: index <= phase ? "checkmark.circle.fill" : "circle")
-                                        .font(.title3.weight(.semibold))
-                                        .foregroundStyle(index <= phase ? Color.trustVerified : Color.secondary)
-                                }
-                                .frame(height: 52)
-                            }
-                        } header: {
-                            Text("iCloud Drive / IronClaw Reborn")
-                        }
-                    }
-                    .listStyle(.insetGrouped)
-                    .navigationTitle("Files")
-                    .platformInlineNavigationTitle()
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Cancel") {}
-                        }
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button(phase >= 1 ? "Open" : "Add") {}
-                                .fontWeight(.semibold)
-                        }
-                    }
-                } else {
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack {
-                            Text("New chat")
-                                .font(.headline.weight(.semibold))
-                            Spacer()
-                            ComposerRouteChip(title: "Hosted IronClaw", symbolName: "terminal", isActive: true, showsChevron: true)
-                        }
-
-                        Text("Attached from Files")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-
-                        VStack(spacing: 8) {
-                            ForEach(files, id: \.0) { file in
-                                HStack(spacing: 10) {
-                                    Image(systemName: file.2)
-                                        .foregroundStyle(Color.actionPrimary)
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(file.0)
-                                            .font(.subheadline.weight(.semibold))
-                                        Text(file.1)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(.secondary)
-                                }
-                                .padding(10)
-                                .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .stroke(Color.appBorder, lineWidth: 1)
-                                }
-                            }
-                        }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Update this project plan based on the latest IronClaw PRs.")
-                                .font(.body)
-                                .foregroundStyle(.primary)
-                                .padding(12)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            HStack {
-                                Image(systemName: "paperclip")
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                Image(systemName: "arrow.up")
-                                    .font(.subheadline.weight(.bold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 32, height: 32)
-                                    .background(Color.actionPrimary, in: Circle())
-                            }
-                        }
-
-                        Spacer()
-                    }
-                    .padding(18)
-                    .background(Color.appBackground)
-                    .navigationTitle("New chat")
-                    .platformInlineNavigationTitle()
-                }
-            }
-        }
-        .task {
-            try? await Task.sleep(nanoseconds: 2_200_000_000)
-            await MainActor.run {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
-                    phase = 1
-                }
-            }
-            try? await Task.sleep(nanoseconds: 2_200_000_000)
-            await MainActor.run {
-                withAnimation(.spring(response: 0.38, dampingFraction: 0.88)) {
-                    phase = 2
-                }
-            }
-        }
-    }
-}
-
-private struct DemoGLMAnswerView: View {
-    @EnvironmentObject private var chatStore: ChatStore
-
-    private var answer: ChatMessage? {
-        chatStore.messages.first { $0.role == .assistant && $0.model == "zai-org/GLM-5.1-FP8" }
-            ?? chatStore.messages.last { $0.role == .assistant }
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        header
-                            .id("top")
-
-                        if let user = chatStore.messages.first(where: { $0.role == .user }) {
-                            Text(user.text)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white)
-                                .padding(12)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        }
-
-                        if let answer {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack(spacing: 8) {
-                                    AssistantAvatar()
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("GLM 5.1")
-                                            .font(.subheadline.weight(.bold))
-                                        Text("NEAR Private route")
-                                            .font(.caption.weight(.medium))
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-
-                                MarkdownMessageText(text: answer.text, sources: answer.sources)
-                                    .font(.body)
-
-                                SearchContextStrip(query: answer.searchQuery, sources: answer.sources)
-                                    .id("sources")
-
-                                DemoVerifiedProofCard()
-                                    .id("proof")
-                            }
-                            .padding(12)
-                            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(Color.appBorder, lineWidth: 1)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 18)
-                }
-                .background(Color.appBackground)
-                .navigationTitle("Private GLM")
-                .platformInlineNavigationTitle()
-                .task {
-                    try? await Task.sleep(nanoseconds: 2_500_000_000)
-                    await MainActor.run {
-                        withAnimation(.easeInOut(duration: 2.8)) {
-                            proxy.scrollTo("proof", anchor: .bottom)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var header: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "checkmark.shield.fill")
-                .foregroundStyle(Color.trustVerified)
-                .frame(width: 34, height: 34)
-                .background(Color.trustVerified.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
-                Text("GLM answer first")
-                    .font(.headline.weight(.semibold))
-                Text("One private model, live web sources, then proof.")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
-private struct DemoVerifiedProofCard: View {
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "checkmark.shield.fill")
-                .font(.title3.weight(.bold))
-                .foregroundStyle(Color.trustVerified)
-                .frame(width: 36, height: 36)
-                .background(Color.trustVerified.opacity(0.16), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Verified")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(Color.trustVerified)
-                Text("Fresh proof for GLM 5.1 on the NEAR Private route. Tap the shield to inspect nonce, model hash, gateway, and signature.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .background(Color.trustVerified.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.trustVerified.opacity(0.24), lineWidth: 1)
-        }
-    }
-}
-
-private struct DemoNearCloudModelsView: View {
-    @EnvironmentObject private var chatStore: ChatStore
-    @State private var scrollTarget: String?
-
-    private var cloudModels: [ModelOption] {
-        chatStore.nearCloudModels
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        header
-
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(Array(cloudModels.prefix(3))) { model in
-                                DemoCloudModelRow(model: model)
-                                    .id(model.id)
-                            }
-                        }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Route behavior")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
-                            Label("Uses the same project files, saved links, and web context when the prompt needs them.", systemImage: "folder.badge.gearshape")
-                            Label("Cloud models run through the NEAR Cloud privacy proxy, separate from the fully private GLM route.", systemImage: "lock.rotation")
-                            Label("GLM 5.1 stays the default verified private model; Cloud is an explicit SOTA override.", systemImage: "checkmark.shield")
-                        }
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(12)
-                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .id("route-behavior")
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 18)
-                }
-                .background(Color.appBackground)
-                .navigationTitle("NEAR Cloud")
-                .platformInlineNavigationTitle()
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") {}
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Label("Connected", systemImage: "key.fill")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(Color.trustVerified)
-                    }
-                }
-                .task {
-                    try? await Task.sleep(nanoseconds: 1_500_000_000)
-                    await MainActor.run {
-                        withAnimation(.easeInOut(duration: 1.1)) {
-                            proxy.scrollTo("route-behavior", anchor: .bottom)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                Image(systemName: "cloud.fill")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(Color.actionPrimary)
-                    .frame(width: 34, height: 34)
-                    .background(Color.actionPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("SOTA models through NEAR AI Cloud")
-                        .font(.headline.weight(.semibold))
-                    Text("Cloud key connected · privacy proxy route")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.trustVerified)
-                }
-            }
-            Text("The app defaults to private verified GLM, but advanced users can deliberately switch to frontier Cloud models without losing project context.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-}
-
-private struct DemoSingleModelPickerView: View {
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    HStack(spacing: 10) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundStyle(.secondary)
-                        Text("Search models")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                    }
-                    .frame(height: 38)
-                }
-
-                Section("Selected model") {
-                    DemoSingleModelRow(
-                        title: "GLM 5.1",
-                        subtitle: "Default private model",
-                        detail: "NEAR Private route · verified when proof is fresh",
-                        symbolName: "checkmark.shield.fill",
-                        tint: .trustVerified,
-                        isSelected: true
-                    )
-                }
-
-                Section("Switching modes") {
-                    HStack(spacing: 10) {
-                        Image(systemName: "square.grid.2x2")
-                            .foregroundStyle(Color.actionPrimary)
-                            .frame(width: 30, height: 30)
-                            .background(Color.actionPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Council is a separate tab")
-                                .font(.subheadline.weight(.semibold))
-                            Text("Tap Council when you want GLM, Qwen Max, and Opus to answer together.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
-            .listStyle(.insetGrouped)
-            .navigationTitle("Model")
-            .platformInlineNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {}
-                }
-            }
-        }
-    }
-}
-
-private struct DemoSingleModelRow: View {
-    let title: String
-    let subtitle: String
-    let detail: String
-    let symbolName: String
-    let tint: Color
-    let isSelected: Bool
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: symbolName)
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(tint)
-                .frame(width: 34, height: 34)
-                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.subheadline.weight(.bold))
-                Text(subtitle)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer()
-            if isSelected {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color.trustVerified)
-            }
-        }
-        .padding(.vertical, 5)
-    }
-}
-
-private struct DemoCloudModelRow: View {
-    let model: ModelOption
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 11) {
-            Image(systemName: iconName)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(Color.actionPrimary)
-                .frame(width: 30, height: 30)
-                .background(Color.actionPrimary.opacity(0.09), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(model.displayName)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.primary)
-                    Spacer(minLength: 0)
-                    Text(costLabel)
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 7)
-                        .frame(height: 20)
-                        .background(Color.appSecondaryBackground, in: Capsule())
-                }
-                Text(model.metadata?.modelDescription ?? "Runs through NEAR Cloud with privacy proxy routing.")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: 6) {
-                    ForEach(Array(model.capabilityBadges.prefix(3)), id: \.self) { badge in
-                        Text(badge)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(badge == "Not attested" ? Color.orange : Color.secondary)
-                            .padding(.horizontal, 7)
-                            .frame(height: 20)
-                            .background(Color.appSecondaryBackground, in: Capsule())
-                    }
-                }
-            }
-        }
-        .padding(12)
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.appBorder, lineWidth: 1)
-        }
-    }
-
-    private var iconName: String {
-        let id = model.id.lowercased()
-        if id.contains("claude") { return "sparkles" }
-        if id.contains("gpt") { return "brain.head.profile" }
-        if id.contains("gemini") { return "diamond" }
-        if id.contains("kimi") { return "moon.stars" }
-        if id.contains("qwen") { return "cpu" }
-        return "cloud"
-    }
-
-    private var costLabel: String {
-        model.id.localizedCaseInsensitiveContains("gpt-oss") ? "Open" : "Cloud"
-    }
-}
-
-private struct DemoIronClawThinkingView: View {
-    private let sources = [
-        ("reborn-project-plan.md", "Attached plan"),
-        ("#4066 lifecycle registry", "GitHub PR"),
-        ("#4065 SSE replay fallback", "GitHub PR"),
-        ("#4064 GitHub WASM install", "GitHub PR")
-    ]
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text("Thinking")
-                        .font(.largeTitle.weight(.medium))
-                        .foregroundStyle(.secondary)
-
-                    DemoAgentTimelineStep(
-                        symbolName: "folder",
-                        title: "Reading attached project plan",
-                        detail: "IronClaw is loading reborn-project-plan.md and the project instruction to update the plan from live GitHub evidence.",
-                        chips: sources
-                    )
-
-                    DemoAgentTimelineStep(
-                        symbolName: "magnifyingglass",
-                        title: "Fetching latest IronClaw PRs",
-                        detail: "Checking nearai/ironclaw open PRs and grouping the work into lifecycle, SSE replay, and first-party GitHub WASM milestones.",
-                        chips: [
-                            ("#4066", "Lifecycle"),
-                            ("#4065", "SSE replay"),
-                            ("#4064", "GitHub WASM")
-                        ]
-                    )
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label("Updating project plan", systemImage: "chevron.left.forwardslash.chevron.right")
-                            .font(.title3.weight(.semibold))
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("markdown")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.secondary)
-                            Text("""
-                            ## Release train
-                            1. Lifecycle registry (#4066)
-                            2. SSE replay fallback (#4065)
-                            3. GitHub WASM install (#4064)
-                            4. Integration QA across activate -> replay
-                            """)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.primary)
-                        }
-                        .padding(12)
-                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    }
-                    .padding(.leading, 36)
-
-                    DemoAgentTimelineStep(
-                        symbolName: "checkmark.seal",
-                        title: "Preparing completed output",
-                        detail: "The final answer returns what changed, why it changed, PR links, risks, and the updated plan inside the chat.",
-                        chips: []
-                    )
-                }
-                .padding(22)
-            }
-            .background(Color.appBackground)
-            .navigationTitle("IronClaw")
-            .platformInlineNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {}
-                }
-            }
-        }
-    }
-}
-
-private struct DemoAgentTimelineStep: View {
-    let symbolName: String
-    let title: String
-    let detail: String
-    let chips: [(String, String)]
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: symbolName)
-                .font(.title3.weight(.medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 8) {
-                Text(title)
-                    .font(.title3.weight(.medium))
-                    .foregroundStyle(.primary)
-                Text(detail)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                if !chips.isEmpty {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 8)], alignment: .leading, spacing: 8) {
-                        ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in
-                            HStack(spacing: 6) {
-                                Circle()
-                                    .fill(Color.trustVerified.opacity(0.80))
-                                    .frame(width: 18, height: 18)
-                                    .overlay {
-                                        Image(systemName: "arrow.up.right")
-                                            .font(.system(size: 9, weight: .bold))
-                                            .foregroundStyle(.white)
-                                    }
-                                VStack(alignment: .leading, spacing: 0) {
-                                    Text(chip.0)
-                                        .font(.caption.weight(.semibold))
-                                        .lineLimit(1)
-                                    Text(chip.1)
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                            }
-                            .padding(.horizontal, 10)
-                            .frame(height: 42)
-                            .background(Color.appSecondaryBackground, in: Capsule())
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private struct DemoCouncilLineupView: View {
-    private let models = [
-        ("GLM 5.1", "Private model answer", "NEAR Private · verified", "checkmark.shield.fill"),
-        ("Qwen Max", "Independent model answer", "NEAR Cloud · privacy proxy", "list.bullet.rectangle"),
-        ("Claude Opus 4.7", "Independent model answer", "NEAR Cloud · privacy proxy", "sparkles")
-    ]
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label("Council lineup matches the synthesis", systemImage: "square.grid.2x2")
-                            .font(.headline.weight(.semibold))
-                        Text("The same Iran prompt goes to GLM, Qwen Max, and Opus 4.7; the next screen shows each view and the synthesis.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    VStack(spacing: 10) {
-                        ForEach(Array(models.enumerated()), id: \.offset) { index, model in
-                            HStack(spacing: 12) {
-                                Image(systemName: model.3)
-                                    .font(.subheadline.weight(.bold))
-                                    .foregroundStyle(index == 0 ? Color.trustVerified : Color.actionPrimary)
-                                    .frame(width: 34, height: 34)
-                                    .background((index == 0 ? Color.trustVerified : Color.actionPrimary).opacity(0.11), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(model.0)
-                                        .font(.subheadline.weight(.bold))
-                                    Text(model.1)
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Text(model.2)
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(index == 0 ? Color.trustVerified : .secondary)
-                                    .padding(.horizontal, 8)
-                                    .frame(height: 22)
-                                    .background(Color.appSecondaryBackground, in: Capsule())
-                            }
-                            .padding(12)
-                            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(Color.appBorder, lineWidth: 1)
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Synthesizer")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-                        HStack(spacing: 10) {
-                            Image(systemName: "sparkles")
-                                .foregroundStyle(Color.actionPrimary)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("GLM 5.1 writes the final answer")
-                                    .font(.subheadline.weight(.semibold))
-                                Text("The synthesis keeps the headline, mechanics, and risks visible instead of hiding disagreement.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                        }
-                        .padding(12)
-                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    }
-                }
-                .padding(18)
-            }
-            .background(Color.appBackground)
-            .navigationTitle("Council")
-            .platformInlineNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {}
-                }
-            }
-        }
-    }
-}
-
-private struct DemoIronClawModesView: View {
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("IronClaw")
-                            .font(.title2.weight(.bold))
-                        Text("Mobile for local, bounded tasks. Hosted for full workstation runs with shell, Git, tests, and GitHub.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    DemoIronClawModeCard(
-                        title: "IronClaw Mobile",
-                        subtitle: "Runs on the phone",
-                        bodyText: "Good for reading the attached plan, drafting lightweight edits, and checking project context without connecting a workstation.",
-                        chips: ["Attached plan", "Phone-safe", "No repo access"],
-                        symbolName: "iphone",
-                        tint: .trustVerified
-                    )
-
-                    DemoIronClawModeCard(
-                        title: "Hosted IronClaw",
-                        subtitle: "Connected workstation agent",
-                        bodyText: "The hosted run can fetch live GitHub PRs, update the attached plan, inspect repo context, and return a concrete artifact while the phone stays the control surface.",
-                        chips: ["GitHub", "Shell", "Plan update", "Repo context", "Web"],
-                        symbolName: "terminal",
-                        tint: .actionPrimary
-                    )
-                }
-                .padding(18)
-            }
-            .background(Color.appBackground)
-            .navigationTitle("Agent")
-            .platformInlineNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {}
-                }
-            }
-        }
-    }
-}
-
-private struct DemoIronClawModeCard: View {
-    let title: String
-    let subtitle: String
-    let bodyText: String
-    let chips: [String]
-    let symbolName: String
-    let tint: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 11) {
-                Image(systemName: symbolName)
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(tint)
-                    .frame(width: 38, height: 38)
-                    .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.headline.weight(.semibold))
-                    Text(subtitle)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-
-            Text(bodyText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            ChipFlowLayout(spacing: 7, lineSpacing: 7) {
-                ForEach(chips, id: \.self) { chip in
-                    Text(chip)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(tint)
-                        .padding(.horizontal, 9)
-                        .frame(height: 26)
-                        .background(tint.opacity(0.09), in: Capsule())
-                }
-            }
-        }
-        .padding(14)
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(tint.opacity(0.16), lineWidth: 1)
-        }
-    }
-}
-
-private struct DemoCouncilComparisonView: View {
-    @EnvironmentObject private var chatStore: ChatStore
-
-    private var councilMessages: [ChatMessage] {
-        let messages = chatStore.messages.filter { $0.councilBatchID?.isEmpty == false }
-        return messages.sorted { $0.createdAt < $1.createdAt }
-    }
-
-    private var synthesis: ChatMessage? {
-        councilMessages.first { $0.model == ModelOption.llmCouncilSynthesisModelID } ?? councilMessages.first
-    }
-
-    private var rawModels: [ChatMessage] {
-        councilMessages.filter { $0.model != ModelOption.llmCouncilSynthesisModelID }
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        header
-                            .id("top")
-
-                        if let synthesis {
-                            CouncilFocusedCard(
-                                title: "Synthesis",
-                                subtitle: "Combined answer with visible disagreement",
-                                symbolName: "sparkles",
-                                tint: .brandBlue,
-                                text: synthesis.text,
-                                sources: synthesis.sources,
-                                searchQuery: synthesis.searchQuery
-                            )
-                            .id("synthesis")
-                        }
-
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Model Differences")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
-
-                            ForEach(rawModels) { message in
-                                CouncilFocusedCard(
-                                    title: message.modelDisplayName,
-                                    subtitle: modelAngle(for: message),
-                                    symbolName: "cpu",
-                                    tint: .trustVerified,
-                                    text: message.text,
-                                    sources: message.sources,
-                                    searchQuery: message.searchQuery
-                                )
-                                .id(message.id)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 20)
-                }
-                .background(Color.appBackground)
-                .navigationTitle("Council")
-                .platformInlineNavigationTitle()
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") {}
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Image(systemName: "rectangle.expand.vertical")
-                            .foregroundStyle(Color.actionPrimary)
-                            .accessibilityLabel("Expanded Council output")
-                    }
-                }
-                .task {
-                    guard let last = rawModels.last else { return }
-                    try? await Task.sleep(nanoseconds: 3_200_000_000)
-                    await MainActor.run {
-                        withAnimation(.easeInOut(duration: 2.6)) {
-                            proxy.scrollTo(last.id, anchor: .bottom)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label("Same prompt. Three model views. One synthesis.", systemImage: "square.grid.2x2")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(.primary)
-            Text("The comparison shows why Council is useful: it exposes disagreement before turning it into a better answer.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func modelAngle(for message: ChatMessage) -> String {
-        switch message.model {
-        case "zai-org/GLM-5.1-FP8":
-            return "Private model answer"
-        case ModelOption.nearCloudQwenMaxModelID:
-            return "Independent model answer"
-        case "near-cloud/anthropic/claude-opus-4-7":
-            return "Independent model answer"
-        default:
-            return "Raw model view"
-        }
-    }
-}
-
-private struct DemoIronClawResultView: View {
-    @EnvironmentObject private var chatStore: ChatStore
-
-    private var userMessage: ChatMessage? {
-        chatStore.messages.first { $0.role == .user }
-    }
-
-    private var resultMessage: ChatMessage? {
-        chatStore.messages.first { $0.role == .assistant && $0.model == ModelOption.ironclawModelID }
-            ?? chatStore.messages.last { $0.role == .assistant }
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        header
-                            .id("top")
-
-                        if let userMessage {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("Task")
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(.secondary)
-                                    .textCase(.uppercase)
-                                Text(userMessage.text)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.primary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            .padding(12)
-                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        }
-
-                        if let resultMessage {
-                            CouncilFocusedCard(
-                                title: "Hosted IronClaw",
-                                subtitle: "Completed agent output returned to chat",
-                                symbolName: "terminal",
-                                tint: .brandBlue,
-                                text: resultMessage.text,
-                                sources: resultMessage.sources,
-                                searchQuery: resultMessage.searchQuery
-                            )
-                            .id("result")
-                        }
-
-                        HStack(spacing: 8) {
-                            Label("IronClaw Reborn Plan", systemImage: "folder")
-                            Label("reborn-project-plan.md", systemImage: "paperclip")
-                            Label("3 PRs", systemImage: "link")
-                        }
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .id("bottom")
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 20)
-                }
-                .background(Color.appBackground)
-                .navigationTitle("IronClaw")
-                .platformInlineNavigationTitle()
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") {}
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Image(systemName: "rectangle.expand.vertical")
-                            .foregroundStyle(Color.actionPrimary)
-                            .accessibilityLabel("Expanded IronClaw output")
-                    }
-                }
-                .task {
-                    try? await Task.sleep(nanoseconds: 2_200_000_000)
-                    await MainActor.run {
-                        withAnimation(.easeInOut(duration: 2.8)) {
-                            proxy.scrollTo("bottom", anchor: .bottom)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label("IronClaw ran against project context.", systemImage: "terminal")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(.primary)
-            Text("This is the completed hosted-agent result, not a setup screen. It updates the attached plan from the latest IronClaw GitHub PRs and returns the artifact into the conversation.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-}
-
-private struct CouncilFocusedCard: View {
-    let title: String
-    let subtitle: String
-    let symbolName: String
-    let tint: Color
-    let text: String
-    var sources: [WebSearchSource] = []
-    var searchQuery: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: symbolName)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(tint)
-                    .frame(width: 28, height: 28)
-                    .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.primary)
-                    Text(subtitle)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            MarkdownMessageText(text: text, sources: sources)
-                .font(.subheadline)
-                .lineSpacing(2)
-
-            if !sources.isEmpty {
-                SearchContextStrip(query: searchQuery, sources: sources)
-            }
-        }
-        .padding(12)
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(tint.opacity(0.18), lineWidth: 1)
-        }
-    }
-}
-#endif
-
-private extension View {
-    func workspaceListRow(top: CGFloat = 3, bottom: CGFloat = 3) -> some View {
-        listRowInsets(EdgeInsets(top: top, leading: 14, bottom: bottom, trailing: 14))
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
-    }
-}
-
-private extension ChatMessage {
-    var shouldShowAgentRunStatus: Bool {
-        guard role == .assistant, model == ModelOption.ironclawModelID else {
-            return false
-        }
-        return isStreaming ||
-            pendingApproval != nil ||
-            ["reasoning", "searching", "approval", "failed", "running", "queued", "in_progress"].contains(status.lowercased())
-    }
-
-    var modelDisplayName: String {
-        if model == ModelOption.ironclawMobileModelID {
-            return "IronClaw Mobile"
-        }
-        if model == ModelOption.ironclawModelID {
-            return "Hosted IronClaw"
-        }
-        if model == ModelOption.llmCouncilSynthesisModelID {
-            return "Council Synthesis"
-        }
-        if model == ModelOption.nearCloudQwenMaxModelID {
-            return "Qwen Max"
-        }
-        if model == "near-cloud/anthropic/claude-opus-4-7" {
-            return "Claude Opus 4.7"
-        }
-        return model?.split(separator: "/").last.map(String.init) ?? "Assistant"
-    }
-
-    var streamingStatusText: String {
-        if model == ModelOption.ironclawMobileModelID {
-            switch status {
-            case "reasoning":
-                return "Running IronClaw Mobile"
-            case "searching":
-                return "Searching with NEAR Private"
-            default:
-                return "Running mobile agent"
-            }
-        }
-
-        if model == ModelOption.ironclawModelID {
-            switch status {
-            case "reasoning":
-                return "Running IronClaw agent"
-            case "approval":
-                return "Waiting for approval"
-            case "searching":
-                if let searchQuery, !searchQuery.isEmpty {
-                    return "Searching \(searchQuery)"
-                }
-                return "Searching web before IronClaw"
-            default:
-                return "Waiting for final IronClaw output"
-            }
-        }
-
-        if model == ModelOption.llmCouncilSynthesisModelID {
-            return status == "searching" ? "Checking sources" : "Synthesizing council"
-        }
-
-        switch status {
-        case "searching":
-            if let searchQuery, !searchQuery.isEmpty {
-                return "Searching \(searchQuery)"
-            }
-            return "Searching web"
-        case "reasoning":
-            return "Reasoning"
-        case "approval":
-            return "Needs approval"
-        default:
-            return "Thinking"
-        }
     }
 }

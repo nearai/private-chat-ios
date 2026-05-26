@@ -92,13 +92,22 @@ final class SessionStore: NSObject, ObservableObject {
             return false
         }
         do {
-            let expectedState = try requirePendingAuthState()
-            let newSession = try api.parseAuthCallback(url, expectedState: expectedState)
+            let pendingRequest = try requirePendingAuthRequest()
+            let callback = try api.parseAuthCallback(url, expectedState: pendingRequest.state)
             clearPendingAuthState()
-            save(newSession)
             Task {
-                await refreshProfile()
-                showBanner(newSession.isNewUser ? "Account created." : "Signed in.")
+                do {
+                    let newSession = try await api.exchangeAuthCode(
+                        provider: pendingRequest.provider,
+                        callback: callback,
+                        codeVerifier: pendingRequest.codeVerifier
+                    )
+                    save(newSession)
+                    await refreshProfile()
+                    showBanner(newSession.isNewUser ? "Account created." : "Signed in.")
+                } catch {
+                    showBanner(error.localizedDescription)
+                }
             }
         } catch {
             clearPendingAuthState()
@@ -144,17 +153,18 @@ final class SessionStore: NSObject, ObservableObject {
         defer { isAuthenticating = false }
 
         do {
-            let pendingRequest = createPendingAuthRequest()
+            let pendingRequest = createPendingAuthRequest(provider: provider)
             let url = try api.authURL(
                 for: provider,
                 state: pendingRequest.state,
                 codeChallenge: pendingRequest.codeChallenge
             )
             let callbackURL = try await startWebAuthentication(url: url)
-            let newSession = try api.parseAuthCallback(
-                callbackURL,
-                expectedState: pendingRequest.state,
-                allowProviderManagedState: true
+            let callback = try api.parseAuthCallback(callbackURL, expectedState: pendingRequest.state)
+            let newSession = try await api.exchangeAuthCode(
+                provider: provider,
+                callback: callback,
+                codeVerifier: pendingRequest.codeVerifier
             )
             clearPendingAuthState()
             save(newSession)
@@ -166,11 +176,12 @@ final class SessionStore: NSObject, ObservableObject {
         }
     }
 
-    private func createPendingAuthRequest() -> PendingAuthRequest {
+    private func createPendingAuthRequest(provider: OAuthProvider) -> PendingAuthRequest {
         let state = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
         let codeVerifier = Self.makePKCECodeVerifier()
         let envelope = PendingAuthRequest(
             state: state,
+            providerRawValue: provider.rawValue,
             codeVerifier: codeVerifier,
             expiresAt: Date().addingTimeInterval(pendingAuthTTL)
         )
@@ -180,7 +191,7 @@ final class SessionStore: NSObject, ObservableObject {
         return envelope
     }
 
-    private func requirePendingAuthState() throws -> String {
+    private func requirePendingAuthRequest() throws -> PendingAuthRequest {
         guard let data = UserDefaults.standard.data(forKey: pendingAuthStateKey),
               let envelope = try? JSONDecoder().decode(PendingAuthRequest.self, from: data),
               !envelope.state.isEmpty else {
@@ -190,7 +201,7 @@ final class SessionStore: NSObject, ObservableObject {
             clearPendingAuthState()
             throw APIError.status(401, "The sign-in callback expired. Try signing in again.")
         }
-        return envelope.state
+        return envelope
     }
 
     private func clearPendingAuthState() {
@@ -325,8 +336,13 @@ final class SessionStore: NSObject, ObservableObject {
 
 private struct PendingAuthRequest: Codable {
     var state: String
+    var providerRawValue: String
     var codeVerifier: String
     var expiresAt: Date
+
+    var provider: OAuthProvider {
+        OAuthProvider(rawValue: providerRawValue) ?? .google
+    }
 
     var codeChallenge: String {
         SessionStore.codeChallenge(for: codeVerifier)

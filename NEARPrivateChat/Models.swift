@@ -139,6 +139,131 @@ struct AuthSession: Codable, Equatable {
     var sessionID: String
     var expiresAt: String?
     var isNewUser: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case token
+        case sessionToken = "session_token"
+        case authToken = "auth_token"
+        case accessToken = "access_token"
+        case sessionID
+        case sessionIDSnake = "session_id"
+        case sessionId
+        case expiresAt
+        case expiresAtSnake = "expires_at"
+        case isNewUser
+        case isNewUserSnake = "is_new_user"
+    }
+
+    init(token: String, sessionID: String, expiresAt: String?, isNewUser: Bool) {
+        self.token = token
+        self.sessionID = sessionID
+        self.expiresAt = expiresAt
+        self.isNewUser = isNewUser
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        token = try container.decodeIfPresent(String.self, forKey: .token) ??
+            container.decodeIfPresent(String.self, forKey: .sessionToken) ??
+            container.decodeIfPresent(String.self, forKey: .authToken) ??
+            container.decodeIfPresent(String.self, forKey: .accessToken) ??
+            ""
+        sessionID = try container.decodeIfPresent(String.self, forKey: .sessionID) ??
+            container.decodeIfPresent(String.self, forKey: .sessionIDSnake) ??
+            container.decodeIfPresent(String.self, forKey: .sessionId) ??
+            ""
+        expiresAt = try container.decodeIfPresent(String.self, forKey: .expiresAt) ??
+            container.decodeIfPresent(String.self, forKey: .expiresAtSnake)
+        isNewUser = try container.decodeIfPresent(Bool.self, forKey: .isNewUser) ??
+            container.decodeIfPresent(Bool.self, forKey: .isNewUserSnake) ??
+            false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(token, forKey: .token)
+        try container.encode(sessionID, forKey: .sessionID)
+        try container.encodeIfPresent(expiresAt, forKey: .expiresAt)
+        try container.encode(isNewUser, forKey: .isNewUser)
+    }
+}
+
+struct AuthCodeCallback: Equatable {
+    var code: String
+    var state: String
+    var providerState: String?
+}
+
+struct AuthCodeExchangePayload: Encodable {
+    var provider: String
+    var code: String
+    var codeVerifier: String
+    var redirectURI: String
+    var state: String
+
+    enum CodingKeys: String, CodingKey {
+        case provider
+        case code
+        case codeVerifier = "code_verifier"
+        case redirectURI = "redirect_uri"
+        case state
+    }
+}
+
+struct AuthCodeExchangeResponse: Decodable {
+    var session: AuthSession
+
+    enum CodingKeys: String, CodingKey {
+        case session
+        case authSession = "auth_session"
+    }
+
+    init(from decoder: Decoder) throws {
+        if let session = try? AuthSession(from: decoder), !session.token.isEmpty {
+            self.session = session
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let session = try container.decodeIfPresent(AuthSession.self, forKey: .session) ??
+            container.decodeIfPresent(AuthSession.self, forKey: .authSession) {
+            self.session = session
+            return
+        }
+        throw DecodingError.keyNotFound(
+            CodingKeys.session,
+            DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Auth code exchange did not return a session.")
+        )
+    }
+}
+
+struct NearCloudConnectResponse: Decodable, Hashable {
+    var apiKey: String?
+    var models: [ModelOption]
+    var connectURL: URL?
+    var message: String?
+
+    enum CodingKeys: String, CodingKey {
+        case apiKey
+        case api_key
+        case nearCloudAPIKey
+        case near_cloud_api_key
+        case models
+        case connectURL
+        case connect_url
+        case message
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey) ??
+            container.decodeIfPresent(String.self, forKey: .api_key) ??
+            container.decodeIfPresent(String.self, forKey: .nearCloudAPIKey) ??
+            container.decodeIfPresent(String.self, forKey: .near_cloud_api_key)
+        models = try container.decodeIfPresent([ModelOption].self, forKey: .models) ?? []
+        connectURL = try container.decodeIfPresent(URL.self, forKey: .connectURL) ??
+            container.decodeIfPresent(URL.self, forKey: .connect_url)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+    }
 }
 
 struct LegalTermsSection: Identifiable, Hashable {
@@ -535,6 +660,10 @@ enum ChatRouteKind: String, Hashable {
     case nearCloud
     case ironclawMobile
     case ironclawHosted
+
+    var isIronclawRoute: Bool {
+        self == .ironclawMobile || self == .ironclawHosted
+    }
 }
 
 enum ChatFocusState: String, Hashable {
@@ -829,7 +958,7 @@ enum UserSetupUseCase: String, CaseIterable, Codable, Identifiable, Hashable {
         switch self {
         case .privateChat: "Fast private answers, web when useful."
         case .research: "Current sources, citations, and memos."
-        case .buildAgents: "IronClaw for code, git, tests, and repo work."
+        case .buildAgents: "Plan code, PR, and test work from project context."
         case .teamProjects: "Files, links, saved outputs, and shared context."
         }
     }
@@ -850,7 +979,7 @@ enum UserSetupUseCase: String, CaseIterable, Codable, Identifiable, Hashable {
         case .research:
             return "Research Room"
         case .buildAgents:
-            return "Agent Workspace"
+            return "Build Workspace"
         case .teamProjects:
             return "Project Workspace"
         }
@@ -863,7 +992,7 @@ enum UserSetupUseCase: String, CaseIterable, Codable, Identifiable, Hashable {
         case .research:
             return "Prioritize dated sources, citations, contradictions, and a concise recommendation. Save strong outputs as project notes."
         case .buildAgents:
-            return "Use IronClaw skill behavior for coding, project setup, local tests, GitHub work, code review, security review, QA, LLM Council, decision capture, commitments, and product prioritization. Do not commit or push unless explicitly requested."
+            return "Use project files, pull requests, issues, and source links to plan careful code work. Do not suggest destructive changes unless explicitly requested."
         case .teamProjects:
             return "Use project files, saved source links, memory, and saved outputs before broad web. Keep context tidy and ask only when a missing source blocks progress."
         }
@@ -876,7 +1005,7 @@ enum UserSetupUseCase: String, CaseIterable, Codable, Identifiable, Hashable {
         case .research:
             return "Create a sourced research brief on the latest important AI developments, with dates, citations, and a short recommendation."
         case .buildAgents:
-            return "Plan a first IronClaw agent mission that can inspect a repo, make a small safe code change, and run focused tests."
+            return "Plan the first repo task: what to inspect, what to change, and which focused tests should run."
         case .teamProjects:
             return "Help me set up this project workspace: what files, links, instructions, and first chat should I add?"
         }
@@ -1193,9 +1322,6 @@ struct UserSetupProfile: Codable, Hashable {
 
     var firstRunDraft: String? {
         let goal = normalizedGoalText
-        if !goal.isEmpty, wantsIronclaw {
-            return "Plan the first IronClaw agent mission for this goal: \(goal)"
-        }
         if !goal.isEmpty, useCases.contains(.research) {
             return "Create a sourced research brief for this goal: \(goal)"
         }
@@ -1223,7 +1349,7 @@ struct UserSetupProfile: Codable, Hashable {
         case .research:
             return "Start a cited brief, compare sources, and save strong outputs."
         case .buildAgents:
-            return "Start with a safe agent mission, then verify the patch or test pass."
+            return "Start with a safe repo plan, then verify the patch or test pass."
         case .teamProjects:
             return "Turn files, links, and notes into a shared project memory."
         }
@@ -1311,9 +1437,9 @@ struct UserSetupProfile: Codable, Hashable {
             if !goal.isEmpty {
                 return [
                     SetupPromptSuggestion(
-                        title: "Plan mission",
-                        symbolName: "terminal",
-                        prompt: "Plan the first IronClaw agent mission for this goal: \(goal)"
+                        title: "Plan repo task",
+                        symbolName: "chevron.left.forwardslash.chevron.right",
+                        prompt: "Plan the first repo task for this goal: \(goal)"
                     ),
                     SetupPromptSuggestion(
                         title: "Safe patch",
@@ -1329,9 +1455,9 @@ struct UserSetupProfile: Codable, Hashable {
             }
             return [
                 SetupPromptSuggestion(
-                    title: "Agent mission",
-                    symbolName: "terminal",
-                    prompt: "Plan a phone-launched agent task for a repo or research project."
+                    title: "Repo plan",
+                    symbolName: "chevron.left.forwardslash.chevron.right",
+                    prompt: "Plan the first repo task: what to inspect, what to change, and which focused tests should run."
                 ),
                 SetupPromptSuggestion(
                     title: "Review repo",
@@ -1497,13 +1623,12 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
 
     init(profile: UserSetupProfile, readiness: AppSetupReadinessSnapshot = .optimistic) {
         let profile = profile.normalizedForDefaults
-        let usesIronclaw = profile.wantsIronclaw && readiness.ironclawMobileAvailable
-        let usesCouncil = !usesIronclaw && profile.wantsCouncil && readiness.councilReady
-        modelRoute = usesIronclaw ? .ironclaw : (usesCouncil ? .council : .privateModel)
+        let usesCouncil = !profile.wantsIronclaw && profile.wantsCouncil && readiness.councilReady
+        modelRoute = usesCouncil ? .council : .privateModel
         focusMode = profile.contextStyle.sourceMode
         focusBehavior = Self.focusBehavior(for: profile)
         starterProjectName = profile.setupStarterProjectName
-        agentEnabled = profile.wantsIronclaw
+        agentEnabled = false
         councilEnabled = profile.wantsCouncil
         expectedFirstAction = Self.expectedFirstAction(for: profile, readiness: readiness, modelRoute: modelRoute)
         goalText = profile.goalText
@@ -1572,9 +1697,6 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
         if !goal.isEmpty {
             return "Start from your goal"
         }
-        if profile.wantsIronclaw, !readiness.ironclawMobileAvailable {
-            return "Review agent setup"
-        }
         if profile.wantsCouncil, !readiness.councilReady {
             return readiness.modelCatalogLoaded
                 ? "Start private chat; Council needs models"
@@ -1589,7 +1711,7 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
         case .research:
             return "Start a research brief"
         case .buildAgents:
-            return "Launch an agent mission"
+            return "Plan a build task"
         case .teamProjects:
             return "Create a project workspace"
         }
@@ -1600,9 +1722,6 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
         readiness: AppSetupReadinessSnapshot,
         modelRoute: AppSetupModelRoute
     ) -> String {
-        if profile.wantsIronclaw, !readiness.ironclawMobileAvailable {
-            return "Agent route needs IronClaw Mobile before setup can open it."
-        }
         if profile.wantsCouncil {
             if !readiness.modelCatalogLoaded {
                 return "Council lineup will be checked after models load."
@@ -1613,9 +1732,6 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
         }
         if !readiness.privateModelAvailable {
             return "Private model catalog is still loading."
-        }
-        if profile.wantsIronclaw, !readiness.hostedIronclawAvailable {
-            return "Phone agent is ready; hosted workstation can be connected later."
         }
         return "Ready: \(modelRoute.title)"
     }
@@ -1654,9 +1770,9 @@ enum CapabilityNextStepPlanner {
         switch routeBlock {
         case .nearCloudKeyRequired:
             return CapabilityNextStep(
-                title: "Add your Cloud key",
+                title: "Connect NEAR Cloud",
                 detail: "This route is blocked until NEAR AI Cloud is connected. Private chat still works right now.",
-                actionTitle: "Add Cloud Key",
+                actionTitle: "Connect Cloud",
                 kind: .openCloud
             )
         case .hostedIronclawEndpointRequired:
@@ -3936,7 +4052,7 @@ enum APIError: LocalizedError {
         switch self {
         case .invalidURL: "The API URL is invalid."
         case .unauthenticated: "Sign in again to continue."
-        case .invalidCallback: "The sign-in callback did not include a session token."
+        case .invalidCallback: "The sign-in callback did not include an authorization code."
         case let .status(code, message): Self.displayStatusMessage(code: code, rawMessage: message)
         case .emptyResponse: "The server returned an empty response."
         }

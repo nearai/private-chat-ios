@@ -1,8 +1,8 @@
 # NEAR Private Chat iOS - Live Simulator Design Review
 
-Date: 2026-05-25  
-Device: iPhone 17 Pro simulator, iOS 26.5  
-Build: current working tree, including the parallel product/legal changes present locally.  
+Date: 2026-05-25
+Device: iPhone 17 Pro simulator, iOS 26.5
+Build: current working tree, including the parallel product/legal changes present locally.
 Scope: design, usability, route clarity, setup readiness, and product polish from live app inspection. No code or legal copy was edited in this pass.
 
 Canonical design spec: `NEARPrivateChatIOS-agentic-default-design-spec-2026-05-25.md`. This live review is the evidence pack; the agentic-default spec is the implementation brief. Findings tagged `[recast]` are subsumed or reversed by the agentic-default spec.

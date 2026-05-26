@@ -1,6 +1,6 @@
 # NEAR Private Chat iOS - Agentic-Default Implementation Tracker
 
-Date: 2026-05-25  
+Date: 2026-05-25
 Status: implementation tracker updated after the explicit model/Council/Effort correction. This file tracks app reality, not just design intent.
 
 Canonical spec: `NEARPrivateChatIOS-agentic-default-design-spec-2026-05-25.md`

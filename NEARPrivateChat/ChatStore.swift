@@ -26,6 +26,8 @@ final class ChatStore: ObservableObject {
     @Published private(set) var nearCloudKeyConfigured = false
     @Published private(set) var billingSnapshot: BillingSnapshot?
     @Published private(set) var isLoadingBilling = false
+    @Published private(set) var isTestingNearCloudKey = false
+    @Published private(set) var isConnectingNearCloudAccount = false
     @Published private(set) var diagnosticChecks: [AppDiagnosticCheck] = []
     @Published private(set) var isRunningDiagnostics = false
     @Published private(set) var isTestingIronclawWorkstation = false
@@ -165,7 +167,8 @@ final class ChatStore: ObservableObject {
     private static let selectedModelDefaultsKey = "selectedModel"
     private static let councilModelDefaultsKey = "councilModelIDs"
     private static let pinnedModelDefaultsKey = "pinnedModelIDs"
-    private static let maxCouncilModels = 4
+    private static let maxCouncilModels = 3
+    private static let maxConcurrentCouncilStreams = 2
     private static let maxPinnedModels = 12
     private static let selectedProjectDefaultsKey = "selectedProjectID"
     private static let draftDefaultsKeyPrefix = "draftByScope"
@@ -786,8 +789,8 @@ final class ChatStore: ObservableObject {
         if modelIDs.contains(where: { routeKind(forModelID: $0) == .nearCloud }), !nearCloudKeyConfigured {
             return RouteReadinessIssue(
                 route: .nearCloud,
-                title: "NEAR Cloud key required",
-                message: "Add a NEAR Cloud API key in Account before sending with this route. Your draft and attachments were kept.",
+                title: "Connect NEAR Cloud",
+                message: "Connect NEAR Cloud in Account before sending with this route. Your draft and attachments were kept.",
                 recoveryAction: .addNearCloudKey,
                 recoveryTitle: "Add Key"
             )
@@ -894,7 +897,7 @@ final class ChatStore: ObservableObject {
         case "IronClaw":
             return selectedModelOption?.isIronclawMobileRuntime == true ? "Ask IronClaw Mobile or the workstation" : "Ask the hosted IronClaw workstation"
         case "NEAR Cloud":
-            return nearCloudKeyConfigured ? "Ask \(selectedModelDisplayName)" : "Add NEAR Cloud API key"
+            return nearCloudKeyConfigured ? "Ask \(selectedModelDisplayName)" : "Connect NEAR Cloud"
         default:
             switch sourceMode {
             case .auto:
@@ -1105,7 +1108,7 @@ final class ChatStore: ObservableObject {
                 switchToPrivateFallbackModel()
             }
         case .addNearCloudKey:
-            showBanner("Add your NEAR Cloud API key in Account, then send again.")
+            showBanner("Connect NEAR Cloud in Account, then send again.")
         case .configureIronClawEndpoint:
             showBanner("Configure the hosted IronClaw endpoint in Account, then send again.")
         }
@@ -1504,7 +1507,7 @@ final class ChatStore: ObservableObject {
         clearAttestationState()
         councilModelIDs = isCouncilEligible(model) ? [modelID] : []
         if model.isNearCloudModel, !nearCloudKeyConfigured {
-            showBanner("Using \(model.displayName). Add a NEAR Cloud API key in Account before sending.")
+            showBanner("Using \(model.displayName). Connect NEAR Cloud in Account before sending.")
         } else {
             showBanner("Using \(modelDisplayName(for: modelID)).")
         }
@@ -1609,7 +1612,7 @@ final class ChatStore: ObservableObject {
     func saveNearCloudAPIKey(_ apiKey: String) {
         let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else {
-            showBanner("Paste a NEAR Cloud API key first.")
+            showBanner("Paste a NEAR Cloud key first.")
             return
         }
 
@@ -1617,15 +1620,71 @@ final class ChatStore: ObservableObject {
             try KeychainStore.save(trimmedKey, account: scopedKeychainAccount(Self.nearCloudAPIKeychainAccount))
             nearCloudKeyConfigured = true
             routeReadinessIssue = nil
-            showBanner("NEAR Cloud API key saved.")
+            showBanner("NEAR Cloud key saved.")
         } catch {
             showBanner(error.localizedDescription)
         }
     }
 
+    func connectNearCloudAccount() async -> Bool {
+        isConnectingNearCloudAccount = true
+        defer { isConnectingNearCloudAccount = false }
+
+        do {
+            let response = try await api.connectNearCloudAccount()
+            guard let apiKey = response.apiKey?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty else {
+                let message = response.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+                showBanner(message?.isEmpty == false ? message! : "Cloud auto-connect is not available yet. Open Cloud, create a key, then paste it here.")
+                return false
+            }
+
+            let fetchedCloud = response.models.isEmpty
+                ? try await api.fetchNearCloudModels(apiKey: apiKey)
+                : response.models
+            try KeychainStore.save(apiKey, account: scopedKeychainAccount(Self.nearCloudAPIKeychainAccount))
+            nearCloudKeyConfigured = true
+            routeReadinessIssue = nil
+            let routeModels = Self.nearCloudRouteModels(from: fetchedCloud)
+            nearCloudModels = routeModels.isEmpty ? Self.fallbackNearCloudModels() : routeModels
+            showBanner("NEAR Cloud connected. \(nearCloudModels.count) models ready.")
+            return true
+        } catch APIError.status(let code, _) where code == 404 || code == 405 {
+            showBanner("Cloud auto-connect is not available yet. Open Cloud, create a key, then paste it here.")
+            return false
+        } catch {
+            showBanner("Cloud auto-connect failed: \(Self.displayFailureMessage(error.localizedDescription))")
+            return false
+        }
+    }
+
+    func connectNearCloudAPIKey(_ apiKey: String) async -> Bool {
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else {
+            showBanner("Paste a NEAR Cloud key first.")
+            return false
+        }
+
+        isTestingNearCloudKey = true
+        defer { isTestingNearCloudKey = false }
+
+        do {
+            let fetchedCloud = try await api.fetchNearCloudModels(apiKey: trimmedKey)
+            try KeychainStore.save(trimmedKey, account: scopedKeychainAccount(Self.nearCloudAPIKeychainAccount))
+            nearCloudKeyConfigured = true
+            routeReadinessIssue = nil
+            let routeModels = Self.nearCloudRouteModels(from: fetchedCloud)
+            nearCloudModels = routeModels.isEmpty ? Self.fallbackNearCloudModels() : routeModels
+            showBanner("NEAR Cloud connected. \(nearCloudModels.count) models ready.")
+            return true
+        } catch {
+            showBanner("NEAR Cloud key was not saved: \(Self.displayFailureMessage(error.localizedDescription))")
+            return false
+        }
+    }
+
     func clearNearCloudAPIKey() {
         KeychainStore.delete(account: scopedKeychainAccount(Self.nearCloudAPIKeychainAccount))
-        nearCloudKeyConfigured = true
+        nearCloudKeyConfigured = false
         if selectedModelOption?.isNearCloudModel == true {
             selectedModel = Self.defaultModelID
         }
@@ -1704,7 +1763,7 @@ final class ChatStore: ObservableObject {
             AppDiagnosticCheck(title: "Web grounding", detail: "Searching a live AI-news query.", state: .running),
             AppDiagnosticCheck(title: "IronClaw bridge", detail: "Checking hosted endpoint and bearer token.", state: .running),
             AppDiagnosticCheck(title: "IronClaw workstation", detail: "Verifying hosted shell/git tools.", state: .running),
-            AppDiagnosticCheck(title: "NEAR Cloud", detail: nearCloudKeyConfigured ? "API key saved." : "No NEAR Cloud key saved.", state: nearCloudKeyConfigured ? .passed : .warning)
+            AppDiagnosticCheck(title: "NEAR Cloud", detail: nearCloudKeyConfigured ? "Connected." : "Not connected.", state: nearCloudKeyConfigured ? .passed : .warning)
         ]
         defer {
             isRunningDiagnostics = false
@@ -3781,7 +3840,11 @@ final class ChatStore: ObservableObject {
                 isStreaming: true
             )
         }
-        let assistantIDByModel = Dictionary(uniqueKeysWithValues: zip(modelIDs, assistantMessages.map(\.id)))
+        let assistantIDByModel = zip(modelIDs, assistantMessages.map(\.id)).reduce(into: [String: String]()) { mapping, pair in
+            if mapping[pair.0] == nil {
+                mapping[pair.0] = pair.1
+            }
+        }
 
         currentAssistantMessageID = nil
         currentCouncilAssistantMessageIDs = assistantMessages.map(\.id)
@@ -3790,8 +3853,10 @@ final class ChatStore: ObservableObject {
         showBanner("LLM Council running \(modelIDs.count) models.")
 
         let outcome = await withTaskGroup(of: CouncilStreamResult.self, returning: CouncilRunOutcome.self) { group in
-            for modelID in modelIDs {
-                guard let assistantID = assistantIDByModel[modelID] else { continue }
+            var pendingModelIDs = modelIDs
+
+            func enqueueModel(_ modelID: String) {
+                guard let assistantID = assistantIDByModel[modelID] else { return }
                 group.addTask { @MainActor [weak self] in
                     guard let self else {
                         return CouncilStreamResult(
@@ -3849,6 +3914,11 @@ final class ChatStore: ObservableObject {
                 }
             }
 
+            let initialTaskCount = min(Self.maxConcurrentCouncilStreams, pendingModelIDs.count)
+            for _ in 0..<initialTaskCount {
+                enqueueModel(pendingModelIDs.removeFirst())
+            }
+
             group.addTask { @MainActor [weak self] in
                 await self?.waitForCouncilStopSignal(batchID: batchID) ?? .stopSignal(batchID: batchID)
             }
@@ -3862,6 +3932,9 @@ final class ChatStore: ObservableObject {
                     continue
                 }
                 collected.append(result)
+                if !stoppedEarly, !pendingModelIDs.isEmpty {
+                    enqueueModel(pendingModelIDs.removeFirst())
+                }
             }
             group.cancelAll()
             return CouncilRunOutcome(results: collected, stoppedEarly: stoppedEarly)
@@ -3921,7 +3994,11 @@ final class ChatStore: ObservableObject {
         modelIDs: [String],
         successfulResults: [CouncilStreamResult]
     ) async {
-        let resultByModel = Dictionary(uniqueKeysWithValues: successfulResults.map { ($0.modelID, $0) })
+        let resultByModel = successfulResults.reduce(into: [String: CouncilStreamResult]()) { mapping, result in
+            if mapping[result.modelID] == nil {
+                mapping[result.modelID] = result
+            }
+        }
         let responses = modelIDs.compactMap { modelID -> (String, String)? in
             guard let result = resultByModel[modelID],
                   let message = messages.first(where: { $0.id == result.messageID }),
@@ -4146,7 +4223,7 @@ final class ChatStore: ObservableObject {
     ) async throws {
         guard let apiKey = loadNearCloudAPIKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
               !apiKey.isEmpty else {
-            throw APIError.status(401, "Add a NEAR Cloud API key in Account to use \(modelDisplayName(for: modelID)).")
+            throw APIError.status(401, "Connect NEAR Cloud in Account to use \(modelDisplayName(for: modelID)).")
         }
         guard let cloudModelID = nearCloudUnderlyingModelID(for: modelID) else {
             throw APIError.status(400, "That NEAR Cloud model route is not valid.")
@@ -4908,7 +4985,7 @@ final class ChatStore: ObservableObject {
 
         let storedModel = UserDefaults.standard.string(forKey: scopedDefaultsKey(Self.selectedModelDefaultsKey))
         let initialModel = storedModel ?? Self.defaultModelID
-        selectedModel = initialModel == ModelOption.ironclawModelID && !loadedIronclawSettings.hasUsableHostedEndpoint ? Self.defaultModelID : initialModel
+        selectedModel = Self.routeKind(forModelID: initialModel).isIronclawRoute ? Self.defaultModelID : initialModel
         let storedCouncilModelIDs = loadStoredCouncilModelIDs()
         councilModelIDs = storedCouncilModelIDs.isEmpty ? [selectedModel] : storedCouncilModelIDs
         pinnedModelIDs = loadPinnedModelIDs()

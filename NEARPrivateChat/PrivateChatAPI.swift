@@ -35,17 +35,11 @@ final class PrivateChatAPI {
         case .google, .github:
             components?.path = "/v1/auth/\(provider.rawValue)"
         }
-        let callbackURL: URL
-        switch provider {
-        case .near:
-            callbackURL = Self.callbackURL(configuration.callbackURL, state: state)
-        case .google, .github:
-            callbackURL = configuration.callbackURL
-        }
+        let callbackURL = Self.callbackURL(configuration.callbackURL, state: state)
         var queryItems = [
             URLQueryItem(name: "frontend_callback", value: callbackURL.absoluteString)
         ]
-        if provider == .near, let state, !state.isEmpty {
+        if let state, !state.isEmpty {
             queryItems.append(URLQueryItem(name: "state", value: state))
         }
         if let codeChallenge, !codeChallenge.isEmpty {
@@ -60,9 +54,8 @@ final class PrivateChatAPI {
 
     func parseAuthCallback(
         _ url: URL,
-        expectedState: String? = nil,
-        allowProviderManagedState: Bool = false
-    ) throws -> AuthSession {
+        expectedState: String? = nil
+    ) throws -> AuthCodeCallback {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             throw APIError.invalidCallback
         }
@@ -72,24 +65,51 @@ final class PrivateChatAPI {
         }
         let callbackStates = values["state", default: []].filter { !$0.isEmpty }
         let hasExpectedState = callbackStates.contains(expectedState)
-        let isActiveProviderCallback = allowProviderManagedState
-        guard hasExpectedState || isActiveProviderCallback else {
+        guard hasExpectedState else {
             throw APIError.status(401, "Sign-in callback failed state validation.")
         }
-        let token = Self.authToken(from: values)
-        if Self.firstNonEmptyValue(named: "code", in: values) != nil,
-           token == nil {
-            throw APIError.status(501, "Authorization-code sign-in requires backend PKCE exchange support.")
+        guard Self.authToken(from: values) == nil else {
+            throw APIError.status(426, "This app no longer accepts bearer tokens through sign-in links. Update the auth service to return an authorization code.")
         }
-        guard let token else {
+        guard let code = Self.firstNonEmptyValue(named: "code", in: values) else {
             throw APIError.invalidCallback
         }
-        return AuthSession(
-            token: token,
-            sessionID: Self.sessionID(from: values) ?? "",
-            expiresAt: Self.firstNonEmptyValue(named: "expires_at", in: values),
-            isNewUser: Self.firstNonEmptyValue(named: "is_new_user", in: values) == "true"
+        return AuthCodeCallback(
+            code: code,
+            state: expectedState,
+            providerState: callbackStates.first { $0 != expectedState }
         )
+    }
+
+    func exchangeAuthCode(
+        provider: OAuthProvider,
+        callback: AuthCodeCallback,
+        codeVerifier: String
+    ) async throws -> AuthSession {
+        let payload = AuthCodeExchangePayload(
+            provider: provider.rawValue,
+            code: callback.code,
+            codeVerifier: codeVerifier,
+            redirectURI: Self.callbackURL(configuration.callbackURL, state: callback.state).absoluteString,
+            state: callback.state
+        )
+        do {
+            let response: AuthCodeExchangeResponse = try await request(
+                "/v1/auth/\(provider.rawValue)/exchange",
+                method: "POST",
+                body: payload,
+                authenticated: false
+            )
+            return response.session
+        } catch APIError.status(let code, _) where code == 404 || code == 405 {
+            let response: AuthCodeExchangeResponse = try await request(
+                "/v1/auth/exchange",
+                method: "POST",
+                body: payload,
+                authenticated: false
+            )
+            return response.session
+        }
     }
 
     private static func callbackURL(_ url: URL, state: String?) -> URL {
@@ -201,7 +221,11 @@ final class PrivateChatAPI {
         return response.models
     }
 
-    func fetchNearCloudModels() async throws -> [ModelOption] {
+    func connectNearCloudAccount() async throws -> NearCloudConnectResponse {
+        try await request("/v1/near-cloud/connect", method: "POST", body: NearCloudConnectPayload(), authenticated: true)
+    }
+
+    func fetchNearCloudModels(apiKey: String? = nil) async throws -> [ModelOption] {
         guard let url = URL(string: "https://cloud-api.near.ai/v1/model/list") else {
             throw APIError.invalidURL
         }
@@ -209,6 +233,9 @@ final class PrivateChatAPI {
         request.httpMethod = "GET"
         request.timeoutInterval = Self.streamTimeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let apiKey = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
         let response: ModelListResponse = try await perform(request)
         return response.models
     }
@@ -1155,6 +1182,8 @@ final class PrivateChatAPI {
 private struct EmptyResponse: Decodable {}
 
 private struct EmptyPayload: Encodable {}
+
+private struct NearCloudConnectPayload: Encodable {}
 
 private enum SharePermission: String {
     case read
