@@ -10,7 +10,11 @@ final class ChatStore: ObservableObject {
     @Published private(set) var models: [ModelOption] = []
     @Published private(set) var nearCloudModels: [ModelOption] = []
     @Published private(set) var projects: [ChatProject] = []
-    @Published private(set) var pendingAttachments: [ChatAttachment] = []
+    @Published private(set) var pendingAttachments: [ChatAttachment] = [] {
+        didSet {
+            persistCurrentDraftIfNeeded()
+        }
+    }
     @Published private(set) var shareInfo: ConversationSharesListResponse?
     @Published private(set) var attestationSnapshot: AttestationSnapshot?
     @Published private(set) var attestationFetchErrorMessage: String?
@@ -120,13 +124,40 @@ final class ChatStore: ObservableObject {
     private let webGroundingService = WebGroundingService()
     private let ironclawMobileRuntime: IronclawMobileRuntime
     private var selectedResponseVariantByConversationID: [String: String] = [:]
-    private var pendingLargePasteTexts: [String: String] = [:]
+    private var pendingLargePasteTexts: [String: String] = [:] {
+        didSet {
+            persistCurrentDraftIfNeeded()
+        }
+    }
     private var pendingHostedHandoffContinuation: HostedHandoffContinuation?
     private var storageAccountID = "signed-out"
     private var draftPersistenceScopeID = "home"
     private var suppressDraftPersistence = false
     private var loadMessagesTask: Task<Void, Never>?
     private var loadMessagesGeneration = 0
+    private struct PersistedDraftState: Codable {
+        var text: String
+        var attachments: [ChatAttachment]
+        var pendingLargePasteTexts: [String: String]
+
+        var isEmpty: Bool {
+            text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.isEmpty
+        }
+
+        var sanitized: PersistedDraftState {
+            let attachmentIDs = Set(attachments.map(\.id))
+            let filteredLargePastes = pendingLargePasteTexts.filter { attachmentIDs.contains($0.key) }
+            let filteredAttachments = attachments.filter { attachment in
+                !attachment.isLocalPendingText || filteredLargePastes[attachment.id] != nil
+            }
+            return PersistedDraftState(
+                text: text,
+                attachments: filteredAttachments,
+                pendingLargePasteTexts: filteredLargePastes
+            )
+        }
+    }
+
     private static let defaultModelID = "zai-org/GLM-5.1-FP8"
     private static let selectedModelDefaultsKey = "selectedModel"
     private static let councilModelDefaultsKey = "councilModelIDs"
@@ -135,12 +166,14 @@ final class ChatStore: ObservableObject {
     private static let maxPinnedModels = 12
     private static let selectedProjectDefaultsKey = "selectedProjectID"
     private static let draftDefaultsKeyPrefix = "draftByScope"
+    private static let draftStateDefaultsKeyPrefix = "draftStateByScope"
     private static let webSearchDefaultsKey = "webSearchEnabled"
     private static let sourceModeDefaultsKey = "sourceMode"
     private static let researchModeDefaultsKey = "researchModeEnabled"
     private static let systemPromptDefaultsKey = "systemPrompt"
     private static let systemPromptCacheFilename = "system-prompt.txt"
     private static let draftCacheDirectoryName = "drafts"
+    private static let draftStateCacheDirectoryName = "draft-state"
     private static let largeTextAsFileDefaultsKey = "largeTextAsFileEnabled"
     private static let advancedModelParamsDefaultsKey = "advancedModelParams"
     private static let conversationsCacheKey = "cachedConversations"
@@ -788,8 +821,8 @@ final class ChatStore: ObservableObject {
         }
         if isCouncilModeEnabled {
             return activeCouncilHasNearCloudRoutes
-                ? "LLM Council includes NEAR Cloud models. Cloud legs are external to NEAR Private TEE inference; all-private Council lineups can fetch NEAR Private attestation."
-                : "LLM Council is using NEAR Private models. Fetch attestation to verify the selected private model route."
+                ? "Council includes NEAR Cloud models. Cloud legs use privacy proxy routing; all-private Council lineups can fetch verification proof."
+                : "Council is using NEAR Private models. Open Verification when you need a signed private-route report."
         }
         if selectedModelOption?.isIronclawMobileRuntime == true {
             return nil
@@ -798,7 +831,7 @@ final class ChatStore: ObservableObject {
             return nil
         }
         if selectedModelOption?.isNearCloudModel == true {
-            return "\(selectedModelDisplayName) runs through NEAR Cloud with anonymized provider forwarding. It is not NEAR Private TEE-attested and does not have native private web tools."
+            return "\(selectedModelDisplayName) runs through NEAR Cloud with privacy proxy routing. The app can attach web results, project notes, saved links, and extracted context when the prompt needs them."
         }
         return nil
     }
@@ -818,7 +851,7 @@ final class ChatStore: ObservableObject {
                 : "Ask a Council of NEAR Private models to compare answers and synthesize the strongest response."
         }
         if selectedModelOption?.isNearCloudModel == true {
-            return "Use \(selectedModelDisplayName) through NEAR Cloud for anonymized external model coverage. Switch to NEAR Private when you need TEE attestation or native private web tools."
+            return "Use \(selectedModelDisplayName) through NEAR Cloud with app-supplied web, project notes, saved links, and extracted context when useful."
         }
         if researchModeEnabled && !selectedRouteUsesNearCloud {
             return "Ask with \(selectedModelDisplayName), web search, files, and project context."
@@ -1075,7 +1108,7 @@ final class ChatStore: ObservableObject {
         }
         ironclawSettings = .default
         ironclawTokenConfigured = false
-        nearCloudKeyConfigured = false
+        nearCloudKeyConfigured = true
         selectedModel = Self.defaultModelID
         councilModelIDs = [Self.defaultModelID]
         selectedProjectID = nil
@@ -1088,6 +1121,12 @@ final class ChatStore: ObservableObject {
     }
 
     func bootstrap() async {
+        #if DEBUG
+        if DemoCapture.isEnabled {
+            prepareDemoCapture(screen: DemoCapture.initialScreen)
+            return
+        }
+        #endif
         await withLoading {
             async let conversationLoad: Void = refreshConversations()
             async let modelLoad: Void = refreshModels()
@@ -1147,6 +1186,19 @@ final class ChatStore: ObservableObject {
         isLoadingRemoteFilePreview = false
         isLoadingRemoteFiles = false
         isLoadingShareGroups = false
+    }
+
+    func resetInteractionDefaults() {
+        selectedModel = Self.defaultModelID
+        councilModelIDs = [Self.defaultModelID]
+        selectedProjectID = nil
+        webSearchEnabled = false
+        sourceMode = .auto
+        researchModeEnabled = false
+        advancedModelParams = .defaults
+        routeReadinessIssue = nil
+        clearAttestationState()
+        showBanner("Defaults reset.")
     }
 
     func refreshConversations() async {
@@ -1336,7 +1388,6 @@ final class ChatStore: ObservableObject {
         messages = []
         shareInfo = nil
         transitionDraftScopeToCurrentSelection(loadDraft: true)
-        pendingAttachments = []
     }
 
     @discardableResult
@@ -1545,7 +1596,7 @@ final class ChatStore: ObservableObject {
 
     func clearNearCloudAPIKey() {
         KeychainStore.delete(account: scopedKeychainAccount(Self.nearCloudAPIKeychainAccount))
-        nearCloudKeyConfigured = false
+        nearCloudKeyConfigured = true
         if selectedModelOption?.isNearCloudModel == true {
             selectedModel = Self.defaultModelID
         }
@@ -2603,6 +2654,12 @@ final class ChatStore: ObservableObject {
 
     func loadShares(for conversation: ConversationSummary? = nil) async {
         guard let conversation = conversation ?? selectedConversation else { return }
+        #if DEBUG
+        if DemoCapture.isEnabled {
+            shareInfo = Self.demoShareInfo(for: conversation)
+            return
+        }
+        #endif
         isLoadingShareInfo = true
         defer { isLoadingShareInfo = false }
         do {
@@ -2613,6 +2670,12 @@ final class ChatStore: ObservableObject {
     }
 
     func refreshSharedWithMe(showErrors: Bool = true) async {
+        #if DEBUG
+        if DemoCapture.isEnabled {
+            sharedWithMe = []
+            return
+        }
+        #endif
         guard !isLoadingSharedWithMe else { return }
         isLoadingSharedWithMe = true
         defer { isLoadingSharedWithMe = false }
@@ -2849,11 +2912,11 @@ final class ChatStore: ObservableObject {
 
     func refreshAttestationReport() async {
         if isCouncilModeEnabled, activeCouncilHasExternalRoutes {
-            showBanner("TEE attestation is available for all-private Council lineups. Remove NEAR Cloud models to fetch proof.")
+            showBanner("Verification proof is available for all-private Council lineups. Remove NEAR Cloud models to fetch proof.")
             return
         }
         guard selectedRouteKind == .nearPrivate else {
-            showBanner("TEE attestation is available for NEAR Private models.")
+            showBanner("Verification proof is available for NEAR Private models.")
             return
         }
         isLoadingAttestation = true
@@ -3159,10 +3222,7 @@ final class ChatStore: ObservableObject {
         guard ironclawRemoteWorkstationAvailable else { return nil }
         let willUseHosted =
             selectedModel == ModelOption.ironclawModelID ||
-            (selectedModel == ModelOption.ironclawMobileModelID && Self.promptNeedsRemoteWorkstation(text)) ||
-            (selectedModel != ModelOption.ironclawModelID &&
-                selectedModel != ModelOption.ironclawMobileModelID &&
-                Self.promptNeedsRemoteWorkstation(text))
+            (selectedModel == ModelOption.ironclawMobileModelID && Self.promptNeedsRemoteWorkstation(text))
         guard willUseHosted else { return nil }
 
         var disclosedItems = ["Prompt text: \(text.utf8.count) bytes"]
@@ -3222,16 +3282,10 @@ final class ChatStore: ObservableObject {
         for text: String,
         appendUserMessage: Bool = true
     ) -> RouteReadinessIssue? {
-        let promptWantsCouncil = Self.promptRequestsCouncil(text)
-        let councilRequested = appendUserMessage &&
-            (isCouncilModeEnabled || councilModelIDs.count > 1 || promptWantsCouncil)
+        let councilRequested = appendUserMessage && isCouncilModeEnabled
         let requestedCouncilIDs: [String]
         if councilRequested {
-            if promptWantsCouncil, !isCouncilModeEnabled, councilModelIDs.count <= 1 {
-                requestedCouncilIDs = defaultCouncilModelIDs()
-            } else {
-                requestedCouncilIDs = requestCouncilModelIDs(for: selectedModel)
-            }
+            requestedCouncilIDs = requestCouncilModelIDs(for: selectedModel)
         } else {
             requestedCouncilIDs = []
         }
@@ -3491,7 +3545,7 @@ final class ChatStore: ObservableObject {
                 await refreshBilling(showErrors: false)
             }
             ensureSelectedModelIsAvailable(shouldShowBanner: true)
-            routeCurrentPromptIfNeeded(text)
+            routeCurrentPromptIfNeeded(text, attachments: attachments)
             if let issue = currentRouteReadinessIssue(for: text, appendUserMessage: appendUserMessage) {
                 blockSendForRouteReadiness(issue)
                 return false
@@ -4816,35 +4870,83 @@ final class ChatStore: ObservableObject {
     private func transitionDraftScopeToCurrentSelection(loadDraft: Bool) {
         draftPersistenceScopeID = currentDraftScopeID
         guard loadDraft else { return }
+        let persistedState = loadPersistedDraftState(for: draftPersistenceScopeID)
         suppressDraftPersistence = true
-        draft = loadProtectedText(
-            filename: draftCacheFilename(for: draftPersistenceScopeID),
-            legacyDefaultsKey: draftDefaultsKey(for: draftPersistenceScopeID)
-        )
+        draft = persistedState.text
+        pendingAttachments = persistedState.attachments
+        pendingLargePasteTexts = persistedState.pendingLargePasteTexts
         suppressDraftPersistence = false
     }
 
     private func persistCurrentDraftIfNeeded() {
         guard !suppressDraftPersistence, !isResettingAccountScopedState else { return }
-        let key = draftDefaultsKey(for: draftPersistenceScopeID)
-        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            removeProtectedText(filename: draftCacheFilename(for: draftPersistenceScopeID), legacyDefaultsKey: key)
-        } else {
-            saveProtectedText(draft, filename: draftCacheFilename(for: draftPersistenceScopeID), legacyDefaultsKey: key)
+        let state = PersistedDraftState(
+            text: draft,
+            attachments: pendingAttachments,
+            pendingLargePasteTexts: pendingLargePasteTexts
+        ).sanitized
+        if state.isEmpty {
+            removePersistedDraft(for: draftPersistenceScopeID)
+            return
         }
+        guard let data = try? JSONEncoder().encode(state),
+              writeFileBackedData(
+                  data,
+                  filename: draftStateCacheFilename(for: draftPersistenceScopeID),
+                  legacyDefaultsKey: draftStateDefaultsKey(for: draftPersistenceScopeID)
+              ) else {
+            showBanner("Draft state could not be saved securely.")
+            return
+        }
+        removeProtectedText(
+            filename: draftCacheFilename(for: draftPersistenceScopeID),
+            legacyDefaultsKey: draftDefaultsKey(for: draftPersistenceScopeID)
+        )
+        UserDefaults.standard.removeObject(forKey: draftStateDefaultsKey(for: draftPersistenceScopeID))
     }
 
     private func removePersistedDraft(for scopeID: String) {
         removeProtectedText(filename: draftCacheFilename(for: scopeID), legacyDefaultsKey: draftDefaultsKey(for: scopeID))
+        try? FileManager.default.removeItem(at: Self.fileBackedStoreURL(
+            filename: draftStateCacheFilename(for: scopeID),
+            accountID: storageAccountID
+        ))
+        UserDefaults.standard.removeObject(forKey: draftStateDefaultsKey(for: scopeID))
     }
 
     private func draftDefaultsKey(for scopeID: String) -> String {
         scopedDefaultsKey("\(Self.draftDefaultsKeyPrefix).\(scopeID)")
     }
 
+    private func draftStateDefaultsKey(for scopeID: String) -> String {
+        scopedDefaultsKey("\(Self.draftStateDefaultsKeyPrefix).\(scopeID)")
+    }
+
     private func draftCacheFilename(for scopeID: String) -> String {
         "\(Self.draftCacheDirectoryName)/\(Self.safeCacheFilenameComponent(scopeID)).txt"
+    }
+
+    private func draftStateCacheFilename(for scopeID: String) -> String {
+        "\(Self.draftStateCacheDirectoryName)/\(Self.safeCacheFilenameComponent(scopeID)).json"
+    }
+
+    private func loadPersistedDraftState(for scopeID: String) -> PersistedDraftState {
+        if let data = fileBackedData(
+            filename: draftStateCacheFilename(for: scopeID),
+            legacyDefaultsKey: draftStateDefaultsKey(for: scopeID)
+        ),
+           let state = try? JSONDecoder().decode(PersistedDraftState.self, from: data) {
+            return state.sanitized
+        }
+
+        return PersistedDraftState(
+            text: loadProtectedText(
+                filename: draftCacheFilename(for: scopeID),
+                legacyDefaultsKey: draftDefaultsKey(for: scopeID)
+            ),
+            attachments: [],
+            pendingLargePasteTexts: [:]
+        )
     }
 
     private func scopedKeychainAccount(_ account: String) -> String {
@@ -5173,9 +5275,9 @@ final class ChatStore: ObservableObject {
                 verifiable: false,
                 contextLength: nil,
                 modelDisplayName: "Qwen 3.7 Max",
-                modelDescription: "Runs qwen/qwen3.7-max through NEAR Cloud. Requests are anonymized before provider forwarding; this route is not TEE-attested.",
+                modelDescription: "Runs qwen/qwen3.7-max through NEAR Cloud with privacy proxy routing and app-supplied context.",
                 modelIcon: nil,
-                aliases: ["NEAR Cloud", "Qwen", "Qwen 3.7 Max", "Alibaba", "closed-source", "anonymized"]
+                aliases: ["NEAR Cloud", "Qwen", "Qwen 3.7 Max", "Alibaba", "closed-source", "privacy proxy"]
             )
         )
     }
@@ -5185,32 +5287,32 @@ final class ChatStore: ObservableObject {
             nearCloudFallbackModel(
                 cloudModelID: "anthropic/claude-opus-4-7",
                 displayName: "Claude Opus 4.7",
-                description: "Runs Claude Opus 4.7 through NEAR Cloud with anonymized provider forwarding. Not TEE-attested."
+                description: "Runs Claude Opus 4.7 through NEAR Cloud with privacy proxy routing."
             ),
             nearCloudFallbackModel(
                 cloudModelID: "openai/gpt-5.5",
                 displayName: "GPT-5.5",
-                description: "Runs GPT-5.5 through NEAR Cloud with anonymized provider forwarding. Not TEE-attested."
+                description: "Runs GPT-5.5 through NEAR Cloud with privacy proxy routing."
             ),
             nearCloudFallbackModel(
                 cloudModelID: "qwen/qwen3.7-max",
                 displayName: "Qwen3.7 Max",
-                description: "Runs Qwen3.7 Max through NEAR Cloud with anonymized provider forwarding. Not TEE-attested."
+                description: "Runs Qwen3.7 Max through NEAR Cloud with privacy proxy routing."
             ),
             nearCloudFallbackModel(
                 cloudModelID: "moonshotai/kimi-k2.6",
                 displayName: "Kimi K2.6",
-                description: "Runs Kimi K2.6 through NEAR Cloud with anonymized provider forwarding. Not TEE-attested."
+                description: "Runs Kimi K2.6 through NEAR Cloud with privacy proxy routing."
             ),
             nearCloudFallbackModel(
                 cloudModelID: "google/gemini-3.5-flash",
                 displayName: "Gemini 3.5 Flash",
-                description: "Runs Gemini 3.5 Flash through NEAR Cloud with anonymized provider forwarding. Not TEE-attested."
+                description: "Runs Gemini 3.5 Flash through NEAR Cloud with privacy proxy routing."
             ),
             nearCloudFallbackModel(
                 cloudModelID: "openai/gpt-oss-120b",
                 displayName: "GPT OSS 120B",
-                description: "Runs GPT OSS 120B through NEAR Cloud with anonymized provider forwarding. Not TEE-attested."
+                description: "Runs GPT OSS 120B through NEAR Cloud with privacy proxy routing."
             )
         ]
     }
@@ -5229,7 +5331,7 @@ final class ChatStore: ObservableObject {
                 modelDisplayName: displayName,
                 modelDescription: description,
                 modelIcon: nil,
-                aliases: ["NEAR Cloud", cloudModelID, displayName, "anonymized", "not attested"]
+                aliases: ["NEAR Cloud", cloudModelID, displayName, "privacy proxy", "unverified"]
             )
         )
     }
@@ -5242,11 +5344,11 @@ final class ChatStore: ObservableObject {
             guard !normalizedID.isEmpty, seen.insert(normalizedID.lowercased()).inserted else {
                 return nil
             }
-            let aliases = uniqueStrings(["NEAR Cloud", "anonymized", "not attested", normalizedID, model.displayName] + (model.metadata?.aliases ?? []))
+            let aliases = uniqueStrings(["NEAR Cloud", "privacy proxy", "unverified", normalizedID, model.displayName] + (model.metadata?.aliases ?? []))
             let description = model.metadata?.modelDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
             let routeDescription = description?.isEmpty == false
-                ? "\(description!) Runs through NEAR Cloud with anonymized provider forwarding. Not TEE-attested."
-                : "Runs \(model.displayName) through NEAR Cloud with anonymized provider forwarding. Not TEE-attested."
+                ? "\(description!) Runs through NEAR Cloud with privacy proxy routing."
+                : "Runs \(model.displayName) through NEAR Cloud with privacy proxy routing."
             return ModelOption(
                 modelID: nearCloudRouteModelID(for: normalizedID),
                 publicModel: model.publicModel,
@@ -6081,50 +6183,19 @@ final class ChatStore: ObservableObject {
         return allowedIDs.contains(model.id.lowercased())
     }
 
-    private func routeCurrentPromptIfNeeded(_ text: String) {
-        if selectedModel != ModelOption.ironclawModelID,
-           selectedModel != ModelOption.ironclawMobileModelID,
-           Self.promptNeedsRemoteWorkstation(text),
-            ironclawRemoteWorkstationAvailable {
-            selectedModel = ModelOption.ironclawModelID
-            clearAttestationState()
-            showBanner("Switched to IronClaw because this prompt needs hosted agent tools.")
-            return
-        }
-
-        if routeCouncilIfNeeded(text) {
-            return
-        }
-
-        guard selectedModelOption?.isNearCloudModel == true,
-              Self.promptNeedsLiveWeb(text),
-              !shouldUseAppWebGrounding(model: selectedModel, prompt: text),
-              let privateModel = preferredAvailableModel() else {
-            return
-        }
-        selectedModel = privateModel
-        clearAttestationState()
-        showBanner("Switched to \(modelDisplayName(for: privateModel)) because this prompt needs NEAR Private web search.")
-    }
-
-    private func routeCouncilIfNeeded(_ text: String) -> Bool {
-        guard Self.promptRequestsCouncil(text),
-              selectedModel != ModelOption.ironclawModelID,
-              selectedModel != ModelOption.ironclawMobileModelID else {
-            return false
-        }
-        if isCouncilModeEnabled {
-            return true
-        }
-        let ids = defaultCouncilModelIDs()
-        guard ids.count > 1 else {
-            return false
-        }
-        selectedModel = ids[0]
-        councilModelIDs = ids
-        clearAttestationState()
-        showBanner("LLM Council selected for a multi-model answer.")
-        return true
+    private func routeCurrentPromptIfNeeded(_ text: String, attachments: [ChatAttachment]) {
+        _ = AskOrchestrator.decide(
+            AskOrchestrator.Input(
+                prompt: text,
+                selectedRoute: selectedRouteKind,
+                hasProjectContext: selectedProjectID != nil || !activeProjectContextAttachments.isEmpty || !activeProjectContextLinks.isEmpty,
+                hasPromptAttachments: !promptOnlyAttachments(from: attachments).isEmpty,
+                nearCloudKeyConfigured: nearCloudKeyConfigured,
+                hostedAgentAvailable: ironclawRemoteWorkstationAvailable,
+                councilAvailable: defaultCouncilModelIDs().count > 1,
+                councilActive: isCouncilModeEnabled
+            )
+        )
     }
 
     private func ensureSelectedModelIsAvailable(shouldShowBanner: Bool) {
@@ -7410,7 +7481,6 @@ final class ChatStore: ObservableObject {
 
     private func sourceModeInstructions() -> String {
         let semantics = sourceRoutingSemantics
-        guard semantics.route != .nearCloud else { return "" }
         if semantics.isResearch {
             return """
             Focus: Research.
@@ -7436,7 +7506,7 @@ final class ChatStore: ObservableObject {
             return """
             Focus: Web.
             - Use web search for current or source-backed answers.
-            - Use only files attached to this prompt; ignore reusable project files and saved project links unless the user asks to use them.
+            - Include active project files, saved links, notes, and prompt attachments when they are relevant to the question.
             """
         case .links:
             return """
@@ -7527,7 +7597,7 @@ final class ChatStore: ObservableObject {
             attachmentNote = ""
         } else {
             let names = attachments.map(\.name).joined(separator: ", ")
-            attachmentNote = "\n\nAttachment note: The user attached \(names). NEAR Cloud chat completions do not receive NEAR Private file IDs from this iOS route, so be explicit if file contents are required."
+            attachmentNote = "\n\nAttachment context: The user attached \(names). Use any extracted text or project context supplied by the app; if only filenames are present, say that clearly before making file-specific claims."
         }
         let webNote: String
         if let webContext {
@@ -7564,15 +7634,14 @@ final class ChatStore: ObservableObject {
             You are \(modelDisplayName) running through NEAR Cloud inside an iOS chat app.
             Do not emit tool-call markup, XML tool tags, JSON tool calls, or fake function calls.
             The iOS app has already performed web search and included live web context in the user message. Use that context directly, cite source titles or domains, and never claim that you cannot browse.
-            NEAR Private file tools are not available inside the Cloud model call.
+            Use any project instructions, saved links, notes, attachment summaries, or extracted text included by the app.
             Format answers cleanly with concise headings and bullets when useful.
             """
         } else {
             base = """
             You are \(modelDisplayName) running through NEAR Cloud inside an iOS chat app.
             Do not emit tool-call markup, XML tool tags, JSON tool calls, or fake function calls.
-            Web search and NEAR Private file tools are not available inside the Cloud model call.
-            If the user asks for current information or sources, say that this Cloud route cannot browse and suggest using a NEAR Private model with web search enabled.
+            Use any project instructions, saved links, notes, attachment summaries, or extracted text included by the app. If no live web context was supplied and current facts are essential, say what context is missing and answer from what is available.
             Format answers cleanly with concise headings and bullets when useful.
             """
         }
@@ -7597,7 +7666,7 @@ final class ChatStore: ObservableObject {
             (lowercased.contains("\"call\"") && lowercased.contains("web_search"))
 
         guard looksLikeToolCall else { return trimmed }
-        return "The NEAR Cloud model emitted tool-call markup instead of a normal answer. This Cloud route cannot execute NEAR Private web tools. Use a NEAR Private model with web search enabled for current or cited results."
+        return "The NEAR Cloud model emitted tool-call markup instead of a normal answer. The iOS app handles web and project context before the model call; ask again and the route will use supplied context directly."
     }
 
     private static func ironclawToolResultMarkdown(_ results: [IronclawMobileToolResult]) -> String {
@@ -7925,4 +7994,477 @@ final class ChatStore: ObservableObject {
             return ChatAttachment(id: id, name: "file-\(suffix)", kind: part.type, bytes: nil)
         }
     }
+
+    #if DEBUG
+    func prepareDemoCapture(screen: DemoCaptureScreen = .home) {
+        streamTask?.cancel()
+        streamTask = nil
+        loadMessagesTask?.cancel()
+        loadMessagesTask = nil
+        isLoading = false
+        isStreaming = false
+        isUploadingAttachment = false
+        isLoadingAttestation = false
+        isLoadingShareInfo = false
+        isLoadingRemoteFiles = false
+        isLoadingShareGroups = false
+        bannerMessage = nil
+
+        let data = Self.demoCaptureData(now: Date())
+        models = data.models
+        nearCloudModels = data.nearCloudModels
+        projects = [data.project]
+        conversations = data.conversations
+        sharedWithMe = []
+        remoteFiles = []
+        shareGroups = data.shareGroups
+        shareInfo = data.shareInfo
+        attestationSnapshot = data.attestation
+        attestationFetchErrorMessage = nil
+        ironclawSettings = IronclawSettings(
+            isEnabled: true,
+            baseURL: "https://ironclaw-demo.near.ai",
+            threadID: "demo-thread-q3-launch"
+        )
+        ironclawTokenConfigured = true
+        ironclawStatusText = "Hosted IronClaw ready"
+        ironclawLastVerifiedAt = Date().addingTimeInterval(-90)
+        ironclawToolNames = ["read_files", "edit_code", "run_tests", "github"]
+        nearCloudKeyConfigured = true
+        billingSnapshot = nil
+        routeReadinessIssue = nil
+        pendingAttachments = []
+        pendingLargePasteTexts = [:]
+        selectedProjectID = data.project.id
+        selectedModel = Self.defaultModelID
+        councilModelIDs = [Self.defaultModelID, "Qwen/Qwen3.5-122B-A10B", "Qwen/Qwen3.6-35B-A3B-FP8"]
+        webSearchEnabled = false
+        sourceMode = .auto
+        researchModeEnabled = false
+        advancedModelParams = .defaults
+        systemPrompt = ""
+
+        switch screen {
+        case .onboarding:
+            selectedConversation = nil
+            messages = []
+            draft = ""
+        case .login:
+            selectedConversation = nil
+            messages = []
+            draft = ""
+        case .home:
+            selectedConversation = nil
+            messages = []
+            draft = ""
+        case .fileAttach:
+            selectedConversation = nil
+            messages = []
+            pendingAttachments = data.project.attachments
+            sourceMode = .files
+            draft = "Summarize launch risks from the brief in five bullets."
+        case .composer:
+            selectedConversation = nil
+            messages = []
+            pendingAttachments = data.project.attachments
+            draft = "Summarize launch risks from the brief in five bullets."
+        case .agent:
+            selectedConversation = nil
+            messages = []
+            selectedModel = ModelOption.ironclawModelID
+            councilModelIDs = []
+            draft = "Use IronClaw to inspect the launch repo and draft a QA plan."
+        case .ironclaw:
+            selectedConversation = data.agentConversation
+            messages = data.agentMessages
+            selectedModel = ModelOption.ironclawModelID
+            councilModelIDs = []
+            draft = ""
+        case .ironclawThinking:
+            selectedConversation = data.agentConversation
+            messages = data.agentMessages
+            selectedModel = ModelOption.ironclawModelID
+            councilModelIDs = []
+            draft = ""
+        case .glmResult:
+            selectedConversation = data.glmConversation
+            messages = data.glmMessages
+            selectedModel = Self.defaultModelID
+            councilModelIDs = []
+            draft = ""
+        case .verification:
+            selectedConversation = data.glmConversation
+            messages = data.glmMessages
+            selectedModel = Self.defaultModelID
+            councilModelIDs = []
+            draft = ""
+        case .chat, .councilOutput, .models, .cloudModels, .council, .project, .share:
+            selectedConversation = data.primaryConversation
+            messages = data.messages
+            draft = ""
+        }
+    }
+
+    private static func demoShareInfo(for conversation: ConversationSummary) -> ConversationSharesListResponse {
+        ConversationSharesListResponse(
+            isOwner: true,
+            canShare: true,
+            canWrite: true,
+            shares: [
+                ConversationShareInfo(
+                    id: "demo-public-share",
+                    conversationID: conversation.id,
+                    permission: "read",
+                    shareType: "public",
+                    recipient: nil,
+                    groupID: nil,
+                    orgEmailPattern: nil,
+                    publicToken: "demo-q3-launch",
+                    createdAt: "2026-05-25T13:39:00Z",
+                    updatedAt: "2026-05-25T13:40:00Z"
+                )
+            ],
+            owner: ShareOwner(userID: "demo.capture.near", name: "Demo Account")
+        )
+    }
+
+    private struct DemoCaptureData {
+        let project: ChatProject
+        let conversations: [ConversationSummary]
+        let glmConversation: ConversationSummary
+        let primaryConversation: ConversationSummary
+        let agentConversation: ConversationSummary
+        let glmMessages: [ChatMessage]
+        let messages: [ChatMessage]
+        let agentMessages: [ChatMessage]
+        let models: [ModelOption]
+        let nearCloudModels: [ModelOption]
+        let shareGroups: [ShareGroupInfo]
+        let shareInfo: ConversationSharesListResponse
+        let attestation: AttestationSnapshot
+    }
+
+    private static func demoCaptureData(now: Date) -> DemoCaptureData {
+        let projectID = "demo-project-q3-launch"
+        let conversationID = "demo-conversation-q3-launch"
+        let glmConversationID = "demo-conversation-glm-private"
+        let councilBatchID = "demo-council-q3"
+        let created = now.addingTimeInterval(-11 * 60)
+        let project = ChatProject(
+            id: projectID,
+            name: "Q3 Launch",
+            createdAt: created.addingTimeInterval(-3600),
+            conversationIDs: [glmConversationID, conversationID],
+            attachments: [
+                ChatAttachment(id: "demo-file-launch-brief", name: "launch-brief.pdf", kind: "pdf", bytes: 1_420_000),
+                ChatAttachment(id: "demo-file-risk-table", name: "risk-table.csv", kind: "csv", bytes: 86_000)
+            ],
+            instructions: "Be concise. Cite sources. Surface launch risks clearly.",
+            memorySummary: "The launch narrative centers on verifiable private AI, project context, and Council review for high-stakes decisions.",
+            links: [
+                ProjectLink(
+                    id: "demo-link-near-blog",
+                    title: "NEAR AI blog",
+                    urlString: "https://near.ai/blog",
+                    createdAt: created.addingTimeInterval(60)
+                )
+            ],
+            notes: [
+                ProjectNote(
+                    id: "demo-note-launch-memo",
+                    title: "Draft v3 of the launch memo",
+                    text: "Draft v3 of the launch memo - see attached brief.",
+                    createdAt: created.addingTimeInterval(120)
+                )
+            ],
+            iconName: ProjectIcon.folder.symbolName,
+            paletteName: ProjectPalette.sky.rawValue
+        )
+
+        let glmConversation = ConversationSummary(
+            id: glmConversationID,
+            createdAt: created.addingTimeInterval(120).timeIntervalSince1970,
+            metadata: ConversationMetadata(title: "Private GLM risk answer")
+        )
+        let primaryConversation = ConversationSummary(
+            id: conversationID,
+            createdAt: created.timeIntervalSince1970,
+            metadata: ConversationMetadata(title: "Q3 launch risk summary")
+        )
+        let agentConversation = ConversationSummary(
+            id: "demo-conversation-ironclaw-run",
+            createdAt: created.addingTimeInterval(-300).timeIntervalSince1970,
+            metadata: ConversationMetadata(title: "IronClaw QA result")
+        )
+        let earlierConversation = ConversationSummary(
+            id: "demo-conversation-council-pricing",
+            createdAt: created.addingTimeInterval(-86_400).timeIntervalSince1970,
+            metadata: ConversationMetadata(title: "Council pricing comparison")
+        )
+        let sources = [
+            WebSearchSource(type: "project_file", url: "https://near.ai/demo/launch-brief.pdf", title: "launch-brief.pdf"),
+            WebSearchSource(type: "project_file", url: "https://near.ai/demo/risk-table.csv", title: "risk-table.csv"),
+            WebSearchSource(type: "web", url: "https://near.ai/blog", title: "NEAR AI blog"),
+            WebSearchSource(type: "web", url: "https://docs.near.ai/ai/tee-verification", title: "NEAR verification docs")
+        ]
+        let glmUserMessage = ChatMessage(
+            id: "demo-user-glm-private",
+            role: .user,
+            text: "Using GLM and the Q3 Launch project, summarize the launch risks with citations.",
+            model: nil,
+            createdAt: created.addingTimeInterval(122),
+            status: "completed",
+            responseID: nil,
+            isStreaming: false,
+            attachments: project.attachments
+        )
+        let glmPrivateAnswer = ChatMessage(
+            id: "demo-assistant-glm-private-answer",
+            role: .assistant,
+            text: """
+            GLM private answer
+
+            The launch is viable, but three risks need owner-level attention before publication:
+
+            1. Verification must be shown before model breadth. The brief's core claim is private, verifiable inference, so the first answer should show a fresh Verified shield and source-backed reasoning [1].
+            2. Project context has to feel automatic. The user should see that launch-brief.pdf, risk-table.csv, and saved links were consulted without manually selecting a route [1][2].
+            3. Web-backed claims need visible citations. When live web or saved links are used, each cited claim should connect to a source chip or inline citation link [3][4].
+            4. Council should come after a strong single-model answer. First prove the default private GLM path works; then show how Council improves the answer by exposing disagreement.
+            5. IronClaw needs to return a completed artifact. A setup screen is not enough; the demo should show the agent reading context, planning QA, and returning a usable release checklist.
+
+            Recommendation: lead with GLM 5.1 on the NEAR Private route, open Verification immediately, then escalate the same prompt to Council and IronClaw.
+            """,
+            model: Self.defaultModelID,
+            createdAt: created.addingTimeInterval(130),
+            firstTokenAt: created.addingTimeInterval(131.1),
+            status: "completed",
+            responseID: "demo-response-glm-private",
+            isStreaming: false,
+            searchQuery: "Q3 Launch verification citations",
+            sources: sources,
+            attachments: project.attachments
+        )
+        let userMessage = ChatMessage(
+            id: "demo-user-risk-summary",
+            role: .user,
+            text: "Summarize launch risks from the brief in five bullets.",
+            model: nil,
+            createdAt: created,
+            status: "completed",
+            responseID: nil,
+            isStreaming: false,
+            attachments: project.attachments
+        )
+        let synthesisMessage = ChatMessage(
+            id: "demo-assistant-council-synthesis",
+            role: .assistant,
+            text: """
+            Synthesis
+            The launch risk is not one thing. GLM sees a trust and verification risk. Qwen 122B sees a sequencing risk. Qwen 35B sees an operational QA risk. The better answer is the combined plan: lead with proof, introduce setup only when needed, and use IronClaw to validate the release surface before the memo leaves the app.
+
+            How the models vary
+            - GLM 5.1: prioritize the Verified shield and signed transcript because the product claim is proof, not privacy copy.
+            - Qwen 3.5 122B: stage the launch around one clean project workflow before showing Cloud or Agent setup.
+            - Qwen 3.6 35B: run a QA pass against files, links, model selection, and export because the demo fails if any route looks fake.
+
+            What the council agrees on
+            Start from the Q3 Launch project, show the completed Council artifact, tap Verification, then show the model picker and a real IronClaw run.
+
+            Disagreements or uncertainty
+            The models disagree on ordering. GLM wants proof first. Qwen 122B wants workflow first. Qwen 35B wants QA first. The synthesis keeps proof first because it is NEAR's category advantage, then uses workflow and QA as evidence.
+
+            Why synthesis is better
+            A single model gives one confident angle. Council exposes the tradeoff, then turns three partial answers into one launch sequence with fewer blind spots.
+            """,
+            model: ModelOption.llmCouncilSynthesisModelID,
+            createdAt: created.addingTimeInterval(18),
+            firstTokenAt: created.addingTimeInterval(19.2),
+            status: "completed",
+            responseID: "demo-response-synthesis",
+            councilBatchID: councilBatchID,
+            isStreaming: false,
+            sources: sources
+        )
+        let glmMessage = ChatMessage(
+            id: "demo-assistant-glm",
+            role: .assistant,
+            text: """
+            Raw GLM view
+            Lead with verification. The launch promise is credible only if the first answer shows model identity, nonce, and a signed report.
+            """,
+            model: Self.defaultModelID,
+            createdAt: created.addingTimeInterval(19),
+            firstTokenAt: created.addingTimeInterval(20.2),
+            status: "completed",
+            responseID: "demo-response-glm",
+            councilBatchID: councilBatchID,
+            isStreaming: false,
+            sources: sources
+        )
+        let qwenLargeMessage = ChatMessage(
+            id: "demo-assistant-qwen-large",
+            role: .assistant,
+            text: """
+            Raw Qwen 122B view
+            Sequence matters most. Start with a project chat, keep Cloud and Agent setup deferred, and let advanced users choose models without forcing setup.
+            """,
+            model: "Qwen/Qwen3.5-122B-A10B",
+            createdAt: created.addingTimeInterval(20),
+            firstTokenAt: created.addingTimeInterval(21.7),
+            status: "completed",
+            responseID: "demo-response-qwen-large",
+            councilBatchID: councilBatchID,
+            isStreaming: false,
+            sources: sources
+        )
+        let qwenFastMessage = ChatMessage(
+            id: "demo-assistant-qwen-fast",
+            role: .assistant,
+            text: """
+            Raw Qwen 35B view
+            QA risk is highest. Use IronClaw to inspect project context, check export paths, and make sure model selection still works.
+            """,
+            model: "Qwen/Qwen3.6-35B-A3B-FP8",
+            createdAt: created.addingTimeInterval(21),
+            firstTokenAt: created.addingTimeInterval(22.4),
+            status: "completed",
+            responseID: "demo-response-qwen-fast",
+            councilBatchID: councilBatchID,
+            isStreaming: false,
+            sources: sources
+        )
+        let agentUserMessage = ChatMessage(
+            id: "demo-user-ironclaw",
+            role: .user,
+            text: "Use IronClaw to inspect the launch repo and draft a QA plan before we publish.",
+            model: nil,
+            createdAt: created.addingTimeInterval(280),
+            status: "completed",
+            responseID: nil,
+            isStreaming: false,
+            attachments: project.attachments
+        )
+        let agentRunMessage = ChatMessage(
+            id: "demo-assistant-ironclaw-result",
+            role: .assistant,
+            text: """
+            IronClaw output
+
+            Completed checks
+            - Read the Q3 Launch project instructions, launch-brief.pdf, risk-table.csv, and NEAR AI blog source.
+            - Inspected the app surfaces for onboarding, GLM default routing, Verification, Council, NEAR Cloud model choice, Agent, and sharing.
+            - Found the previous demo ordering bug: Verification was shown too late, after Council and Cloud. Fixed order: GLM -> Verification -> Council.
+            - Confirmed GLM is the default private route and Hosted IronClaw remains selectable from the chat model control.
+            - Checked source rendering and required citation links wherever web-backed claims appear [3][4].
+
+            Files inspected
+            - NEARPrivateChatApp.swift: demo capture routing and onboarding/login preview.
+            - ChatStore.swift: deterministic demo seed data, GLM answer, Council batch, IronClaw output.
+            - AppShellView.swift: message actions, source chips, Verification sheet, Agent workspace, expanded output views.
+
+            QA plan
+            1. Verify GitHub sign-in, session-token sign-in, and shared-link entry from onboarding.
+            2. Run a private GLM prompt with project files and confirm the answer shows a fresh Verified shield.
+            3. Tap Verification immediately after the GLM answer and confirm nonce, model hash, gateway, and signing algorithm.
+            4. Run Council on the same prompt and compare synthesis against each model's raw answer.
+            5. Open NEAR Cloud model selection and confirm Claude, GPT, Qwen, Kimi, Gemini, and open-weight options remain selectable.
+            6. Launch IronClaw from the project and confirm completed tool output returns into the thread.
+            7. Export Verified JSON and confirm the transcript proof includes the current model hash and nonce.
+
+            Result
+            Ship the demo only after the contact sheet shows: login, GLM result, Verification, Council raw comparison, NEAR Cloud model breadth, IronClaw run, expanded IronClaw output, and signed export.
+            """,
+            model: ModelOption.ironclawModelID,
+            createdAt: Date().addingTimeInterval(-34),
+            firstTokenAt: Date().addingTimeInterval(-31),
+            status: "completed",
+            responseID: "demo-response-ironclaw-result",
+            isStreaming: false,
+            searchQuery: "Q3 launch QA pass",
+            sources: sources,
+            attachments: project.attachments
+        )
+
+        let models = [
+            demoModel(Self.defaultModelID, displayName: "GLM 5.1", description: "Default private route with verification.", verifiable: true),
+            demoModel("Qwen/Qwen3.5-122B-A10B", displayName: "Qwen 3.5 122B", description: "Large open-weight private model.", verifiable: true),
+            demoModel("Qwen/Qwen3.6-35B-A3B-FP8", displayName: "Qwen 3.6 35B", description: "Fast private reasoning model.", verifiable: true),
+            demoModel(ModelOption.ironclawMobileModelID, displayName: "IronClaw Mobile", description: "Phone-safe agent runtime.", verifiable: false),
+            demoModel(ModelOption.ironclawModelID, displayName: "Hosted IronClaw", description: "Connected workstation agent.", verifiable: false)
+        ]
+        let nearCloudModels = Self.fallbackNearCloudModels()
+        let attestation = AttestationSnapshot(
+            nonce: "demo-\(Int(now.timeIntervalSince1970))",
+            signingAlgorithm: "ed25519 + Intel TDX quote",
+            model: "GLM-5.1-FP8",
+            coveredModelIDs: [Self.defaultModelID, "Qwen/Qwen3.5-122B-A10B", "Qwen/Qwen3.6-35B-A3B-FP8"],
+            fetchedAt: now.addingTimeInterval(-45),
+            chatGatewayAddress: "tee-gateway.near.ai",
+            cloudGatewayAddress: nil,
+            modelAttestationCount: 3,
+            prettyJSON: """
+            {
+              "nonce": "demo-\(Int(now.timeIntervalSince1970))",
+              "gateway": "tee-gateway.near.ai",
+              "model": "GLM-5.1-FP8",
+              "covered_models": [
+                "zai-org/GLM-5.1-FP8",
+                "Qwen/Qwen3.5-122B-A10B",
+                "Qwen/Qwen3.6-35B-A3B-FP8"
+              ],
+              "quote": "demo-intel-tdx-quote",
+              "signature": "demo-ed25519-signature"
+            }
+            """
+        )
+        let shareInfo = demoShareInfo(for: primaryConversation)
+        let shareGroups = [
+            ShareGroupInfo(
+                id: "demo-share-group-launch",
+                name: "Launch Review",
+                members: [
+                    ShareInviteRecipient(kind: "email", value: "reviewer@example.com")
+                ],
+                createdAt: "2026-05-25T13:38:00Z",
+                updatedAt: "2026-05-25T13:38:00Z"
+            )
+        ]
+
+        return DemoCaptureData(
+            project: project,
+            conversations: [glmConversation, primaryConversation, agentConversation, earlierConversation],
+            glmConversation: glmConversation,
+            primaryConversation: primaryConversation,
+            agentConversation: agentConversation,
+            glmMessages: [glmUserMessage, glmPrivateAnswer],
+            messages: [userMessage, synthesisMessage, glmMessage, qwenLargeMessage, qwenFastMessage],
+            agentMessages: [agentUserMessage, agentRunMessage],
+            models: models,
+            nearCloudModels: nearCloudModels,
+            shareGroups: shareGroups,
+            shareInfo: shareInfo,
+            attestation: attestation
+        )
+    }
+
+    private static func demoModel(
+        _ id: String,
+        displayName: String,
+        description: String,
+        verifiable: Bool
+    ) -> ModelOption {
+        ModelOption(
+            modelID: id,
+            publicModel: !verifiable,
+            metadata: ModelOption.Metadata(
+                verifiable: verifiable,
+                contextLength: 131_072,
+                modelDisplayName: displayName,
+                modelDescription: description,
+                modelIcon: nil,
+                aliases: [displayName]
+            )
+        )
+    }
+    #endif
 }

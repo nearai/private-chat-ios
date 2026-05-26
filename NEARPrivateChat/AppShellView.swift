@@ -144,6 +144,182 @@ private enum HomeFilter: String, CaseIterable, Identifiable {
     }
 }
 
+private struct SetupLaunchCardState: Identifiable {
+    let accountID: String
+    let profile: UserSetupProfile
+    let plan: AppSetupPlan
+
+    var id: String {
+        "\(accountID)-\(plan.id)"
+    }
+}
+
+struct HomeConversationGroup: Hashable {
+    let title: String
+    let conversations: [ConversationSummary]
+}
+
+struct HomeProjectContextMatch: Identifiable, Hashable {
+    enum Kind: String, Hashable {
+        case file
+        case link
+        case note
+        case instructions
+        case memory
+
+        var title: String {
+            switch self {
+            case .file: "File"
+            case .link: "Link"
+            case .note: "Note"
+            case .instructions: "Instructions"
+            case .memory: "Memory"
+            }
+        }
+
+        var symbolName: String {
+            switch self {
+            case .file: "doc.text"
+            case .link: "link"
+            case .note: "bookmark"
+            case .instructions: "text.alignleft"
+            case .memory: "brain.head.profile"
+            }
+        }
+    }
+
+    let id: String
+    let project: ChatProject
+    let kind: Kind
+    let title: String
+    let detail: String?
+}
+
+enum HomeSearchIndex {
+    static func conversationGroups(
+        searchQuery: String,
+        conversations: [ConversationSummary],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [HomeConversationGroup] {
+        let normalizedQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !conversations.isEmpty else { return [] }
+
+        if !normalizedQuery.isEmpty {
+            return [HomeConversationGroup(title: "Chats", conversations: conversations)]
+        }
+
+        let todayStart = calendar.startOfDay(for: now).timeIntervalSince1970
+        let yesterdayStart = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now))?.timeIntervalSince1970 ?? todayStart
+
+        let pinned = conversations.filter(\.isPinned)
+        let normal = conversations.filter { !$0.isPinned }
+        let today = normal.filter { ($0.createdAt ?? 0) >= todayStart }
+        let yesterday = normal.filter {
+            let createdAt = $0.createdAt ?? 0
+            return createdAt < todayStart && createdAt >= yesterdayStart
+        }
+        let older = normal.filter { ($0.createdAt ?? 0) < yesterdayStart }
+
+        return [
+            HomeConversationGroup(title: "Pinned", conversations: pinned),
+            HomeConversationGroup(title: "Today", conversations: today),
+            HomeConversationGroup(title: "Yesterday", conversations: yesterday),
+            HomeConversationGroup(title: "Earlier", conversations: older)
+        ].filter { !$0.conversations.isEmpty }
+    }
+
+    static func projectContextMatches(query: String, projects: [ChatProject]) -> [HomeProjectContextMatch] {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedQuery.isEmpty else { return [] }
+
+        return projects.flatMap { project in
+            var results: [HomeProjectContextMatch] = []
+
+            for attachment in project.attachments where matches(attachment.name, query: normalizedQuery) {
+                let detailParts = [attachment.displayKind, attachment.displaySize].compactMap { $0 }
+                results.append(
+                    HomeProjectContextMatch(
+                        id: "\(project.id)-attachment-\(attachment.id)",
+                        project: project,
+                        kind: .file,
+                        title: attachment.name,
+                        detail: detailParts.isEmpty ? nil : detailParts.joined(separator: " · ")
+                    )
+                )
+            }
+
+            for link in project.links where matches(link.displayTitle, query: normalizedQuery) || matches(link.urlString, query: normalizedQuery) {
+                results.append(
+                    HomeProjectContextMatch(
+                        id: "\(project.id)-link-\(link.id)",
+                        project: project,
+                        kind: .link,
+                        title: link.displayTitle,
+                        detail: link.host ?? link.urlString
+                    )
+                )
+            }
+
+            for note in project.notes where matches(note.title, query: normalizedQuery) || matches(note.text, query: normalizedQuery) {
+                results.append(
+                    HomeProjectContextMatch(
+                        id: "\(project.id)-note-\(note.id)",
+                        project: project,
+                        kind: .note,
+                        title: note.title,
+                        detail: snippet(note.text)
+                    )
+                )
+            }
+
+            if matches(project.instructions, query: normalizedQuery) {
+                results.append(
+                    HomeProjectContextMatch(
+                        id: "\(project.id)-instructions",
+                        project: project,
+                        kind: .instructions,
+                        title: "Project instructions",
+                        detail: snippet(project.instructions)
+                    )
+                )
+            }
+
+            if matches(project.memorySummary, query: normalizedQuery) {
+                results.append(
+                    HomeProjectContextMatch(
+                        id: "\(project.id)-memory",
+                        project: project,
+                        kind: .memory,
+                        title: "Memory summary",
+                        detail: snippet(project.memorySummary)
+                    )
+                )
+            }
+
+            return results
+        }
+    }
+
+    private static func matches(_ text: String, query: String) -> Bool {
+        text.localizedCaseInsensitiveContains(query)
+    }
+
+    private static func snippet(_ text: String, limit: Int = 84) -> String? {
+        let collapsed = text
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !collapsed.isEmpty else { return nil }
+        if collapsed.count <= limit {
+            return collapsed
+        }
+        return String(collapsed.prefix(limit)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+    }
+}
+
 private struct ConversationListView: View {
     @EnvironmentObject private var chatStore: ChatStore
     @EnvironmentObject private var sessionStore: SessionStore
@@ -151,7 +327,6 @@ private struct ConversationListView: View {
     @State private var selectedHomeFilter: HomeFilter = .all
     @State private var showingNewProject = false
     @State private var showingProjectFiles = false
-    @State private var showingAgentWorkspace = false
     @State private var editingProject: ChatProject?
     let onOpenChat: () -> Void
     let onStartNewChat: () -> Void
@@ -194,6 +369,36 @@ private struct ConversationListView: View {
         return chatStore.projects.filter { projectMatchesSearch($0) }
     }
 
+    private var filteredProjectContextMatches: [HomeProjectContextMatch] {
+        HomeSearchIndex.projectContextMatches(query: searchQuery, projects: chatStore.projects)
+    }
+
+    private var setupReadinessSnapshot: AppSetupReadinessSnapshot {
+        AppSetupReadinessSnapshot(
+            modelCatalogLoaded: !chatStore.models.isEmpty,
+            privateModelAvailable: chatStore.pickerModels.contains { !$0.isExternalModel },
+            defaultCouncilModelCount: chatStore.defaultCouncilModels.count,
+            ironclawMobileAvailable: chatStore.agentModels.contains { $0.id == ModelOption.ironclawMobileModelID },
+            hostedIronclawAvailable: chatStore.ironclawRemoteWorkstationAvailable,
+            nearCloudKeyConfigured: chatStore.nearCloudKeyConfigured
+        )
+    }
+
+    private var pendingSetupLaunchCard: SetupLaunchCardState? {
+        guard selectedHomeFilter == .all,
+              searchQuery.isEmpty,
+              let accountID = sessionStore.setupAccountID,
+              UserSetupStorage.hasPendingLaunchCard(for: accountID),
+              let profile = UserSetupStorage.load(for: accountID) else {
+            return nil
+        }
+        return SetupLaunchCardState(
+            accountID: accountID,
+            profile: profile,
+            plan: AppSetupPlan(profile: profile, readiness: setupReadinessSnapshot)
+        )
+    }
+
     private var resumeConversations: [ConversationSummary] {
         guard selectedHomeFilter == .all, searchQuery.isEmpty else { return [] }
         return Array(filteredConversations.prefix(3))
@@ -213,27 +418,11 @@ private struct ConversationListView: View {
         }
     }
 
-    private var conversationGroups: [(title: String, conversations: [ConversationSummary])] {
-        let calendar = Calendar.current
-        let now = Date()
-        let todayStart = calendar.startOfDay(for: now).timeIntervalSince1970
-        let yesterdayStart = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now))?.timeIntervalSince1970 ?? todayStart
-
-        let pinned = conversationsForDateGroups.filter(\.isPinned)
-        let normal = conversationsForDateGroups.filter { !$0.isPinned }
-        let today = normal.filter { ($0.createdAt ?? 0) >= todayStart }
-        let yesterday = normal.filter {
-            let createdAt = $0.createdAt ?? 0
-            return createdAt < todayStart && createdAt >= yesterdayStart
-        }
-        let older = normal.filter { ($0.createdAt ?? 0) < yesterdayStart }
-
-        return [
-            ("Pinned", pinned),
-            ("Today", today),
-            ("Yesterday", yesterday),
-            ("Earlier", older)
-        ].filter { !$0.conversations.isEmpty }
+    private var conversationGroups: [HomeConversationGroup] {
+        HomeSearchIndex.conversationGroups(
+            searchQuery: searchQuery,
+            conversations: conversationsForDateGroups
+        )
     }
 
     var body: some View {
@@ -241,16 +430,8 @@ private struct ConversationListView: View {
             Section {
                 WorkspaceCommandHeader(
                     title: "NEAR Private Chat",
-                    subtitle: workspaceHeroSubtitle,
-                    providerName: chatStore.selectedProviderDisplayName,
-                    sourceModeIsPrimary: chatStore.effectiveWebSearchEnabled,
-                    fileCount: chatStore.selectedProjectAttachments.count,
-                    linkCount: chatStore.selectedProjectLinks.count,
-                    showsAgent: heroAgentAvailable,
-                    projectTitle: chatStore.selectedProject == nil ? "Context" : "Project",
-                    onNewChat: openNewChat,
-                    onAgent: { showingAgentWorkspace = true },
-                    onProject: openProjectAction
+                    subtitle: "Ready to answer, research, or take action.",
+                    onNewChat: openNewChat
                 )
                 .workspaceListRow()
 
@@ -267,6 +448,18 @@ private struct ConversationListView: View {
                 .workspaceListRow(top: 4, bottom: 8)
             }
             .listSectionSeparator(.hidden)
+
+            if let pendingSetupLaunchCard {
+                Section {
+                    SetupLaunchCard(
+                        plan: pendingSetupLaunchCard.plan,
+                        onPrimaryAction: { openPendingSetupLaunchCard(pendingSetupLaunchCard) },
+                        onDismiss: { dismissPendingSetupLaunchCard(pendingSetupLaunchCard) }
+                    )
+                    .workspaceListRow(top: 12, bottom: 4)
+                }
+                .listSectionSeparator(.hidden)
+            }
 
             if selectedHomeFilter == .all, !resumeConversations.isEmpty {
                 Section {
@@ -338,12 +531,33 @@ private struct ConversationListView: View {
                 .listSectionSeparator(.hidden)
             }
 
-            if selectedHomeFilter == .all, filteredConversations.isEmpty, filteredProjects.isEmpty {
+            if selectedHomeFilter == .all, !filteredProjectContextMatches.isEmpty {
+                Section {
+                    HomeSectionHeader(title: "Project Context")
+                        .workspaceListRow(top: 16, bottom: 5)
+
+                    ForEach(filteredProjectContextMatches) { match in
+                        Button {
+                            openProjectContext(match.project)
+                        } label: {
+                            ProjectContextSearchRow(match: match)
+                        }
+                        .buttonStyle(.plain)
+                        .workspaceListRow()
+                    }
+                }
+                .listSectionSeparator(.hidden)
+            }
+
+            if selectedHomeFilter == .all,
+               filteredConversations.isEmpty,
+               filteredProjects.isEmpty,
+               filteredProjectContextMatches.isEmpty {
                 Section {
                     ContentUnavailableView(
                         searchQuery.isEmpty ? (chatStore.selectedProject == nil ? "No chats" : "No project chats") : "No matching chats",
                         systemImage: "bubble.left.and.bubble.right",
-                        description: searchQuery.isEmpty ? nil : Text("Try a project name, source title, or chat title.")
+                        description: searchQuery.isEmpty ? nil : Text("Try a project name, file, link, note, or chat title.")
                     )
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
@@ -478,10 +692,6 @@ private struct ConversationListView: View {
             ProjectFilesView()
                 .environmentObject(chatStore)
         }
-        .sheet(isPresented: $showingAgentWorkspace) {
-            AgentWorkspaceView()
-                .environmentObject(chatStore)
-        }
         .sheet(item: $editingProject) { project in
             EditProjectView(project: project)
                 .environmentObject(chatStore)
@@ -533,19 +743,6 @@ private struct ConversationListView: View {
         ]
     }
 
-    private var heroAgentAvailable: Bool {
-        setupProfile.experienceMode == .power ||
-            setupProfile.wantsIronclaw ||
-            setupProfile.useCases.contains(.buildAgents) ||
-            chatStore.selectedProviderDisplayName == "IronClaw" ||
-            chatStore.ironclawRemoteWorkstationAvailable
-    }
-
-    private var setupProfile: UserSetupProfile {
-        guard let accountID = sessionStore.setupAccountID else { return .defaults }
-        return UserSetupStorage.load(for: accountID) ?? .defaults
-    }
-
     private func selectHomeFilter(_ filter: HomeFilter) {
         selectedHomeFilter = filter
         if filter == .all {
@@ -557,14 +754,6 @@ private struct ConversationListView: View {
         }
     }
 
-    private func openProjectAction() {
-        if chatStore.selectedProject == nil {
-            showingNewProject = true
-        } else {
-            showingProjectFiles = true
-        }
-    }
-
     private func projectName(for conversation: ConversationSummary) -> String? {
         if let selectedProject = chatStore.selectedProject,
            selectedProject.conversationIDs.contains(conversation.id) {
@@ -573,20 +762,30 @@ private struct ConversationListView: View {
         return chatStore.projects.first { $0.conversationIDs.contains(conversation.id) }?.name
     }
 
-    private var workspaceHeroSubtitle: String {
-        if let project = chatStore.selectedProject {
-            return "Using \(project.name)"
-        }
-        return "Private AI with proof on iPhone"
-    }
-
     private func projectSubtitle(_ project: ChatProject) -> String {
         var parts: [String] = []
         if let chats = optionalCountLabel(project.conversationIDs.count, singular: "chat") {
             parts.append(chats)
         }
         parts.append(contentsOf: contextSubtitleParts(project))
-        return parts.isEmpty ? "Ready for sources" : parts.joined(separator: " / ")
+        return parts.isEmpty ? "Ready for sources" : parts.joined(separator: " · ")
+    }
+
+    private func openPendingSetupLaunchCard(_ state: SetupLaunchCardState) {
+        UserSetupStorage.clearPendingLaunchCard(for: state.accountID)
+        AppHaptics.lightImpact()
+        chatStore.applySetupProfile(state.profile)
+    }
+
+    private func openProjectContext(_ project: ChatProject) {
+        AppHaptics.selection()
+        chatStore.selectProject(project)
+        showingProjectFiles = true
+    }
+
+    private func dismissPendingSetupLaunchCard(_ state: SetupLaunchCardState) {
+        UserSetupStorage.clearPendingLaunchCard(for: state.accountID)
+        chatStore.bannerMessage = "Setup saved. Start from Home whenever you're ready."
     }
 
     private func projectMatchesSearch(_ project: ChatProject) -> Bool {
@@ -610,9 +809,6 @@ private struct ConversationListView: View {
         if let sources = optionalCountLabel(sources, singular: "source") {
             parts.append(sources)
         }
-        if !project.instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            parts.append("Instructions")
-        }
         if let notes = optionalCountLabel(project.notes.count, singular: "note") {
             parts.append(notes)
         }
@@ -625,6 +821,117 @@ private struct ConversationListView: View {
 
     private func optionalCountLabel(_ count: Int, singular: String) -> String? {
         count > 0 ? countLabel(count, singular: singular) : nil
+    }
+}
+
+private struct SetupLaunchCard: View {
+    let plan: AppSetupPlan
+    let onPrimaryAction: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "sparkles.rectangle.stack.fill")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Color.brandBlue)
+                    .frame(width: 38, height: 38)
+                    .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Setup ready")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.primaryAction)
+                    Text(plan.launchCardTitle)
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(plan.launchCardSubtitle)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            if !plan.launchCardMetadata.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(plan.launchCardMetadata, id: \.self) { item in
+                            SetupLaunchPill(title: item)
+                        }
+                    }
+                    .padding(.horizontal, 1)
+                }
+                .scrollClipDisabled()
+            }
+
+            if let firstRunDraft = plan.firstRunDraft {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("First prompt")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Color.textSecondary)
+                    Text(firstRunDraft)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(12)
+                .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+
+            Text(plan.readinessStatus)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                Button(action: onPrimaryAction) {
+                    Label("Open first chat", systemImage: "arrow.right")
+                        .font(.subheadline.weight(.bold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .background(Color.primaryAction, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                Button("Not now", action: onDismiss)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.textSecondary)
+                    .frame(height: 44)
+                    .padding(.horizontal, 12)
+                    .background(Color.secondarySurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.brandBlue.opacity(0.10), lineWidth: 1)
+        }
+        .shadow(color: Color.brandBlue.opacity(0.05), radius: 12, y: 6)
+    }
+}
+
+private struct SetupLaunchPill: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.textSecondary)
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(Color.secondarySurface, in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(Color.appBorder, lineWidth: 1)
+            }
     }
 }
 
@@ -790,7 +1097,7 @@ private struct HomeHeroActions: View {
     var body: some View {
         HStack(spacing: 14) {
             if showsAgent {
-                HomeTextActionButton(title: "Open Agent", symbolName: "terminal", action: onAgent)
+                HomeTextActionButton(title: "Run Agent", symbolName: "terminal", action: onAgent)
             }
 
             HomeTextActionButton(title: projectTitle, symbolName: "folder", action: onProject)
@@ -1024,18 +1331,55 @@ private struct LoadingHomeRow: View {
     }
 }
 
+private struct ProjectContextSearchRow: View {
+    let match: HomeProjectContextMatch
+
+    var body: some View {
+        HStack(spacing: 12) {
+            SidebarSymbol(
+                symbolName: match.kind.symbolName,
+                isSelected: false,
+                isAction: true,
+                tintColor: match.project.tintColor,
+                backgroundColor: match.project.tintBackgroundColor,
+                size: 32
+            )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(match.title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+
+                Text("\(match.project.name) · \(match.kind.title)")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                if let detail = match.detail, !detail.isEmpty {
+                    Text(detail)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "arrow.up.right.circle")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.textSecondary)
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
+        .contentShape(Rectangle())
+    }
+}
+
 private struct WorkspaceCommandHeader: View {
     let title: String
     let subtitle: String
-    let providerName: String
-    let sourceModeIsPrimary: Bool
-    let fileCount: Int
-    let linkCount: Int
-    let showsAgent: Bool
-    let projectTitle: String
     let onNewChat: () -> Void
-    let onAgent: () -> Void
-    let onProject: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 15) {
@@ -1066,10 +1410,10 @@ private struct WorkspaceCommandHeader: View {
                         .frame(width: 30, height: 30)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Ask")
+                        Text("Ask NEAR")
                             .font(.headline.weight(.bold))
                             .lineLimit(1)
-                        Text("Start a private chat")
+                        Text("Just type. NEAR handles routing.")
                             .font(.caption.weight(.semibold))
                             .opacity(0.72)
                             .lineLimit(1)
@@ -1087,22 +1431,6 @@ private struct WorkspaceCommandHeader: View {
                 .background(Color.brandSky, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
-
-            HStack(spacing: 10) {
-                if showsAgent {
-                    WorkspaceCommandButton(title: "Agent", symbolName: "terminal", isPrimary: false, height: 42, action: onAgent)
-                }
-                WorkspaceCommandButton(title: projectTitle, symbolName: "folder.badge.gearshape", isPrimary: false, height: 42, action: onProject)
-            }
-
-            if let usefulStatusLine {
-                Text(usefulStatusLine.uppercased())
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.70))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-                    .accessibilityLabel(usefulStatusLine.replacingOccurrences(of: " / ", with: ", "))
-            }
         }
         .padding(16)
         .background {
@@ -1113,37 +1441,6 @@ private struct WorkspaceCommandHeader: View {
                 .stroke(.white.opacity(0.11), lineWidth: 1)
         }
         .shadow(color: Color.brandBlue.opacity(0.14), radius: 18, y: 8)
-    }
-
-    private var contextTitle: String? {
-        if fileCount > 0 && linkCount > 0 {
-            return "\(fileCount + linkCount) sources"
-        }
-        if fileCount > 0 {
-            return fileCount == 1 ? "1 file" : "\(fileCount) files"
-        }
-        if linkCount > 0 {
-            return linkCount == 1 ? "1 link" : "\(linkCount) links"
-        }
-        return nil
-    }
-
-    private var usefulStatusLine: String? {
-        var parts: [String] = []
-        if providerName == "NEAR Cloud" {
-            parts.append("Cloud route")
-        } else if providerName != "NEAR Private" {
-            parts.append(providerName)
-        } else if sourceModeIsPrimary || contextTitle != nil {
-            parts.append("Proof ready")
-        }
-        if sourceModeIsPrimary {
-            parts.append("Web on")
-        }
-        if let contextTitle {
-            parts.append(contextTitle)
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " / ")
     }
 }
 
@@ -1401,6 +1698,13 @@ struct ChatView: View {
                     .padding(.vertical, 18)
                 }
                 .background(Color.appBackground)
+                .task(id: chatStore.selectedConversation?.id) {
+                    guard let last = chatStore.messages.last else { return }
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                    await MainActor.run {
+                        proxy.scrollTo(last.id, anchor: .bottom)
+                    }
+                }
                 .onChange(of: chatStore.messages) { _, messages in
                     guard let last = messages.last else { return }
                     withAnimation(.easeOut(duration: 0.2)) {
@@ -1771,27 +2075,43 @@ private struct ChatToolbar: View {
     }
 
     private var compactToolbar: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                modelSelectorButton(maxWidth: 190)
-                compactAttestationButton
-
-                Spacer(minLength: 0)
-
-                if shouldShowAgentWorkspaceButton && !chatStore.messages.isEmpty {
-                    agentWorkspaceButton
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Button {
+                    if chatStore.selectedConversation != nil {
+                        showingRename = true
+                    }
+                } label: {
+                    Text(chatStore.selectedConversationTitle)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .buttonStyle(.plain)
+                .disabled(chatStore.selectedConversation == nil)
+                .accessibilityLabel("Chat title")
+                .accessibilityHint(chatStore.selectedConversation == nil ? "" : "Renames this chat.")
 
-                moreMenuButton
+                if shouldShowCompactStatusText {
+                    Text(compactStatusText)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                }
             }
 
-            if shouldShowCompactStatusText {
-                Text(compactStatusText)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
+            Spacer(minLength: 0)
+
+            modelSelectorButton(maxWidth: 142)
+
+            if chatStore.selectedConversation != nil {
+                shareButton
             }
+
+            moreMenuButton
         }
     }
 
@@ -1802,22 +2122,18 @@ private struct ChatToolbar: View {
     private var compactStatusText: String {
         var parts: [String] = []
         if chatStore.selectedRouteUsesNearCloud {
-            parts.append("NEAR Cloud")
+            parts.append("Privacy proxy")
         } else if chatStore.selectedProviderDisplayName == "IronClaw" {
-            parts.append("Agent route")
+            parts.append("Agent run")
         } else if chatStore.researchModeEnabled {
             parts.append("Private research")
         } else {
             parts.append("Private chat")
         }
-        if chatStore.selectedProviderDisplayName != "NEAR Private",
-           chatStore.selectedProviderDisplayName != "IronClaw" {
-            parts.append(chatStore.selectedProviderDisplayName)
-        }
         if let project = chatStore.selectedProject {
             parts.append(project.name)
         }
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: " › ")
     }
 
     private var compactAttestationButton: some View {
@@ -1831,7 +2147,7 @@ private struct ChatToolbar: View {
             HStack(spacing: 5) {
                 Image(systemName: isCloudTrust ? "eye.slash" : status.symbolName)
                     .font(.caption.weight(.bold))
-                Text(isCloudTrust ? "Anonymized" : compactAttestationLabel(copy.badge))
+                Text(isCloudTrust ? "Privacy proxy" : compactAttestationLabel(copy.badge))
                     .font(.caption2.weight(.semibold))
                     .lineLimit(1)
             }
@@ -1849,9 +2165,6 @@ private struct ChatToolbar: View {
     }
 
     private func compactAttestationLabel(_ value: String) -> String {
-        guard value.localizedCaseInsensitiveCompare("No proof") != .orderedSame else {
-            return value
-        }
         return value
             .replacingOccurrences(of: "Verified ", with: "")
             .replacingOccurrences(of: " proof", with: "")
@@ -1873,7 +2186,7 @@ private struct ChatToolbar: View {
                 )
             }
             if chatStore.selectedRouteUsesNearCloud || (chatStore.isCouncilModeEnabled && chatStore.activeCouncilHasNearCloudRoutes) {
-                MetadataPill(title: "Anonymized", symbolName: "eye.slash", isPrimary: true)
+                MetadataPill(title: "Privacy proxy", symbolName: "eye.slash", isPrimary: true)
                 MetadataPill(
                     title: chatStore.effectiveAppWebGroundingEnabled ? "App web on" : "App web off",
                     symbolName: chatStore.effectiveAppWebGroundingEnabled ? "globe" : "globe.slash",
@@ -2056,15 +2369,18 @@ private struct ChatToolbar: View {
         Section("Navigate") {
             if shouldShowAgentWorkspaceButton {
                 Button {
-                    showingAgentWorkspace = true
+                    chatStore.selectModel(chatStore.ironclawRemoteWorkstationAvailable ? ModelOption.ironclawModelID : ModelOption.ironclawMobileModelID)
+                    chatStore.draft = chatStore.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? "Agent mission: "
+                        : "Agent mission: \(chatStore.draft)"
                 } label: {
-                    Label("Open Agent", systemImage: "terminal")
+                    Label("Run as agent", systemImage: "terminal")
                 }
             }
             Button {
                 showingSecurity = true
             } label: {
-                Label("Security & Attestation", systemImage: "checkmark.shield")
+                Label("Verification", systemImage: "checkmark.shield")
             }
             Button {
                 showingProjectFiles = true
@@ -2310,6 +2626,10 @@ private struct ModelPickerView: View {
         case council = "Council"
 
         var id: String { rawValue }
+    }
+
+    init(openingCouncil: Bool = false) {
+        _selectedTab = State(initialValue: openingCouncil ? .council : .models)
     }
 
     private var eliteModels: [ModelOption] {
@@ -2958,7 +3278,7 @@ private struct ModelPickerSummary: View {
             return isHostedIronclaw ? "Hosted git, code, shell, and research route" : "Phone-safe agent with hosted handoff"
         }
         if isNearCloudProvider {
-            return "Anonymized provider route, outside TEE proof"
+            return "Privacy proxy route with app-supplied context"
         }
         if councilModelNames.count > 1 {
             return councilModelNames.prefix(3).joined(separator: " · ") +
@@ -2990,7 +3310,7 @@ private struct ModelPickerSummary: View {
             return ironclawTokenConfigured ? "Token saved" : "Connect token"
         }
         if isNearCloudProvider {
-            return "Anonymized"
+            return "Privacy proxy"
         }
         return "\(planName.capitalized) plan"
     }
@@ -3223,7 +3543,7 @@ private struct ModelPickerRow: View {
 
     private var proofFactTitle: String? {
         if model.isNearCloudModel {
-            return "Anonymized"
+            return "Privacy proxy"
         }
         if model.isIronclawModel {
             return model.isIronclawHostedModel ? "Hosted" : "On phone"
@@ -3424,6 +3744,7 @@ private struct ShareConversationView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     shareHeader
                     publicLinkSection
+                    proofExportSection
                     grantAccessSection
                     accessListSection
 
@@ -3617,6 +3938,52 @@ private struct ShareConversationView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.appBorder, lineWidth: 1)
+        }
+    }
+
+    private var proofExportSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(Color.trustVerified)
+                    .frame(width: 34, height: 34)
+                    .background(Color.trustVerified.opacity(0.13), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Verified export")
+                        .font(.footnote.weight(.semibold))
+                    Text("Share the transcript with a signed proof bundle so recipients can verify model, route, nonce, and gateway.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    chatStore.bannerMessage = "Verified JSON export prepared."
+                } label: {
+                    Label("Verified JSON", systemImage: "checkmark.shield")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.trustVerified)
+
+                Button {
+                    chatStore.bannerMessage = "Proof JSON prepared."
+                } label: {
+                    Label("Proof JSON", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .padding(12)
+        .background(Color.trustVerified.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.trustVerified.opacity(0.20), lineWidth: 1)
         }
     }
 
@@ -4794,6 +5161,9 @@ private struct ProjectFilesView: View {
                         dismiss()
                     }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    projectSourceAddMenu
+                }
             }
             .fileImporter(
                 isPresented: $showingFileImporter,
@@ -4884,6 +5254,36 @@ private struct ProjectFilesView: View {
         }
         .task {
             await chatStore.refreshRemoteFiles(showErrors: false)
+        }
+    }
+
+    @ViewBuilder
+    private var projectSourceAddMenu: some View {
+        if selectedTab == .sources {
+            Menu {
+                Button {
+                    showingAddLinkForm = true
+                } label: {
+                    Label("Add Link", systemImage: "link.badge.plus")
+                }
+                Button {
+                    showingFileImporter = true
+                } label: {
+                    Label("Add Files", systemImage: "paperclip")
+                }
+                Button {
+                    showingFileLibrary.toggle()
+                    if showingFileLibrary, chatStore.remoteFiles.isEmpty {
+                        Task { await chatStore.refreshRemoteFiles(showErrors: false) }
+                    }
+                } label: {
+                    Label(showingFileLibrary ? "Hide Uploaded Files" : "Browse Uploaded Files", systemImage: "tray.full")
+                }
+            } label: {
+                Image(systemName: "plus")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .accessibilityLabel("Add project source")
         }
     }
 
@@ -4994,10 +5394,14 @@ private struct ProjectFilesView: View {
     @ViewBuilder
     private var sourcesSections: some View {
         Section(projectSourceCount == 0 ? "Sources" : "Sources (\(projectSourceCount))") {
+            if showingAddLinkForm {
+                addLinkForm
+            }
+
             if projectSourceCount == 0 {
                 ProjectContextEmptyActionRow(
                     title: "No sources yet",
-                    message: "Add a link or file so project chats can use the same context.",
+                    message: "Tap + to add a link or file so project chats can use the same context.",
                     systemImage: "link.badge.plus"
                 ) {
                     Button {
@@ -5033,49 +5437,6 @@ private struct ProjectFilesView: View {
                     }
                 }
             }
-        }
-
-        Section("Add") {
-            if showingAddLinkForm {
-                addLinkForm
-            } else {
-                Button {
-                    showingAddLinkForm = true
-                } label: {
-                    ProjectContextActionRow(
-                        title: "Add Link",
-                        subtitle: "Save a URL as reusable project context.",
-                        systemImage: "plus.circle"
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-
-            Button {
-                showingFileImporter = true
-            } label: {
-                ProjectContextActionRow(
-                    title: chatStore.isUploadingAttachment ? "Uploading Files" : "Add Files",
-                    subtitle: "Upload documents directly into this project.",
-                    systemImage: chatStore.isUploadingAttachment ? "arrow.triangle.2.circlepath" : "paperclip"
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(chatStore.isUploadingAttachment)
-
-            Button {
-                showingFileLibrary.toggle()
-                if showingFileLibrary, chatStore.remoteFiles.isEmpty {
-                    Task { await chatStore.refreshRemoteFiles(showErrors: false) }
-                }
-            } label: {
-                ProjectContextActionRow(
-                    title: showingFileLibrary ? "Hide File Library" : "Browse File Library",
-                    subtitle: "Add existing uploaded files to this project.",
-                    systemImage: showingFileLibrary ? "chevron.up.circle" : "tray.full"
-                )
-            }
-            .buttonStyle(.plain)
         }
 
         if showingFileLibrary {
@@ -5124,40 +5485,6 @@ private struct ProjectFilesView: View {
 
     @ViewBuilder
     private var fileLibrarySections: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "tray.full")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(Color.primaryAction)
-                        .frame(width: 34, height: 34)
-                        .background(Color.primaryAction.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("File Library")
-                            .font(.headline)
-                        Text("Use existing uploaded files as project sources.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Spacer(minLength: 0)
-
-                    Button {
-                        Task { await chatStore.refreshRemoteFiles(showErrors: true) }
-                    } label: {
-                        Image(systemName: chatStore.isLoadingRemoteFiles ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
-                            .frame(width: 32, height: 32)
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(chatStore.isLoadingRemoteFiles)
-                    .accessibilityLabel(chatStore.isLoadingRemoteFiles ? "Refreshing Files" : "Refresh Files")
-                }
-            }
-            .padding(.vertical, 3)
-        }
-
         Section("Uploaded Files") {
             if chatStore.isLoadingRemoteFiles && chatStore.remoteFiles.isEmpty {
                 HStack(spacing: 10) {
@@ -5170,7 +5497,7 @@ private struct ProjectFilesView: View {
             } else if chatStore.remoteFiles.isEmpty {
                 ProjectContextEmptyActionRow(
                     title: "No uploaded files",
-                    message: "Upload a file into this project to make it reusable here.",
+                    message: "Tap + to upload a file into this project. Files up to 10 MB are supported.",
                     systemImage: "tray"
                 ) {
                     Button {
@@ -6428,6 +6755,7 @@ private struct AccountSettingsView: View {
     @State private var showingChatImporter = false
     @State private var showingShareGroups = false
     @State private var showingCapabilities = false
+    @State private var showingSecurity = false
     @State private var isImportingChats = false
     @State private var powerToolsUnlocked = false
     @FocusState private var focusedPowerToolField: PowerToolField?
@@ -6467,34 +6795,34 @@ private struct AccountSettingsView: View {
                     .padding(.vertical, 4)
                 }
 
-                Section("Capabilities") {
-                    Button {
-                        showingCapabilities = true
-                    } label: {
-                        CapabilitiesEntryRow(
-                            statusLine: capabilitySummary,
-                            detail: "See what is ready now, what needs setup, and which routes keep proof."
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Section("Composer Setup") {
+                Section("Defaults") {
                     Button {
                         if let accountID = sessionStore.setupAccountID {
-                            UserSetupStorage.clearCompletion(for: accountID)
+                            UserSetupStorage.save(.defaults, for: accountID)
                         }
                         dismiss()
                         onRunSetupAgain()
                     } label: {
-                        Label("Run Setup Again", systemImage: "slider.horizontal.3")
+                        Label("Reset Defaults", systemImage: "arrow.counterclockwise")
                     }
-                    Text("Keeps your chats, projects, and account. It only updates source, model, and starter defaults.")
+                    Text("Keeps your chats, projects, and account. It resets route, model, and composer defaults without opening setup.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 if showsPowerTools {
+                    Section("Capabilities") {
+                        Button {
+                            showingCapabilities = true
+                        } label: {
+                            CapabilitiesEntryRow(
+                                statusLine: capabilitySummary,
+                                detail: "Capabilities, trust, and integrations"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
                     Section("Developer Diagnostics") {
                         if chatStore.diagnosticChecks.isEmpty {
                             InfoRow(title: "Preflight", value: "Run before demos to verify models, web, IronClaw, and keys.")
@@ -6513,15 +6841,17 @@ private struct AccountSettingsView: View {
                     }
                 }
 
-                Section("Composer") {
-                    Toggle("Web Search", isOn: $webSearchEnabled)
-                    Toggle("Large Paste as File", isOn: $largeTextAsFileEnabled)
+                if showsPowerTools {
+                    Section("Composer") {
+                        Toggle("Web Search", isOn: $webSearchEnabled)
+                        Toggle("Large Paste as File", isOn: $largeTextAsFileEnabled)
 
-                    TextField("System prompt", text: $systemPrompt, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .lineLimit(3...8)
-                        .padding(10)
-                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
+                        TextField("System prompt", text: $systemPrompt, axis: .vertical)
+                            .textFieldStyle(.plain)
+                            .lineLimit(3...8)
+                            .padding(10)
+                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
+                    }
                 }
 
                 Section("Privacy") {
@@ -6546,7 +6876,7 @@ private struct AccountSettingsView: View {
                     if let active = chatStore.billingSnapshot?.activeSubscription {
                         InfoRow(title: "Provider", value: active.provider)
                         if let currentPeriodEnd = active.currentPeriodEnd {
-                            InfoRow(title: "Renews", value: currentPeriodEnd)
+                            InfoRow(title: "Renews", value: formattedBillingDate(currentPeriodEnd))
                         }
                     }
                     ForEach(Array((chatStore.billingSnapshot?.plans ?? []).prefix(3))) { plan in
@@ -6750,7 +7080,7 @@ private struct AccountSettingsView: View {
                         }
                     }
                 } else {
-                    Section("Power Tools") {
+                    Section("Capabilities") {
                         PowerToolsUnlockCard(
                             onShowAll: { revealPowerTools() },
                             onCloudKey: { revealPowerTools(focus: .nearCloudKey) },
@@ -6816,12 +7146,16 @@ private struct AccountSettingsView: View {
                 ShareGroupsView()
                     .environmentObject(chatStore)
             }
+            .sheet(isPresented: $showingSecurity) {
+                SecurityView()
+                    .environmentObject(chatStore)
+            }
             .sheet(isPresented: $showingCapabilities) {
                 CapabilitiesView(
-                    onOpenAccountSettings: nil,
-                    onOpenSecurity: nil,
+                    onOpenAccountSettings: {},
+                    onOpenSecurity: { showingSecurity = true },
                     onOpenAgentWorkspace: nil,
-                    onRunSetupAgain: nil
+                    onRunSetupAgain: onRunSetupAgain
                 )
                 .environmentObject(chatStore)
                 .environmentObject(sessionStore)
@@ -6928,6 +7262,19 @@ private struct AccountSettingsView: View {
             .replacingOccurrences(of: #"\.$"#, with: "", options: .regularExpression)
     }
 
+    private func formattedBillingDate(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let parsedDate = formatter.date(from: trimmed) ?? {
+            let fallback = ISO8601DateFormatter()
+            fallback.formatOptions = [.withInternetDateTime]
+            return fallback.date(from: trimmed)
+        }()
+        guard let parsedDate else { return trimmed }
+        return parsedDate.formatted(.dateTime.month(.abbreviated).day().year())
+    }
+
     private func planDetail(_ plan: SubscriptionPlan) -> String {
         var parts: [String] = []
         if let price = plan.price {
@@ -6959,7 +7306,7 @@ private struct CapabilitiesEntryRow: View {
                 .background(Color.brandBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("Capability Center")
+                    Text("Capabilities")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                 Text(statusLine)
@@ -6998,6 +7345,7 @@ private struct CapabilitiesView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     capabilityHeader
                     CapabilityStatusStrip(items: statusItems)
+                    setupDefaultsCard
 
                     CapabilityCard(
                         iconName: "lock.shield",
@@ -7005,7 +7353,7 @@ private struct CapabilitiesView: View {
                         status: privateStatus,
                         statusColor: privateStatusColor,
                         summary: "Private chat works immediately on iPhone and can attach proof when the selected route supports it.",
-                        trustLine: "Trust boundary: attestation proves the serving environment, not that an answer is true.",
+                        trustLine: "Trust boundary: verification proves route evidence, not that an answer is true.",
                         detail: privateDetail,
                         primaryAction: privatePrimaryAction,
                         secondaryAction: nil
@@ -7017,7 +7365,7 @@ private struct CapabilitiesView: View {
                         status: cloudStatus,
                         statusColor: cloudStatusColor,
                         summary: "Connect Cloud when you want more external models inside the same conversation flow.",
-                        trustLine: "Trust boundary: Cloud turns are anonymized or proxied, but they are not NEAR Private TEE proof.",
+                        trustLine: "Trust boundary: Cloud turns use privacy proxy routing, but they are not NEAR Private verification proof.",
                         detail: cloudDetail,
                         primaryAction: cloudPrimaryAction,
                         secondaryAction: nil
@@ -7047,12 +7395,15 @@ private struct CapabilitiesView: View {
                         secondaryAction: nil
                     )
 
-                    if let footerAction = footerAction {
+                    if let nextStep {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("Next step")
+                            Text("Suggested next step")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
-                            CapabilityActionButton(action: footerAction)
+                            CapabilityActionButton(action: primaryAction(for: nextStep))
+                            if let secondaryAction = secondaryAction(for: nextStep) {
+                                CapabilityActionButton(action: secondaryAction)
+                            }
                         }
                         .padding(.top, 4)
                     }
@@ -7078,13 +7429,18 @@ private struct CapabilitiesView: View {
 
     private var capabilityHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Private chat is ready now. Connect Cloud and IronClaw only when you need broader model coverage or agent runs.")
+            Text("Private chat is ready now. Connect Cloud or hosted agents only when a task needs them.")
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(headerStatusLine)
                 .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(setupPlan.readinessStatus)
+                .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -7111,6 +7467,67 @@ private struct CapabilitiesView: View {
             chatStore.nearCloudKeyConfigured ? "Cloud connected" : "Cloud not connected",
             chatStore.ironclawRemoteWorkstationAvailable ? "Agent connected" : "Agent phone ready"
         ].joined(separator: " · ")
+    }
+
+    private var setupDefaultsCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Default setup")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            SetupPlanPreviewCard(plan: setupPlan)
+        }
+    }
+
+    private var setupProfile: UserSetupProfile {
+        guard let accountID = sessionStore.setupAccountID else { return .defaults }
+        return UserSetupStorage.load(for: accountID) ?? .defaults
+    }
+
+    private var readinessSnapshot: AppSetupReadinessSnapshot {
+        AppSetupReadinessSnapshot(
+            modelCatalogLoaded: !chatStore.models.isEmpty,
+            privateModelAvailable: chatStore.pickerModels.contains { !$0.isExternalModel },
+            defaultCouncilModelCount: chatStore.defaultCouncilModels.count,
+            ironclawMobileAvailable: chatStore.agentModels.contains { $0.id == ModelOption.ironclawMobileModelID },
+            hostedIronclawAvailable: chatStore.ironclawRemoteWorkstationAvailable,
+            nearCloudKeyConfigured: chatStore.nearCloudKeyConfigured
+        )
+    }
+
+    private var setupPlan: AppSetupPlan {
+        AppSetupPlan(profile: setupProfile, readiness: readinessSnapshot)
+    }
+
+    private var routeBlock: CapabilityRouteBlock? {
+        guard let issue = chatStore.routeReadinessIssue else { return nil }
+        switch issue.route {
+        case .nearCloud:
+            return .nearCloudKeyRequired
+        case .hostedIronclaw:
+            return .hostedIronclawEndpointRequired
+        case .council:
+            return .councilNeedsModels
+        }
+    }
+
+    private var hasFreshPrivateProof: Bool {
+        guard let snapshot = chatStore.attestationSnapshot else { return false }
+        return AttestationFreshness.classify(attestedAt: snapshot.fetchedAt) != .stale
+    }
+
+    private var nextStep: CapabilityNextStep? {
+        let recommendation = CapabilityNextStepPlanner.recommend(
+            routeBlock: routeBlock,
+            setupPlan: setupPlan,
+            currentRoute: chatStore.selectedRouteKind,
+            hasFreshPrivateProof: hasFreshPrivateProof,
+            hostedIronclawAvailable: chatStore.ironclawRemoteWorkstationAvailable,
+            autoCouncilReady: chatStore.defaultCouncilModels.count >= 2
+        )
+        if recommendation?.kind == .rerunSetup, onRunSetupAgain == nil {
+            return nil
+        }
+        return recommendation
     }
 
     private var privateStatus: String {
@@ -7240,7 +7657,7 @@ private struct CapabilitiesView: View {
 
     private var agentPrimaryAction: CapabilityCardAction? {
         if chatStore.ironclawRemoteWorkstationAvailable, let onOpenAgentWorkspace {
-            return CapabilityCardAction(title: "Open Agent", systemImage: "terminal", role: .primary) {
+            return CapabilityCardAction(title: "Run Agent", systemImage: "terminal", role: .primary) {
                 dismissThen(onOpenAgentWorkspace)
             }
         }
@@ -7264,9 +7681,38 @@ private struct CapabilitiesView: View {
         }
     }
 
-    private var footerAction: CapabilityCardAction? {
-        guard let onRunSetupAgain else { return nil }
-        return CapabilityCardAction(title: "Run Setup Again", systemImage: "slider.horizontal.3", role: .secondary) {
+    private func primaryAction(for nextStep: CapabilityNextStep) -> CapabilityCardAction {
+        switch nextStep.kind {
+        case .openSecurity:
+            return CapabilityCardAction(title: nextStep.actionTitle, systemImage: "checkmark.shield", role: .primary) {
+                guard let onOpenSecurity else { return }
+                dismissThen(onOpenSecurity)
+            }
+        case .openCloud:
+            return CapabilityCardAction(title: nextStep.actionTitle, systemImage: "key", role: .primary) {
+                guard let onOpenAccountSettings else { return }
+                dismissThen(onOpenAccountSettings)
+            }
+        case .openAgent:
+            return CapabilityCardAction(title: nextStep.actionTitle, systemImage: "point.3.connected.trianglepath.dotted", role: .primary) {
+                guard let onOpenAccountSettings else { return }
+                dismissThen(onOpenAccountSettings)
+            }
+        case .useAutoCouncil:
+            return CapabilityCardAction(title: nextStep.actionTitle, systemImage: "square.grid.2x2", role: .primary) {
+                chatStore.useDefaultCouncilLineup()
+            }
+        case .rerunSetup:
+            return CapabilityCardAction(title: nextStep.actionTitle, systemImage: "arrow.counterclockwise", role: .primary) {
+                guard let onRunSetupAgain else { return }
+                dismissThen(onRunSetupAgain)
+            }
+        }
+    }
+
+    private func secondaryAction(for nextStep: CapabilityNextStep) -> CapabilityCardAction? {
+        guard let onRunSetupAgain, nextStep.kind != .rerunSetup else { return nil }
+        return CapabilityCardAction(title: "Rerun Setup", systemImage: "arrow.counterclockwise", role: .secondary) {
             dismissThen(onRunSetupAgain)
         }
     }
@@ -7556,9 +8002,9 @@ private struct PowerToolsUnlockCard: View {
                     .background(Color.actionPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Add Power Tools")
+                    Text("Add Capabilities")
                         .font(.headline)
-                    Text("Keep the app simple by default, but add Cloud keys, hosted IronClaw, diagnostics, or advanced model controls whenever you need them.")
+                    Text("Keep the app simple by default, then connect Cloud, hosted IronClaw, diagnostics, or advanced model controls only when you need them.")
                         .font(.footnote)
                         .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -7566,7 +8012,7 @@ private struct PowerToolsUnlockCard: View {
             }
 
             Button(action: onShowAll) {
-                Label("Show Power Tools", systemImage: "slider.horizontal.3")
+                Label("Show Capabilities", systemImage: "slider.horizontal.3")
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity)
             }
@@ -7825,8 +8271,8 @@ private struct SecurityView: View {
                 symbolName: "server.rack"
             )
             ProofFactRow(
-                title: "TEE",
-                value: proofTEEPhrase(snapshot),
+                title: "Runtime",
+                value: proofRuntimeEvidencePhrase(snapshot),
                 detail: "Proof covers route/model evidence when present. It does not prove answer truthfulness.",
                 symbolName: "lock.shield"
             )
@@ -7911,20 +8357,20 @@ private struct SecurityView: View {
                     .background(Color.brandBlue.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Anonymized cloud route")
+                    Text("Privacy proxy route")
                         .font(.headline)
-                    Text("NEAR Cloud forwards the request without provider-facing app identity. It is not NEAR Private TEE-attested.")
+                    Text("NEAR Cloud can use app-supplied web and project context, but this route does not carry NEAR Private verification.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            StatusChip(title: "Anonymized · not attested", symbolName: "cloud", isPrimary: true)
+            StatusChip(title: "Privacy proxy · unverified", symbolName: "cloud", isPrimary: true)
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("NEAR Cloud route anonymized, not TEE-attested")
+        .accessibilityLabel("NEAR Cloud privacy proxy route, unverified")
     }
 
     private var canFetchAttestation: Bool {
@@ -7946,9 +8392,9 @@ private struct SecurityView: View {
 
     private var fetchAttestationDisabledText: String {
         if chatStore.isCouncilModeEnabled, chatStore.activeCouncilHasExternalRoutes {
-            return "TEE proof is available for all-private Council lineups. Remove NEAR Cloud models to fetch proof."
+            return "Verification proof is available for all-private Council lineups. Remove NEAR Cloud models to fetch proof."
         }
-        return "Switch to a NEAR Private model to fetch TEE proof."
+        return "Switch to a NEAR Private model to fetch verification proof."
     }
 
     private func attestationCoveragePhrase(_ snapshot: AttestationSnapshot) -> String {
@@ -8003,14 +8449,14 @@ private struct SecurityView: View {
         return routeSummary
     }
 
-    private func proofTEEPhrase(_ snapshot: AttestationSnapshot) -> String {
+    private func proofRuntimeEvidencePhrase(_ snapshot: AttestationSnapshot) -> String {
         if snapshot.modelAttestationCount > 0 {
-            return "Model TEE evidence present"
+            return "Model runtime evidence present"
         }
         if snapshot.chatGatewayAddress != nil || snapshot.cloudGatewayAddress != nil {
             return "Gateway evidence present"
         }
-        return "TEE facts not present"
+        return "Runtime facts not present"
     }
 
     private var routeSummary: String {
@@ -8223,7 +8669,7 @@ private struct EmptyChatView: View {
         if chatStore.researchModeEnabled && !chatStore.selectedRouteUsesNearCloud {
             return "Search current sources."
         }
-        return "Private by default. Add web, files, or sources when useful."
+        return "Ask normally. NEAR picks web, project context, or an agent when needed."
     }
 
     var body: some View {
@@ -8305,9 +8751,9 @@ private struct EmptyChatView: View {
         if let project = chatStore.selectedProject {
             let projectName = project.name
             return [
-                EmptyPromptSuggestion(title: "5 bullets", symbolName: "list.bullet", prompt: "Summarize \(projectName)'s launch brief in 5 bullets."),
-                EmptyPromptSuggestion(title: "Find risks", symbolName: "exclamationmark.triangle", prompt: "Review \(projectName)'s files, links, and notes. What launch risks should I address?"),
-                EmptyPromptSuggestion(title: "Draft memo", symbolName: "doc.text", prompt: "Draft a launch-risk memo from \(projectName)'s project files.")
+                EmptyPromptSuggestion(title: "Brief project", symbolName: "folder.badge.gearshape", prompt: "Use \(projectName)'s files, links, and notes to brief me on the next best move."),
+                EmptyPromptSuggestion(title: "Find blockers", symbolName: "exclamationmark.triangle", prompt: "Review \(projectName)'s context and identify the highest-risk blockers, missing facts, and next checks."),
+                EmptyPromptSuggestion(title: "Draft next step", symbolName: "arrow.forward.circle", prompt: "Turn \(projectName)'s current context into a concise next-step plan I can act on.")
             ]
         }
 
@@ -8328,9 +8774,9 @@ private struct EmptyChatView: View {
         }
 
         return [
-            EmptyPromptSuggestion(title: "5 bullets", symbolName: "list.bullet", prompt: "Summarize the launch brief in 5 bullets."),
-            EmptyPromptSuggestion(title: "Compare", symbolName: "square.grid.2x2", prompt: "Compare Anthropic and OpenAI for this task: "),
-            EmptyPromptSuggestion(title: "Risk memo", symbolName: "doc.text", prompt: "Draft a launch-risk memo from project files.")
+            EmptyPromptSuggestion(title: "Plan next move", symbolName: "arrow.forward.circle", prompt: "Help me turn this into the next concrete action: "),
+            EmptyPromptSuggestion(title: "Research latest", symbolName: "globe", prompt: "Research the latest context and give me the decision-ready version: "),
+            EmptyPromptSuggestion(title: "Compare options", symbolName: "square.grid.2x2", prompt: "Compare the strongest options, tradeoffs, and recommendation for: ")
         ]
     }
 }
@@ -8537,6 +8983,13 @@ private struct AgentMissionControlPanel: View {
 
         }
         .frame(maxWidth: 520, alignment: .leading)
+        .onAppear {
+            #if DEBUG
+            if DemoCapture.isEnabled, missionBrief.isEmpty {
+                missionBrief = "Inspect the Q3 Launch project sources, find release risks, and draft the QA plan."
+            }
+            #endif
+        }
         .sheet(isPresented: $showingProjectFiles) {
             ProjectFilesView()
                 .environmentObject(chatStore)
@@ -8963,6 +9416,7 @@ private struct MessageBubble: View {
     let message: ChatMessage
     @State private var showingArtifact = false
     @State private var showingSecurity = false
+    @State private var showingSources = false
     @State private var editingUserMessage: ChatMessage?
 
     var body: some View {
@@ -8987,18 +9441,6 @@ private struct MessageBubble: View {
                             .padding(.vertical, 3)
                             .background((badge == "Failed" ? Color.red.opacity(0.08) : Color.brandBlue.opacity(0.08)), in: Capsule())
                     }
-                    if let attestationStatus = messageAttestationStatus {
-                        Button {
-                            showingSecurity = true
-                        } label: {
-                            AttestedMessageChip(
-                                status: attestationStatus,
-                                modelID: message.model
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Open attestation details")
-                    }
                 }
 
                 Group {
@@ -9009,7 +9451,7 @@ private struct MessageBubble: View {
                                 .foregroundStyle(.secondary)
                         }
                     } else if message.role == .assistant {
-                        MarkdownMessageText(text: message.text.isEmpty ? " " : message.text)
+                        MarkdownMessageText(text: message.text.isEmpty ? " " : message.text, sources: message.sources)
                     } else {
                         Text(message.text.isEmpty ? " " : message.text)
                             .textSelection(.enabled)
@@ -9084,11 +9526,13 @@ private struct MessageBubble: View {
                         canSaveToProject: chatStore.selectedProject != nil,
                         isSavedToProject: chatStore.isMessageSavedToSelectedProject(message),
                         canOpen: message.isArtifactCandidate,
+                        sourceCount: message.sources.count,
                         onCopy: { Clipboard.copy(message.text) },
                         onCopySigned: { chatStore.copySignedSnippet(for: message) },
                         onRegenerate: { chatStore.regenerateResponse(for: message) },
                         onSave: { chatStore.saveMessageAsProjectNote(message) },
                         onOpen: { showingArtifact = true },
+                        onSources: { showingSources = true }
                     )
                 }
 
@@ -9106,6 +9550,16 @@ private struct MessageBubble: View {
                 if message.role == .assistant && !message.sources.isEmpty {
                     SearchContextStrip(query: message.searchQuery, sources: message.sources)
                 }
+
+                if let answerProofCapsule {
+                    Button {
+                        showingSecurity = true
+                    } label: {
+                        ProofCapsule(viewModel: answerProofCapsule)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open verification details")
+                }
             }
             .frame(maxWidth: message.role == .user ? 560 : 740, alignment: message.role == .user ? .trailing : .leading)
 
@@ -9120,6 +9574,9 @@ private struct MessageBubble: View {
         .sheet(isPresented: $showingSecurity) {
             SecurityView()
                 .environmentObject(chatStore)
+        }
+        .sheet(isPresented: $showingSources) {
+            SourcesDetailView(query: message.searchQuery, sources: message.sources)
         }
         .sheet(item: $editingUserMessage) { userMessage in
             EditUserMessageView(message: userMessage)
@@ -9142,18 +9599,45 @@ private struct MessageBubble: View {
         }
     }
 
-    private var messageAttestationStatus: AttestationStatus? {
+    private var answerProofCapsule: ProofCapsuleViewModel? {
         guard message.role == .assistant,
-              let modelID = message.model,
-              ChatStore.routeKind(forModelID: modelID) == .nearPrivate else {
+              !message.isStreaming,
+              !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let modelID = message.model else {
             return nil
         }
-        let status = AttestationStatus(snapshot: chatStore.attestationSnapshot, selectedModelID: modelID)
-        switch status.effectiveState() {
-        case .valid, .stale, .mismatch:
-            return status
-        case .unknown, .unavailable:
-            return nil
+
+        switch ChatStore.routeKind(forModelID: modelID) {
+        case .nearPrivate:
+            let status = AttestationStatus(snapshot: chatStore.attestationSnapshot, selectedModelID: modelID)
+            switch status.effectiveState() {
+            case .valid, .stale, .mismatch:
+                return ProofCapsuleViewModel(status: status, modelID: modelID)
+            case .unknown, .unavailable:
+                return ProofCapsuleViewModel(
+                    state: .private_,
+                    title: "Private route",
+                    detail: "This answer used the private route. Open Verification when you need a fresh model proof for the turn.",
+                    badge: "Private",
+                    symbolName: "lock.shield"
+                )
+            }
+        case .nearCloud:
+            return ProofCapsuleViewModel(
+                state: .proxied,
+                title: "Privacy proxy",
+                detail: "This answer used the privacy proxy route. It does not carry NEAR Private verification for this turn.",
+                badge: "Privacy proxy",
+                symbolName: "eye.slash"
+            )
+        case .ironclawMobile, .ironclawHosted:
+            return ProofCapsuleViewModel(
+                state: .unverified,
+                title: "Agent route",
+                detail: "This answer used agent tools. Verification only applies when the underlying model route supplies proof.",
+                badge: "Agent",
+                symbolName: "terminal"
+            )
         }
     }
 }
@@ -9461,22 +9945,46 @@ private struct AssistantInlineActions: View {
     let canSaveToProject: Bool
     let isSavedToProject: Bool
     let canOpen: Bool
+    let sourceCount: Int
     let onCopy: () -> Void
     let onCopySigned: () -> Void
     let onRegenerate: () -> Void
     let onSave: () -> Void
     let onOpen: () -> Void
+    let onSources: () -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+            HStack(spacing: 12) {
                 actionButton(symbolName: "doc.on.doc", label: "Copy", action: onCopy)
-                actionButton(symbolName: "checkmark.shield", label: "Copy Signed Snippet", action: onCopySigned)
-                saveButton
+                actionButton(symbolName: "arrow.clockwise", label: "Regenerate", action: onRegenerate)
                 if canOpen {
                     actionButton(symbolName: "rectangle.expand.vertical", label: "Open Output", action: onOpen)
                 }
-                actionButton(symbolName: "arrow.clockwise", label: "Regenerate", action: onRegenerate)
+                actionButton(symbolName: "checkmark.shield", label: "Copy Signed Snippet", action: onCopySigned)
+                saveButton
+                if sourceCount > 0 {
+                    Button(action: onSources) {
+                        HStack(spacing: 7) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.trustVerified.opacity(0.20))
+                                Image(systemName: "arrow.up.right")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(Color.trustVerified)
+                            }
+                            .frame(width: 24, height: 24)
+                            Text(sourceCount == 1 ? "Source" : "Sources")
+                                .font(.subheadline.weight(.medium))
+                        }
+                        .foregroundStyle(.secondary)
+                        .frame(height: 34)
+                        .padding(.horizontal, 8)
+                        .background(Color.clear, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(sourceCount == 1 ? "Open source" : "Open \(sourceCount) sources")
+                }
             }
         }
         .scrollClipDisabled()
@@ -9485,13 +9993,11 @@ private struct AssistantInlineActions: View {
 
     private var saveButton: some View {
         Button(action: onSave) {
-            Label(saveLabel, systemImage: saveSymbolName)
-                .font(.caption.weight(.semibold))
-                .labelStyle(.titleAndIcon)
+            Image(systemName: saveSymbolName)
+                .font(.title3.weight(.regular))
                 .foregroundStyle(saveForeground)
-                .frame(height: 30)
-                .padding(.horizontal, 10)
-                .background(saveBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .frame(width: 34, height: 34)
+                .background(saveBackground, in: Circle())
         }
         .buttonStyle(.plain)
         .disabled(isSavedToProject)
@@ -9501,10 +10007,10 @@ private struct AssistantInlineActions: View {
     private func actionButton(symbolName: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbolName)
-                .font(.caption.weight(.semibold))
+                .font(.title3.weight(.regular))
                 .foregroundStyle(.secondary)
-                .frame(width: 30, height: 30)
-                .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .frame(width: 34, height: 34)
+                .background(Color.clear, in: Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
@@ -9568,8 +10074,12 @@ private struct ArtifactOutputView: View {
 
                     Divider()
 
-                    MarkdownMessageText(text: message.text)
+                    MarkdownMessageText(text: message.text, sources: message.sources)
                         .font(.body)
+
+                    if !message.sources.isEmpty {
+                        SearchContextStrip(query: message.searchQuery, sources: message.sources)
+                    }
                 }
                 .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -10076,6 +10586,8 @@ private struct InputBar: View {
     @State private var showingAgentWorkspace = false
     @State private var showingAccountSettings = false
     @State private var showingCapabilities = false
+    @State private var showingModelPicker = false
+    @State private var modelPickerOpeningCouncil = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -10118,11 +10630,11 @@ private struct InputBar: View {
                     .padding(.horizontal, 2)
             }
 
-            focusModeRow
-
             if !visibleSlashCommands.isEmpty {
                 slashCommandTray
             }
+
+            composerRoutingControls
 
             VStack(alignment: .leading, spacing: 4) {
                 TextField(composerPlaceholder, text: $chatStore.draft, axis: .vertical)
@@ -10238,6 +10750,10 @@ private struct InputBar: View {
             .environmentObject(chatStore)
             .environmentObject(sessionStore)
         }
+        .sheet(isPresented: $showingModelPicker) {
+            ModelPickerView(openingCouncil: modelPickerOpeningCouncil)
+                .environmentObject(chatStore)
+        }
     }
 
     private var shouldShowProjectContextStrip: Bool {
@@ -10302,6 +10818,90 @@ private struct InputBar: View {
 
     private var researchButtonActive: Bool {
         chatStore.researchModeEnabled && !chatStore.selectedRouteUsesNearCloud
+    }
+
+    private var composerRoutingControls: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 7) {
+                Button {
+                    openModelPicker(openingCouncil: false)
+                } label: {
+                    ComposerRouteChip(
+                        title: chatStore.activeModelDisplayName,
+                        symbolName: composerModelSymbolName,
+                        isActive: true,
+                        showsChevron: true
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Model \(chatStore.activeModelDisplayName)")
+                .accessibilityHint("Choose GLM, IronClaw, NEAR Cloud, or another model for the next message.")
+
+                Button {
+                    if chatStore.isCouncilModeEnabled {
+                        openModelPicker(openingCouncil: true)
+                    } else {
+                        chatStore.useDefaultCouncilLineup()
+                    }
+                } label: {
+                    ComposerRouteChip(
+                        title: chatStore.isCouncilModeEnabled ? "Council \(chatStore.activeCouncilModels.count)" : "Council",
+                        symbolName: "square.grid.2x2",
+                        isActive: chatStore.isCouncilModeEnabled,
+                        showsChevron: chatStore.isCouncilModeEnabled
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(chatStore.isCouncilModeEnabled ? "LLM Council active" : "Enable LLM Council")
+                .accessibilityHint(chatStore.isCouncilModeEnabled ? "Customize the Council lineup." : "Uses the recommended Council lineup for the next message.")
+
+                Menu {
+                    ForEach(ModelReasoningEffort.allCases) { effort in
+                        Button {
+                            chatStore.setReasoningEffort(effort)
+                        } label: {
+                            Label(effort.title, systemImage: effort == chatStore.advancedModelParams.reasoningEffort ? "checkmark" : "circle")
+                        }
+                    }
+                    Divider()
+                    Button {
+                        openModelPicker(openingCouncil: false)
+                    } label: {
+                        Label("Open model settings", systemImage: "slider.horizontal.3")
+                    }
+                } label: {
+                    ComposerRouteChip(
+                        title: "Effort \(chatStore.advancedModelParams.reasoningEffort.title)",
+                        symbolName: "brain.head.profile",
+                        isActive: chatStore.advancedModelParams.reasoningEffort != .automatic,
+                        showsChevron: true
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Reasoning effort \(chatStore.advancedModelParams.reasoningEffort.title)")
+                .accessibilityHint("Changes reasoning effort from the chat window.")
+            }
+            .padding(.horizontal, 1)
+        }
+    }
+
+    private var composerModelSymbolName: String {
+        if chatStore.isCouncilModeEnabled {
+            return "square.grid.2x2"
+        }
+        if chatStore.selectedModelOption?.isIronclawModel == true {
+            return "terminal"
+        }
+        if chatStore.selectedRouteUsesNearCloud {
+            return "cloud"
+        }
+        return "cpu"
+    }
+
+    private func openModelPicker(openingCouncil: Bool) {
+        AppHaptics.selection()
+        modelPickerOpeningCouncil = openingCouncil
+        showingModelPicker = true
     }
 
     private var composerSourceTitle: String {
@@ -10377,14 +10977,14 @@ private struct InputBar: View {
             SlashCommandSuggestion(
                 command: "/agent",
                 title: "Agent",
-                subtitle: "Open IronClaw mission control",
+                subtitle: "Prepare an agent run",
                 symbolName: "terminal",
                 action: .agent
             ),
             SlashCommandSuggestion(
                 command: "/verify",
                 title: "Verify",
-                subtitle: "Open attestation details",
+                subtitle: "Open verification details",
                 symbolName: "checkmark.shield",
                 action: .verify
             ),
@@ -10494,9 +11094,9 @@ private struct InputBar: View {
             chatStore.draft = remainder
             isFocused = true
         case .agent:
-            chatStore.draft = remainder.isEmpty ? "" : "Agent mission: \(remainder)"
-            showingAgentWorkspace = true
-            isFocused = false
+            chatStore.selectModel(chatStore.ironclawRemoteWorkstationAvailable ? ModelOption.ironclawModelID : ModelOption.ironclawMobileModelID)
+            chatStore.draft = remainder.isEmpty ? "Agent mission: " : "Agent mission: \(remainder)"
+            isFocused = true
         case .verify:
             chatStore.draft = remainder
             showingSecurity = true
@@ -10546,6 +11146,51 @@ private struct InputBar: View {
     private func focusModeBorder(_ mode: ComposerFocusMode) -> Color {
         guard selectedFocusMode == mode else { return Color.appBorder.opacity(0.8) }
         return Color.clear
+    }
+}
+
+private struct ComposerRouteChip: View {
+    let title: String
+    let symbolName: String
+    let isActive: Bool
+    let showsChevron: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbolName)
+                .font(.caption.weight(.bold))
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+            if showsChevron {
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .opacity(0.65)
+            }
+        }
+        .foregroundStyle(isActive ? activeForeground : Color.textSecondary)
+        .padding(.horizontal, 10)
+        .frame(height: 32)
+        .background(background, in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(border, lineWidth: 1)
+        }
+    }
+
+    private var activeForeground: Color {
+        symbolName == "brain.head.profile" ? Color.brandBlack : Color.brandBlue
+    }
+
+    private var background: Color {
+        if isActive {
+            return symbolName == "brain.head.profile" ? Color.brandSky.opacity(0.55) : Color.brandBlue.opacity(0.08)
+        }
+        return Color.appPanelBackground
+    }
+
+    private var border: Color {
+        isActive ? Color.brandBlue.opacity(0.16) : Color.appBorder
     }
 }
 
@@ -10606,7 +11251,7 @@ private struct RouteReadinessRecoveryCard: View {
             }
 
             Button(action: onViewCapabilities) {
-                Label("View Capabilities", systemImage: "square.grid.2x2")
+                    Label("Open Capabilities", systemImage: "slider.horizontal.3")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.primaryAction)
             }
@@ -10756,9 +11401,39 @@ private struct AttachmentStrip: View {
 
 private struct MarkdownMessageText: View {
     let text: String
+    let sources: [WebSearchSource]
+
+    init(text: String, sources: [WebSearchSource] = []) {
+        self.text = text
+        self.sources = sources
+    }
 
     private var blocks: [MarkdownBlock] {
-        MarkdownBlock.parse(text)
+        MarkdownBlock.parse(Self.linkCitationMarkers(in: text, sources: sources))
+    }
+
+    private static func linkCitationMarkers(in text: String, sources: [WebSearchSource]) -> String {
+        guard !sources.isEmpty else { return text }
+        let pattern = #"(?<!\!)\[(\d{1,2})\](?!\()"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        let matches = regex.matches(in: text, range: range)
+        guard !matches.isEmpty else { return text }
+
+        var linked = text
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 2,
+                  let wholeRange = Range(match.range(at: 0), in: linked),
+                  let numberRange = Range(match.range(at: 1), in: linked),
+                  let index = Int(linked[numberRange]),
+                  index > 0,
+                  sources.indices.contains(index - 1),
+                  let url = sources[index - 1].safeURL else {
+                continue
+            }
+            linked.replaceSubrange(wholeRange, with: "[[\(index)]](\(url.absoluteString))")
+        }
+        return linked
     }
 
     var body: some View {
@@ -11153,67 +11828,64 @@ private struct SearchContextStrip: View {
     let sources: [WebSearchSource]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: "checkmark.seal")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.brandBlue)
-                Text("Evidence")
-                    .font(.caption.weight(.semibold))
+                ZStack {
+                    Circle()
+                        .fill(Color.trustVerified.opacity(0.20))
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color.trustVerified)
+                }
+                .frame(width: 22, height: 22)
+                Text("Sources")
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
                 Text(headerText)
-                    .font(.caption2.weight(.medium))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
                 Spacer(minLength: 0)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(Array(sources.prefix(5).enumerated()), id: \.element.id) { index, source in
-                    if let url = source.safeURL {
-                        Link(destination: url) {
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text("\(index + 1)")
-                                    .font(.caption2.monospacedDigit().weight(.bold))
-                                    .foregroundStyle(Color.brandBlue)
-                                    .frame(width: 20, height: 20)
-                                    .background(Color.brandBlue.opacity(0.10), in: Circle())
-
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(sourceTitle(source))
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(1)
-                                    Text(sourceSubtitle(source))
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(sources.prefix(4).enumerated()), id: \.element.id) { index, source in
+                        if let url = source.safeURL {
+                            Link(destination: url) {
+                                SourcePill(index: index + 1, source: source)
                             }
-                            .contentShape(Rectangle())
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                    }
+
+                    if sources.count > 4 {
+                        Text("\(sources.count - 4) more")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 12)
+                            .frame(height: 34)
+                            .background(Color.appPanelBackground, in: Capsule())
                     }
                 }
+                .padding(.trailing, 2)
             }
         }
         .padding(10)
         .frame(maxWidth: 620, alignment: .leading)
-        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.brandBlue.opacity(0.10), lineWidth: 1)
+                .stroke(Color.appBorder.opacity(0.8), lineWidth: 1)
         )
     }
 
     private var headerText: String {
-        let sourceCount = sources.count
-        let sourceText = sourceCount == 1 ? "1 source" : "\(sourceCount) sources"
         guard let query = displayQuery, !query.isEmpty else {
-            return sourceText
+            return "\(sources.count)"
         }
-        return "Searched \(query) · \(sourceText)"
+        return "for \(query)"
     }
 
     private var displayQuery: String? {
@@ -11260,6 +11932,95 @@ private struct SearchContextStrip: View {
     }
 }
 
+private struct SourcePill: View {
+    let index: Int
+    let source: WebSearchSource
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ZStack {
+                Circle()
+                    .fill(Color.trustVerified.opacity(0.18))
+                Text("\(index)")
+                    .font(.caption2.monospacedDigit().weight(.bold))
+                    .foregroundStyle(Color.trustVerified)
+            }
+            .frame(width: 22, height: 22)
+            Text(source.host)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(.leading, 7)
+        .padding(.trailing, 11)
+        .frame(height: 34)
+        .background(Color.appPanelBackground, in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(Color.appBorder.opacity(0.55), lineWidth: 1)
+        }
+        .accessibilityLabel("Source \(index), \(source.title ?? source.host)")
+    }
+}
+
+private struct SourcesDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    let query: String?
+    let sources: [WebSearchSource]
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let query = query?.trimmingCharacters(in: .whitespacesAndNewlines), !query.isEmpty {
+                    Section {
+                        Text(query)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } header: {
+                        Text("Search")
+                    }
+                }
+
+                Section {
+                    ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
+                        if let url = source.safeURL {
+                            Link(destination: url) {
+                                HStack(spacing: 11) {
+                                    Text("\(index + 1)")
+                                        .font(.caption.monospacedDigit().weight(.bold))
+                                        .foregroundStyle(Color.trustVerified)
+                                        .frame(width: 28, height: 28)
+                                        .background(Color.trustVerified.opacity(0.12), in: Circle())
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(source.title ?? source.host)
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(2)
+                                        Text(source.host)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Linked Sources")
+                }
+            }
+            .navigationTitle("Sources")
+            .platformInlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
 private struct TypingDots: View {
     @State private var pulse = false
 
@@ -11283,6 +12044,1419 @@ private struct TypingDots: View {
         }
     }
 }
+
+#if DEBUG
+struct DemoCaptureRootView: View {
+    @EnvironmentObject private var chatStore: ChatStore
+    let screen: DemoCaptureScreen
+    let autoPlay: Bool
+    @State private var currentScreen: DemoCaptureScreen
+
+    private let autoPlayScreens: [DemoCaptureScreen] = [
+        .onboarding,
+        .login,
+        .home,
+        .fileAttach,
+        .composer,
+        .models,
+        .glmResult,
+        .verification,
+        .cloudModels,
+        .council,
+        .chat,
+        .councilOutput,
+        .project,
+        .agent,
+        .ironclawThinking,
+        .ironclaw,
+        .share
+    ]
+
+    init(screen: DemoCaptureScreen, autoPlay: Bool) {
+        self.screen = screen
+        self.autoPlay = autoPlay
+        _currentScreen = State(initialValue: screen)
+    }
+
+    var body: some View {
+        DemoCaptureScreenHost(screen: currentScreen)
+            .environmentObject(chatStore)
+            .id(currentScreen.rawValue)
+            .transition(.opacity)
+            .animation(.easeInOut(duration: 0.25), value: currentScreen)
+            .overlay {
+                DemoSceneOverlay(screen: currentScreen)
+                    .allowsHitTesting(false)
+            }
+            .task {
+                guard autoPlay else { return }
+                let delay = DemoCapture.autoPlayDelayNanoseconds
+                if delay > 0 {
+                    try? await Task.sleep(nanoseconds: delay)
+                }
+                for screen in autoPlayScreens {
+                    await MainActor.run {
+                        currentScreen = screen
+                        chatStore.prepareDemoCapture(screen: screen)
+                    }
+                    try? await Task.sleep(nanoseconds: duration(for: screen))
+                }
+            }
+            .onAppear {
+                chatStore.prepareDemoCapture(screen: currentScreen)
+            }
+    }
+
+    private func duration(for screen: DemoCaptureScreen) -> UInt64 {
+        switch screen {
+        case .onboarding:
+            return 2_000_000_000
+        case .login:
+            return 2_300_000_000
+        case .home:
+            return 4_000_000_000
+        case .fileAttach:
+            return 9_000_000_000
+        case .glmResult:
+            return 14_000_000_000
+        case .chat:
+            return 3_500_000_000
+        case .councilOutput:
+            return 12_000_000_000
+        case .verification:
+            return 7_000_000_000
+        case .cloudModels:
+            return 4_000_000_000
+        case .models:
+            return 5_000_000_000
+        case .council:
+            return 6_000_000_000
+        case .composer:
+            return 5_500_000_000
+        case .agent:
+            return 7_000_000_000
+        case .ironclawThinking:
+            return 10_000_000_000
+        case .ironclaw:
+            return 9_000_000_000
+        case .project:
+            return 5_000_000_000
+        case .share:
+            return 6_000_000_000
+        }
+    }
+}
+
+private struct DemoCaptureScreenHost: View {
+    @EnvironmentObject private var chatStore: ChatStore
+    let screen: DemoCaptureScreen
+
+    var body: some View {
+        Group {
+            switch screen {
+            case .onboarding:
+                DemoOnboardingPreviewView()
+            case .login:
+                DemoMockLoginView()
+            case .home:
+                AppShellView()
+            case .fileAttach:
+                DemoFileAttachmentFlowView()
+            case .glmResult:
+                DemoGLMAnswerView()
+            case .councilOutput:
+                DemoCouncilComparisonView()
+            case .chat, .composer:
+                NavigationStack {
+                    ChatView()
+                        .navigationTitle(chatStore.selectedConversationTitle)
+                        .platformInlineNavigationTitle()
+                }
+            case .ironclaw:
+                DemoIronClawResultView()
+            case .ironclawThinking:
+                DemoIronClawThinkingView()
+            case .agent:
+                DemoIronClawModesView()
+            case .verification:
+                SecurityView()
+            case .models:
+                ModelPickerView(openingCouncil: false)
+            case .cloudModels:
+                DemoNearCloudModelsView()
+            case .council:
+                DemoCouncilLineupView()
+            case .project:
+                ProjectFilesView()
+            case .share:
+                if let conversation = chatStore.selectedConversation {
+                    ShareConversationView(conversation: conversation)
+                } else {
+                    AppShellView()
+                }
+            }
+        }
+        .tint(.brandBlue)
+    }
+}
+
+private struct DemoSceneOverlay: View {
+    let screen: DemoCaptureScreen
+
+    var body: some View {
+        ZStack {
+            switch screen {
+            case .composer:
+                DemoTimedTapPulse(delay: 4.25, x: 0.79, y: 0.18)
+            case .glmResult:
+                DemoFocusBox(delay: 1.0, duration: 2.0, x: 0.04, y: 0.23, width: 0.92, height: 0.58, tint: .actionPrimary)
+                DemoFocusBox(delay: 11.4, duration: 2.1, x: 0.06, y: 0.76, width: 0.88, height: 0.13, tint: .trustVerified)
+                DemoTimedTapPulse(delay: 12.4, x: 0.14, y: 0.82, tint: .trustVerified)
+            case .verification:
+                DemoFocusBox(delay: 0.8, duration: 2.0, x: 0.07, y: 0.11, width: 0.86, height: 0.13, tint: .trustVerified)
+                DemoFocusBox(delay: 3.3, duration: 2.2, x: 0.07, y: 0.37, width: 0.86, height: 0.30, tint: .actionPrimary)
+            case .cloudModels:
+                DemoFocusBox(delay: 1.1, duration: 2.2, x: 0.08, y: 0.35, width: 0.84, height: 0.18, tint: .orange)
+            case .council:
+                DemoFocusBox(delay: 1.0, duration: 2.1, x: 0.06, y: 0.28, width: 0.88, height: 0.35, tint: .actionPrimary)
+                DemoFocusBox(delay: 3.7, duration: 1.8, x: 0.06, y: 0.66, width: 0.88, height: 0.15, tint: .trustVerified)
+            case .chat:
+                DemoTimedTapPulse(delay: 2.4, x: 0.91, y: 0.09)
+            case .agent:
+                DemoFocusBox(delay: 3.0, duration: 2.2, x: 0.06, y: 0.48, width: 0.88, height: 0.30, tint: .actionPrimary)
+                DemoTimedTapPulse(delay: 5.9, x: 0.50, y: 0.62)
+            case .ironclawThinking:
+                DemoFocusBox(delay: 1.0, duration: 2.0, x: 0.06, y: 0.16, width: 0.88, height: 0.20, tint: .trustVerified)
+                DemoFocusBox(delay: 4.0, duration: 2.0, x: 0.06, y: 0.36, width: 0.88, height: 0.19, tint: .actionPrimary)
+                DemoFocusBox(delay: 7.0, duration: 2.2, x: 0.16, y: 0.60, width: 0.78, height: 0.20, tint: .actionPrimary)
+            case .share:
+                DemoFocusBox(delay: 1.0, duration: 2.0, x: 0.06, y: 0.18, width: 0.88, height: 0.18, tint: .trustVerified)
+                DemoFocusBox(delay: 3.3, duration: 2.1, x: 0.06, y: 0.42, width: 0.88, height: 0.18, tint: .actionPrimary)
+            default:
+                EmptyView()
+            }
+        }
+    }
+}
+
+private struct DemoTimedTapPulse: View {
+    let delay: Double
+    let x: CGFloat
+    let y: CGFloat
+    var tint: Color = .actionPrimary
+
+    @State private var isVisible = false
+    @State private var isExpanded = false
+
+    var body: some View {
+        GeometryReader { geometry in
+            if isVisible {
+                ZStack {
+                    Circle()
+                        .stroke(tint.opacity(0.28), lineWidth: 2)
+                        .frame(width: isExpanded ? 74 : 28, height: isExpanded ? 74 : 28)
+                        .opacity(isExpanded ? 0 : 1)
+                    Circle()
+                        .fill(tint.opacity(0.18))
+                        .frame(width: 32, height: 32)
+                    Circle()
+                        .fill(tint)
+                        .frame(width: 9, height: 9)
+                }
+                .position(x: geometry.size.width * x, y: geometry.size.height * y)
+                .onAppear {
+                    withAnimation(.easeOut(duration: 0.72).repeatCount(3, autoreverses: false)) {
+                        isExpanded = true
+                    }
+                }
+            }
+        }
+        .task {
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            await MainActor.run {
+                isVisible = true
+            }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await MainActor.run {
+                isVisible = false
+            }
+        }
+    }
+}
+
+private struct DemoFocusBox: View {
+    let delay: Double
+    let duration: Double
+    let x: CGFloat
+    let y: CGFloat
+    let width: CGFloat
+    let height: CGFloat
+    var tint: Color = .actionPrimary
+
+    @State private var isVisible = false
+    @State private var isExpanded = false
+
+    var body: some View {
+        GeometryReader { geometry in
+            if isVisible {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(tint.opacity(isExpanded ? 0.16 : 0.55), lineWidth: 3)
+                    .background {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(tint.opacity(0.045))
+                    }
+                    .frame(width: geometry.size.width * width, height: geometry.size.height * height)
+                    .position(x: geometry.size.width * (x + width / 2), y: geometry.size.height * (y + height / 2))
+                    .scaleEffect(isExpanded ? 1.018 : 1.0)
+                    .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isExpanded)
+                    .onAppear {
+                        isExpanded = true
+                    }
+            }
+        }
+        .task {
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            await MainActor.run {
+                isVisible = true
+            }
+            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+            await MainActor.run {
+                isVisible = false
+            }
+        }
+    }
+}
+
+private struct DemoOnboardingPreviewView: View {
+    private let signInRows: [(title: String, symbol: String)] = [
+        ("Continue with NEAR", "sparkles"),
+        ("Continue with Google", "g.circle"),
+        ("Continue with GitHub", "chevron.left.forwardslash.chevron.right")
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 18) {
+                AuthHeroCard()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Terms & Conditions", systemImage: "doc.text.magnifyingglass")
+                        .font(.headline.weight(.semibold))
+                    Text("Review terms once, then sign in with NEAR, Google, or GitHub.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(14)
+                .frame(maxWidth: 360, alignment: .leading)
+                .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.appBorder, lineWidth: 1)
+                }
+
+                VStack(spacing: 10) {
+                    ForEach(signInRows, id: \.title) { row in
+                        HStack(spacing: 10) {
+                            Image(systemName: row.symbol)
+                                .font(.subheadline.weight(.bold))
+                                .frame(width: 24)
+                            Text(row.title)
+                                .font(.subheadline.weight(.bold))
+                            Spacer()
+                        }
+                        .foregroundStyle(row.title.contains("NEAR") ? Color.white : Color.primary)
+                        .padding(.horizontal, 14)
+                        .frame(height: 48)
+                        .background(row.title.contains("NEAR") ? Color.actionPrimary : Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(row.title.contains("NEAR") ? Color.clear : Color.appBorder, lineWidth: 1)
+                        }
+                    }
+
+                    HStack {
+                        Label("Open shared link", systemImage: "link")
+                        Spacer()
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.actionPrimary)
+                    .padding(.horizontal, 2)
+
+                    HStack {
+                        Label("More sign-in options", systemImage: "ellipsis.circle")
+                        Spacer()
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 2)
+                }
+                .frame(maxWidth: 360)
+
+                Text("https://private.near.ai")
+                    .font(.footnote.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(28)
+        }
+        .background { HomeSurfaceBackground().ignoresSafeArea() }
+    }
+}
+
+private struct DemoMockLoginView: View {
+    @State private var activeStep = 1
+
+    private let steps = [
+        ("Email", "maya.launch@example.com", "person.text.rectangle"),
+        ("Password", "••••••••••••", "lock.fill"),
+        ("Google account verified", "Returning to NEAR Private Chat", "checkmark.circle.fill"),
+        ("Workspace ready", "Q3 Launch, GLM default, IronClaw connected", "sparkles")
+    ]
+
+    var body: some View {
+        VStack(spacing: 18) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 10) {
+                    Image(systemName: "g.circle.fill")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(Color.actionPrimary)
+                        .frame(width: 36, height: 36)
+                        .background(Color.actionPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Sign in with Google")
+                            .font(.headline.weight(.semibold))
+                        Text("Mock authentication")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+
+                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                    HStack(alignment: .center, spacing: 10) {
+                        Image(systemName: index <= activeStep ? step.2 : "circle")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(index == 2 && index <= activeStep ? Color.trustVerified : (index <= activeStep ? Color.actionPrimary : Color.secondary))
+                            .frame(width: 24, height: 24)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(step.0)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
+                            Text(step.1)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .opacity(index <= activeStep ? 1 : 0.42)
+                }
+
+                Button {} label: {
+                    Text(activeStep >= 2 ? "Continue to NEAR Private Chat" : "Continue")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(true)
+            }
+            .padding(16)
+            .frame(maxWidth: 360, alignment: .leading)
+            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.appBorder, lineWidth: 1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.appBackground.ignoresSafeArea())
+        .task {
+            for index in 2..<steps.count {
+                try? await Task.sleep(nanoseconds: 450_000_000)
+                await MainActor.run {
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
+                        activeStep = index
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct DemoFileAttachmentFlowView: View {
+    @State private var phase = 0
+
+    private let files = [
+        ("launch-brief.pdf", "PDF document · 1.4 MB", "doc.richtext"),
+        ("risk-table.csv", "CSV spreadsheet · 86 KB", "tablecells")
+    ]
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                if phase < 2 {
+                    List {
+                        Section {
+                            ForEach(Array(files.enumerated()), id: \.offset) { index, file in
+                                HStack(spacing: 12) {
+                                    Image(systemName: file.2)
+                                        .font(.headline.weight(.medium))
+                                        .foregroundStyle(Color.actionPrimary)
+                                        .frame(width: 34, height: 34)
+                                        .background(Color.actionPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(file.0)
+                                            .font(.subheadline.weight(.semibold))
+                                        Text(file.1)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: index <= phase ? "checkmark.circle.fill" : "circle")
+                                        .font(.title3.weight(.semibold))
+                                        .foregroundStyle(index <= phase ? Color.trustVerified : Color.secondary)
+                                }
+                                .frame(height: 52)
+                            }
+                        } header: {
+                            Text("iCloud Drive / Q3 Launch")
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                    .navigationTitle("Files")
+                    .platformInlineNavigationTitle()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") {}
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(phase >= 1 ? "Open" : "Add") {}
+                                .fontWeight(.semibold)
+                        }
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack {
+                            Text("New chat")
+                                .font(.headline.weight(.semibold))
+                            Spacer()
+                            ComposerRouteChip(title: "GLM 5.1", symbolName: "cpu", isActive: true, showsChevron: true)
+                        }
+
+                        Text("Attached from Files")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+
+                        VStack(spacing: 8) {
+                            ForEach(files, id: \.0) { file in
+                                HStack(spacing: 10) {
+                                    Image(systemName: file.2)
+                                        .foregroundStyle(Color.actionPrimary)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(file.0)
+                                            .font(.subheadline.weight(.semibold))
+                                        Text(file.1)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(10)
+                                .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .stroke(Color.appBorder, lineWidth: 1)
+                                }
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Summarize launch risks from the brief in five bullets.")
+                                .font(.body)
+                                .foregroundStyle(.primary)
+                                .padding(12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            HStack {
+                                Image(systemName: "paperclip")
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Image(systemName: "arrow.up")
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 32, height: 32)
+                                    .background(Color.actionPrimary, in: Circle())
+                            }
+                        }
+
+                        Spacer()
+                    }
+                    .padding(18)
+                    .background(Color.appBackground)
+                    .navigationTitle("New chat")
+                    .platformInlineNavigationTitle()
+                }
+            }
+        }
+        .task {
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            await MainActor.run {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
+                    phase = 1
+                }
+            }
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            await MainActor.run {
+                withAnimation(.spring(response: 0.38, dampingFraction: 0.88)) {
+                    phase = 2
+                }
+            }
+        }
+    }
+}
+
+private struct DemoGLMAnswerView: View {
+    @EnvironmentObject private var chatStore: ChatStore
+
+    private var answer: ChatMessage? {
+        chatStore.messages.first { $0.role == .assistant && $0.model == "zai-org/GLM-5.1-FP8" }
+            ?? chatStore.messages.last { $0.role == .assistant }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        header
+                            .id("top")
+
+                        if let user = chatStore.messages.first(where: { $0.role == .user }) {
+                            Text(user.text)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .padding(12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+
+                        if let answer {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack(spacing: 8) {
+                                    AssistantAvatar()
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("GLM 5.1")
+                                            .font(.subheadline.weight(.bold))
+                                        Text("NEAR Private route")
+                                            .font(.caption.weight(.medium))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+
+                                MarkdownMessageText(text: answer.text, sources: answer.sources)
+                                    .font(.body)
+
+                                SearchContextStrip(query: answer.searchQuery, sources: answer.sources)
+                                    .id("sources")
+
+                                DemoVerifiedProofCard()
+                                    .id("proof")
+                            }
+                            .padding(12)
+                            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(Color.appBorder, lineWidth: 1)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 18)
+                }
+                .background(Color.appBackground)
+                .navigationTitle("Private GLM")
+                .platformInlineNavigationTitle()
+                .task {
+                    try? await Task.sleep(nanoseconds: 2_500_000_000)
+                    await MainActor.run {
+                        withAnimation(.easeInOut(duration: 2.8)) {
+                            proxy.scrollTo("proof", anchor: .bottom)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.shield.fill")
+                .foregroundStyle(Color.trustVerified)
+                .frame(width: 34, height: 34)
+                .background(Color.trustVerified.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("GLM answer first")
+                    .font(.headline.weight(.semibold))
+                Text("One private model, project files, citations, then proof.")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+private struct DemoVerifiedProofCard: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "checkmark.shield.fill")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Color.trustVerified)
+                .frame(width: 36, height: 36)
+                .background(Color.trustVerified.opacity(0.16), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Verified")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(Color.trustVerified)
+                Text("Fresh proof for GLM 5.1 on the NEAR Private route. Tap the shield to inspect nonce, model hash, gateway, and signature.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(Color.trustVerified.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.trustVerified.opacity(0.24), lineWidth: 1)
+        }
+    }
+}
+
+private struct DemoNearCloudModelsView: View {
+    @EnvironmentObject private var chatStore: ChatStore
+    @State private var scrollTarget: String?
+
+    private var cloudModels: [ModelOption] {
+        chatStore.nearCloudModels
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        header
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(Array(cloudModels.prefix(3))) { model in
+                                DemoCloudModelRow(model: model)
+                                    .id(model.id)
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Route behavior")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.secondary)
+                                .textCase(.uppercase)
+                            Label("Uses the same project files, saved links, and web context when the prompt needs them.", systemImage: "folder.badge.gearshape")
+                            Label("Cloud models run through the NEAR Cloud privacy proxy, separate from the fully private GLM route.", systemImage: "lock.rotation")
+                            Label("GLM 5.1 stays the default verified private model; Cloud is an explicit SOTA override.", systemImage: "checkmark.shield")
+                        }
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(12)
+                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .id("route-behavior")
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 18)
+                }
+                .background(Color.appBackground)
+                .navigationTitle("NEAR Cloud")
+                .platformInlineNavigationTitle()
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") {}
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        Label("Connected", systemImage: "key.fill")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color.trustVerified)
+                    }
+                }
+                .task {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    await MainActor.run {
+                        withAnimation(.easeInOut(duration: 1.1)) {
+                            proxy.scrollTo("route-behavior", anchor: .bottom)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "cloud.fill")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(Color.actionPrimary)
+                    .frame(width: 34, height: 34)
+                    .background(Color.actionPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("SOTA models through NEAR AI Cloud")
+                        .font(.headline.weight(.semibold))
+                    Text("Cloud key connected · privacy proxy route")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.trustVerified)
+                }
+            }
+            Text("The app defaults to private verified GLM, but advanced users can deliberately switch to frontier Cloud models without losing project context.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct DemoCloudModelRow: View {
+    let model: ModelOption
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 11) {
+            Image(systemName: iconName)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.actionPrimary)
+                .frame(width: 30, height: 30)
+                .background(Color.actionPrimary.opacity(0.09), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(model.displayName)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                    Text(costLabel)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 7)
+                        .frame(height: 20)
+                        .background(Color.appSecondaryBackground, in: Capsule())
+                }
+                Text(model.metadata?.modelDescription ?? "Runs through NEAR Cloud with privacy proxy routing.")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 6) {
+                    ForEach(Array(model.capabilityBadges.prefix(3)), id: \.self) { badge in
+                        Text(badge)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(badge == "Not attested" ? Color.orange : Color.secondary)
+                            .padding(.horizontal, 7)
+                            .frame(height: 20)
+                            .background(Color.appSecondaryBackground, in: Capsule())
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 1)
+        }
+    }
+
+    private var iconName: String {
+        let id = model.id.lowercased()
+        if id.contains("claude") { return "sparkles" }
+        if id.contains("gpt") { return "brain.head.profile" }
+        if id.contains("gemini") { return "diamond" }
+        if id.contains("kimi") { return "moon.stars" }
+        if id.contains("qwen") { return "cpu" }
+        return "cloud"
+    }
+
+    private var costLabel: String {
+        model.id.localizedCaseInsensitiveContains("gpt-oss") ? "Open" : "Cloud"
+    }
+}
+
+private struct DemoIronClawThinkingView: View {
+    private let sources = [
+        ("launch-brief.pdf", "Project file"),
+        ("risk-table.csv", "Project file"),
+        ("NEAR AI blog", "Saved link"),
+        ("AppShellView.swift", "Repo file")
+    ]
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Thinking")
+                        .font(.largeTitle.weight(.medium))
+                        .foregroundStyle(.secondary)
+
+                    DemoAgentTimelineStep(
+                        symbolName: "folder",
+                        title: "Reading project context",
+                        detail: "IronClaw is loading the launch brief, risk table, saved NEAR AI link, and project instructions before touching the repo.",
+                        chips: sources
+                    )
+
+                    DemoAgentTimelineStep(
+                        symbolName: "magnifyingglass",
+                        title: "Inspecting app surfaces",
+                        detail: "Checking onboarding, GLM default route, Verification, model picker, Council, Cloud routes, Agent workspace, and signed export.",
+                        chips: [
+                            ("NEARPrivateChatApp.swift", "Route"),
+                            ("ChatStore.swift", "State"),
+                            ("AppShellView.swift", "UI")
+                        ]
+                    )
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Drafting QA patch plan", systemImage: "chevron.left.forwardslash.chevron.right")
+                            .font(.title3.weight(.semibold))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("swift")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.secondary)
+                            Text("""
+                            let requiredDemoOrder = [
+                              "Login",
+                              "GLM private answer",
+                              "Verification",
+                              "Council comparison",
+                              "NEAR Cloud models",
+                              "IronClaw completed output"
+                            ]
+                            """)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.primary)
+                        }
+                        .padding(12)
+                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .padding(.leading, 36)
+
+                    DemoAgentTimelineStep(
+                        symbolName: "checkmark.seal",
+                        title: "Preparing completed output",
+                        detail: "The final answer will return a checklist, files inspected, risks found, and release recommendation inside the chat.",
+                        chips: []
+                    )
+                }
+                .padding(22)
+            }
+            .background(Color.appBackground)
+            .navigationTitle("IronClaw")
+            .platformInlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {}
+                }
+            }
+        }
+    }
+}
+
+private struct DemoAgentTimelineStep: View {
+    let symbolName: String
+    let title: String
+    let detail: String
+    let chips: [(String, String)]
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: symbolName)
+                .font(.title3.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(.title3.weight(.medium))
+                    .foregroundStyle(.primary)
+                Text(detail)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !chips.isEmpty {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 8)], alignment: .leading, spacing: 8) {
+                        ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(Color.trustVerified.opacity(0.80))
+                                    .frame(width: 18, height: 18)
+                                    .overlay {
+                                        Image(systemName: "arrow.up.right")
+                                            .font(.system(size: 9, weight: .bold))
+                                            .foregroundStyle(.white)
+                                    }
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Text(chip.0)
+                                        .font(.caption.weight(.semibold))
+                                        .lineLimit(1)
+                                    Text(chip.1)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                            .padding(.horizontal, 10)
+                            .frame(height: 42)
+                            .background(Color.appSecondaryBackground, in: Capsule())
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct DemoCouncilLineupView: View {
+    private let models = [
+        ("GLM 5.1", "Verification-first", "NEAR Private · verified", "checkmark.shield.fill"),
+        ("Qwen 3.5 122B", "Launch sequencing", "Open-weight private route", "list.bullet.rectangle"),
+        ("Qwen 3.6 35B", "QA risk", "Fast private reasoning", "wrench.and.screwdriver")
+    ]
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Council lineup matches the synthesis", systemImage: "square.grid.2x2")
+                            .font(.headline.weight(.semibold))
+                        Text("The next screen uses these same three model views, then GLM writes the synthesis.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    VStack(spacing: 10) {
+                        ForEach(Array(models.enumerated()), id: \.offset) { index, model in
+                            HStack(spacing: 12) {
+                                Image(systemName: model.3)
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(index == 0 ? Color.trustVerified : Color.actionPrimary)
+                                    .frame(width: 34, height: 34)
+                                    .background((index == 0 ? Color.trustVerified : Color.actionPrimary).opacity(0.11), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(model.0)
+                                        .font(.subheadline.weight(.bold))
+                                    Text(model.1)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Text(model.2)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(index == 0 ? Color.trustVerified : .secondary)
+                                    .padding(.horizontal, 8)
+                                    .frame(height: 22)
+                                    .background(Color.appSecondaryBackground, in: Capsule())
+                            }
+                            .padding(12)
+                            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(Color.appBorder, lineWidth: 1)
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Synthesizer")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                        HStack(spacing: 10) {
+                            Image(systemName: "sparkles")
+                                .foregroundStyle(Color.actionPrimary)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("GLM 5.1 writes the final answer")
+                                    .font(.subheadline.weight(.semibold))
+                                Text("The synthesis keeps disagreement visible instead of hiding it.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                        }
+                        .padding(12)
+                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                }
+                .padding(18)
+            }
+            .background(Color.appBackground)
+            .navigationTitle("Council")
+            .platformInlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {}
+                }
+            }
+        }
+    }
+}
+
+private struct DemoIronClawModesView: View {
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("IronClaw")
+                            .font(.title2.weight(.bold))
+                        Text("Mobile for local, bounded tasks. Hosted for full workstation runs with shell, Git, tests, and GitHub.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    DemoIronClawModeCard(
+                        title: "IronClaw Mobile",
+                        subtitle: "Runs on the phone",
+                        bodyText: "Good for project-aware QA notes, local file inspection, and small bounded tasks without connecting a workstation.",
+                        chips: ["Private context", "Phone-safe", "No repo access"],
+                        symbolName: "iphone",
+                        tint: .trustVerified
+                    )
+
+                    DemoIronClawModeCard(
+                        title: "Hosted IronClaw",
+                        subtitle: "Connected workstation agent",
+                        bodyText: "The hosted run can read repo files, reason over the project brief, draft patches, run tests, and prepare a GitHub-ready QA plan while the phone stays the control surface.",
+                        chips: ["Shell", "Git", "Tests", "GitHub", "Web"],
+                        symbolName: "terminal",
+                        tint: .actionPrimary
+                    )
+                }
+                .padding(18)
+            }
+            .background(Color.appBackground)
+            .navigationTitle("Agent")
+            .platformInlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {}
+                }
+            }
+        }
+    }
+}
+
+private struct DemoIronClawModeCard: View {
+    let title: String
+    let subtitle: String
+    let bodyText: String
+    let chips: [String]
+    let symbolName: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 11) {
+                Image(systemName: symbolName)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 38, height: 38)
+                    .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.headline.weight(.semibold))
+                    Text(subtitle)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+
+            Text(bodyText)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ChipFlowLayout(spacing: 7, lineSpacing: 7) {
+                ForEach(chips, id: \.self) { chip in
+                    Text(chip)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(tint)
+                        .padding(.horizontal, 9)
+                        .frame(height: 26)
+                        .background(tint.opacity(0.09), in: Capsule())
+                }
+            }
+        }
+        .padding(14)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(tint.opacity(0.16), lineWidth: 1)
+        }
+    }
+}
+
+private struct DemoCouncilComparisonView: View {
+    @EnvironmentObject private var chatStore: ChatStore
+
+    private var councilMessages: [ChatMessage] {
+        let messages = chatStore.messages.filter { $0.councilBatchID?.isEmpty == false }
+        return messages.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private var synthesis: ChatMessage? {
+        councilMessages.first { $0.model == ModelOption.llmCouncilSynthesisModelID } ?? councilMessages.first
+    }
+
+    private var rawModels: [ChatMessage] {
+        councilMessages.filter { $0.model != ModelOption.llmCouncilSynthesisModelID }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        header
+                            .id("top")
+
+                        if let synthesis {
+                            CouncilFocusedCard(
+                                title: "Synthesis",
+                                subtitle: "Why the combined answer is better",
+                                symbolName: "sparkles",
+                                tint: .brandBlue,
+                                text: synthesis.text
+                            )
+                            .id("synthesis")
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Model Differences")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.secondary)
+                                .textCase(.uppercase)
+
+                            ForEach(rawModels) { message in
+                                CouncilFocusedCard(
+                                    title: message.modelDisplayName,
+                                    subtitle: modelAngle(for: message),
+                                    symbolName: "cpu",
+                                    tint: .trustVerified,
+                                    text: message.text
+                                )
+                                .id(message.id)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 20)
+                }
+                .background(Color.appBackground)
+                .navigationTitle("Council")
+                .platformInlineNavigationTitle()
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") {}
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        Image(systemName: "rectangle.expand.vertical")
+                            .foregroundStyle(Color.actionPrimary)
+                            .accessibilityLabel("Expanded Council output")
+                    }
+                }
+                .task {
+                    guard let last = rawModels.last else { return }
+                    try? await Task.sleep(nanoseconds: 3_200_000_000)
+                    await MainActor.run {
+                        withAnimation(.easeInOut(duration: 2.6)) {
+                            proxy.scrollTo(last.id, anchor: .bottom)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Same prompt. Three model views. One synthesis.", systemImage: "square.grid.2x2")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text("The comparison shows why Council is useful: it exposes disagreement before turning it into a better answer.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func modelAngle(for message: ChatMessage) -> String {
+        switch message.model {
+        case "zai-org/GLM-5.1-FP8":
+            return "Verification-first"
+        case "Qwen/Qwen3.5-122B-A10B":
+            return "Launch sequencing"
+        case "Qwen/Qwen3.6-35B-A3B-FP8":
+            return "QA risk"
+        default:
+            return "Raw model view"
+        }
+    }
+}
+
+private struct DemoIronClawResultView: View {
+    @EnvironmentObject private var chatStore: ChatStore
+
+    private var userMessage: ChatMessage? {
+        chatStore.messages.first { $0.role == .user }
+    }
+
+    private var resultMessage: ChatMessage? {
+        chatStore.messages.first { $0.role == .assistant && $0.model == ModelOption.ironclawModelID }
+            ?? chatStore.messages.last { $0.role == .assistant }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        header
+                            .id("top")
+
+                        if let userMessage {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Task")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.secondary)
+                                    .textCase(.uppercase)
+                                Text(userMessage.text)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(12)
+                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+
+                        if let resultMessage {
+                            CouncilFocusedCard(
+                                title: "Hosted IronClaw",
+                                subtitle: "Completed agent output returned to chat",
+                                symbolName: "terminal",
+                                tint: .brandBlue,
+                                text: resultMessage.text
+                            )
+                            .id("result")
+                        }
+
+                        HStack(spacing: 8) {
+                            Label("Q3 Launch", systemImage: "folder")
+                            Label("2 files", systemImage: "paperclip")
+                            Label("1 link", systemImage: "link")
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .id("bottom")
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 20)
+                }
+                .background(Color.appBackground)
+                .navigationTitle("IronClaw")
+                .platformInlineNavigationTitle()
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") {}
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        Image(systemName: "rectangle.expand.vertical")
+                            .foregroundStyle(Color.actionPrimary)
+                            .accessibilityLabel("Expanded IronClaw output")
+                    }
+                }
+                .task {
+                    try? await Task.sleep(nanoseconds: 2_200_000_000)
+                    await MainActor.run {
+                        withAnimation(.easeInOut(duration: 2.8)) {
+                            proxy.scrollTo("bottom", anchor: .bottom)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("IronClaw ran against project context.", systemImage: "terminal")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text("This is the completed agent result, not a setup screen. It shows the checks, QA plan, and release recommendation returned into the conversation.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct CouncilFocusedCard: View {
+    let title: String
+    let subtitle: String
+    let symbolName: String
+    let tint: Color
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: symbolName)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 28, height: 28)
+                    .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                    Text(subtitle)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            MarkdownMessageText(text: text)
+                .font(.subheadline)
+                .lineSpacing(2)
+        }
+        .padding(12)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(tint.opacity(0.18), lineWidth: 1)
+        }
+    }
+}
+#endif
 
 private extension View {
     func workspaceListRow(top: CGFloat = 3, bottom: CGFloat = 3) -> some View {

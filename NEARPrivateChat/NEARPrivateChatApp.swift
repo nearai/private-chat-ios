@@ -1,5 +1,63 @@
 import SwiftUI
 
+#if DEBUG
+enum DemoCaptureScreen: String, CaseIterable {
+    case onboarding
+    case login
+    case home
+    case fileAttach
+    case glmResult
+    case chat
+    case councilOutput
+    case verification
+    case models
+    case cloudModels
+    case council
+    case composer
+    case agent
+    case ironclawThinking
+    case ironclaw
+    case project
+    case share
+
+    init(rawValueOrDefault rawValue: String?) {
+        guard let rawValue,
+              let screen = DemoCaptureScreen(rawValue: rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) else {
+            self = .onboarding
+            return
+        }
+        self = screen
+    }
+}
+
+enum DemoCapture {
+    static var isEnabled: Bool {
+        CommandLine.arguments.contains("-NEARDemoCapture") ||
+            ProcessInfo.processInfo.environment["NEAR_DEMO_CAPTURE"] == "1"
+    }
+
+    static var isAutoPlayEnabled: Bool {
+        CommandLine.arguments.contains("-NEARDemoAutoPlay") ||
+            ProcessInfo.processInfo.environment["NEAR_DEMO_AUTOPLAY"] == "1"
+    }
+
+    static var initialScreen: DemoCaptureScreen {
+        let argumentPrefix = "-NEARDemoScreen="
+        let argumentValue = CommandLine.arguments.first { $0.hasPrefix(argumentPrefix) }
+            .map { String($0.dropFirst(argumentPrefix.count)) }
+        return DemoCaptureScreen(rawValueOrDefault: argumentValue ?? ProcessInfo.processInfo.environment["NEAR_DEMO_SCREEN"])
+    }
+
+    static var autoPlayDelayNanoseconds: UInt64 {
+        let argumentPrefix = "-NEARDemoAutoPlayDelayMS="
+        let argumentValue = CommandLine.arguments.first { $0.hasPrefix(argumentPrefix) }
+            .flatMap { UInt64(String($0.dropFirst(argumentPrefix.count))) }
+        let environmentValue = ProcessInfo.processInfo.environment["NEAR_DEMO_AUTOPLAY_DELAY_MS"].flatMap(UInt64.init)
+        return (argumentValue ?? environmentValue ?? 0) * 1_000_000
+    }
+}
+#endif
+
 @main
 struct NEARPrivateChatApp: App {
     @StateObject private var sessionStore: SessionStore
@@ -27,6 +85,13 @@ struct NEARPrivateChatApp: App {
                 }
                 .onChange(of: sessionStore.session?.token) { _, token in
                     Task {
+                        #if DEBUG
+                        if DemoCapture.isEnabled {
+                            sessionStore.configureDemoCaptureSession()
+                            chatStore.prepareDemoCapture(screen: DemoCapture.initialScreen)
+                            return
+                        }
+                        #endif
                         if token == nil {
                             chatStore.prepareForAuthenticatedAccount(nil)
                         } else {
@@ -36,6 +101,13 @@ struct NEARPrivateChatApp: App {
                 }
                 .onChange(of: sessionStore.setupAccountID) { _, accountID in
                     guard sessionStore.isSignedIn else { return }
+                    #if DEBUG
+                    if DemoCapture.isEnabled {
+                        chatStore.prepareForAuthenticatedAccount(accountID)
+                        chatStore.prepareDemoCapture(screen: DemoCapture.initialScreen)
+                        return
+                    }
+                    #endif
                     if let accountID,
                        UserSetupStorage.isFallbackAccountID(accountID),
                        sessionStore.profile == nil {
@@ -51,6 +123,15 @@ struct NEARPrivateChatApp: App {
 
     @MainActor
     private func prepareAuthenticatedChatState() async {
+        #if DEBUG
+        if DemoCapture.isEnabled {
+            sessionStore.configureDemoCaptureSession()
+            chatStore.prepareForAuthenticatedAccount(sessionStore.setupAccountID)
+            chatStore.prepareDemoCapture(screen: DemoCapture.initialScreen)
+            return
+        }
+        #endif
+
         guard sessionStore.isSignedIn else { return }
         await sessionStore.refreshProfile()
         chatStore.prepareForAuthenticatedAccount(sessionStore.setupAccountID)
@@ -61,27 +142,20 @@ struct NEARPrivateChatApp: App {
 private struct RootView: View {
     @EnvironmentObject private var sessionStore: SessionStore
     @EnvironmentObject private var chatStore: ChatStore
-    @State private var setupCompleted = true
     @State private var setupAccountID: String?
-    @State private var setupInitialProfile = UserSetupProfile.defaults
-    @State private var showingSetup = false
     @State private var legalTermsAccepted = true
 
     var body: some View {
         Group {
-            if sessionStore.isSignedIn {
-                if legalTermsAccepted {
-                    AppShellView {
-                        beginSetupRerun()
-                    }
-                } else {
-                    LegalTermsRequiredView {
-                        acceptLegalTermsForCurrentAccount()
-                    }
-                }
+            #if DEBUG
+            if DemoCapture.isEnabled {
+                DemoCaptureRootView(screen: DemoCapture.initialScreen, autoPlay: DemoCapture.isAutoPlayEnabled)
             } else {
-                AuthView()
+                authenticatedRoot
             }
+            #else
+            authenticatedRoot
+            #endif
         }
         .onAppear {
             refreshLegalTermsAcceptance()
@@ -95,16 +169,13 @@ private struct RootView: View {
             refreshLegalTermsAcceptance(previousAccountID: oldAccountID, currentAccountID: accountID)
             refreshSetupPresentation(previousAccountID: oldAccountID)
         }
-        .fullScreenCover(isPresented: $showingSetup) {
-            UserSetupView(initialProfile: setupInitialProfile, readiness: setupReadinessSnapshot) { profile in
-                completeSetup(with: profile)
-            } onSkip: {
-                completeSetup(with: .defaults, outcome: .skipped)
-            }
-            .environmentObject(chatStore)
-        }
         .overlay(alignment: .top) {
-            if let message = sessionStore.bannerMessage ?? chatStore.bannerMessage {
+            #if DEBUG
+            let shouldSuppressDemoBanner = DemoCapture.isEnabled
+            #else
+            let shouldSuppressDemoBanner = false
+            #endif
+            if !shouldSuppressDemoBanner, let message = sessionStore.bannerMessage ?? chatStore.bannerMessage {
                 StatusBanner(message: message)
                     .padding(.top, 12)
                     .padding(.horizontal, 16)
@@ -113,29 +184,32 @@ private struct RootView: View {
         }
     }
 
-    private var currentSetupProfile: UserSetupProfile {
-        var profile = UserSetupProfile.defaults
-        profile.wantsWeb = chatStore.webSearchEnabled
-        profile.contextStyle = UserSetupContextStyle(sourceMode: chatStore.sourceMode)
-        profile.wantsIronclaw = chatStore.selectedModel == ModelOption.ironclawMobileModelID ||
-            chatStore.selectedModel == ModelOption.ironclawModelID
-        profile.wantsCouncil = !chatStore.councilModelIDs.isEmpty
-
-        if chatStore.researchModeEnabled {
-            profile.useCase = .research
-            profile.useCases = [.research]
-        } else if profile.wantsIronclaw {
-            profile.useCase = .buildAgents
-            profile.useCases = [.buildAgents]
-        } else if chatStore.selectedProjectID != nil || profile.contextStyle != .simple {
-            profile.useCase = .teamProjects
-            profile.useCases = [.teamProjects]
+    @ViewBuilder
+    private var authenticatedRoot: some View {
+        if sessionStore.isSignedIn {
+            if legalTermsAccepted {
+                AppShellView {
+                    beginSetupRerun()
+                }
+            } else {
+                LegalTermsRequiredView {
+                    acceptLegalTermsForCurrentAccount()
+                }
+            }
         } else {
-            profile.useCase = .privateChat
-            profile.useCases = [.privateChat]
+            AuthView()
         }
+    }
 
-        return profile
+    private var currentSetupProfile: UserSetupProfile {
+        UserSetupProfile.inferredCurrentDefaults(
+            webSearchEnabled: chatStore.webSearchEnabled,
+            sourceMode: chatStore.sourceMode,
+            selectedModelID: chatStore.selectedModel,
+            hasSelectedProject: chatStore.selectedProjectID != nil,
+            isCouncilModeEnabled: chatStore.isCouncilModeEnabled,
+            researchModeEnabled: chatStore.researchModeEnabled
+        )
     }
 
     private var setupReadinessSnapshot: AppSetupReadinessSnapshot {
@@ -152,26 +226,9 @@ private struct RootView: View {
     private func beginSetupRerun() {
         guard sessionStore.isSignedIn, let accountID = sessionStore.setupAccountID else { return }
         setupAccountID = accountID
-        setupInitialProfile = UserSetupStorage.load(for: accountID) ?? currentSetupProfile
-        showingSetup = true
-    }
-
-    private func completeSetup(
-        with profile: UserSetupProfile,
-        outcome: TelemetrySetupOutcome = .completed
-    ) {
-        guard let accountID = sessionStore.setupAccountID else {
-            showingSetup = false
-            return
-        }
-
-        let profile = profile.normalizedForDefaults
-        chatStore.applySetupProfile(profile)
-        UserSetupStorage.save(profile, for: accountID)
-        recordSetupTelemetry(profile: profile, outcome: outcome)
-        setupAccountID = accountID
-        setupCompleted = true
-        showingSetup = false
+        UserSetupStorage.save(.defaults, for: accountID)
+        chatStore.resetInteractionDefaults()
+        recordSetupTelemetry(profile: .defaults, outcome: .completed)
     }
 
     private func recordSetupTelemetry(profile: UserSetupProfile, outcome: TelemetrySetupOutcome) {
@@ -201,7 +258,6 @@ private struct RootView: View {
         }
 
         legalTermsAccepted = false
-        showingSetup = false
     }
 
     private func acceptLegalTermsForCurrentAccount() {
@@ -214,15 +270,11 @@ private struct RootView: View {
     private func refreshSetupPresentation(previousAccountID: String? = nil) {
         guard sessionStore.isSignedIn, let accountID = sessionStore.setupAccountID else {
             setupAccountID = nil
-            setupCompleted = true
-            showingSetup = false
             return
         }
 
         guard LegalTermsAcceptanceStore.hasAcceptedCurrentVersion(for: accountID) else {
             setupAccountID = accountID
-            setupCompleted = true
-            showingSetup = false
             return
         }
 
@@ -233,11 +285,10 @@ private struct RootView: View {
         }
 
         setupAccountID = accountID
-        setupCompleted = UserSetupStorage.isCompleted(for: accountID)
-
-        guard !setupCompleted else { return }
-        setupInitialProfile = UserSetupStorage.load(for: accountID) ?? currentSetupProfile
-        showingSetup = true
+        if !UserSetupStorage.isCompleted(for: accountID) {
+            UserSetupStorage.save(.defaults, for: accountID)
+            recordSetupTelemetry(profile: .defaults, outcome: .skipped)
+        }
     }
 }
 
@@ -251,11 +302,11 @@ private struct LegalTermsRequiredView: View {
                 AuthHeroCard()
 
                 VStack(alignment: .leading, spacing: 14) {
-                    Label("Legal attestation required", systemImage: "checkmark.shield")
+                    Label("Review terms to continue", systemImage: "doc.text.magnifyingglass")
                         .font(.title3.weight(.bold))
                         .foregroundStyle(.primary)
 
-                    Text("Accept the current Terms before using private chat, Cloud models, files, sharing, web grounding, LLM Council, or IronClaw agents.")
+                    Text("Accept the current Terms before using private chat, Cloud models, files, sharing, web grounding, Council, or agent tools.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -443,10 +494,10 @@ private struct UserSetupView: View {
             HStack(alignment: .top, spacing: 12) {
                 PrivacySeal(size: 48)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Start with one job")
+                    Text("Make it yours")
                         .font(.title2.weight(.bold))
                         .foregroundStyle(.white)
-                    Text("Tell NEAR Private Chat what should work first. It will set route, context, and proof defaults around that job.")
+                    Text("Tell NEAR Private Chat what should work first. It will set route, context, and proof defaults around that goal.")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.68))
                         .fixedSize(horizontal: false, vertical: true)
@@ -777,7 +828,7 @@ private struct SetupToggleRow: View {
     }
 }
 
-private struct SetupPlanPreviewCard: View {
+struct SetupPlanPreviewCard: View {
     let plan: AppSetupPlan
 
     var body: some View {
@@ -829,7 +880,7 @@ private struct SetupPlanPreviewCard: View {
     }
 }
 
-private struct SetupPlanLine: View {
+struct SetupPlanLine: View {
     let symbolName: String
     let title: String
     let value: String
