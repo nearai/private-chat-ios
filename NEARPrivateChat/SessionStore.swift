@@ -1,5 +1,7 @@
 import AuthenticationServices
+import CryptoKit
 import Foundation
+import Security
 #if canImport(UIKit)
 import UIKit
 #elseif canImport(AppKit)
@@ -145,7 +147,8 @@ final class SessionStore: NSObject, ObservableObject {
             let pendingRequest = createPendingAuthRequest()
             let url = try api.authURL(
                 for: provider,
-                state: pendingRequest.state
+                state: pendingRequest.state,
+                codeChallenge: pendingRequest.codeChallenge
             )
             let callbackURL = try await startWebAuthentication(url: url)
             let newSession = try api.parseAuthCallback(
@@ -165,8 +168,10 @@ final class SessionStore: NSObject, ObservableObject {
 
     private func createPendingAuthRequest() -> PendingAuthRequest {
         let state = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let codeVerifier = Self.makePKCECodeVerifier()
         let envelope = PendingAuthRequest(
             state: state,
+            codeVerifier: codeVerifier,
             expiresAt: Date().addingTimeInterval(pendingAuthTTL)
         )
         if let data = try? JSONEncoder().encode(envelope) {
@@ -190,6 +195,27 @@ final class SessionStore: NSObject, ObservableObject {
 
     private func clearPendingAuthState() {
         UserDefaults.standard.removeObject(forKey: pendingAuthStateKey)
+    }
+
+    nonisolated private static func makePKCECodeVerifier() -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        if status != errSecSuccess {
+            return UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        }
+        return base64URLEncoded(Data(bytes))
+    }
+
+    nonisolated fileprivate static func codeChallenge(for verifier: String) -> String {
+        let digest = SHA256.hash(data: Data(verifier.utf8))
+        return base64URLEncoded(Data(digest))
+    }
+
+    nonisolated private static func base64URLEncoded(_ data: Data) -> String {
+        data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
     }
 
     private func save(_ newSession: AuthSession) {
@@ -299,7 +325,12 @@ final class SessionStore: NSObject, ObservableObject {
 
 private struct PendingAuthRequest: Codable {
     var state: String
+    var codeVerifier: String
     var expiresAt: Date
+
+    var codeChallenge: String {
+        SessionStore.codeChallenge(for: codeVerifier)
+    }
 }
 
 private struct SimulatorFallbackSessionEnvelope: Codable {

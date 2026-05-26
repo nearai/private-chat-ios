@@ -131,6 +131,8 @@ final class PrivateChatCoreTests: XCTestCase {
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
         let values = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
 
+        XCTAssertEqual(values["frontend_callback"], AppConfiguration.production.callbackURL.absoluteString)
+        XCTAssertNil(values["state"])
         XCTAssertEqual(values["response_type"], "code")
         XCTAssertEqual(values["code_challenge"], "challenge-1")
         XCTAssertEqual(values["code_challenge_method"], "S256")
@@ -1469,7 +1471,7 @@ final class PrivateChatCoreTests: XCTestCase {
             route: .nearCloud
         )
         XCTAssertEqual(cloudAuto.modelNativeWebToolPolicy, .never)
-        XCTAssertEqual(cloudAuto.appWebGroundingPolicy, .whenFreshRequested)
+        XCTAssertEqual(cloudAuto.appWebGroundingPolicy, .never)
         XCTAssertTrue(cloudAuto.attachesSavedLinkSourcePack)
         XCTAssertTrue(cloudAuto.attachesProjectFileSourcePack)
 
@@ -1494,6 +1496,15 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(cloudLinks.appWebGroundingPolicy, .whenFreshRequested)
         XCTAssertTrue(cloudLinks.attachesSavedLinkSourcePack)
         XCTAssertFalse(cloudLinks.attachesProjectFileSourcePack)
+
+        let cloudFilesWithoutWeb = ChatStore.sourceRoutingSemantics(
+            sourceMode: .files,
+            researchModeEnabled: false,
+            webSearchEnabled: false,
+            route: .nearCloud
+        )
+        XCTAssertEqual(cloudFilesWithoutWeb.modelNativeWebToolPolicy, .never)
+        XCTAssertEqual(cloudFilesWithoutWeb.appWebGroundingPolicy, .never)
     }
 
     func testAskOrchestratorKeepsNearCloudWithProjectAndWebContextWhenKeyExists() {

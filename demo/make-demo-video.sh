@@ -1,24 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 cat >&2 <<'EOF'
-This script used to generate a synthetic narrated storyboard.
-That is no longer part of the demo pipeline.
-
-Use the real simulator capture flow instead:
-
-  bash demo/record-supademo-raw.sh
-
-Then import the raw recording into Supademo with:
-- no AI voiceover
-- no captions
-- no hotspots
-- no callout text
-- no generated step text
-- only trim, pacing, crop/zoom, and exports
-
-See:
-  review-artifacts/NEARPrivateChatIOS-supademo-one-cut-video-spec-2026-05-25.md
+demo/make-demo-video.sh is now a compatibility wrapper.
+The narrated storyboard generator was removed; running the real simulator capture instead.
 EOF
 
-exit 2
+exec bash "$ROOT_DIR/demo/record-supademo-raw.sh" "$@"

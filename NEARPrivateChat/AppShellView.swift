@@ -6821,9 +6821,6 @@ private struct AccountSettingsView: View {
 
                 Section("Defaults") {
                     Button {
-                        if let accountID = sessionStore.setupAccountID {
-                            UserSetupStorage.save(.defaults, for: accountID)
-                        }
                         dismiss()
                         onRunSetupAgain()
                     } label: {
@@ -7829,6 +7826,73 @@ private struct CapabilityCardAction {
     let systemImage: String
     let role: Role
     let action: () -> Void
+}
+
+private enum CapabilityRouteBlock {
+    case nearCloudKeyRequired
+    case hostedIronclawEndpointRequired
+    case councilNeedsModels
+}
+
+private struct CapabilityNextStep {
+    enum Kind {
+        case openSecurity
+        case openCloud
+        case openAgent
+        case useAutoCouncil
+        case rerunSetup
+    }
+
+    let kind: Kind
+    let actionTitle: String
+}
+
+private enum CapabilityNextStepPlanner {
+    static func recommend(
+        routeBlock: CapabilityRouteBlock?,
+        setupPlan: AppSetupPlan,
+        currentRoute: ChatRouteKind,
+        hasFreshPrivateProof: Bool,
+        hostedIronclawAvailable: Bool,
+        autoCouncilReady: Bool
+    ) -> CapabilityNextStep? {
+        if let routeBlock {
+            switch routeBlock {
+            case .nearCloudKeyRequired:
+                return CapabilityNextStep(kind: .openCloud, actionTitle: "Add Cloud Key")
+            case .hostedIronclawEndpointRequired:
+                return CapabilityNextStep(kind: .openAgent, actionTitle: "Connect Agent")
+            case .councilNeedsModels:
+                if autoCouncilReady {
+                    return CapabilityNextStep(kind: .useAutoCouncil, actionTitle: "Use Auto-Council")
+                }
+                return CapabilityNextStep(kind: .rerunSetup, actionTitle: "Rerun Setup")
+            }
+        }
+
+        switch currentRoute {
+        case .nearCloud:
+            return nil
+        case .ironclawHosted:
+            return hostedIronclawAvailable ? nil : CapabilityNextStep(kind: .openAgent, actionTitle: "Connect Agent")
+        case .nearPrivate, .ironclawMobile:
+            break
+        }
+
+        if setupPlan.councilEnabled, autoCouncilReady {
+            return CapabilityNextStep(kind: .useAutoCouncil, actionTitle: "Use Auto-Council")
+        }
+
+        if setupPlan.agentEnabled, !hostedIronclawAvailable {
+            return CapabilityNextStep(kind: .openAgent, actionTitle: "Connect Agent")
+        }
+
+        if !hasFreshPrivateProof {
+            return CapabilityNextStep(kind: .openSecurity, actionTitle: "Check Proof")
+        }
+
+        return nil
+    }
 }
 
 private struct CapabilityCard: View {

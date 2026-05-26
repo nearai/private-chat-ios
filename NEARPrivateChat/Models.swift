@@ -642,14 +642,14 @@ struct ChatSourceRoutingSemantics: Hashable {
         switch focus {
         case .web, .research:
             return .always
-        case .project:
-            return webSearchEnabled ? .whenHelpful : .whenFreshRequested
-        case .links:
-            return .whenFreshRequested
-        case .auto:
-            return webSearchEnabled ? .whenHelpful : .whenFreshRequested
         case .files:
-            return .whenFreshRequested
+            return .never
+        case .project:
+            return webSearchEnabled ? .whenHelpful : .never
+        case .links:
+            return webSearchEnabled ? .whenFreshRequested : .never
+        case .auto:
+            return webSearchEnabled ? .whenHelpful : .never
         }
     }
 }
