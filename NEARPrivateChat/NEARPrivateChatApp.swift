@@ -21,8 +21,8 @@ enum DemoCaptureScreen: String, CaseIterable {
     case share
 
     init(rawValueOrDefault rawValue: String?) {
-        guard let rawValue,
-              let screen = DemoCaptureScreen(rawValue: rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) else {
+        guard let normalized = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              let screen = DemoCaptureScreen.allCases.first(where: { $0.rawValue.lowercased() == normalized }) else {
             self = .onboarding
             return
         }

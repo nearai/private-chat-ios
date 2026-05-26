@@ -8227,12 +8227,23 @@ final class ChatStore: ObservableObject {
             createdAt: created.addingTimeInterval(-86_400).timeIntervalSince1970,
             metadata: ConversationMetadata(title: "Model routing comparison")
         )
+        let apExplainerSource = WebSearchSource(type: "web", url: "https://apnews.com/article/b1659232611edc10808612e30647c17d", title: "AP: What we know about the emerging deal to end the Iran war", publishedAt: "May 25, 2026")
+        let pbsExplainerSource = WebSearchSource(type: "web", url: "https://www.pbs.org/newshour/world/what-we-know-and-dont-know-about-the-emerging-deal-to-end-the-iran-war", title: "PBS/AP: Emerging deal to end the Iran war", publishedAt: "May 25, 2026")
+        let bostonAPSource = WebSearchSource(type: "web", url: "https://www.boston.com/news/politics/2026/05/24/trump-says-a-deal-with-iran-and-opening-of-strait-of-hormuz-are-largely-negotiated/", title: "Boston.com/AP: Deal and Hormuz reopening largely negotiated", publishedAt: "May 24, 2026")
+        let apDealSource = WebSearchSource(type: "web", url: "https://apnews.com/article/1c283f26d037102cc5e6f798546d0e59", title: "AP: Trump says Iran deal is largely negotiated", publishedAt: "May 23, 2026")
+        let apStrikesSource = WebSearchSource(type: "web", url: "https://apnews.com/article/01a13e9a63ece786a0a7fa4933dbf09b", title: "AP: U.S. military reports self-defense strikes in Iran", publishedAt: "May 25, 2026")
+        let apHezbollahSource = WebSearchSource(type: "web", url: "https://apnews.com/article/9e3ba96982cd082f030a1a556cd57785", title: "AP: Israel strikes Hezbollah sites as ceasefire pressure continues", publishedAt: "May 25, 2026")
         let iranSources = [
-            WebSearchSource(type: "web", url: "https://apnews.com/article/b1659232611edc10808612e30647c17d", title: "AP: What we know about the emerging deal to end the Iran war", publishedAt: "May 25, 2026"),
-            WebSearchSource(type: "web", url: "https://www.axios.com/2026/05/23/us-iran-trump-deal-war", title: "Axios: U.S.-Iran deal to end war will be finalized shortly", publishedAt: "May 23, 2026"),
-            WebSearchSource(type: "web", url: "https://apnews.com/article/1c283f26d037102cc5e6f798546d0e59", title: "AP: Trump says Iran deal is largely negotiated", publishedAt: "May 23, 2026"),
-            WebSearchSource(type: "web", url: "https://apnews.com/article/9e3ba96982cd082f030a1a556cd57785", title: "AP: Israel strikes Hezbollah sites as ceasefire pressure continues", publishedAt: "May 25, 2026")
+            apExplainerSource,
+            pbsExplainerSource,
+            bostonAPSource,
+            apDealSource,
+            apStrikesSource,
+            apHezbollahSource
         ]
+        let glmCouncilSources = [apExplainerSource, pbsExplainerSource]
+        let qwenCouncilSources = [bostonAPSource, apDealSource]
+        let opusCouncilSources = [apStrikesSource, apHezbollahSource]
         let prSources = [
             WebSearchSource(type: "project_file", url: "https://near.ai/demo/reborn-project-plan.md", title: "reborn-project-plan.md"),
             WebSearchSource(type: "web", url: "https://github.com/nearai/ironclaw/pull/4066", title: "#4066 Wire Reborn extension lifecycle registry"),
@@ -8256,9 +8267,9 @@ final class ChatStore: ObservableObject {
             text: """
             Short answer: it looks closer to ending, but I would not call it over yet.
 
-            As of today, U.S., Iranian, and mediator statements point to a near-final framework that would end the war, gradually reopen the Strait of Hormuz, and start a longer negotiation period [1][2][3]. That is materially better than an active escalation cycle.
+            As of today, U.S., Iranian, and mediator statements point to a near-final framework that would end the war, gradually reopen the Strait of Hormuz, and start a longer negotiation period [1][2][3][4]. That is materially better than an active escalation cycle.
 
-            The reason I would stay cautious is that the deal is still described as a framework, not a fully implemented settlement. The remaining gaps include wording, sequencing, sanctions/frozen funds, the Strait of Hormuz, and follow-on nuclear talks [2][3]. There is also spillover pressure from Israel-Hezbollah fighting, which can still derail a broader regional de-escalation [4].
+            The reason I would stay cautious is that the deal is still described as a framework, not a fully implemented settlement. The remaining gaps include wording, sequencing, sanctions/frozen funds, the Strait of Hormuz, and follow-on nuclear talks [3][4]. There are also live military and regional spillover risks, including reported U.S. self-defense strikes and Israel-Hezbollah pressure, which can still derail a broader de-escalation [5][6].
 
             My read: the war is in an endgame phase, not a finished peace. Watch for three confirmations: a signed announcement, verified reopening steps in the Strait, and a sustained pause in related regional strikes.
             """,
@@ -8288,15 +8299,15 @@ final class ChatStore: ObservableObject {
             role: .assistant,
             text: """
             ## Direct answer
-            The best answer is cautious optimism. GLM anchors the current sourcing and says the conflict is in an endgame phase, not over. Qwen Max emphasizes the negotiation mechanics: a framework, Hormuz reopening, and a longer follow-on process. Opus is more skeptical and focuses on failure modes from wording gaps, sanctions sequencing, nuclear talks, and regional spillover.
+            The best answer is cautious optimism. GLM anchors the current sourcing and says the conflict is in an endgame phase, not over [1][2]. Qwen Max emphasizes the negotiation mechanics: a framework, Hormuz reopening, and a longer follow-on process [3][4]. Opus is more skeptical and focuses on live military and regional spillover risks [5][6].
 
             ## What the council agrees on
-            Nobody should say the war is already over. The strongest supported statement is: talks appear close to an agreement, but the outcome still depends on signing, implementation, and whether related fronts stay contained.
+            Nobody should say the war is already over. The strongest supported statement is: talks appear close to an agreement, but the outcome still depends on signing, implementation, and whether related fronts stay contained [1][5][6].
 
             ## How the models vary
-            - GLM 5.1: treats the latest reports as meaningful evidence of a possible endgame, while keeping the answer bounded to today's facts [1][3].
-            - Qwen Max: maps the path from ceasefire/framework to implementation and asks what would make the deal durable [2][3].
-            - Claude Opus: stresses uncertainty and the ways the apparent deal could still fail, especially through regional escalation [4].
+            - GLM 5.1: treats AP/PBS reporting as meaningful evidence of a possible endgame, while keeping the answer bounded to today's facts [1][2].
+            - Qwen Max: maps the implementation path from "largely negotiated" to durable agreement: Hormuz reopening, ceasefire extension, and follow-on talks [3][4].
+            - Claude Opus: stresses uncertainty and the ways the apparent deal could still fail, especially through fresh strike reports and regional escalation [5][6].
 
             ## Disagreements or uncertainty
             The disagreement is about probability. GLM reads the latest sourcing as a likely off-ramp. Qwen Max is conditional: it needs implementation milestones. Opus is the least willing to call it ending until regional spillover quiets down.
@@ -8316,7 +8327,7 @@ final class ChatStore: ObservableObject {
             role: .assistant,
             text: """
             ## GLM 5.1
-            The latest reporting supports "close to an endgame," not "ended." The credible path is a near-final framework plus implementation checks: signature, Strait reopening, and sustained ceasefire behavior.
+            The latest AP/PBS reporting supports "close to an endgame," not "ended" [1][2]. The credible path is a near-final framework plus implementation checks: signature, Strait reopening, and sustained ceasefire behavior.
             """,
             model: Self.defaultModelID,
             createdAt: created.addingTimeInterval(19),
@@ -8326,14 +8337,14 @@ final class ChatStore: ObservableObject {
             councilBatchID: councilBatchID,
             isStreaming: false,
             searchQuery: "Is the war in Iran ending as of today?",
-            sources: iranSources
+            sources: glmCouncilSources
         )
         let qwenLargeMessage = ChatMessage(
             id: "demo-assistant-qwen-large",
             role: .assistant,
             text: """
             ## Qwen Max
-            The key question is sequencing. If the framework triggers a verifiable reopening of Hormuz and launches the 30-60 day negotiation period, then the war is plausibly ending. If those milestones slip, the current optimism is just another negotiation headline.
+            The key question is sequencing. If the framework triggers a verifiable reopening of Hormuz and launches the 30-60 day negotiation period, then the war is plausibly ending [1][2]. If those milestones slip, the current optimism is just another negotiation headline.
             """,
             model: ModelOption.nearCloudQwenMaxModelID,
             createdAt: created.addingTimeInterval(20),
@@ -8343,14 +8354,14 @@ final class ChatStore: ObservableObject {
             councilBatchID: councilBatchID,
             isStreaming: false,
             searchQuery: "Is the war in Iran ending as of today?",
-            sources: iranSources
+            sources: qwenCouncilSources
         )
         let opusMessage = ChatMessage(
             id: "demo-assistant-opus",
             role: .assistant,
             text: """
             ## Claude Opus 4.7
-            I would be careful with the word "ending." There are strong diplomatic signals, but a war can move from battlefield escalation into coercive negotiation without being settled. The unresolved nuclear file and related Israel-Hezbollah front are the main tail risks.
+            I would be careful with the word "ending." There are strong diplomatic signals, but a war can move from battlefield escalation into coercive negotiation without being settled. Fresh strike reporting and the Israel-Hezbollah front are the main tail risks [1][2].
             """,
             model: "near-cloud/anthropic/claude-opus-4-7",
             createdAt: created.addingTimeInterval(21),
@@ -8360,7 +8371,7 @@ final class ChatStore: ObservableObject {
             councilBatchID: councilBatchID,
             isStreaming: false,
             searchQuery: "Is the war in Iran ending as of today?",
-            sources: iranSources
+            sources: opusCouncilSources
         )
         let agentUserMessage = ChatMessage(
             id: "demo-user-ironclaw",
