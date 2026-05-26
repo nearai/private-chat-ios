@@ -144,6 +144,7 @@ final class SessionStore: NSObject, ObservableObject {
                 codeChallenge: pendingRequest.codeChallenge
             )
             let callbackURL = try await startWebAuthentication(url: url)
+            // Owned web sessions currently return provider state, not app state; trust only the active pending request until backend preserves callback-path app state.
             let newSession = try api.parseAuthCallback(
                 callbackURL,
                 expectedState: pendingRequest.state,

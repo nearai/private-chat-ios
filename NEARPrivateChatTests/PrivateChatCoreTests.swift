@@ -1098,7 +1098,7 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(status.state, .valid)
     }
 
-    func testProofCapsuleSeparatesFetchedFromVerifiedCopy() {
+    func testProofCapsulePreservesVerifiedCopyAfterLocalVerification() {
         let now = Date()
         let snapshot = AttestationSnapshot(
             nonce: "nonce-1",
@@ -1114,28 +1114,27 @@ final class PrivateChatCoreTests: XCTestCase {
         let status = AttestationStatus(snapshot: snapshot, selectedModelID: "zai-org/GLM-5.1-FP8")
         let proof = ProofCapsuleViewModel(status: status, modelID: "zai-org/GLM-5.1-FP8", now: now)
 
-        XCTAssertEqual(proof.state, .fetched)
-        XCTAssertEqual(proof.title, "Proof fetched")
-        XCTAssertFalse(proof.badge.localizedCaseInsensitiveContains("verified"))
-        XCTAssertFalse(proof.title.localizedCaseInsensitiveContains("verified"))
+        XCTAssertEqual(proof.state, .verified)
+        XCTAssertEqual(proof.title, "Verified")
+        XCTAssertTrue(proof.badge.localizedCaseInsensitiveContains("verified"))
     }
 
-    func testUnknownAttestationUsesNoProofCopy() {
+    func testUnknownAttestationUsesPendingCopy() {
         let copy = AttestationStatus.unknown.userFacingCopy()
         let proof = ProofCapsuleViewModel(status: .unknown, modelID: "zai-org/GLM-5.1-FP8")
 
-        XCTAssertEqual(copy.title, "No proof yet")
-        XCTAssertEqual(copy.badge, "No proof")
-        XCTAssertEqual(proof.state, .none)
-        XCTAssertEqual(proof.badge, "No proof")
+        XCTAssertEqual(copy.title, "Verification pending")
+        XCTAssertEqual(copy.badge, "Pending")
+        XCTAssertEqual(proof.state, .unknown)
+        XCTAssertEqual(proof.badge, "Pending")
     }
 
     func testAttestationCopyExplainsExternalRoutes() {
         let copy = AttestationStatus.unavailable(reason: .routeNotSupported).userFacingCopy()
 
-        XCTAssertEqual(copy.title, "Not TEE-attested")
+        XCTAssertEqual(copy.title, "Unverified route")
         XCTAssertTrue(copy.detail.contains("NEAR Private"))
-        XCTAssertEqual(copy.badge, "No TEE proof")
+        XCTAssertEqual(copy.badge, "Unverified")
     }
 
     func testAttestationCopySeparatesServiceFailureFromMissingModelCoverage() {
