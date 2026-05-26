@@ -157,13 +157,13 @@ enum LegalTerms {
     static let nearAIPrivacyPolicyURL = URL(string: "https://near.ai/privacy-policy")!
     static let ironclawRepositoryURL = URL(string: "https://github.com/nearai/ironclaw")!
 
-    static let acceptanceText = "I attest that I am at least 18, I agree to the NEAR Private Chat iOS Terms, NEAR AI Services Terms, NEAR AI Cloud Terms, Acceptable Use Policy, and applicable IronClaw/third-party terms, and I understand that networked models, web search, files, and agents can send selected content off this device."
+    static let acceptanceText = "I confirm that I am at least 18, I agree to the NEAR Private Chat iOS Terms, NEAR AI Services Terms, NEAR AI Cloud Terms, Acceptable Use Policy, and applicable IronClaw/third-party terms, and I understand that networked models, web search, files, and agents can send selected content off this device."
 
     static let signupSummary = [
         "Required before sign in.",
         "Applies to private chat, NEAR AI Cloud, LLM Council, files, sharing, web, and IronClaw.",
-        "Cloud premium models are anonymized/proxied, not attested.",
-        "Attestation is proof of serving environment, not proof that an answer is true.",
+        "Cloud premium models use a privacy proxy and do not carry NEAR Private verification.",
+        "Verification is proof of serving environment, not proof that an answer is true.",
         "Agent actions and connected keys remain your responsibility."
     ]
 
@@ -205,8 +205,12 @@ enum LegalTerms {
             body: "Some routes require API keys, usage credits, subscriptions, or rate limits. You are responsible for usage caused by your account, keys, agents, and connected users. Shared links, write grants, imports, exports, signed transcripts, file previews, pasteboard actions, and screenshots can expose private data; confirm recipients and contents before sharing."
         ),
         LegalTermsSection(
+            title: "Dispute Defaults",
+            body: "The App terms draft follows the NEAR AI Services Terms default structure: Delaware law, informal dispute resolution before formal proceedings, individual arbitration in Wilmington or by video where applicable, class action and jury trial waivers where permitted, and local consumer-law carveouts for EEA, UK, and Swiss consumers. Upstream provider terms control disputes with those providers."
+        ),
+        LegalTermsSection(
             title: "Disclaimer",
-            body: "The App and experimental features are provided as is and as available to the fullest extent permitted by law. Features may fail, change, stall, be unavailable, or produce unintended outputs or actions. Limitations of liability, indemnity, governing law, dispute, contact, and regional clauses must be finalized by counsel before public release."
+            body: "The App and experimental features are provided as is and as available to the fullest extent permitted by law. Features may fail, change, stall, be unavailable, or produce unintended outputs or actions. The distributing entity and support/legal contact are intentionally blank in this draft and must be completed before public release."
         )
     ]
 }
@@ -615,8 +619,8 @@ struct ChatSourceRoutingSemantics: Hashable {
             focus: focus,
             modelNativeWebToolPolicy: supportsNativeWebTool ? sourceWebPolicy : .never,
             appWebGroundingPolicy: supportsAppGrounding ? appGroundingPolicy : .never,
-            attachesSavedLinkSourcePack: focus == .auto || focus == .links || focus == .project || focus == .research,
-            attachesProjectFileSourcePack: focus == .auto || focus == .files || focus == .project || focus == .research,
+            attachesSavedLinkSourcePack: focus == .auto || focus == .web || focus == .links || focus == .project || focus == .research,
+            attachesProjectFileSourcePack: focus == .auto || focus == .web || focus == .files || focus == .project || focus == .research,
             attachesPromptFiles: true
         )
     }
@@ -624,7 +628,7 @@ struct ChatSourceRoutingSemantics: Hashable {
     private static func webPolicy(for focus: ChatFocusState, webSearchEnabled: Bool) -> ChatWebUsePolicy {
         switch focus {
         case .auto:
-            return webSearchEnabled ? .whenHelpful : .never
+            return webSearchEnabled ? .whenHelpful : .whenFreshRequested
         case .web, .project, .research:
             return .always
         case .links:
@@ -635,16 +639,17 @@ struct ChatSourceRoutingSemantics: Hashable {
     }
 
     private static func appGroundingPolicy(for focus: ChatFocusState, webSearchEnabled: Bool) -> ChatWebUsePolicy {
-        guard webSearchEnabled else { return .never }
         switch focus {
         case .web, .research:
             return .always
         case .project:
-            return .whenFreshRequested
+            return webSearchEnabled ? .whenHelpful : .whenFreshRequested
         case .links:
             return .whenFreshRequested
-        case .auto, .files:
-            return .never
+        case .auto:
+            return webSearchEnabled ? .whenHelpful : .whenFreshRequested
+        case .files:
+            return .whenFreshRequested
         }
     }
 }
@@ -1034,6 +1039,16 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
     }
 }
 
+struct SetupPromptSuggestion: Identifiable, Hashable {
+    let title: String
+    let symbolName: String
+    let prompt: String
+
+    var id: String {
+        "\(title)-\(prompt)"
+    }
+}
+
 struct UserSetupProfile: Codable, Hashable {
     var useCase: UserSetupUseCase {
         didSet {
@@ -1120,6 +1135,38 @@ struct UserSetupProfile: Codable, Hashable {
         String(goalText.trimmingCharacters(in: .whitespacesAndNewlines).prefix(280))
     }
 
+    static func inferredCurrentDefaults(
+        webSearchEnabled: Bool,
+        sourceMode: ChatSourceMode,
+        selectedModelID: String,
+        hasSelectedProject: Bool,
+        isCouncilModeEnabled: Bool,
+        researchModeEnabled: Bool
+    ) -> UserSetupProfile {
+        var profile = UserSetupProfile.defaults
+        profile.wantsWeb = webSearchEnabled
+        profile.contextStyle = UserSetupContextStyle(sourceMode: sourceMode)
+        profile.wantsIronclaw = selectedModelID == ModelOption.ironclawMobileModelID ||
+            selectedModelID == ModelOption.ironclawModelID
+        profile.wantsCouncil = isCouncilModeEnabled
+
+        if researchModeEnabled {
+            profile.useCase = .research
+            profile.useCases = [.research]
+        } else if profile.wantsIronclaw {
+            profile.useCase = .buildAgents
+            profile.useCases = [.buildAgents]
+        } else if hasSelectedProject || profile.contextStyle != .simple {
+            profile.useCase = .teamProjects
+            profile.useCases = [.teamProjects]
+        } else {
+            profile.useCase = .privateChat
+            profile.useCases = [.privateChat]
+        }
+
+        return profile
+    }
+
     var setupStarterProjectName: String? {
         if useCases.contains(.buildAgents) {
             return UserSetupUseCase.buildAgents.starterProjectName
@@ -1162,6 +1209,179 @@ struct UserSetupProfile: Codable, Hashable {
             return "Help me with this goal: \(goal)"
         }
         return useCases.setupPrimaryUseCase.starterPrompt
+    }
+
+    var emptyStateSubtitle: String {
+        let goal = normalizedGoalText
+        if !goal.isEmpty {
+            return "Goal ready: \(goal)"
+        }
+
+        switch useCases.setupPrimaryUseCase {
+        case .privateChat:
+            return "Ask privately first. Turn on web or files only when the task needs them."
+        case .research:
+            return "Start a cited brief, compare sources, and save strong outputs."
+        case .buildAgents:
+            return "Start with a safe agent mission, then verify the patch or test pass."
+        case .teamProjects:
+            return "Turn files, links, and notes into a shared project memory."
+        }
+    }
+
+    var emptyStatePromptSuggestions: [SetupPromptSuggestion] {
+        let goal = normalizedGoalText
+
+        switch useCases.setupPrimaryUseCase {
+        case .privateChat:
+            if !goal.isEmpty {
+                return [
+                    SetupPromptSuggestion(
+                        title: "Start goal",
+                        symbolName: "lock.shield",
+                        prompt: "Help me with this goal: \(goal)"
+                    ),
+                    SetupPromptSuggestion(
+                        title: "Break into steps",
+                        symbolName: "list.bullet.clipboard",
+                        prompt: "Break this goal into the next private steps I should take: \(goal)"
+                    ),
+                    SetupPromptSuggestion(
+                        title: "Best first question",
+                        symbolName: "questionmark.bubble",
+                        prompt: "What is the most important first question I should ask for this goal: \(goal)"
+                    )
+                ]
+            }
+            return [
+                SetupPromptSuggestion(
+                    title: "Private question",
+                    symbolName: "lock.shield",
+                    prompt: "Help me think through a private question."
+                ),
+                SetupPromptSuggestion(
+                    title: "Pressure-test",
+                    symbolName: "scale.3d",
+                    prompt: "Pressure-test this decision and show me the strongest risks and tradeoffs: "
+                ),
+                SetupPromptSuggestion(
+                    title: "Draft message",
+                    symbolName: "text.bubble",
+                    prompt: "Draft a clear message I can send about this situation: "
+                )
+            ]
+        case .research:
+            if !goal.isEmpty {
+                return [
+                    SetupPromptSuggestion(
+                        title: "Start brief",
+                        symbolName: "doc.text.magnifyingglass",
+                        prompt: "Create a sourced research brief for this goal: \(goal)"
+                    ),
+                    SetupPromptSuggestion(
+                        title: "Find sources",
+                        symbolName: "globe",
+                        prompt: "Find the strongest current sources, dates, and contradictions for this goal: \(goal)"
+                    ),
+                    SetupPromptSuggestion(
+                        title: "Recommend next step",
+                        symbolName: "arrow.forward.circle",
+                        prompt: "Turn this research goal into a concise recommendation with citations: \(goal)"
+                    )
+                ]
+            }
+            return [
+                SetupPromptSuggestion(
+                    title: "Research brief",
+                    symbolName: "doc.text.magnifyingglass",
+                    prompt: "Create a sourced brief on the latest developments in AI."
+                ),
+                SetupPromptSuggestion(
+                    title: "Compare sources",
+                    symbolName: "arrow.triangle.branch",
+                    prompt: "Compare the strongest current sources on this topic, note contradictions, and explain what matters most: "
+                ),
+                SetupPromptSuggestion(
+                    title: "Risk memo",
+                    symbolName: "exclamationmark.triangle",
+                    prompt: "Draft a short risk memo with dates, citations, and a recommendation for: "
+                )
+            ]
+        case .buildAgents:
+            if !goal.isEmpty {
+                return [
+                    SetupPromptSuggestion(
+                        title: "Plan mission",
+                        symbolName: "terminal",
+                        prompt: "Plan the first IronClaw agent mission for this goal: \(goal)"
+                    ),
+                    SetupPromptSuggestion(
+                        title: "Safe patch",
+                        symbolName: "wrench.and.screwdriver",
+                        prompt: "Turn this goal into a safe patch plan with focused verification steps: \(goal)"
+                    ),
+                    SetupPromptSuggestion(
+                        title: "Repo checklist",
+                        symbolName: "checklist",
+                        prompt: "Create a repo inspection checklist for this goal before any code changes: \(goal)"
+                    )
+                ]
+            }
+            return [
+                SetupPromptSuggestion(
+                    title: "Agent mission",
+                    symbolName: "terminal",
+                    prompt: "Plan a phone-launched agent task for a repo or research project."
+                ),
+                SetupPromptSuggestion(
+                    title: "Review repo",
+                    symbolName: "chevron.left.forwardslash.chevron.right",
+                    prompt: "Review this repo and identify the highest-impact safe fix to make first: "
+                ),
+                SetupPromptSuggestion(
+                    title: "Focused tests",
+                    symbolName: "checkmark.seal",
+                    prompt: "List the focused tests and verification steps I should run for this change: "
+                )
+            ]
+        case .teamProjects:
+            if !goal.isEmpty {
+                return [
+                    SetupPromptSuggestion(
+                        title: "Organize project",
+                        symbolName: "folder.badge.gearshape",
+                        prompt: "Help me organize this project and next actions for this goal: \(goal)"
+                    ),
+                    SetupPromptSuggestion(
+                        title: "Add context",
+                        symbolName: "paperclip",
+                        prompt: "What files, links, notes, or instructions should I add first for this goal: \(goal)"
+                    ),
+                    SetupPromptSuggestion(
+                        title: "First workspace chat",
+                        symbolName: "bubble.left.and.bubble.right",
+                        prompt: "Draft the best first project chat prompt for this goal: \(goal)"
+                    )
+                ]
+            }
+            return [
+                SetupPromptSuggestion(
+                    title: "Project setup",
+                    symbolName: "folder.badge.gearshape",
+                    prompt: "Help me set up this project workspace: what files, links, instructions, and first chat should I add?"
+                ),
+                SetupPromptSuggestion(
+                    title: "Find missing context",
+                    symbolName: "magnifyingglass",
+                    prompt: "Look at this project context and tell me what is missing before I start work: "
+                ),
+                SetupPromptSuggestion(
+                    title: "Next-step plan",
+                    symbolName: "arrow.forward.circle",
+                    prompt: "Turn this project context into a concise next-step plan I can act on."
+                )
+            ]
+        }
     }
 
     mutating func toggleUseCase(_ useCase: UserSetupUseCase) {
@@ -1255,6 +1475,26 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
     var readinessStatus: String
     var experienceSummary: String
 
+    var launchCardTitle: String {
+        expectedFirstAction
+    }
+
+    var launchCardSubtitle: String {
+        let goal = goalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !goal.isEmpty {
+            return goal
+        }
+        return "Ready now: \(launchCardMetadata.joined(separator: " · "))"
+    }
+
+    var launchCardMetadata: [String] {
+        var items = [modelRoute.title, focusMode.title]
+        if let starterProjectName {
+            items.append(starterProjectName)
+        }
+        return items
+    }
+
     init(profile: UserSetupProfile, readiness: AppSetupReadinessSnapshot = .optimistic) {
         let profile = profile.normalizedForDefaults
         let usesIronclaw = profile.wantsIronclaw && readiness.ironclawMobileAvailable
@@ -1340,6 +1580,9 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
                 ? "Start private chat; Council needs models"
                 : "Start private chat while models load"
         }
+        if modelRoute == .council {
+            return "Ask the council"
+        }
         switch profile.useCase {
         case .privateChat:
             return "Ask a private question"
@@ -1378,13 +1621,109 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
     }
 }
 
+enum CapabilityRouteBlock: String, Codable, Equatable, Sendable {
+    case nearCloudKeyRequired
+    case hostedIronclawEndpointRequired
+    case councilNeedsModels
+}
+
+enum CapabilityNextStepKind: String, Codable, Equatable, Sendable {
+    case openSecurity
+    case openCloud
+    case openAgent
+    case useAutoCouncil
+    case rerunSetup
+}
+
+struct CapabilityNextStep: Codable, Equatable, Sendable {
+    let title: String
+    let detail: String
+    let actionTitle: String
+    let kind: CapabilityNextStepKind
+}
+
+enum CapabilityNextStepPlanner {
+    static func recommend(
+        routeBlock: CapabilityRouteBlock?,
+        setupPlan: AppSetupPlan,
+        currentRoute: ChatRouteKind,
+        hasFreshPrivateProof: Bool,
+        hostedIronclawAvailable: Bool,
+        autoCouncilReady: Bool
+    ) -> CapabilityNextStep? {
+        switch routeBlock {
+        case .nearCloudKeyRequired:
+            return CapabilityNextStep(
+                title: "Add your Cloud key",
+                detail: "This route is blocked until NEAR AI Cloud is connected. Private chat still works right now.",
+                actionTitle: "Add Cloud Key",
+                kind: .openCloud
+            )
+        case .hostedIronclawEndpointRequired:
+            return CapabilityNextStep(
+                title: "Connect hosted agent",
+                detail: "Phone-safe agent skills are ready, but workstation routes need a hosted HTTPS IronClaw endpoint.",
+                actionTitle: "Connect Agent",
+                kind: .openAgent
+            )
+        case .councilNeedsModels:
+            if autoCouncilReady {
+                return CapabilityNextStep(
+                    title: "Restore the Council lineup",
+                    detail: "Auto-Council can repopulate a working lineup so you can compare models without rebuilding it by hand.",
+                    actionTitle: "Use Auto-Council",
+                    kind: .useAutoCouncil
+                )
+            }
+        case nil:
+            break
+        }
+
+        if setupPlan.agentEnabled && !hostedIronclawAvailable {
+            return CapabilityNextStep(
+                title: "Finish agent setup",
+                detail: "Your defaults expect agent work. Connect a hosted workstation when you need repo, shell, or approval-gated tasks.",
+                actionTitle: "Connect Agent",
+                kind: .openAgent
+            )
+        }
+
+        if setupPlan.councilEnabled && autoCouncilReady {
+            return CapabilityNextStep(
+                title: "Try Auto-Council",
+                detail: "Your defaults favor multi-model comparison. Start with the ready lineup and customize later if needed.",
+                actionTitle: "Use Auto-Council",
+                kind: .useAutoCouncil
+            )
+        }
+
+        if currentRoute == .nearPrivate && !hasFreshPrivateProof {
+            return CapabilityNextStep(
+                title: "Check private proof",
+                detail: "Private chat is ready now. Fetch or refresh proof when you need signed route evidence for the current model.",
+                actionTitle: "Open Security",
+                kind: .openSecurity
+            )
+        }
+
+        return CapabilityNextStep(
+            title: "Adjust your defaults",
+            detail: "Rerun setup if you want to change the app's first-run route, context, or capability defaults.",
+            actionTitle: "Rerun Setup",
+            kind: .rerunSetup
+        )
+    }
+}
+
 enum UserSetupStorage {
     static let completedKey = "userSetupProfileV1Completed"
     static let profileKey = "userSetupProfileV1Data"
+    static let launchCardPendingKey = "userSetupLaunchCardPending"
     private static let scopedVersion = "v2"
     private static let protectedStoreDirectoryName = "SetupProfiles"
     private static let protectedProfileFilename = "profile.json"
     private static let protectedCompletionFilename = "completed.txt"
+    private static let protectedLaunchCardPendingFilename = "launch-card-pending.txt"
 
     static func accountID(userID: String?, sessionID: String?, token: String?) -> String? {
         if let userID = userID?.trimmingCharacters(in: .whitespacesAndNewlines), !userID.isEmpty {
@@ -1430,14 +1769,26 @@ enum UserSetupStorage {
                 writeProtectedData(data, for: accountID, filename: protectedProfileFilename)
             }
             writeProtectedData(Data("true".utf8), for: accountID, filename: protectedCompletionFilename)
+            writeProtectedData(Data("true".utf8), for: accountID, filename: protectedLaunchCardPendingFilename)
             defaults.removeObject(forKey: scopedProfileKey(for: accountID))
             defaults.removeObject(forKey: scopedCompletedKey(for: accountID))
+            defaults.removeObject(forKey: scopedLaunchCardPendingKey(for: accountID))
             return
         }
         if let data = try? JSONEncoder().encode(profile.normalizedForDefaults) {
             defaults.set(data, forKey: scopedProfileKey(for: accountID))
         }
         defaults.set(true, forKey: scopedCompletedKey(for: accountID))
+        defaults.set(true, forKey: scopedLaunchCardPendingKey(for: accountID))
+    }
+
+    static func saveWithoutPendingLaunchCard(
+        _ profile: UserSetupProfile,
+        for accountID: String,
+        defaults: UserDefaults = .standard
+    ) {
+        save(profile, for: accountID, defaults: defaults)
+        clearPendingLaunchCard(for: accountID, defaults: defaults)
     }
 
     static func clearCompletion(for accountID: String, defaults: UserDefaults = .standard) {
@@ -1447,6 +1798,45 @@ enum UserSetupStorage {
             return
         }
         defaults.set(false, forKey: scopedCompletedKey(for: accountID))
+    }
+
+    static func hasPendingLaunchCard(for accountID: String, defaults: UserDefaults = .standard) -> Bool {
+        if usesProtectedStorage(defaults) {
+            if let data = readProtectedData(for: accountID, filename: protectedLaunchCardPendingFilename),
+               let text = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased() {
+                return text == "true" || text == "1"
+            }
+            if defaults.object(forKey: scopedLaunchCardPendingKey(for: accountID)) != nil {
+                return defaults.bool(forKey: scopedLaunchCardPendingKey(for: accountID))
+            }
+            return false
+        }
+        return defaults.bool(forKey: scopedLaunchCardPendingKey(for: accountID))
+    }
+
+    static func clearPendingLaunchCard(for accountID: String, defaults: UserDefaults = .standard) {
+        if usesProtectedStorage(defaults) {
+            writeProtectedData(Data("false".utf8), for: accountID, filename: protectedLaunchCardPendingFilename)
+            defaults.removeObject(forKey: scopedLaunchCardPendingKey(for: accountID))
+            return
+        }
+        defaults.set(false, forKey: scopedLaunchCardPendingKey(for: accountID))
+    }
+
+    static func presentationProfile(
+        for accountID: String,
+        currentDefaults: UserSetupProfile,
+        defaults: UserDefaults = .standard
+    ) -> UserSetupProfile {
+        if let stored = load(for: accountID, defaults: defaults) {
+            return stored
+        }
+        if isCompleted(for: accountID, defaults: defaults) {
+            return currentDefaults.normalizedForDefaults
+        }
+        return .defaults
     }
 
     static func migrate(from oldAccountID: String, to newAccountID: String, defaults: UserDefaults = .standard) {
@@ -1462,11 +1852,24 @@ enum UserSetupStorage {
                 defaults.set(true, forKey: scopedCompletedKey(for: newAccountID))
             }
         }
+        if hasPendingLaunchCard(for: oldAccountID, defaults: defaults) {
+            if usesProtectedStorage(defaults) {
+                writeProtectedData(Data("true".utf8), for: newAccountID, filename: protectedLaunchCardPendingFilename)
+            } else {
+                defaults.set(true, forKey: scopedLaunchCardPendingKey(for: newAccountID))
+            }
+        }
         if usesProtectedStorage(defaults) {
             removeProtectedData(for: oldAccountID, filename: protectedProfileFilename)
             removeProtectedData(for: oldAccountID, filename: protectedCompletionFilename)
+            removeProtectedData(for: oldAccountID, filename: protectedLaunchCardPendingFilename)
             defaults.removeObject(forKey: scopedProfileKey(for: oldAccountID))
             defaults.removeObject(forKey: scopedCompletedKey(for: oldAccountID))
+            defaults.removeObject(forKey: scopedLaunchCardPendingKey(for: oldAccountID))
+        } else {
+            defaults.removeObject(forKey: scopedProfileKey(for: oldAccountID))
+            defaults.removeObject(forKey: scopedCompletedKey(for: oldAccountID))
+            defaults.removeObject(forKey: scopedLaunchCardPendingKey(for: oldAccountID))
         }
     }
 
@@ -1489,6 +1892,10 @@ enum UserSetupStorage {
 
     private static func scopedProfileKey(for accountID: String) -> String {
         "\(profileKey).\(scopedVersion).\(normalizedAccountID(accountID))"
+    }
+
+    private static func scopedLaunchCardPendingKey(for accountID: String) -> String {
+        "\(launchCardPendingKey).\(scopedVersion).\(normalizedAccountID(accountID))"
     }
 
     private static func usesProtectedStorage(_ defaults: UserDefaults) -> Bool {
@@ -1617,6 +2024,26 @@ struct ContentPart: Codable, Hashable {
     }
 }
 
+struct MessageMetadata: Codable, Hashable {
+    let authorID: String?
+    let authorName: String?
+
+    enum CodingKeys: String, CodingKey {
+        case authorID = "author_id"
+        case authorName = "author_name"
+    }
+
+    var trimmedAuthorName: String? {
+        let trimmed = authorName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    var trimmedAuthorID: String? {
+        let trimmed = authorID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 struct ConversationItem: Decodable, Identifiable, Hashable {
     let type: String
     let id: String
@@ -1629,6 +2056,7 @@ struct ConversationItem: Decodable, Identifiable, Hashable {
     let model: String?
     let previousResponseID: String?
     let action: SearchAction?
+    let metadata: MessageMetadata?
 
     enum CodingKeys: String, CodingKey {
         case type
@@ -1642,6 +2070,7 @@ struct ConversationItem: Decodable, Identifiable, Hashable {
         case model
         case previousResponseID = "previous_response_id"
         case action
+        case metadata
     }
 
     init(from decoder: Decoder) throws {
@@ -1656,6 +2085,7 @@ struct ConversationItem: Decodable, Identifiable, Hashable {
         model = try container.decodeIfPresent(String.self, forKey: .model)
         previousResponseID = try container.decodeIfPresent(String.self, forKey: .previousResponseID)
         action = try container.decodeIfPresent(SearchAction.self, forKey: .action)
+        metadata = try container.decodeIfPresent(MessageMetadata.self, forKey: .metadata)
 
         if let arrayContent = try? container.decodeIfPresent([ContentPart].self, forKey: .content) {
             content = arrayContent
@@ -2108,6 +2538,7 @@ struct ChatMessage: Identifiable, Hashable, Codable {
     var attachments: [ChatAttachment] = []
     var pendingApproval: IronclawPendingGate? = nil
     var branchVariant: MessageBranchVariant? = nil
+    var metadata: MessageMetadata? = nil
 
     var tint: Color {
         switch role {
@@ -2115,6 +2546,14 @@ struct ChatMessage: Identifiable, Hashable, Codable {
         case .assistant: .primary
         case .system: .secondary
         }
+    }
+
+    var authorName: String? {
+        metadata?.trimmedAuthorName
+    }
+
+    var authorID: String? {
+        metadata?.trimmedAuthorID
     }
 
     var firstTokenLatency: TimeInterval? {

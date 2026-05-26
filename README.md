@@ -45,7 +45,7 @@ The helper starts the local IronClaw gateway, then exposes it through Cloudflare
 - Share groups from the web app are available in the native share sheet, including group creation, editing, deletion, member previews, and sharing a conversation with an existing group.
 - Shared-link viewer for `private.near.ai/c/...` conversations before or after sign-in, with read-only clone or writable-open based on API permissions.
 - Shared-link copy-and-continue flow through `/v1/conversations/{id}/clone`.
-- Remote chat settings for web search default and system prompt through `/v1/users/me/settings`.
+- Remote account settings for appearance, notification preference, web-search default, system prompt, large-paste handling, and advanced model params through `/v1/users/me/settings`.
 - Chat import from Account supports native NEAR Private Chat JSON exports and legacy Private Chat history JSON, then creates imported conversations and posts message batches to `/v1/conversations/{id}/items`.
 - Advanced model params from the mobile reference app: `temperature`, `top_p`, and `max_tokens` sync through `/v1/users/me/settings` and are sent on `/v1/responses`.
 - Large pasted text can be uploaded automatically as a `.txt` file attachment, matching the mobile app's file-context behavior.

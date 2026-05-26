@@ -3,8 +3,9 @@
 Effective date: May 25, 2026
 Version: 2026-05-25
 Status: Product/legal draft for counsel review before public release.
+Distributing entity:
 
-These Terms and Conditions ("Terms") govern access to and use of the NEAR Private Chat iOS application, including private AI chat, NEAR AI Cloud model routes, app-side web grounding, projects, files, sharing, signed transcript export, LLM Council, IronClaw Mobile, and hosted IronClaw agent workflows (collectively, the "App"). The App is made available by the entity that distributes it to you ("Operator," "we," "us," or "our"). Replace this Operator definition, contact information, venue, and any jurisdiction-specific clauses before release.
+These Terms and Conditions ("Terms") govern access to and use of the NEAR Private Chat iOS application, including private AI chat, NEAR AI Cloud model routes, app-side web grounding, projects, files, sharing, signed transcript export, LLM Council, IronClaw Mobile, and hosted IronClaw agent workflows (collectively, the "App"). The App is made available by the distributing entity listed above ("Operator," "we," "us," or "our"). The distributing entity is intentionally blank in this draft and must be completed before release.
 
 By creating an account, signing in, connecting a NEAR AI Cloud key, connecting IronClaw, uploading content, or otherwise using the App, you agree to these Terms. If you use the App for an organization, you represent that you are authorized to bind that organization.
 
@@ -155,7 +156,7 @@ The App is provided "as is" and "as available" to the fullest extent permitted b
 
 ## 18. Limitation of liability
 
-To the fullest extent permitted by law, the Operator and its affiliates, officers, employees, contractors, licensors, and service providers will not be liable for indirect, incidental, special, consequential, exemplary, punitive, or lost-profit damages, or for loss of data, credentials, goodwill, business, revenue, or use, arising from or related to the App. Aggregate liability will not exceed the greater of the amount you paid directly to the Operator for the App in the 12 months before the claim or USD 100, unless applicable law requires otherwise.
+To the fullest extent permitted by law, the Operator and its affiliates, officers, employees, contractors, licensors, and service providers will not be liable for indirect, incidental, special, consequential, exemplary, punitive, or lost-profit damages, or for loss of data, credentials, goodwill, business, revenue, or use, arising from or related to the App. Consistent with the NEAR AI Services Terms default, aggregate liability will not exceed the greater of the fees you paid directly to the Operator for the App in the 12 months before the claim or USD 500, unless applicable law requires otherwise.
 
 Some jurisdictions do not allow certain limitations, so some limitations may not apply.
 
@@ -165,12 +166,26 @@ To the fullest extent permitted by law, you will defend, indemnify, and hold har
 
 ## 20. Changes to these Terms
 
-We may update these Terms from time to time. The App may require you to accept a new version before continuing to use the App. Continued use after an update becomes effective means you accept the updated Terms.
+We may update these Terms from time to time. Consistent with the NEAR AI Services Terms default, material changes that adversely affect your rights or obligations should receive at least 30 days' advance notice by email or in-product notification where reasonably available; non-material changes may take effect when posted. The App may require you to accept a new version before continuing to use the App. Continued use after an update becomes effective means you accept the updated Terms.
 
 ## 21. Governing law and disputes
 
-[Insert governing law, venue, arbitration, class-action waiver, consumer rights, and regional addenda after counsel review.] If an upstream provider term has a separate dispute process for that upstream service, that upstream process applies to disputes with that provider.
+The default dispute terms for this App follow the NEAR AI Services Terms structure unless the final distributing entity adopts different counsel-approved language.
+
+Informal resolution. Before either party starts a formal proceeding, the parties will try to resolve the dispute informally and in good faith for at least 60 days after written notice describing the dispute is sent to the other party.
+
+Arbitration. If the dispute is not resolved informally, it will be resolved by final and binding individual arbitration before a single arbitrator under the American Arbitration Association rules, unless an exception applies. Arbitration will take place in Wilmington, Delaware, or by videoconference when permitted. The Federal Arbitration Act governs this arbitration provision. A user may opt out of arbitration within 30 days after account creation or a material change to this section by contacting the support team designated by the distributing entity.
+
+Exceptions. Either party may bring an eligible claim in small claims court. Either party may seek injunctive or equitable relief for intellectual property misuse or unauthorized access.
+
+Class action and jury trial waiver. Disputes must be brought only on an individual basis. The parties waive participation in class actions, class arbitrations, representative actions, and jury trials to the fullest extent permitted by law. If 25 or more similar claims are filed by the same or coordinated counsel within 90 days, they may be administered in batches consistent with the NEAR AI Services Terms default.
+
+Governing law and venue. These Terms are governed by Delaware law, excluding conflict-of-laws rules. Except for disputes subject to arbitration, small claims court, or non-waivable consumer rights, claims must be brought exclusively in the state or federal courts located in Delaware.
+
+Regional consumer rights. If you are a consumer in the EEA, UK, or Switzerland, the arbitration, class action waiver, jury trial waiver, and exclusive Delaware forum provisions do not apply where prohibited by law. You may have the right to bring proceedings in your local courts, and mandatory consumer laws in your country of residence may apply.
+
+Upstream service disputes. If a NEAR AI, NEAR AI Cloud, IronClaw, App Store, model-provider, payment-provider, search-provider, repository-host, or other third-party term has a separate dispute process for that upstream service, that upstream process controls for disputes with that provider or service.
 
 ## 22. Contact
 
-Questions, notices, and support requests should be sent to: [insert support/legal email].
+Questions, notices, opt-out requests, security reports, appeals, and support requests should be sent to the support/legal contact designated by the distributing entity.

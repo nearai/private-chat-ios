@@ -1,20 +1,37 @@
-# NEAR Private Chat Demo Video
+# NEAR Private Chat Supademo Capture
 
-This folder generates a narrated demo MP4 without manual editing.
+This folder is for real simulator capture only.
 
-Current mode: screenshot-driven simulation video using the latest clean app screenshots plus seeded narration.
+Do not generate mock screens, narrated storyboards, captions, callouts, or text overlays. The demo must be the actual iOS simulator running the actual app.
+
+Canonical spec:
+
+```bash
+review-artifacts/NEARPrivateChatIOS-supademo-one-cut-video-spec-2026-05-25.md
+```
 
 Run:
 
 ```bash
-bash demo/make-demo-video.sh
+bash demo/record-supademo-raw.sh
 ```
 
-Output:
+Default raw output:
 
 ```bash
-demo/out/near-private-chat-demo.mp4
+demo/out/near-private-chat-supademo-raw.mov
 ```
+
+Import that raw video into Supademo and disable:
+
+- AI voiceover
+- captions
+- hotspots
+- callouts
+- text annotations
+- generated step text
+
+Supademo should only trim, pace, subtly zoom/crop, and export landscape / portrait / square.
 
 Optional local secrets for future live capture can go in `demo/.env.local`. Do not commit that file.
 
@@ -24,6 +41,3 @@ NEAR_DEMO_NEAR_CLOUD_API_KEY=...
 NEAR_DEMO_IRONCLAW_ENDPOINT=...
 NEAR_DEMO_IRONCLAW_TOKEN=...
 ```
-
-The screenshot simulation does not require these secrets. A future live simulator/UI-test capture should call `demo/preflight.sh` before recording.
-

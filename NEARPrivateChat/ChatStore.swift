@@ -64,6 +64,8 @@ final class ChatStore: ObservableObject {
             UserDefaults.standard.set(webSearchEnabled, forKey: scopedDefaultsKey(Self.webSearchDefaultsKey))
         }
     }
+    @Published private(set) var notificationPreferenceEnabled = false
+    @Published private(set) var appearancePreference: AppAppearancePreference = .system
     @Published var sourceMode: ChatSourceMode = .auto {
         didSet {
             UserDefaults.standard.set(sourceMode.rawValue, forKey: scopedDefaultsKey(Self.sourceModeDefaultsKey))
@@ -130,6 +132,7 @@ final class ChatStore: ObservableObject {
         }
     }
     private var pendingHostedHandoffContinuation: HostedHandoffContinuation?
+    private var currentUserMessageMetadata: MessageMetadata?
     private var storageAccountID = "signed-out"
     private var draftPersistenceScopeID = "home"
     private var suppressDraftPersistence = false
@@ -720,6 +723,14 @@ final class ChatStore: ObservableObject {
         return privateRouteAttestationStatus
     }
 
+    var shouldShowSharedAuthorNames: Bool {
+        if sharedPreview != nil {
+            return true
+        }
+        guard let shareInfo else { return false }
+        return !shareInfo.isOwner || !shareInfo.shares.isEmpty
+    }
+
     private var privateRouteAttestationStatus: AttestationStatus {
         if attestationSnapshot == nil, attestationFetchErrorMessage != nil {
             return .unavailable(reason: .serviceUnavailable)
@@ -1152,6 +1163,21 @@ final class ChatStore: ObservableObject {
         loadAccountScopedState()
     }
 
+    func updateCurrentUser(profile: UserProfile?) {
+        guard let user = profile?.user else {
+            currentUserMessageMetadata = nil
+            return
+        }
+
+        let authorID = user.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        let authorName = user.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let metadata = MessageMetadata(
+            authorID: authorID.isEmpty ? nil : authorID,
+            authorName: authorName.isEmpty ? nil : authorName
+        )
+        currentUserMessageMetadata = metadata.authorID == nil && metadata.authorName == nil ? nil : metadata
+    }
+
     func reset() {
         streamTask?.cancel()
         streamTask = nil
@@ -1167,6 +1193,7 @@ final class ChatStore: ObservableObject {
         pendingExternalDeepLink = nil
         pendingHostedHandoffPreflight = nil
         pendingHostedHandoffContinuation = nil
+        currentUserMessageMetadata = nil
         approvedHostedHandoffFingerprint = nil
         routeReadinessIssue = nil
         pendingAttachments = []
@@ -1327,6 +1354,8 @@ final class ChatStore: ObservableObject {
     func saveUserSettings(
         systemPrompt: String,
         webSearchEnabled: Bool,
+        notificationEnabled: Bool,
+        appearancePreference: AppAppearancePreference,
         largeTextAsFileEnabled: Bool,
         advancedParams: AdvancedModelParams
     ) async {
@@ -1335,14 +1364,14 @@ final class ChatStore: ObservableObject {
             let response = try await api.updateUserSettings(
                 systemPrompt: systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines),
                 webSearchEnabled: webSearchEnabled,
-                notificationEnabled: lastRemoteSettings.notification ?? false,
-                appearance: lastRemoteSettings.appearance ?? "System",
+                notificationEnabled: notificationEnabled,
+                appearance: appearancePreference.rawValue,
                 largeTextAsFile: largeTextAsFileEnabled,
                 advancedParams: sanitizedParams
             )
             apply(remoteSettings: response.settings)
             advancedModelParams = sanitizedParams
-            showBanner("Chat settings saved.")
+            showBanner("Account preferences saved.")
         } catch {
             showBanner(error.localizedDescription)
         }
@@ -1775,19 +1804,32 @@ final class ChatStore: ObservableObject {
 
     func applySetupProfile(_ rawProfile: UserSetupProfile) {
         let profile = rawProfile.normalizedForDefaults
+        let readiness = AppSetupReadinessSnapshot(
+            modelCatalogLoaded: !models.isEmpty,
+            privateModelAvailable: pickerModels.contains { !$0.isExternalModel },
+            defaultCouncilModelCount: defaultCouncilModels.count,
+            ironclawMobileAvailable: agentModels.contains { $0.id == ModelOption.ironclawMobileModelID },
+            hostedIronclawAvailable: ironclawRemoteWorkstationAvailable,
+            nearCloudKeyConfigured: nearCloudKeyConfigured
+        )
+        let plan = AppSetupPlan(profile: profile, readiness: readiness)
         webSearchEnabled = profile.wantsWeb
-        sourceMode = profile.contextStyle.sourceMode
-        researchModeEnabled = profile.useCases.contains(.research) && !profile.wantsIronclaw
+        sourceMode = plan.focusMode
+        researchModeEnabled = profile.useCases.contains(.research) && plan.modelRoute != .ironclaw
 
-        let requestedCouncilModelIDs = profile.wantsCouncil && !models.isEmpty ? defaultCouncilModelIDs() : []
-        if profile.wantsIronclaw {
+        let requestedCouncilModelIDs = plan.modelRoute == .council ? defaultCouncilModelIDs() : []
+        switch plan.modelRoute {
+        case .ironclaw:
             selectedModel = ModelOption.ironclawMobileModelID
+            councilModelIDs = []
+        case .council:
             councilModelIDs = requestedCouncilModelIDs
-        } else if requestedCouncilModelIDs.count > 1 {
-            councilModelIDs = requestedCouncilModelIDs
-            selectedModel = requestedCouncilModelIDs[0]
-        } else {
-            if selectedModelOption?.isIronclawModel == true {
+            selectedModel = requestedCouncilModelIDs.first ?? preferredAvailableModel() ?? Self.defaultModelID
+        case .privateModel:
+            let selectedModelIsUsablePrivateModel =
+                pickerModels.contains(where: { $0.id == selectedModel && !$0.isExternalModel }) &&
+                Self.routeKind(forModelID: selectedModel) == .nearPrivate
+            if !selectedModelIsUsablePrivateModel {
                 selectedModel = preferredAvailableModel() ?? Self.defaultModelID
             }
             councilModelIDs = canUseInCouncil(selectedModel) ? [selectedModel] : []
@@ -1795,6 +1837,7 @@ final class ChatStore: ObservableObject {
 
         if let projectName = profile.setupStarterProjectName {
             let project = ensureMobileProject(named: projectName, includeConversationID: nil)
+            selectedProjectID = project.id
             if let index = projects.firstIndex(where: { $0.id == project.id }) {
                 var didChangeProject = false
                 let instructions = profile.setupProjectInstructions
@@ -1815,9 +1858,31 @@ final class ChatStore: ObservableObject {
             startNewConversation()
             self.draft = draft
             openSelectedConversationToken = UUID()
-            showBanner("Setup applied. First prompt ready.")
+            showBanner(setupAppliedBanner(for: plan, profile: profile, openedDraft: true))
         } else {
-            showBanner("Setup applied.")
+            showBanner(setupAppliedBanner(for: plan, profile: profile, openedDraft: false))
+        }
+    }
+
+    private func setupAppliedBanner(for plan: AppSetupPlan, profile: UserSetupProfile, openedDraft: Bool) -> String {
+        if profile.wantsIronclaw, plan.modelRoute != .ironclaw {
+            return openedDraft
+                ? "Setup applied. Private prompt ready while agent tools stay unavailable."
+                : "Setup applied. Private route is ready while agent tools stay unavailable."
+        }
+        if profile.wantsCouncil, plan.modelRoute != .council {
+            return openedDraft
+                ? "Setup applied. Private prompt ready while Council finishes loading."
+                : "Setup applied. Private route is ready while Council finishes loading."
+        }
+
+        switch plan.modelRoute {
+        case .ironclaw:
+            return openedDraft ? "Setup applied. Agent prompt ready." : "Setup applied. Agent route ready."
+        case .council:
+            return openedDraft ? "Setup applied. Council prompt ready." : "Setup applied. Council route ready."
+        case .privateModel:
+            return openedDraft ? "Setup applied. First prompt ready." : "Setup applied."
         }
     }
 
@@ -3020,6 +3085,7 @@ final class ChatStore: ObservableObject {
                 isLoading = false
             }
         }
+        async let fetchedShareInfo = silentShareInfo(for: conversation)
 
         let cachedMessages = loadLocalMessages(for: conversation.id)
         if preferCached, let cachedMessages, !cachedMessages.isEmpty {
@@ -3038,7 +3104,9 @@ final class ChatStore: ObservableObject {
 
         do {
             let response = try await api.fetchConversationItems(conversation.id)
+            let loadedShareInfo = await fetchedShareInfo
             guard canApplyMessageLoad(for: conversation.id, generation: generation) else { return }
+            shareInfo = loadedShareInfo
             let preferredResponseID = selectedResponseVariantByConversationID[conversation.id]
             let remoteMessages = Self.chatMessages(from: response.data, preferredResponseID: preferredResponseID)
             let loadedMessages = Self.mergedMessages(remoteMessages: remoteMessages, localCache: cachedMessages)
@@ -3050,7 +3118,9 @@ final class ChatStore: ObservableObject {
         } catch is CancellationError {
             return
         } catch {
+            let loadedShareInfo = await fetchedShareInfo
             guard canApplyMessageLoad(for: conversation.id, generation: generation) else { return }
+            shareInfo = loadedShareInfo
             if cachedMessages?.isEmpty == false {
                 showBanner("Could not refresh this chat. Showing cached messages.")
             } else {
@@ -3070,6 +3140,15 @@ final class ChatStore: ObservableObject {
         !Task.isCancelled &&
             loadMessagesGeneration == generation &&
             selectedConversation?.id == conversationID
+    }
+
+    private func silentShareInfo(for conversation: ConversationSummary) async -> ConversationSharesListResponse? {
+        #if DEBUG
+        if DemoCapture.isEnabled {
+            return Self.demoShareInfo(for: conversation)
+        }
+        #endif
+        return try? await api.fetchConversationShares(conversation.id)
     }
 
     nonisolated static func mergedMessages(remoteMessages: [ChatMessage], localCache: [ChatMessage]?) -> [ChatMessage] {
@@ -3591,7 +3670,8 @@ final class ChatStore: ObservableObject {
                 responseID: nil,
                 previousResponseID: previousResponseID,
                 isStreaming: false,
-                attachments: attachments
+                attachments: attachments,
+                metadata: currentUserMessageMetadata
             )
             let assistantMessage = ChatMessage(
                 id: "local-assistant-\(UUID().uuidString)",
@@ -3678,7 +3758,8 @@ final class ChatStore: ObservableObject {
             previousResponseID: previousResponseID,
             councilBatchID: batchID,
             isStreaming: false,
-            attachments: attachments
+            attachments: attachments,
+            metadata: currentUserMessageMetadata
         )
         let assistantMessages = modelIDs.enumerated().map { offset, modelID in
             ChatMessage(
@@ -4039,6 +4120,7 @@ final class ChatStore: ObservableObject {
             attachments: attachments,
             conversationID: conversationID,
             previousResponseID: previousResponseID,
+            authorMetadata: currentUserMessageMetadata,
             webSearchEnabled: shouldEnableModelNativeWebTool(model: model, prompt: text),
             systemPrompt: activeSystemPrompt(),
             advancedParams: advancedModelParams,
@@ -4794,6 +4876,8 @@ final class ChatStore: ObservableObject {
 
     private func apply(remoteSettings: RemoteUserSettings) {
         lastRemoteSettings = remoteSettings
+        notificationPreferenceEnabled = remoteSettings.notification ?? false
+        appearancePreference = AppAppearancePreference(remoteValue: remoteSettings.appearance)
         if let remoteWebSearch = remoteSettings.webSearch {
             webSearchEnabled = remoteWebSearch
         }
@@ -7844,7 +7928,8 @@ final class ChatStore: ObservableObject {
                     searchQuery: item.role == .assistant ? queryByResponseID[item.responseID] ?? nil : nil,
                     sources: item.role == .assistant ? sourcesByResponseID[item.responseID] ?? [] : [],
                     attachments: item.role == .user ? attachments(from: item.content ?? []) : [],
-                    branchVariant: item.role == .assistant ? branchVariants[item.responseID] : nil
+                    branchVariant: item.role == .assistant ? branchVariants[item.responseID] : nil,
+                    metadata: item.metadata
                 )
             }
         return normalizedMessages(messages, assumingStreamLost: false)

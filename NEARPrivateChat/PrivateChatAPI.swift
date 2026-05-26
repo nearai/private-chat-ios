@@ -516,6 +516,7 @@ final class PrivateChatAPI {
         attachments: [ChatAttachment],
         conversationID: String,
         previousResponseID: String?,
+        authorMetadata: MessageMetadata? = nil,
         webSearchEnabled: Bool,
         systemPrompt: String,
         advancedParams: AdvancedModelParams = .defaults,
@@ -531,7 +532,7 @@ final class PrivateChatAPI {
         let payload = ResponsePayload(
             model: model,
             input: [
-                ResponseInput(role: "user", content: content)
+                ResponseInput(role: "user", content: content, metadata: authorMetadata)
             ],
             conversation: conversationID,
             stream: true,
@@ -1223,6 +1224,7 @@ private struct ResponseTool: Encodable {
 private struct ResponseInput: Encodable {
     let role: String
     let content: [ResponseContent]
+    let metadata: MessageMetadata?
 }
 
 private struct ResponseContent: Encodable {

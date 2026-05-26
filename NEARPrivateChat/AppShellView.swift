@@ -889,7 +889,7 @@ private struct SetupLaunchCard: View {
 
             HStack(spacing: 10) {
                 Button(action: onPrimaryAction) {
-                    Label("Open first chat", systemImage: "arrow.right")
+                    Label(primaryActionTitle, systemImage: primaryActionSymbolName)
                         .font(.subheadline.weight(.bold))
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
@@ -914,6 +914,28 @@ private struct SetupLaunchCard: View {
                 .stroke(Color.brandBlue.opacity(0.10), lineWidth: 1)
         }
         .shadow(color: Color.brandBlue.opacity(0.05), radius: 12, y: 6)
+    }
+
+    private var primaryActionTitle: String {
+        switch plan.modelRoute {
+        case .ironclaw:
+            return "Open agent prompt"
+        case .council:
+            return "Open council prompt"
+        case .privateModel:
+            return "Open first prompt"
+        }
+    }
+
+    private var primaryActionSymbolName: String {
+        switch plan.modelRoute {
+        case .ironclaw:
+            return "terminal"
+        case .council:
+            return "square.grid.2x2"
+        case .privateModel:
+            return "arrow.right"
+        }
     }
 }
 
@@ -6741,6 +6763,8 @@ private struct AccountSettingsView: View {
     let onRunSetupAgain: () -> Void
     @State private var systemPrompt = ""
     @State private var webSearchEnabled = true
+    @State private var notificationPreferenceEnabled = false
+    @State private var appearancePreference: AppAppearancePreference = .system
     @State private var largeTextAsFileEnabled = true
     @State private var temperature = ""
     @State private var topP = ""
@@ -6810,6 +6834,41 @@ private struct AccountSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                Section {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Appearance", systemImage: "circle.lefthalf.filled")
+                            .font(.subheadline.weight(.semibold))
+
+                        Picker("Appearance", selection: $appearancePreference) {
+                            ForEach(AppAppearancePreference.allCases) { option in
+                                Text(option.rawValue).tag(option)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        Text(appearancePreference.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.vertical, 4)
+
+                    Toggle("Notifications preference", isOn: $notificationPreferenceEnabled)
+                    Toggle("Web Search by Default", isOn: $webSearchEnabled)
+                    Toggle("Large Paste as File", isOn: $largeTextAsFileEnabled)
+
+                    Button {
+                        Task { await saveChatSettings() }
+                    } label: {
+                        Label(isSavingSettings ? "Saving Preferences" : "Save Preferences", systemImage: "checkmark.circle")
+                    }
+                    .disabled(isSavingSettings)
+                } header: {
+                    Text("Preferences")
+                } footer: {
+                    Text("Appearance and notification preference sync with your NEAR Private account. Native push delivery is not enabled in this iPhone build yet.")
+                }
+
                 if showsPowerTools {
                     Section("Capabilities") {
                         Button {
@@ -6843,9 +6902,6 @@ private struct AccountSettingsView: View {
 
                 if showsPowerTools {
                     Section("Composer") {
-                        Toggle("Web Search", isOn: $webSearchEnabled)
-                        Toggle("Large Paste as File", isOn: $largeTextAsFileEnabled)
-
                         TextField("System prompt", text: $systemPrompt, axis: .vertical)
                             .textFieldStyle(.plain)
                             .lineLimit(3...8)
@@ -7109,6 +7165,8 @@ private struct AccountSettingsView: View {
             .onAppear {
                 systemPrompt = chatStore.systemPrompt
                 webSearchEnabled = chatStore.webSearchEnabled
+                notificationPreferenceEnabled = chatStore.notificationPreferenceEnabled
+                appearancePreference = chatStore.appearancePreference
                 largeTextAsFileEnabled = chatStore.largeTextAsFileEnabled
                 loadAdvancedParams(chatStore.advancedModelParams)
                 nearCloudAPIKey = ""
@@ -7170,9 +7228,13 @@ private struct AccountSettingsView: View {
         await chatStore.saveUserSettings(
             systemPrompt: systemPrompt,
             webSearchEnabled: webSearchEnabled,
+            notificationEnabled: notificationPreferenceEnabled,
+            appearancePreference: appearancePreference,
             largeTextAsFileEnabled: largeTextAsFileEnabled,
             advancedParams: advancedParams
         )
+        notificationPreferenceEnabled = chatStore.notificationPreferenceEnabled
+        appearancePreference = chatStore.appearancePreference
         loadAdvancedParams(chatStore.advancedModelParams)
     }
 
@@ -8644,6 +8706,7 @@ private struct SecurityStateRow: View {
 
 private struct EmptyChatView: View {
     @EnvironmentObject private var chatStore: ChatStore
+    @EnvironmentObject private var sessionStore: SessionStore
 
     private struct EmptyPromptSuggestion: Identifiable {
         var id: String { title }
@@ -8663,11 +8726,17 @@ private struct EmptyChatView: View {
         if chatStore.selectedModelOption?.isIronclawMobileRuntime == true {
             return chatStore.ironclawRemoteWorkstationAvailable ? "Hosted agent ready." : "Mobile agent ready."
         }
+        if let setupProfileWithGoal {
+            return setupProfileWithGoal.emptyStateSubtitle
+        }
         if chatStore.isCouncilModeEnabled {
             return "Council is ready to compare answers."
         }
         if chatStore.researchModeEnabled && !chatStore.selectedRouteUsesNearCloud {
             return "Search current sources."
+        }
+        if let setupProfile {
+            return setupProfile.emptyStateSubtitle
         }
         return "Ask normally. NEAR picks web, project context, or an agent when needed."
     }
@@ -8757,6 +8826,12 @@ private struct EmptyChatView: View {
             ]
         }
 
+        if let setupProfileWithGoal {
+            return setupProfileWithGoal.emptyStatePromptSuggestions.map {
+                EmptyPromptSuggestion(title: $0.title, symbolName: $0.symbolName, prompt: $0.prompt)
+            }
+        }
+
         if chatStore.isCouncilModeEnabled {
             return [
                 EmptyPromptSuggestion(title: "Compare models", symbolName: "square.grid.2x2", prompt: "Compare Anthropic and OpenAI for this task: "),
@@ -8773,11 +8848,27 @@ private struct EmptyChatView: View {
             ]
         }
 
+        if let setupProfile {
+            return setupProfile.emptyStatePromptSuggestions.map {
+                EmptyPromptSuggestion(title: $0.title, symbolName: $0.symbolName, prompt: $0.prompt)
+            }
+        }
+
         return [
             EmptyPromptSuggestion(title: "Plan next move", symbolName: "arrow.forward.circle", prompt: "Help me turn this into the next concrete action: "),
             EmptyPromptSuggestion(title: "Research latest", symbolName: "globe", prompt: "Research the latest context and give me the decision-ready version: "),
             EmptyPromptSuggestion(title: "Compare options", symbolName: "square.grid.2x2", prompt: "Compare the strongest options, tradeoffs, and recommendation for: ")
         ]
+    }
+
+    private var setupProfile: UserSetupProfile? {
+        guard let accountID = sessionStore.setupAccountID else { return nil }
+        return UserSetupStorage.load(for: accountID)
+    }
+
+    private var setupProfileWithGoal: UserSetupProfile? {
+        guard let setupProfile, !setupProfile.normalizedGoalText.isEmpty else { return nil }
+        return setupProfile
     }
 }
 
@@ -9430,7 +9521,7 @@ private struct MessageBubble: View {
 
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 8) {
                 HStack(spacing: 6) {
-                    Text(message.role == .user ? "You" : message.modelDisplayName)
+                    Text(headerTitle)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     if message.role == .assistant, let badge = statusBadge {
@@ -9597,6 +9688,15 @@ private struct MessageBubble: View {
         default:
             return nil
         }
+    }
+
+    private var headerTitle: String {
+        if message.role == .user,
+           chatStore.shouldShowSharedAuthorNames,
+           let authorName = message.authorName {
+            return authorName
+        }
+        return message.role == .user ? "You" : message.modelDisplayName
     }
 
     private var answerProofCapsule: ProofCapsuleViewModel? {

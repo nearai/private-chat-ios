@@ -62,7 +62,7 @@ This ledger is intentionally blunt: every feature confirmed in the web repo is e
 | Web feature | Upstream evidence | iOS status | Notes |
 | --- | --- | --- | --- |
 | Local/remote settings tabs | `src/components/common/dialogs/settings/SettingsDialog.tsx` | Partial | Native has account and security sheets; full General/Chats/About parity is missing. |
-| Remote user settings | `src/api/users/client.ts`, `src/types/index.ts` | Partial | Native account sheet reads/saves system prompt and web search. Appearance and notifications are still missing. |
+| Remote user settings | `src/api/users/client.ts`, `src/types/index.ts` | Implemented | Native Account syncs appearance, notification preference, web-search default, large-paste handling, system prompt, and advanced params. Native push delivery itself is still not enabled in this iPhone build. |
 | Chat import from JSON | `src/components/common/dialogs/settings/ChatsSettings.tsx` | Implemented | Native Account settings imports NEAR Private Chat export JSON and legacy history JSON, creates imported conversations, and posts message batches to conversation items. |
 | Download JSON/TXT/PDF | `src/components/chat/DownloadDropdown.tsx` | Implemented | Native can copy transcripts and export current chats as TXT, JSON, or paginated PDF files. |
 | Archived chat export | `src/components/common/dialogs/archived-chats/ArchivedChatsModal.tsx` | Implemented | Native archived chats can be copied as JSON or exported as a JSON file through the iOS file exporter. |
@@ -72,7 +72,7 @@ This ledger is intentionally blunt: every feature confirmed in the web repo is e
 
 ## Priority Queue
 
-1. Remote settings with appearance, notifications, and fuller account/about parity.
+1. Fuller account/about parity beyond the synced settings surface.
 2. KaTeX/math output rendering parity.
 3. Shared author metadata in message rows.
 4. iPad drag/drop polish for attachments.

@@ -258,7 +258,7 @@ private struct LegalTermsAcceptanceCard: View {
                 .accessibilityLabel(isAccepted ? "Terms accepted" : "Accept terms")
 
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Legal attestation required")
+                    Text("Review terms to continue")
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
                     Text(LegalTerms.acceptanceText)

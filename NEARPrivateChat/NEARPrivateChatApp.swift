@@ -1,5 +1,46 @@
 import SwiftUI
 
+enum AppAppearancePreference: String, CaseIterable, Codable, Identifiable, Hashable {
+    case system = "System"
+    case light = "Light"
+    case dark = "Dark"
+
+    var id: String { rawValue }
+
+    init(remoteValue: String?) {
+        switch remoteValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "light":
+            self = .light
+        case "dark":
+            self = .dark
+        default:
+            self = .system
+        }
+    }
+
+    var preferredColorScheme: ColorScheme? {
+        switch self {
+        case .system:
+            return nil
+        case .light:
+            return .light
+        case .dark:
+            return .dark
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .system:
+            return "Follow the iPhone setting."
+        case .light:
+            return "Keep the app bright."
+        case .dark:
+            return "Use a darker, lower-glare look."
+        }
+    }
+}
+
 #if DEBUG
 enum DemoCaptureScreen: String, CaseIterable {
     case onboarding
@@ -82,6 +123,7 @@ struct NEARPrivateChatApp: App {
                 }
                 .task {
                     await prepareAuthenticatedChatState()
+                    chatStore.updateCurrentUser(profile: sessionStore.profile)
                 }
                 .onChange(of: sessionStore.session?.token) { _, token in
                     Task {
@@ -93,11 +135,15 @@ struct NEARPrivateChatApp: App {
                         }
                         #endif
                         if token == nil {
+                            chatStore.updateCurrentUser(profile: nil)
                             chatStore.prepareForAuthenticatedAccount(nil)
                         } else {
                             await prepareAuthenticatedChatState()
                         }
                     }
+                }
+                .onChange(of: sessionStore.profile) { _, profile in
+                    chatStore.updateCurrentUser(profile: profile)
                 }
                 .onChange(of: sessionStore.setupAccountID) { _, accountID in
                     guard sessionStore.isSignedIn else { return }
@@ -134,6 +180,7 @@ struct NEARPrivateChatApp: App {
 
         guard sessionStore.isSignedIn else { return }
         await sessionStore.refreshProfile()
+        chatStore.updateCurrentUser(profile: sessionStore.profile)
         chatStore.prepareForAuthenticatedAccount(sessionStore.setupAccountID)
         await chatStore.bootstrap()
     }
@@ -142,7 +189,7 @@ struct NEARPrivateChatApp: App {
 private struct RootView: View {
     @EnvironmentObject private var sessionStore: SessionStore
     @EnvironmentObject private var chatStore: ChatStore
-    @State private var setupAccountID: String?
+    @State private var presentedSetupAccountID: String?
     @State private var legalTermsAccepted = true
 
     var body: some View {
@@ -157,6 +204,7 @@ private struct RootView: View {
             authenticatedRoot
             #endif
         }
+        .preferredColorScheme(chatStore.appearancePreference.preferredColorScheme)
         .onAppear {
             refreshLegalTermsAcceptance()
             refreshSetupPresentation()
@@ -168,6 +216,33 @@ private struct RootView: View {
         .onChange(of: sessionStore.setupAccountID) { oldAccountID, accountID in
             refreshLegalTermsAcceptance(previousAccountID: oldAccountID, currentAccountID: accountID)
             refreshSetupPresentation(previousAccountID: oldAccountID)
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { presentedSetupAccountID != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        presentedSetupAccountID = nil
+                    }
+                }
+            )
+        ) {
+            if let accountID = presentedSetupAccountID {
+                UserSetupView(
+                    initialProfile: UserSetupStorage.presentationProfile(
+                        for: accountID,
+                        currentDefaults: currentSetupProfile
+                    ),
+                    readiness: setupReadinessSnapshot,
+                    onComplete: { profile in
+                        completeSetup(profile, for: accountID)
+                    },
+                    onSkip: {
+                        skipSetup(for: accountID)
+                    }
+                )
+                .environmentObject(chatStore)
+            }
         }
         .overlay(alignment: .top) {
             #if DEBUG
@@ -225,10 +300,22 @@ private struct RootView: View {
 
     private func beginSetupRerun() {
         guard sessionStore.isSignedIn, let accountID = sessionStore.setupAccountID else { return }
-        setupAccountID = accountID
-        UserSetupStorage.save(.defaults, for: accountID)
-        chatStore.resetInteractionDefaults()
-        recordSetupTelemetry(profile: .defaults, outcome: .completed)
+        presentedSetupAccountID = accountID
+    }
+
+    private func completeSetup(_ profile: UserSetupProfile, for accountID: String) {
+        let normalized = profile.normalizedForDefaults
+        UserSetupStorage.saveWithoutPendingLaunchCard(normalized, for: accountID)
+        presentedSetupAccountID = nil
+        recordSetupTelemetry(profile: normalized, outcome: .completed)
+        chatStore.applySetupProfile(normalized)
+    }
+
+    private func skipSetup(for accountID: String) {
+        let profile = UserSetupStorage.presentationProfile(for: accountID, currentDefaults: currentSetupProfile)
+        UserSetupStorage.saveWithoutPendingLaunchCard(profile, for: accountID)
+        presentedSetupAccountID = nil
+        recordSetupTelemetry(profile: profile, outcome: .skipped)
     }
 
     private func recordSetupTelemetry(profile: UserSetupProfile, outcome: TelemetrySetupOutcome) {
@@ -269,25 +356,25 @@ private struct RootView: View {
 
     private func refreshSetupPresentation(previousAccountID: String? = nil) {
         guard sessionStore.isSignedIn, let accountID = sessionStore.setupAccountID else {
-            setupAccountID = nil
+            presentedSetupAccountID = nil
             return
         }
 
         guard LegalTermsAcceptanceStore.hasAcceptedCurrentVersion(for: accountID) else {
-            setupAccountID = accountID
+            presentedSetupAccountID = nil
             return
         }
 
         if let previousAccountID, previousAccountID != accountID {
             UserSetupStorage.migrate(from: previousAccountID, to: accountID)
-        } else if let setupAccountID, setupAccountID != accountID {
-            UserSetupStorage.migrate(from: setupAccountID, to: accountID)
+        } else if let presentedSetupAccountID, presentedSetupAccountID != accountID {
+            UserSetupStorage.migrate(from: presentedSetupAccountID, to: accountID)
         }
 
-        setupAccountID = accountID
         if !UserSetupStorage.isCompleted(for: accountID) {
-            UserSetupStorage.save(.defaults, for: accountID)
-            recordSetupTelemetry(profile: .defaults, outcome: .skipped)
+            presentedSetupAccountID = accountID
+        } else if presentedSetupAccountID == accountID {
+            presentedSetupAccountID = nil
         }
     }
 }

@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 @testable import NEARPrivateChat
 
 final class PrivateChatCoreTests: XCTestCase {
@@ -28,6 +29,19 @@ final class PrivateChatCoreTests: XCTestCase {
         let url = try api.authURL(for: OAuthProvider.github, state: "nonce-1")
 
         XCTAssertTrue(url.absoluteString.contains("state=nonce-1"))
+    }
+
+    func testAuthURLUsesTokenCallbackByDefaultForProviderLogin() throws {
+        let api = PrivateChatAPI(configuration: AppConfiguration.production)
+
+        let url = try api.authURL(for: OAuthProvider.github, state: "nonce-1")
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let values = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+
+        XCTAssertEqual(values["state"], "nonce-1")
+        XCTAssertNil(values["response_type"])
+        XCTAssertNil(values["code_challenge"])
+        XCTAssertNil(values["code_challenge_method"])
     }
 
     func testAuthURLCanRequestPKCECodeFlow() throws {
@@ -81,6 +95,48 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(tool, .assistant)
     }
 
+    func testConversationItemDecodesSharedAuthorMetadata() throws {
+        let payload = Data("""
+        {
+          "type": "message",
+          "id": "msg-1",
+          "response_id": "resp-1",
+          "next_response_ids": [],
+          "created_at": 1700000000,
+          "status": "completed",
+          "role": "user",
+          "content": [{"type": "input_text", "text": "Hello"}],
+          "model": "zai-org/GLM-5.1-FP8",
+          "metadata": {
+            "author_id": "user-123",
+            "author_name": "Alex Rivera"
+          }
+        }
+        """.utf8)
+
+        let item = try JSONDecoder().decode(ConversationItem.self, from: payload)
+
+        XCTAssertEqual(item.metadata?.authorID, "user-123")
+        XCTAssertEqual(item.metadata?.authorName, "Alex Rivera")
+    }
+
+    func testChatMessageAuthorMetadataIsTrimmedForDisplay() {
+        let message = ChatMessage(
+            id: "msg-1",
+            role: .user,
+            text: "Hello",
+            model: nil,
+            createdAt: Date(timeIntervalSince1970: 1_000),
+            status: "completed",
+            responseID: nil,
+            isStreaming: false,
+            metadata: MessageMetadata(authorID: " user-123 ", authorName: "  Alex Rivera  ")
+        )
+
+        XCTAssertEqual(message.authorID, "user-123")
+        XCTAssertEqual(message.authorName, "Alex Rivera")
+    }
+
     func testChatImportNormalizesDeveloperAndToolRoles() throws {
         let payload = Data("""
         {
@@ -123,6 +179,18 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertNil(ChatStore.conversationID(from: "https://private.near.ai/c/conv_abc123/../users/me"))
         XCTAssertFalse(PrivateChatAPI.isSafeAPIPathID("../users/me", minimumLength: 6))
         XCTAssertFalse(PrivateChatAPI.isSafeAPIPathID("conv_abc%2Fusers", minimumLength: 6))
+    }
+
+    func testAppAppearancePreferenceNormalizesRemoteValues() {
+        XCTAssertEqual(AppAppearancePreference(remoteValue: nil), .system)
+        XCTAssertEqual(AppAppearancePreference(remoteValue: "System"), .system)
+        XCTAssertEqual(AppAppearancePreference(remoteValue: " light "), .light)
+        XCTAssertEqual(AppAppearancePreference(remoteValue: "DARK"), .dark)
+        XCTAssertEqual(AppAppearancePreference(remoteValue: "unknown"), .system)
+
+        XCTAssertNil(AppAppearancePreference.system.preferredColorScheme)
+        XCTAssertEqual(AppAppearancePreference.light.preferredColorScheme, ColorScheme.light)
+        XCTAssertEqual(AppAppearancePreference.dark.preferredColorScheme, ColorScheme.dark)
     }
 
     func testSafeAPIPathIDRejectsAmbiguousOrOversizedSegments() {
@@ -232,6 +300,76 @@ final class PrivateChatCoreTests: XCTestCase {
         ))
     }
 
+    func testCapabilityNextStepPrioritizesBlockedCloudRoute() {
+        let nextStep = CapabilityNextStepPlanner.recommend(
+            routeBlock: .nearCloudKeyRequired,
+            setupPlan: AppSetupPlan(profile: .defaults, readiness: .optimistic),
+            currentRoute: .nearCloud,
+            hasFreshPrivateProof: false,
+            hostedIronclawAvailable: false,
+            autoCouncilReady: true
+        )
+
+        XCTAssertEqual(nextStep?.kind, .openCloud)
+        XCTAssertEqual(nextStep?.actionTitle, "Add Cloud Key")
+    }
+
+    func testCapabilityNextStepPromotesHostedAgentForAgentDefaults() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .buildAgents
+        profile.useCases = [.buildAgents]
+        profile.wantsIronclaw = true
+        profile.wantsCouncil = false
+        let plan = AppSetupPlan(profile: profile, readiness: .optimistic)
+
+        let nextStep = CapabilityNextStepPlanner.recommend(
+            routeBlock: nil,
+            setupPlan: plan,
+            currentRoute: .ironclawMobile,
+            hasFreshPrivateProof: false,
+            hostedIronclawAvailable: false,
+            autoCouncilReady: true
+        )
+
+        XCTAssertEqual(nextStep?.kind, .openAgent)
+        XCTAssertEqual(nextStep?.actionTitle, "Connect Agent")
+    }
+
+    func testCapabilityNextStepSuggestsAutoCouncilForResearchDefaults() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .research
+        profile.useCases = [.research]
+        profile.wantsCouncil = true
+        profile.wantsIronclaw = false
+        let plan = AppSetupPlan(profile: profile, readiness: .optimistic)
+
+        let nextStep = CapabilityNextStepPlanner.recommend(
+            routeBlock: nil,
+            setupPlan: plan,
+            currentRoute: .nearPrivate,
+            hasFreshPrivateProof: true,
+            hostedIronclawAvailable: true,
+            autoCouncilReady: true
+        )
+
+        XCTAssertEqual(nextStep?.kind, .useAutoCouncil)
+        XCTAssertEqual(nextStep?.actionTitle, "Use Auto-Council")
+    }
+
+    func testCapabilityNextStepSuggestsSecurityWhenPrivateProofIsMissing() {
+        let nextStep = CapabilityNextStepPlanner.recommend(
+            routeBlock: nil,
+            setupPlan: AppSetupPlan(profile: .defaults, readiness: .optimistic),
+            currentRoute: .nearPrivate,
+            hasFreshPrivateProof: false,
+            hostedIronclawAvailable: true,
+            autoCouncilReady: false
+        )
+
+        XCTAssertEqual(nextStep?.kind, .openSecurity)
+        XCTAssertEqual(nextStep?.actionTitle, "Open Security")
+    }
+
     @MainActor
     func testSelectingSingleModelClearsExistingCouncilLineup() {
         let store = ChatStore(api: PrivateChatAPI(configuration: .production))
@@ -244,6 +382,177 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(store.selectedModel, cloudModelID)
         XCTAssertEqual(store.councilModelIDs, [cloudModelID])
         XCTAssertFalse(store.isCouncilModeEnabled)
+    }
+
+    func testHomeSearchContextMatchesSurfaceExplicitProjectHits() {
+        let project = ChatProject(
+            id: "project-1",
+            name: "Launch Room",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            conversationIDs: [],
+            attachments: [
+                ChatAttachment(id: "file-1", name: "launch-brief.pdf", kind: "file", bytes: 2_048)
+            ],
+            instructions: "Use the launch checklist and summarize risks clearly.",
+            memorySummary: "Remember the launch owner requested an executive summary.",
+            links: [
+                ProjectLink(id: "link-1", title: "Launch plan", urlString: "https://near.ai/launch-plan")
+            ],
+            notes: [
+                ProjectNote(id: "note-1", title: "Risk note", text: "Flag launch blockers before signoff.")
+            ]
+        )
+
+        let fileMatches = HomeSearchIndex.projectContextMatches(query: "brief", projects: [project])
+        XCTAssertEqual(fileMatches.map(\.kind), [.file])
+        XCTAssertEqual(fileMatches.map(\.title), ["launch-brief.pdf"])
+
+        let linkMatches = HomeSearchIndex.projectContextMatches(query: "launch-plan", projects: [project])
+        XCTAssertEqual(linkMatches.map(\.kind), [.link])
+        XCTAssertEqual(linkMatches.first?.detail, "near.ai")
+
+        let noteMatches = HomeSearchIndex.projectContextMatches(query: "blockers", projects: [project])
+        XCTAssertEqual(noteMatches.map(\.kind), [.note])
+        XCTAssertEqual(noteMatches.first?.title, "Risk note")
+
+        let instructionMatches = HomeSearchIndex.projectContextMatches(query: "checklist", projects: [project])
+        XCTAssertEqual(instructionMatches.map(\.kind), [.instructions])
+        XCTAssertEqual(instructionMatches.first?.title, "Project instructions")
+
+        let memoryMatches = HomeSearchIndex.projectContextMatches(query: "executive summary", projects: [project])
+        XCTAssertEqual(memoryMatches.map(\.kind), [.memory])
+        XCTAssertEqual(memoryMatches.first?.title, "Memory summary")
+    }
+
+    func testHomeSearchConversationGroupsCollapseToChatsSection() {
+        let conversations = [
+            ConversationSummary(
+                id: "conv-1",
+                createdAt: 1_700_000_000,
+                metadata: ConversationMetadata(title: "Launch summary", pinnedAt: nil, archivedAt: nil, importedAt: nil, rootResponseID: nil)
+            ),
+            ConversationSummary(
+                id: "conv-2",
+                createdAt: 1_699_000_000,
+                metadata: ConversationMetadata(title: "Risk follow-up", pinnedAt: nil, archivedAt: nil, importedAt: nil, rootResponseID: nil)
+            )
+        ]
+
+        let groups = HomeSearchIndex.conversationGroups(
+            searchQuery: "launch",
+            conversations: conversations,
+            now: Date(timeIntervalSince1970: 1_700_050_000),
+            calendar: Calendar(identifier: .gregorian)
+        )
+
+        XCTAssertEqual(groups.map(\.title), ["Chats"])
+        XCTAssertEqual(groups.first?.conversations.map(\.id), ["conv-1", "conv-2"])
+    }
+
+    func testHomeConversationGroupsKeepPinnedAndDateBucketsWithoutSearch() {
+        let now = Date(timeIntervalSince1970: 1_700_100_000)
+        let calendar = Calendar(identifier: .gregorian)
+        let startOfToday = calendar.startOfDay(for: now).timeIntervalSince1970
+        let yesterday = startOfToday - 3_600
+        let earlier = startOfToday - 200_000
+
+        let conversations = [
+            ConversationSummary(
+                id: "conv-pinned",
+                createdAt: startOfToday + 60,
+                metadata: ConversationMetadata(title: "Pinned chat", pinnedAt: "2026-05-25T00:00:00Z", archivedAt: nil, importedAt: nil, rootResponseID: nil)
+            ),
+            ConversationSummary(
+                id: "conv-today",
+                createdAt: startOfToday + 120,
+                metadata: ConversationMetadata(title: "Today chat", pinnedAt: nil, archivedAt: nil, importedAt: nil, rootResponseID: nil)
+            ),
+            ConversationSummary(
+                id: "conv-yesterday",
+                createdAt: yesterday,
+                metadata: ConversationMetadata(title: "Yesterday chat", pinnedAt: nil, archivedAt: nil, importedAt: nil, rootResponseID: nil)
+            ),
+            ConversationSummary(
+                id: "conv-earlier",
+                createdAt: earlier,
+                metadata: ConversationMetadata(title: "Earlier chat", pinnedAt: nil, archivedAt: nil, importedAt: nil, rootResponseID: nil)
+            )
+        ]
+
+        let groups = HomeSearchIndex.conversationGroups(
+            searchQuery: "",
+            conversations: conversations,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(groups.map(\.title), ["Pinned", "Today", "Yesterday", "Earlier"])
+        XCTAssertEqual(groups[0].conversations.map(\.id), ["conv-pinned"])
+        XCTAssertEqual(groups[1].conversations.map(\.id), ["conv-today"])
+        XCTAssertEqual(groups[2].conversations.map(\.id), ["conv-yesterday"])
+        XCTAssertEqual(groups[3].conversations.map(\.id), ["conv-earlier"])
+    }
+
+    @MainActor
+    func testDraftScopesRestorePendingAttachmentsBetweenHomeAndProject() {
+        let accountID = "draft-scope-\(UUID().uuidString)"
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        store.prepareForAuthenticatedAccount(accountID)
+
+        let homeAttachment = RemoteFileInfo(
+            id: "file-home",
+            bytes: 64,
+            filename: "home.txt",
+            purpose: "user_data"
+        )
+        store.draft = "Home draft"
+        store.attachRemoteFileToPrompt(homeAttachment)
+
+        store.createProject(named: "Shiproom")
+        let project = try! XCTUnwrap(store.projects.first)
+        store.selectProject(project)
+
+        XCTAssertEqual(store.draft, "")
+        XCTAssertTrue(store.pendingAttachments.isEmpty)
+
+        let projectAttachment = RemoteFileInfo(
+            id: "file-project",
+            bytes: 96,
+            filename: "project.txt",
+            purpose: "user_data"
+        )
+        store.draft = "Project draft"
+        store.attachRemoteFileToPrompt(projectAttachment)
+
+        store.selectAllChats()
+        XCTAssertEqual(store.draft, "Home draft")
+        XCTAssertEqual(store.pendingAttachments.map(\.id), ["file-home"])
+
+        store.selectProject(project)
+        XCTAssertEqual(store.draft, "Project draft")
+        XCTAssertEqual(store.pendingAttachments.map(\.id), ["file-project"])
+    }
+
+    @MainActor
+    func testLargePasteAttachmentRestoresAfterRelaunch() {
+        let accountID = "draft-relaunch-\(UUID().uuidString)"
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        store.prepareForAuthenticatedAccount(accountID)
+
+        store.draft = String(repeating: "x", count: 5_200)
+
+        XCTAssertEqual(store.draft, "")
+        XCTAssertEqual(store.pendingAttachments.count, 1)
+        XCTAssertTrue(store.pendingAttachments[0].isLocalPendingText)
+        XCTAssertEqual(store.pendingAttachments[0].bytes, 5_200)
+
+        let restoredStore = ChatStore(api: PrivateChatAPI(configuration: .production))
+        restoredStore.prepareForAuthenticatedAccount(accountID)
+
+        XCTAssertEqual(restoredStore.draft, "")
+        XCTAssertEqual(restoredStore.pendingAttachments.count, 1)
+        XCTAssertTrue(restoredStore.pendingAttachments[0].isLocalPendingText)
+        XCTAssertEqual(restoredStore.pendingAttachments[0].bytes, 5_200)
     }
 
     func testWebSearchSourcesDropUnsafeSchemes() throws {
@@ -410,6 +719,27 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(merged.map(\.id), ["remote-user", "remote-assistant", "local-user", "local-assistant"])
     }
 
+    @MainActor
+    func testSharedPreviewEnablesAuthorNamesWithoutShareSheetState() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+
+        XCTAssertFalse(store.shouldShowSharedAuthorNames)
+
+        store.sharedPreview = SharedConversationSnapshot(
+            conversation: ConversationSummary(
+                id: "conv-shared",
+                createdAt: 1_700_000_000,
+                metadata: ConversationMetadata(title: "Shared", pinnedAt: nil, archivedAt: nil, importedAt: nil, rootResponseID: nil)
+            ),
+            messages: [],
+            source: "https://private.near.ai/c/conv-shared",
+            canWrite: false,
+            loadedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+
+        XCTAssertTrue(store.shouldShowSharedAuthorNames)
+    }
+
     func testResponseStreamParserHandlesCoreEvents() throws {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
 
@@ -497,6 +827,57 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertFalse(UserSetupStorage.isCompleted(for: accountB, defaults: defaults))
         XCTAssertEqual(UserSetupStorage.load(for: accountA, defaults: defaults), researchProfile)
         XCTAssertNil(UserSetupStorage.load(for: accountB, defaults: defaults))
+        XCTAssertTrue(UserSetupStorage.hasPendingLaunchCard(for: accountA, defaults: defaults))
+        XCTAssertFalse(UserSetupStorage.hasPendingLaunchCard(for: accountB, defaults: defaults))
+    }
+
+    func testUserSetupLaunchCardPendingCanBeCleared() throws {
+        let defaults = try makeIsolatedDefaults()
+        let accountID = "user:launch-card"
+
+        UserSetupStorage.save(.defaults, for: accountID, defaults: defaults)
+        XCTAssertTrue(UserSetupStorage.hasPendingLaunchCard(for: accountID, defaults: defaults))
+
+        UserSetupStorage.clearPendingLaunchCard(for: accountID, defaults: defaults)
+
+        XCTAssertFalse(UserSetupStorage.hasPendingLaunchCard(for: accountID, defaults: defaults))
+    }
+
+    func testUserSetupSaveWithoutPendingLaunchCardSuppressesHomeResumeCard() throws {
+        let defaults = try makeIsolatedDefaults()
+        let accountID = "user:applied-setup"
+
+        UserSetupStorage.saveWithoutPendingLaunchCard(.defaults, for: accountID, defaults: defaults)
+
+        XCTAssertTrue(UserSetupStorage.isCompleted(for: accountID, defaults: defaults))
+        XCTAssertFalse(UserSetupStorage.hasPendingLaunchCard(for: accountID, defaults: defaults))
+    }
+
+    func testUserSetupPresentationProfileUsesDefaultsUntilSetupCompletes() throws {
+        let defaults = try makeIsolatedDefaults()
+        let accountID = "user:setup-presentation"
+        var current = UserSetupProfile.defaults
+        current.useCase = .research
+        current.useCases = [.research]
+        current.wantsCouncil = true
+
+        let initial = UserSetupStorage.presentationProfile(
+            for: accountID,
+            currentDefaults: current,
+            defaults: defaults
+        )
+
+        XCTAssertEqual(initial, .defaults)
+
+        UserSetupStorage.saveWithoutPendingLaunchCard(current, for: accountID, defaults: defaults)
+
+        let afterCompletion = UserSetupStorage.presentationProfile(
+            for: accountID,
+            currentDefaults: .defaults,
+            defaults: defaults
+        )
+
+        XCTAssertEqual(afterCompletion, current.normalizedForDefaults)
     }
 
     func testUserSetupStorageMigratesFallbackToUserAccount() throws {
@@ -512,6 +893,8 @@ final class PrivateChatCoreTests: XCTestCase {
 
         XCTAssertTrue(UserSetupStorage.isCompleted(for: userAccount, defaults: defaults))
         XCTAssertEqual(UserSetupStorage.load(for: userAccount, defaults: defaults), agentProfile)
+        XCTAssertTrue(UserSetupStorage.hasPendingLaunchCard(for: userAccount, defaults: defaults))
+        XCTAssertFalse(UserSetupStorage.hasPendingLaunchCard(for: fallbackAccount, defaults: defaults))
     }
 
     func testLegalTermsAcceptanceIsPendingThenAccountScoped() throws {
@@ -625,7 +1008,7 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertFalse(plan.agentEnabled)
         XCTAssertTrue(plan.councilEnabled)
         XCTAssertEqual(plan.focusMode, .auto)
-        XCTAssertEqual(plan.expectedFirstAction, "Launch an agent mission")
+        XCTAssertEqual(plan.expectedFirstAction, "Ask the council")
     }
 
     func testAppSetupPlanFallsBackWhenCouncilIsNotReady() {
@@ -666,6 +1049,57 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(plan.expectedFirstAction, "Start from your goal")
     }
 
+    func testSetupLaunchCardUsesGoalAsSubtitleWhenPresent() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .research
+        profile.useCases = [.research]
+        profile.contextStyle = .project
+        profile.goalText = "Map the strongest privacy proof workflow."
+
+        let plan = AppSetupPlan(profile: profile, readiness: .optimistic)
+
+        XCTAssertEqual(plan.launchCardTitle, "Start from your goal")
+        XCTAssertEqual(plan.launchCardSubtitle, "Map the strongest privacy proof workflow.")
+    }
+
+    func testSetupGoalDrivesEmptyStateSubtitleAndPrompts() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .research
+        profile.useCases = [.research]
+        profile.goalText = "Map the strongest privacy proof workflow."
+
+        let normalized = profile.normalizedForDefaults
+        let suggestions = normalized.emptyStatePromptSuggestions
+
+        XCTAssertEqual(normalized.emptyStateSubtitle, "Goal ready: Map the strongest privacy proof workflow.")
+        XCTAssertEqual(suggestions.map(\.title), ["Start brief", "Find sources", "Recommend next step"])
+        XCTAssertEqual(suggestions.first?.prompt, "Create a sourced research brief for this goal: Map the strongest privacy proof workflow.")
+    }
+
+    func testSetupUseCaseProvidesFallbackEmptyStatePromptsWithoutGoal() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .buildAgents
+        profile.useCases = [.buildAgents]
+
+        let suggestions = profile.normalizedForDefaults.emptyStatePromptSuggestions
+
+        XCTAssertEqual(profile.normalizedForDefaults.emptyStateSubtitle, "Start with a safe agent mission, then verify the patch or test pass.")
+        XCTAssertEqual(suggestions.map(\.title), ["Agent mission", "Review repo", "Focused tests"])
+        XCTAssertEqual(suggestions.first?.prompt, "Plan a phone-launched agent task for a repo or research project.")
+    }
+
+    func testSetupLaunchCardMetadataFallsBackToRouteFocusAndProject() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .teamProjects
+        profile.useCases = [.teamProjects]
+        profile.contextStyle = .project
+
+        let plan = AppSetupPlan(profile: profile, readiness: .optimistic)
+
+        XCTAssertEqual(plan.launchCardMetadata, ["Private model", "Project", "Project Workspace"])
+        XCTAssertEqual(plan.launchCardSubtitle, "Ready now: Private model · Project · Project Workspace")
+    }
+
     func testSetupCTAIsDerivedFromSinglePlanState() {
         let cases: [(UserSetupUseCase, Bool, Bool, String)] = [
             (.privateChat, false, false, "Ask a private question"),
@@ -688,6 +1122,42 @@ final class PrivateChatCoreTests: XCTestCase {
                 XCTAssertEqual(plan.expectedFirstAction, expectedCTA)
             }
         }
+    }
+
+    func testRuntimeSetupProfileInferenceRequiresActiveCouncilMode() {
+        let storedSingleModelProfile = UserSetupProfile.inferredCurrentDefaults(
+            webSearchEnabled: false,
+            sourceMode: .auto,
+            selectedModelID: "zai-org/GLM-5.1-FP8",
+            hasSelectedProject: false,
+            isCouncilModeEnabled: false,
+            researchModeEnabled: false
+        )
+        let activeCouncilProfile = UserSetupProfile.inferredCurrentDefaults(
+            webSearchEnabled: true,
+            sourceMode: .all,
+            selectedModelID: "zai-org/GLM-5.1-FP8",
+            hasSelectedProject: true,
+            isCouncilModeEnabled: true,
+            researchModeEnabled: false
+        )
+
+        XCTAssertFalse(storedSingleModelProfile.wantsCouncil)
+        XCTAssertEqual(storedSingleModelProfile.useCases, [.privateChat])
+        XCTAssertTrue(activeCouncilProfile.wantsCouncil)
+        XCTAssertEqual(activeCouncilProfile.useCases, [.teamProjects])
+    }
+
+    func testAppSetupPlanUsesCouncilCTAWhenCouncilRouteIsReady() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .research
+        profile.useCases = [.research]
+        profile.wantsCouncil = true
+
+        let plan = AppSetupPlan(profile: profile, readiness: .optimistic)
+
+        XCTAssertEqual(plan.modelRoute, .council)
+        XCTAssertEqual(plan.expectedFirstAction, "Ask the council")
     }
 
     func testStarterPresetsPrefillGoalAndKeepCTAStateDerived() {
@@ -843,6 +1313,17 @@ final class PrivateChatCoreTests: XCTestCase {
     }
 
     func testSourceRoutingSemanticsNearPrivateSeparatesLinksFromNativeWebTool() {
+        let autoDefault = ChatStore.sourceRoutingSemantics(
+            sourceMode: .auto,
+            researchModeEnabled: false,
+            webSearchEnabled: false,
+            route: .nearPrivate
+        )
+        XCTAssertEqual(autoDefault.modelNativeWebToolPolicy, .whenFreshRequested)
+        XCTAssertEqual(autoDefault.appWebGroundingPolicy, .never)
+        XCTAssertTrue(autoDefault.attachesSavedLinkSourcePack)
+        XCTAssertTrue(autoDefault.attachesProjectFileSourcePack)
+
         let links = ChatStore.sourceRoutingSemantics(
             sourceMode: .links,
             researchModeEnabled: false,
@@ -865,11 +1346,22 @@ final class PrivateChatCoreTests: XCTestCase {
         )
         XCTAssertEqual(web.focus, .web)
         XCTAssertEqual(web.modelNativeWebToolPolicy, .always)
-        XCTAssertFalse(web.attachesSavedLinkSourcePack)
-        XCTAssertFalse(web.attachesProjectFileSourcePack)
+        XCTAssertTrue(web.attachesSavedLinkSourcePack)
+        XCTAssertTrue(web.attachesProjectFileSourcePack)
     }
 
     func testSourceRoutingSemanticsNearCloudUsesAppGroundingWithoutNativeTools() {
+        let cloudAuto = ChatStore.sourceRoutingSemantics(
+            sourceMode: .auto,
+            researchModeEnabled: false,
+            webSearchEnabled: false,
+            route: .nearCloud
+        )
+        XCTAssertEqual(cloudAuto.modelNativeWebToolPolicy, .never)
+        XCTAssertEqual(cloudAuto.appWebGroundingPolicy, .whenFreshRequested)
+        XCTAssertTrue(cloudAuto.attachesSavedLinkSourcePack)
+        XCTAssertTrue(cloudAuto.attachesProjectFileSourcePack)
+
         let cloudWeb = ChatStore.sourceRoutingSemantics(
             sourceMode: .web,
             researchModeEnabled: false,
@@ -878,8 +1370,8 @@ final class PrivateChatCoreTests: XCTestCase {
         )
         XCTAssertEqual(cloudWeb.modelNativeWebToolPolicy, .never)
         XCTAssertEqual(cloudWeb.appWebGroundingPolicy, .always)
-        XCTAssertFalse(cloudWeb.attachesSavedLinkSourcePack)
-        XCTAssertFalse(cloudWeb.attachesProjectFileSourcePack)
+        XCTAssertTrue(cloudWeb.attachesSavedLinkSourcePack)
+        XCTAssertTrue(cloudWeb.attachesProjectFileSourcePack)
 
         let cloudLinks = ChatStore.sourceRoutingSemantics(
             sourceMode: .links,
@@ -891,6 +1383,67 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(cloudLinks.appWebGroundingPolicy, .whenFreshRequested)
         XCTAssertTrue(cloudLinks.attachesSavedLinkSourcePack)
         XCTAssertFalse(cloudLinks.attachesProjectFileSourcePack)
+    }
+
+    func testAskOrchestratorKeepsNearCloudWithProjectAndWebContextWhenKeyExists() {
+        let decision = AskOrchestrator.decide(
+            AskOrchestrator.Input(
+                prompt: "Use the project files and latest web context to compare options",
+                selectedRoute: .nearCloud,
+                hasProjectContext: true,
+                hasPromptAttachments: false,
+                nearCloudKeyConfigured: true,
+                hostedAgentAvailable: false,
+                councilAvailable: false,
+                councilActive: false
+            )
+        )
+
+        XCTAssertEqual(decision.route, .nearCloud)
+        XCTAssertEqual(decision.proofState, .proxied)
+        XCTAssertTrue(decision.tools.contains(.projectFiles))
+        XCTAssertTrue(decision.tools.contains(.web))
+        XCTAssertEqual(decision.failurePlan, .none)
+    }
+
+    func testAskOrchestratorRequestsCloudKeyWithoutChangingSelectedRoute() {
+        let decision = AskOrchestrator.decide(
+            AskOrchestrator.Input(
+                prompt: "Use latest sources",
+                selectedRoute: .nearCloud,
+                hasProjectContext: false,
+                hasPromptAttachments: false,
+                nearCloudKeyConfigured: false,
+                hostedAgentAvailable: false,
+                councilAvailable: false,
+                councilActive: false
+            )
+        )
+
+        XCTAssertEqual(decision.route, .nearCloud)
+        XCTAssertEqual(decision.failurePlan, .requestCloudKey)
+        XCTAssertEqual(decision.proofState, .unverified)
+    }
+
+    func testAskOrchestratorOffersAgentAndCouncilWithoutChangingSelectedRoute() {
+        let decision = AskOrchestrator.decide(
+            AskOrchestrator.Input(
+                prompt: "Compare options and implement the safest repo patch",
+                selectedRoute: .nearPrivate,
+                hasProjectContext: false,
+                hasPromptAttachments: false,
+                nearCloudKeyConfigured: true,
+                hostedAgentAvailable: true,
+                councilAvailable: true,
+                councilActive: false
+            )
+        )
+
+        XCTAssertEqual(decision.route, .nearPrivate)
+        XCTAssertTrue(decision.shouldOfferAgent)
+        XCTAssertTrue(decision.shouldOfferCouncil)
+        XCTAssertFalse(decision.tools.contains(.agent))
+        XCTAssertFalse(decision.tools.contains(.council))
     }
 
     func testSourceRoutingSemanticsResearchIsSingleFocusAcrossSourceModes() {
@@ -922,7 +1475,9 @@ final class PrivateChatCoreTests: XCTestCase {
             route: .ironclawMobile
         )
         XCTAssertEqual(mobileResearch.modelNativeWebToolPolicy, .always)
-        XCTAssertEqual(mobileResearch.appWebGroundingPolicy, .never)
+        XCTAssertEqual(mobileResearch.appWebGroundingPolicy, .always)
+        XCTAssertTrue(mobileResearch.attachesProjectFileSourcePack)
+        XCTAssertTrue(mobileResearch.attachesSavedLinkSourcePack)
 
         let hostedResearch = ChatStore.sourceRoutingSemantics(
             sourceMode: .auto,
@@ -931,7 +1486,9 @@ final class PrivateChatCoreTests: XCTestCase {
             route: .ironclawHosted
         )
         XCTAssertEqual(hostedResearch.modelNativeWebToolPolicy, .never)
-        XCTAssertEqual(hostedResearch.appWebGroundingPolicy, .never)
+        XCTAssertEqual(hostedResearch.appWebGroundingPolicy, .always)
+        XCTAssertTrue(hostedResearch.attachesProjectFileSourcePack)
+        XCTAssertTrue(hostedResearch.attachesSavedLinkSourcePack)
     }
 
     func testNearCloudModelIDsPreserveUnderlyingCloudModel() {
@@ -1063,7 +1620,7 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(status.state, .valid)
     }
 
-    func testProofCapsuleSeparatesFetchedFromVerifiedCopy() {
+    func testProofCapsuleUsesVerifiedConsumerCopy() {
         let now = Date()
         let snapshot = AttestationSnapshot(
             nonce: "nonce-1",
@@ -1079,28 +1636,28 @@ final class PrivateChatCoreTests: XCTestCase {
         let status = AttestationStatus(snapshot: snapshot, selectedModelID: "zai-org/GLM-5.1-FP8")
         let proof = ProofCapsuleViewModel(status: status, modelID: "zai-org/GLM-5.1-FP8", now: now)
 
-        XCTAssertEqual(proof.state, .fetched)
-        XCTAssertEqual(proof.title, "Proof fetched")
-        XCTAssertFalse(proof.badge.localizedCaseInsensitiveContains("verified"))
-        XCTAssertFalse(proof.title.localizedCaseInsensitiveContains("verified"))
+        XCTAssertEqual(proof.state, .verified)
+        XCTAssertEqual(proof.title, "Verified")
+        XCTAssertTrue(proof.badge.localizedCaseInsensitiveContains("verified"))
+        XCTAssertTrue(proof.title.localizedCaseInsensitiveContains("verified"))
     }
 
-    func testUnknownAttestationUsesNoProofCopy() {
+    func testUnknownAttestationUsesPendingVerificationCopy() {
         let copy = AttestationStatus.unknown.userFacingCopy()
         let proof = ProofCapsuleViewModel(status: .unknown, modelID: "zai-org/GLM-5.1-FP8")
 
-        XCTAssertEqual(copy.title, "No proof yet")
-        XCTAssertEqual(copy.badge, "No proof")
-        XCTAssertEqual(proof.state, .none)
-        XCTAssertEqual(proof.badge, "No proof")
+        XCTAssertEqual(copy.title, "Verification pending")
+        XCTAssertEqual(copy.badge, "Pending")
+        XCTAssertEqual(proof.state, .unknown)
+        XCTAssertEqual(proof.badge, "Pending")
     }
 
     func testAttestationCopyExplainsExternalRoutes() {
         let copy = AttestationStatus.unavailable(reason: .routeNotSupported).userFacingCopy()
 
-        XCTAssertEqual(copy.title, "Not TEE-attested")
+        XCTAssertEqual(copy.title, "Unverified route")
         XCTAssertTrue(copy.detail.contains("NEAR Private"))
-        XCTAssertEqual(copy.badge, "No TEE proof")
+        XCTAssertEqual(copy.badge, "Unverified")
     }
 
     func testAttestationCopySeparatesServiceFailureFromMissingModelCoverage() {
