@@ -135,6 +135,27 @@ final class PrivateChatCoreTests: XCTestCase {
 
         XCTAssertEqual(message.authorID, "user-123")
         XCTAssertEqual(message.authorName, "Alex Rivera")
+        XCTAssertEqual(message.authorDisplayLabel, "Alex Rivera")
+    }
+
+    func testChatMessageAuthorDisplayFallsBackToCompactAuthorID() {
+        let message = ChatMessage(
+            id: "msg-2",
+            role: .assistant,
+            text: "Hi",
+            model: "zai-org/GLM-5.1-FP8",
+            createdAt: Date(timeIntervalSince1970: 2_000),
+            status: "completed",
+            responseID: nil,
+            isStreaming: false,
+            metadata: MessageMetadata(
+                authorID: "near-user-account-1234567890abcdef",
+                authorName: nil
+            )
+        )
+
+        XCTAssertEqual(message.compactAuthorID, "near-user-...abcdef")
+        XCTAssertEqual(message.authorDisplayLabel, "near-user-...abcdef")
     }
 
     func testChatImportNormalizesDeveloperAndToolRoles() throws {
@@ -581,6 +602,20 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(event, .webSearchCompleted(query: "test", sources: [
             WebSearchSource(type: nil, url: "https://example.com/a")
         ]))
+    }
+
+    func testWebSearchSourceDisplayMetadataIsReadable() {
+        let source = WebSearchSource(
+            type: "project_file",
+            url: "https://www.example.com/a",
+            title: "  Launch   brief  ",
+            publishedAt: "May 25, 2026"
+        )
+
+        XCTAssertEqual(source.host, "example.com")
+        XCTAssertEqual(source.displayTitle, "Launch brief")
+        XCTAssertEqual(source.displaySubtitle, "example.com · May 25, 2026 · Project File")
+        XCTAssertEqual(source.sourceInitials, "EX")
     }
 
     func testSearchActionDecodingDropsUnsafeSourceURLs() throws {

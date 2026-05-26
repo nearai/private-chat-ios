@@ -520,9 +520,13 @@ private struct UserSetupView: View {
 
                     setupExamples
 
+                    setupExperienceMode
+
                     SetupQuietWebToggle(isOn: setupToggleBinding(.web, keyPath: \.wantsWeb))
 
-                    SetupReadinessLine(plan: AppSetupPlan(profile: profile.normalizedForDefaults, readiness: readiness))
+                    SetupReadinessLine(plan: setupPlan)
+
+                    setupPreview
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 18)
@@ -573,7 +577,11 @@ private struct UserSetupView: View {
     }
 
     private var primarySetupActionTitle: String {
-        AppSetupPlan(profile: profile.normalizedForDefaults, readiness: readiness).expectedFirstAction
+        setupPlan.expectedFirstAction
+    }
+
+    private var setupPlan: AppSetupPlan {
+        AppSetupPlan(profile: profile.normalizedForDefaults, readiness: readiness)
     }
 
     private var setupHero: some View {
@@ -615,6 +623,27 @@ private struct UserSetupView: View {
             VStack(spacing: 8) {
                 content()
             }
+        }
+    }
+
+    private var setupExperienceMode: some View {
+        setupSection(title: "How much control do you want?") {
+            ForEach(UserSetupExperienceMode.allCases) { mode in
+                SetupChoiceRow(
+                    title: mode.title,
+                    subtitle: mode.subtitle,
+                    symbolName: mode.symbolName,
+                    isSelected: profile.experienceMode == mode
+                ) {
+                    profile.experienceMode = mode
+                }
+            }
+        }
+    }
+
+    private var setupPreview: some View {
+        setupSection(title: "What will happen next") {
+            SetupPlanPreviewCard(plan: setupPlan)
         }
     }
 

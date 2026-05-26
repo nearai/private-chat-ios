@@ -2157,6 +2157,38 @@ struct WebSearchSource: Codable, Hashable, Identifiable {
         return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
     }
 
+    var displayTitle: String {
+        let cleanedTitle = title?
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let cleanedTitle, !cleanedTitle.isEmpty {
+            return cleanedTitle
+        }
+        return host
+    }
+
+    var displaySubtitle: String {
+        var parts = [host]
+        if let publishedAt = publishedAt?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !publishedAt.isEmpty {
+            parts.append(publishedAt)
+        }
+        if let typeLabel {
+            parts.append(typeLabel)
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    var sourceInitials: String {
+        let base = host
+            .split(separator: ".")
+            .first
+            .map(String.init) ?? host
+        let letters = base.uppercased().filter { $0.isLetter || $0.isNumber }
+        let initials = String(letters.prefix(2))
+        return initials.isEmpty ? "#" : initials
+    }
+
     init(type: String? = nil, url: String, title: String? = nil, publishedAt: String? = nil) {
         self.type = type
         self.url = Self.sanitizedURLString(url) ?? ""
@@ -2167,6 +2199,17 @@ struct WebSearchSource: Codable, Hashable, Identifiable {
     static func sanitizedURLString(_ value: String) -> String? {
         guard let url = safeURL(from: value) else { return nil }
         return url.absoluteString
+    }
+
+    private var typeLabel: String? {
+        guard let rawType = type?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawType.isEmpty,
+              rawType.caseInsensitiveCompare("web") != .orderedSame else {
+            return nil
+        }
+        return rawType
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
     }
 
     private static func safeURL(from value: String) -> URL? {
@@ -2554,6 +2597,18 @@ struct ChatMessage: Identifiable, Hashable, Codable {
 
     var authorID: String? {
         metadata?.trimmedAuthorID
+    }
+
+    var compactAuthorID: String? {
+        guard let authorID else { return nil }
+        if authorID.count <= 24 {
+            return authorID
+        }
+        return "\(authorID.prefix(10))...\(authorID.suffix(6))"
+    }
+
+    var authorDisplayLabel: String? {
+        authorName ?? compactAuthorID
     }
 
     var firstTokenLatency: TimeInterval? {

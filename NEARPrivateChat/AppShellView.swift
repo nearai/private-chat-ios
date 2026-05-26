@@ -9524,6 +9524,9 @@ private struct MessageBubble: View {
                     Text(headerTitle)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
+                    if let authorBadgeTitle {
+                        MetadataPill(title: authorBadgeTitle, symbolName: "person.crop.circle", isPrimary: false)
+                    }
                     if message.role == .assistant, let badge = statusBadge {
                         Text(badge)
                             .font(.caption2.weight(.semibold))
@@ -9691,12 +9694,20 @@ private struct MessageBubble: View {
     }
 
     private var headerTitle: String {
-        if message.role == .user,
-           chatStore.shouldShowSharedAuthorNames,
-           let authorName = message.authorName {
-            return authorName
+        if message.role == .user {
+            if chatStore.shouldShowSharedAuthorNames {
+                return message.authorDisplayLabel ?? "User"
+            }
+            return "You"
         }
-        return message.role == .user ? "You" : message.modelDisplayName
+        return message.modelDisplayName
+    }
+
+    private var authorBadgeTitle: String? {
+        guard chatStore.shouldShowSharedAuthorNames, message.role != .user else {
+            return nil
+        }
+        return message.authorDisplayLabel
     }
 
     private var answerProofCapsule: ProofCapsuleViewModel? {
@@ -10069,12 +10080,12 @@ private struct AssistantInlineActions: View {
                             ZStack {
                                 Circle()
                                     .fill(Color.trustVerified.opacity(0.20))
-                                Image(systemName: "arrow.up.right")
+                                Image(systemName: "link")
                                     .font(.system(size: 10, weight: .bold))
                                     .foregroundStyle(Color.trustVerified)
                             }
                             .frame(width: 24, height: 24)
-                            Text(sourceCount == 1 ? "Source" : "Sources")
+                            Text(sourceButtonLabel)
                                 .font(.subheadline.weight(.medium))
                         }
                         .foregroundStyle(.secondary)
@@ -10102,6 +10113,10 @@ private struct AssistantInlineActions: View {
         .buttonStyle(.plain)
         .disabled(isSavedToProject)
         .accessibilityLabel(saveAccessibilityLabel)
+    }
+
+    private var sourceButtonLabel: String {
+        "\(sourceCount) source\(sourceCount == 1 ? "" : "s")"
     }
 
     private func actionButton(symbolName: String, label: String, action: @escaping () -> Void) -> some View {
@@ -11970,12 +11985,12 @@ private struct SearchContextStrip: View {
                 ZStack {
                     Circle()
                         .fill(Color.trustVerified.opacity(0.20))
-                    Image(systemName: "arrow.up.right")
+                    Image(systemName: "link")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(Color.trustVerified)
                 }
                 .frame(width: 22, height: 22)
-                Text("Sources")
+                Text("Sources checked")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
                 Text(headerText)
@@ -12037,10 +12052,11 @@ private struct SearchContextStrip: View {
     }
 
     private var headerText: String {
+        let countLabel = "\(sources.count) source\(sources.count == 1 ? "" : "s")"
         guard let query = displayQuery, !query.isEmpty else {
-            return "\(sources.count)"
+            return countLabel
         }
-        return "for \(query)"
+        return "\(countLabel) · \(query)"
     }
 
     private var displayQuery: String? {
@@ -12066,25 +12082,6 @@ private struct SearchContextStrip: View {
         }
         return value.isEmpty ? nil : value
     }
-
-    private func sourceTitle(_ source: WebSearchSource) -> String {
-        let title = source.title?
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if let title, !title.isEmpty {
-            return title.count > 34 ? "\(title.prefix(31))..." : title
-        }
-        return source.host
-    }
-
-    private func sourceSubtitle(_ source: WebSearchSource) -> String {
-        var parts = [source.host]
-        if let publishedAt = source.publishedAt?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !publishedAt.isEmpty {
-            parts.append(publishedAt)
-        }
-        return parts.joined(separator: " · ")
-    }
 }
 
 private struct SourcePill: View {
@@ -12093,6 +12090,9 @@ private struct SourcePill: View {
 
     var body: some View {
         HStack(spacing: 7) {
+            Text("[\(index)]")
+                .font(.caption2.monospacedDigit().weight(.bold))
+                .foregroundStyle(Color.trustVerified)
             SourceLogo(source: source, fallbackText: "\(index)")
             Text(source.host)
                 .font(.caption.weight(.semibold))
@@ -12146,9 +12146,19 @@ private struct SourceLogo: View {
     }
 
     private var fallback: some View {
-        Text(fallbackText)
-            .font(.caption2.monospacedDigit().weight(.bold))
+        Text(fallbackLabel)
+            .font(fallbackFont)
             .foregroundStyle(Color.trustVerified)
+    }
+
+    private var fallbackLabel: String {
+        source.sourceInitials == "#" ? fallbackText : source.sourceInitials
+    }
+
+    private var fallbackFont: Font {
+        fallbackLabel == fallbackText
+            ? .caption2.monospacedDigit().weight(.bold)
+            : .caption2.weight(.bold)
     }
 
     private var faviconURL: URL? {
@@ -12184,20 +12194,24 @@ private struct SourcesDetailView: View {
                                 HStack(spacing: 11) {
                                     SourceLogo(source: source, fallbackText: "\(index + 1)")
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(source.title ?? source.host)
+                                        Text(source.displayTitle)
                                             .font(.subheadline.weight(.semibold))
                                             .foregroundStyle(.primary)
                                             .lineLimit(2)
-                                        Text(source.host)
+                                        Text(source.displaySubtitle)
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
+                                    Spacer(minLength: 8)
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(Color.actionPrimary)
                                 }
                             }
                         }
                     }
                 } header: {
-                    Text("Linked Sources")
+                    Text("\(sources.count) linked source\(sources.count == 1 ? "" : "s")")
                 }
             }
             .navigationTitle("Sources")

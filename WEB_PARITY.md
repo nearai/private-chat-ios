@@ -55,7 +55,7 @@ This ledger is intentionally blunt: every feature confirmed in the web repo is e
 | Organization sharing | `src/components/chat/ShareConversationDialog.tsx` | Implemented | Native share sheet supports organization email patterns with read/write permission and removal. |
 | Shared-with-me list | `src/api/chat/client.ts`, `src/pages/SharedPage.tsx` | Implemented | Native Shared With Me inbox calls `/v1/shared-with-me`, previews readable conversations, and supports copy-and-continue. |
 | Write-access shared conversations | `src/pages/Home.tsx` | Implemented | Native shared previews carry `can_write`; writable shared chats expose Open Chat and continue through the normal composer, while read-only shares remain preview/clone-only. |
-| Owner/author display | `src/pages/Home.tsx`, `src/types/index.ts` | Partial | Native decodes share owner for share settings, but messages do not show shared author metadata. |
+| Owner/author display | `src/pages/Home.tsx`, `src/types/index.ts` | Implemented | Native decodes share owner for share settings and now shows shared-message author names or compact author IDs in message rows when viewing shared/non-owner conversations. |
 
 ## Organization, Settings, And Export
 
@@ -74,5 +74,4 @@ This ledger is intentionally blunt: every feature confirmed in the web repo is e
 
 1. Fuller account/about parity beyond the synced settings surface.
 2. KaTeX/math output rendering parity.
-3. Shared author metadata in message rows.
-4. iPad drag/drop polish for attachments.
+3. iPad drag/drop polish for attachments.
