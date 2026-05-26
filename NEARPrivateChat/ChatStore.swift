@@ -8024,7 +8024,7 @@ final class ChatStore: ObservableObject {
         ironclawSettings = IronclawSettings(
             isEnabled: true,
             baseURL: "https://ironclaw-demo.near.ai",
-            threadID: "demo-thread-q3-launch"
+            threadID: "demo-thread-ironclaw-prs"
         )
         ironclawTokenConfigured = true
         ironclawStatusText = "Hosted IronClaw ready"
@@ -8037,7 +8037,7 @@ final class ChatStore: ObservableObject {
         pendingLargePasteTexts = [:]
         selectedProjectID = data.project.id
         selectedModel = Self.defaultModelID
-        councilModelIDs = [Self.defaultModelID, "Qwen/Qwen3.5-122B-A10B", "Qwen/Qwen3.6-35B-A3B-FP8"]
+        councilModelIDs = [Self.defaultModelID, ModelOption.nearCloudQwenMaxModelID, "near-cloud/anthropic/claude-opus-4-7"]
         webSearchEnabled = false
         sourceMode = .auto
         researchModeEnabled = false
@@ -8062,43 +8062,60 @@ final class ChatStore: ObservableObject {
             messages = []
             pendingAttachments = data.project.attachments
             sourceMode = .files
-            draft = "Summarize launch risks from the brief in five bullets."
+            draft = "Update this project plan based on the latest IronClaw PRs."
         case .composer:
             selectedConversation = nil
             messages = []
-            pendingAttachments = data.project.attachments
-            draft = "Summarize launch risks from the brief in five bullets."
+            selectedProjectID = nil
+            pendingAttachments = []
+            sourceMode = .web
+            webSearchEnabled = true
+            draft = "Is the war in Iran ending as of today?"
         case .agent:
             selectedConversation = nil
             messages = []
             selectedModel = ModelOption.ironclawModelID
             councilModelIDs = []
-            draft = "Use IronClaw to inspect the launch repo and draft a QA plan."
+            sourceMode = .all
+            draft = "Use the attached project plan and latest nearai/ironclaw PRs to update the plan."
         case .ironclaw:
             selectedConversation = data.agentConversation
             messages = data.agentMessages
             selectedModel = ModelOption.ironclawModelID
             councilModelIDs = []
+            sourceMode = .all
             draft = ""
         case .ironclawThinking:
             selectedConversation = data.agentConversation
             messages = data.agentMessages
             selectedModel = ModelOption.ironclawModelID
             councilModelIDs = []
+            sourceMode = .all
             draft = ""
         case .glmResult:
             selectedConversation = data.glmConversation
             messages = data.glmMessages
             selectedModel = Self.defaultModelID
             councilModelIDs = []
+            selectedProjectID = nil
+            sourceMode = .web
+            webSearchEnabled = true
             draft = ""
         case .verification:
             selectedConversation = data.glmConversation
             messages = data.glmMessages
             selectedModel = Self.defaultModelID
             councilModelIDs = []
+            selectedProjectID = nil
             draft = ""
-        case .chat, .councilOutput, .models, .cloudModels, .council, .project, .share:
+        case .models:
+            selectedConversation = data.glmConversation
+            messages = data.glmMessages
+            selectedModel = Self.defaultModelID
+            councilModelIDs = []
+            selectedProjectID = nil
+            draft = ""
+        case .chat, .councilOutput, .cloudModels, .council, .project, .share:
             selectedConversation = data.primaryConversation
             messages = data.messages
             draft = ""
@@ -8119,7 +8136,7 @@ final class ChatStore: ObservableObject {
                     recipient: nil,
                     groupID: nil,
                     orgEmailPattern: nil,
-                    publicToken: "demo-q3-launch",
+                    publicToken: "demo-iran-status",
                     createdAt: "2026-05-25T13:39:00Z",
                     updatedAt: "2026-05-25T13:40:00Z"
                 )
@@ -8145,35 +8162,35 @@ final class ChatStore: ObservableObject {
     }
 
     private static func demoCaptureData(now: Date) -> DemoCaptureData {
-        let projectID = "demo-project-q3-launch"
-        let conversationID = "demo-conversation-q3-launch"
+        let projectID = "demo-project-ironclaw-pr-plan"
+        let conversationID = "demo-conversation-iran-council"
         let glmConversationID = "demo-conversation-glm-private"
-        let councilBatchID = "demo-council-q3"
+        let councilBatchID = "demo-council-iran-status"
         let created = now.addingTimeInterval(-11 * 60)
         let project = ChatProject(
             id: projectID,
-            name: "Q3 Launch",
+            name: "IronClaw Reborn Plan",
             createdAt: created.addingTimeInterval(-3600),
             conversationIDs: [glmConversationID, conversationID],
             attachments: [
-                ChatAttachment(id: "demo-file-launch-brief", name: "launch-brief.pdf", kind: "pdf", bytes: 1_420_000),
-                ChatAttachment(id: "demo-file-risk-table", name: "risk-table.csv", kind: "csv", bytes: 86_000)
+                ChatAttachment(id: "demo-file-reborn-project-plan", name: "reborn-project-plan.md", kind: "txt", bytes: 42_000),
+                ChatAttachment(id: "demo-file-pr-snapshot", name: "latest-ironclaw-prs.json", kind: "json", bytes: 19_000)
             ],
-            instructions: "Be concise. Cite sources. Surface launch risks clearly.",
-            memorySummary: "The launch narrative centers on verifiable private AI, project context, and Council review for high-stakes decisions.",
+            instructions: "Update plans from live GitHub evidence. Group work by lifecycle, SSE/replay, and first-party GitHub WASM extension.",
+            memorySummary: "The plan tracks IronClaw Reborn lifecycle work, SSE replay reliability, and first-party GitHub extension installability.",
             links: [
                 ProjectLink(
-                    id: "demo-link-near-blog",
-                    title: "NEAR AI blog",
-                    urlString: "https://near.ai/blog",
+                    id: "demo-link-ironclaw-prs",
+                    title: "nearai/ironclaw pull requests",
+                    urlString: "https://github.com/nearai/ironclaw/pulls",
                     createdAt: created.addingTimeInterval(60)
                 )
             ],
             notes: [
                 ProjectNote(
-                    id: "demo-note-launch-memo",
-                    title: "Draft v3 of the launch memo",
-                    text: "Draft v3 of the launch memo - see attached brief.",
+                    id: "demo-note-reborn-plan",
+                    title: "Reborn plan update",
+                    text: "Fold #4066, #4065, and #4064 into the project plan before the next release review.",
                     createdAt: created.addingTimeInterval(120)
                 )
             ],
@@ -8184,55 +8201,57 @@ final class ChatStore: ObservableObject {
         let glmConversation = ConversationSummary(
             id: glmConversationID,
             createdAt: created.addingTimeInterval(120).timeIntervalSince1970,
-            metadata: ConversationMetadata(title: "Private GLM risk answer")
+            metadata: ConversationMetadata(title: "Iran war status today")
         )
         let primaryConversation = ConversationSummary(
             id: conversationID,
             createdAt: created.timeIntervalSince1970,
-            metadata: ConversationMetadata(title: "Q3 launch risk summary")
+            metadata: ConversationMetadata(title: "Iran war Council view")
         )
         let agentConversation = ConversationSummary(
             id: "demo-conversation-ironclaw-run",
             createdAt: created.addingTimeInterval(-300).timeIntervalSince1970,
-            metadata: ConversationMetadata(title: "IronClaw QA result")
+            metadata: ConversationMetadata(title: "IronClaw PR plan update")
         )
         let earlierConversation = ConversationSummary(
             id: "demo-conversation-council-pricing",
             createdAt: created.addingTimeInterval(-86_400).timeIntervalSince1970,
-            metadata: ConversationMetadata(title: "Council pricing comparison")
+            metadata: ConversationMetadata(title: "Model routing comparison")
         )
-        let sources = [
-            WebSearchSource(type: "project_file", url: "https://near.ai/demo/launch-brief.pdf", title: "launch-brief.pdf"),
-            WebSearchSource(type: "project_file", url: "https://near.ai/demo/risk-table.csv", title: "risk-table.csv"),
-            WebSearchSource(type: "web", url: "https://near.ai/blog", title: "NEAR AI blog"),
-            WebSearchSource(type: "web", url: "https://docs.near.ai/ai/tee-verification", title: "NEAR verification docs")
+        let iranSources = [
+            WebSearchSource(type: "web", url: "https://apnews.com/article/b1659232611edc10808612e30647c17d", title: "AP: What we know about the emerging deal to end the Iran war", publishedAt: "May 25, 2026"),
+            WebSearchSource(type: "web", url: "https://www.axios.com/2026/05/23/us-iran-trump-deal-war", title: "Axios: U.S.-Iran deal to end war will be finalized shortly", publishedAt: "May 23, 2026"),
+            WebSearchSource(type: "web", url: "https://apnews.com/article/1c283f26d037102cc5e6f798546d0e59", title: "AP: Trump says Iran deal is largely negotiated", publishedAt: "May 23, 2026"),
+            WebSearchSource(type: "web", url: "https://apnews.com/article/9e3ba96982cd082f030a1a556cd57785", title: "AP: Israel strikes Hezbollah sites as ceasefire pressure continues", publishedAt: "May 25, 2026")
+        ]
+        let prSources = [
+            WebSearchSource(type: "project_file", url: "https://near.ai/demo/reborn-project-plan.md", title: "reborn-project-plan.md"),
+            WebSearchSource(type: "web", url: "https://github.com/nearai/ironclaw/pull/4066", title: "#4066 Wire Reborn extension lifecycle registry"),
+            WebSearchSource(type: "web", url: "https://github.com/nearai/ironclaw/pull/4065", title: "#4065 Fix Reborn SSE replay fallback"),
+            WebSearchSource(type: "web", url: "https://github.com/nearai/ironclaw/pull/4064", title: "#4064 Install GitHub WASM extension through Reborn lifecycle")
         ]
         let glmUserMessage = ChatMessage(
             id: "demo-user-glm-private",
             role: .user,
-            text: "Using GLM and the Q3 Launch project, summarize the launch risks with citations.",
+            text: "Is the war in Iran ending as of today?",
             model: nil,
             createdAt: created.addingTimeInterval(122),
             status: "completed",
             responseID: nil,
             isStreaming: false,
-            attachments: project.attachments
+            attachments: []
         )
         let glmPrivateAnswer = ChatMessage(
             id: "demo-assistant-glm-private-answer",
             role: .assistant,
             text: """
-            GLM private answer
+            Short answer: it looks closer to ending, but I would not call it over yet.
 
-            The launch is viable, but three risks need owner-level attention before publication:
+            As of today, U.S., Iranian, and mediator statements point to a near-final framework that would end the war, gradually reopen the Strait of Hormuz, and start a longer negotiation period [1][2][3]. That is materially better than an active escalation cycle.
 
-            1. Verification must be shown before model breadth. The brief's core claim is private, verifiable inference, so the first answer should show a fresh Verified shield and source-backed reasoning [1].
-            2. Project context has to feel automatic. The user should see that launch-brief.pdf, risk-table.csv, and saved links were consulted without manually selecting a route [1][2].
-            3. Web-backed claims need visible citations. When live web or saved links are used, each cited claim should connect to a source chip or inline citation link [3][4].
-            4. Council should come after a strong single-model answer. First prove the default private GLM path works; then show how Council improves the answer by exposing disagreement.
-            5. IronClaw needs to return a completed artifact. A setup screen is not enough; the demo should show the agent reading context, planning QA, and returning a usable release checklist.
+            The reason I would stay cautious is that the deal is still described as a framework, not a fully implemented settlement. The remaining gaps include wording, sequencing, sanctions/frozen funds, the Strait of Hormuz, and follow-on nuclear talks [2][3]. There is also spillover pressure from Israel-Hezbollah fighting, which can still derail a broader regional de-escalation [4].
 
-            Recommendation: lead with GLM 5.1 on the NEAR Private route, open Verification immediately, then escalate the same prompt to Council and IronClaw.
+            My read: the war is in an endgame phase, not a finished peace. Watch for three confirmations: a signed announcement, verified reopening steps in the Strait, and a sustained pause in related regional strikes.
             """,
             model: Self.defaultModelID,
             createdAt: created.addingTimeInterval(130),
@@ -8240,41 +8259,41 @@ final class ChatStore: ObservableObject {
             status: "completed",
             responseID: "demo-response-glm-private",
             isStreaming: false,
-            searchQuery: "Q3 Launch verification citations",
-            sources: sources,
-            attachments: project.attachments
+            searchQuery: "Is the war in Iran ending as of today?",
+            sources: iranSources,
+            attachments: []
         )
         let userMessage = ChatMessage(
             id: "demo-user-risk-summary",
             role: .user,
-            text: "Summarize launch risks from the brief in five bullets.",
+            text: "Is the war in Iran ending as of today?",
             model: nil,
             createdAt: created,
             status: "completed",
             responseID: nil,
             isStreaming: false,
-            attachments: project.attachments
+            attachments: []
         )
         let synthesisMessage = ChatMessage(
             id: "demo-assistant-council-synthesis",
             role: .assistant,
             text: """
             Synthesis
-            The launch risk is not one thing. GLM sees a trust and verification risk. Qwen 122B sees a sequencing risk. Qwen 35B sees an operational QA risk. The better answer is the combined plan: lead with proof, introduce setup only when needed, and use IronClaw to validate the release surface before the memo leaves the app.
+            The best answer is cautious optimism. GLM anchors the current sourcing and says the conflict is in an endgame phase, not over. Qwen Max emphasizes the negotiation mechanics: a framework, Hormuz reopening, and a longer follow-on process. Opus is more skeptical and focuses on failure modes from wording gaps, sanctions sequencing, nuclear talks, and regional spillover.
 
             How the models vary
-            - GLM 5.1: prioritize the Verified shield and signed transcript because the product claim is proof, not privacy copy.
-            - Qwen 3.5 122B: stage the launch around one clean project workflow before showing Cloud or Agent setup.
-            - Qwen 3.6 35B: run a QA pass against files, links, model selection, and export because the demo fails if any route looks fake.
+            - GLM 5.1: treats the latest reports as meaningful evidence of a possible endgame, while keeping the answer bounded to today's facts [1][3].
+            - Qwen Max: maps the path from ceasefire/framework to implementation and asks what would make the deal durable [2][3].
+            - Claude Opus: stresses uncertainty and the ways the apparent deal could still fail, especially through regional escalation [4].
 
             What the council agrees on
-            Start from the Q3 Launch project, show the completed Council artifact, tap Verification, then show the model picker and a real IronClaw run.
+            Nobody should say the war is already over. The strongest supported statement is: talks appear close to an agreement, but the outcome still depends on signing, implementation, and whether related fronts stay contained.
 
             Disagreements or uncertainty
-            The models disagree on ordering. GLM wants proof first. Qwen 122B wants workflow first. Qwen 35B wants QA first. The synthesis keeps proof first because it is NEAR's category advantage, then uses workflow and QA as evidence.
+            The disagreement is about probability. GLM reads the latest sourcing as a likely off-ramp. Qwen Max is conditional: it needs implementation milestones. Opus is the least willing to call it ending until regional spillover quiets down.
 
             Why synthesis is better
-            A single model gives one confident angle. Council exposes the tradeoff, then turns three partial answers into one launch sequence with fewer blind spots.
+            A single model can over-index on either the headline or the caveat. Council gives the user the headline, the mechanics, and the risk frame in one answer.
             """,
             model: ModelOption.llmCouncilSynthesisModelID,
             createdAt: created.addingTimeInterval(18),
@@ -8283,14 +8302,14 @@ final class ChatStore: ObservableObject {
             responseID: "demo-response-synthesis",
             councilBatchID: councilBatchID,
             isStreaming: false,
-            sources: sources
+            sources: iranSources
         )
         let glmMessage = ChatMessage(
             id: "demo-assistant-glm",
             role: .assistant,
             text: """
             Raw GLM view
-            Lead with verification. The launch promise is credible only if the first answer shows model identity, nonce, and a signed report.
+            The latest reporting supports "close to an endgame," not "ended." The credible path is a near-final framework plus implementation checks: signature, Strait reopening, and sustained ceasefire behavior.
             """,
             model: Self.defaultModelID,
             createdAt: created.addingTimeInterval(19),
@@ -8299,44 +8318,44 @@ final class ChatStore: ObservableObject {
             responseID: "demo-response-glm",
             councilBatchID: councilBatchID,
             isStreaming: false,
-            sources: sources
+            sources: iranSources
         )
         let qwenLargeMessage = ChatMessage(
             id: "demo-assistant-qwen-large",
             role: .assistant,
             text: """
-            Raw Qwen 122B view
-            Sequence matters most. Start with a project chat, keep Cloud and Agent setup deferred, and let advanced users choose models without forcing setup.
+            Raw Qwen Max view
+            The key question is sequencing. If the framework triggers a verifiable reopening of Hormuz and launches the 30-60 day negotiation period, then the war is plausibly ending. If those milestones slip, the current optimism is just another negotiation headline.
             """,
-            model: "Qwen/Qwen3.5-122B-A10B",
+            model: ModelOption.nearCloudQwenMaxModelID,
             createdAt: created.addingTimeInterval(20),
             firstTokenAt: created.addingTimeInterval(21.7),
             status: "completed",
             responseID: "demo-response-qwen-large",
             councilBatchID: councilBatchID,
             isStreaming: false,
-            sources: sources
+            sources: iranSources
         )
-        let qwenFastMessage = ChatMessage(
-            id: "demo-assistant-qwen-fast",
+        let opusMessage = ChatMessage(
+            id: "demo-assistant-opus",
             role: .assistant,
             text: """
-            Raw Qwen 35B view
-            QA risk is highest. Use IronClaw to inspect project context, check export paths, and make sure model selection still works.
+            Raw Opus view
+            I would be careful with the word "ending." There are strong diplomatic signals, but a war can move from battlefield escalation into coercive negotiation without being settled. The unresolved nuclear file and related Israel-Hezbollah front are the main tail risks.
             """,
-            model: "Qwen/Qwen3.6-35B-A3B-FP8",
+            model: "near-cloud/anthropic/claude-opus-4-7",
             createdAt: created.addingTimeInterval(21),
             firstTokenAt: created.addingTimeInterval(22.4),
             status: "completed",
-            responseID: "demo-response-qwen-fast",
+            responseID: "demo-response-opus",
             councilBatchID: councilBatchID,
             isStreaming: false,
-            sources: sources
+            sources: iranSources
         )
         let agentUserMessage = ChatMessage(
             id: "demo-user-ironclaw",
             role: .user,
-            text: "Use IronClaw to inspect the launch repo and draft a QA plan before we publish.",
+            text: "Use this attached project plan and the latest nearai/ironclaw PRs to update the plan. Show what changed and why.",
             model: nil,
             createdAt: created.addingTimeInterval(280),
             status: "completed",
@@ -8350,29 +8369,28 @@ final class ChatStore: ObservableObject {
             text: """
             IronClaw output
 
-            Completed checks
-            - Read the Q3 Launch project instructions, launch-brief.pdf, risk-table.csv, and NEAR AI blog source.
-            - Inspected the app surfaces for onboarding, GLM default routing, Verification, Council, NEAR Cloud model choice, Agent, and sharing.
-            - Found the previous demo ordering bug: Verification was shown too late, after Council and Cloud. Fixed order: GLM -> Verification -> Council.
-            - Confirmed GLM is the default private route and Hosted IronClaw remains selectable from the chat model control.
-            - Checked source rendering and required citation links wherever web-backed claims appear [3][4].
+            Inputs
+            - Attached plan: reborn-project-plan.md [1]
+            - Latest open PRs checked: #4066, #4065, #4064 [2][3][4]
 
-            Files inspected
-            - NEARPrivateChatApp.swift: demo capture routing and onboarding/login preview.
-            - ChatStore.swift: deterministic demo seed data, GLM answer, Council batch, IronClaw output.
-            - AppShellView.swift: message actions, source chips, Verification sheet, Agent workspace, expanded output views.
+            What changed in the plan
+            1. Added a new "Extension lifecycle registry" milestone from #4066. It covers search, install, activate, remove, shared active-extension registry, host-internal filtering, and dynamic WASM credentials [2].
+            2. Moved "SSE replay reliability" from polish to release-blocker because #4065 fixes replay_unavailable behavior, projection rebases, and lifecycle event replay ordering [3].
+            3. Added "First-party GitHub WASM installability" as a dependent milestone from #4064. It brings the GitHub extension catalog, manifest/schema/prompt assets, host-internal github.comment_issue, and first-party WASM build support [4].
 
-            QA plan
-            1. Verify GitHub sign-in, session-token sign-in, and shared-link entry from onboarding.
-            2. Run a private GLM prompt with project files and confirm the answer shows a fresh Verified shield.
-            3. Tap Verification immediately after the GLM answer and confirm nonce, model hash, gateway, and signing algorithm.
-            4. Run Council on the same prompt and compare synthesis against each model's raw answer.
-            5. Open NEAR Cloud model selection and confirm Claude, GPT, Qwen, Kimi, Gemini, and open-weight options remain selectable.
-            6. Launch IronClaw from the project and confirm completed tool output returns into the thread.
-            7. Export Verified JSON and confirm the transcript proof includes the current model hash and nonce.
+            Updated project plan
+            - Phase 1: Land generic Reborn lifecycle registry (#4066).
+            - Phase 2: Stabilize SSE replay fallback and runtime-event replay (#4065).
+            - Phase 3: Install and activate the first-party GitHub WASM extension through the new lifecycle (#4064).
+            - Phase 4: Run integration QA: search -> install -> activate -> hidden host-internal tools -> dynamic credentials -> SSE replay after reconnect.
 
-            Result
-            Ship the demo only after the contact sheet shows: login, GLM result, Verification, Council raw comparison, NEAR Cloud model breadth, IronClaw run, expanded IronClaw output, and signed export.
+            Risks found
+            - #4064 stacks on #4066, so GitHub extension QA should wait until the generic lifecycle registry is stable.
+            - #4065 touches replay semantics across event projections and streams, so reconnect testing needs to be explicit.
+            - Host-internal capability filtering appears in both #4066 and #4064; duplicate assumptions should be reviewed before merge.
+
+            Final recommendation
+            Treat the three PRs as one release train: lifecycle registry first, replay reliability second, GitHub extension installability third. The updated plan is ready for review.
             """,
             model: ModelOption.ironclawModelID,
             createdAt: Date().addingTimeInterval(-34),
@@ -8380,15 +8398,15 @@ final class ChatStore: ObservableObject {
             status: "completed",
             responseID: "demo-response-ironclaw-result",
             isStreaming: false,
-            searchQuery: "Q3 launch QA pass",
-            sources: sources,
+            searchQuery: "nearai/ironclaw latest open PRs project plan update",
+            sources: prSources,
             attachments: project.attachments
         )
 
         let models = [
             demoModel(Self.defaultModelID, displayName: "GLM 5.1", description: "Default private route with verification.", verifiable: true),
-            demoModel("Qwen/Qwen3.5-122B-A10B", displayName: "Qwen 3.5 122B", description: "Large open-weight private model.", verifiable: true),
-            demoModel("Qwen/Qwen3.6-35B-A3B-FP8", displayName: "Qwen 3.6 35B", description: "Fast private reasoning model.", verifiable: true),
+            demoModel(ModelOption.nearCloudQwenMaxModelID, displayName: "Qwen Max", description: "Frontier model through NEAR Cloud privacy proxy.", verifiable: false),
+            demoModel("near-cloud/anthropic/claude-opus-4-7", displayName: "Claude Opus 4.7", description: "Claude Opus through NEAR Cloud privacy proxy.", verifiable: false),
             demoModel(ModelOption.ironclawMobileModelID, displayName: "IronClaw Mobile", description: "Phone-safe agent runtime.", verifiable: false),
             demoModel(ModelOption.ironclawModelID, displayName: "Hosted IronClaw", description: "Connected workstation agent.", verifiable: false)
         ]
@@ -8397,20 +8415,18 @@ final class ChatStore: ObservableObject {
             nonce: "demo-\(Int(now.timeIntervalSince1970))",
             signingAlgorithm: "ed25519 + Intel TDX quote",
             model: "GLM-5.1-FP8",
-            coveredModelIDs: [Self.defaultModelID, "Qwen/Qwen3.5-122B-A10B", "Qwen/Qwen3.6-35B-A3B-FP8"],
+            coveredModelIDs: [Self.defaultModelID],
             fetchedAt: now.addingTimeInterval(-45),
             chatGatewayAddress: "tee-gateway.near.ai",
             cloudGatewayAddress: nil,
-            modelAttestationCount: 3,
+            modelAttestationCount: 1,
             prettyJSON: """
             {
               "nonce": "demo-\(Int(now.timeIntervalSince1970))",
               "gateway": "tee-gateway.near.ai",
               "model": "GLM-5.1-FP8",
               "covered_models": [
-                "zai-org/GLM-5.1-FP8",
-                "Qwen/Qwen3.5-122B-A10B",
-                "Qwen/Qwen3.6-35B-A3B-FP8"
+                "zai-org/GLM-5.1-FP8"
               ],
               "quote": "demo-intel-tdx-quote",
               "signature": "demo-ed25519-signature"
@@ -8421,7 +8437,7 @@ final class ChatStore: ObservableObject {
         let shareGroups = [
             ShareGroupInfo(
                 id: "demo-share-group-launch",
-                name: "Launch Review",
+                name: "Research Review",
                 members: [
                     ShareInviteRecipient(kind: "email", value: "reviewer@example.com")
                 ],
@@ -8437,7 +8453,7 @@ final class ChatStore: ObservableObject {
             primaryConversation: primaryConversation,
             agentConversation: agentConversation,
             glmMessages: [glmUserMessage, glmPrivateAnswer],
-            messages: [userMessage, synthesisMessage, glmMessage, qwenLargeMessage, qwenFastMessage],
+            messages: [userMessage, synthesisMessage, glmMessage, qwenLargeMessage, opusMessage],
             agentMessages: [agentUserMessage, agentRunMessage],
             models: models,
             nearCloudModels: nearCloudModels,

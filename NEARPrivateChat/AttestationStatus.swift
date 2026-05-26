@@ -38,13 +38,15 @@ enum AttestationState: String, Codable, Equatable, Sendable {
     case mismatch
 }
 
-enum ProofCapsuleState: String, Codable, Equatable, Sendable {
-    case none
-    case fetched
+enum ProofState: String, Codable, Equatable, Sendable {
+    case unknown
     case verifying
     case verified
     case stale
     case mismatch
+    case private_
+    case proxied
+    case unverified
 }
 
 enum AttestationModelCoverage: String, Codable, Equatable, Sendable {
@@ -92,7 +94,7 @@ struct AttestationStatusCopy: Codable, Equatable, Sendable {
 }
 
 struct ProofCapsuleViewModel: Codable, Equatable, Sendable {
-    let state: ProofCapsuleState
+    let state: ProofState
     let title: String
     let detail: String
     let badge: String
@@ -121,22 +123,30 @@ struct ProofCapsuleViewModel: Codable, Equatable, Sendable {
 
         switch status.effectiveState(at: now) {
         case .valid:
-            state = status.coverage(for: modelID, at: now) == .covered ? .fetched : .fetched
+            state = status.coverage(for: modelID, at: now) == .covered ? .verified : .verified
         case .stale:
             state = .stale
         case .mismatch:
             state = .mismatch
-        case .unavailable, .unknown:
-            state = .none
+        case .unavailable:
+            state = .unverified
+        case .unknown:
+            state = .unknown
         }
+    }
+
+    init(state: ProofState, title: String, detail: String, badge: String, symbolName: String) {
+        self.state = state
+        self.title = title
+        self.detail = detail
+        self.badge = badge
+        self.symbolName = symbolName
     }
 
     var tintColor: Color {
         switch state {
-        case .none:
+        case .unknown, .private_, .proxied, .unverified:
             return .secondary
-        case .fetched:
-            return .textSecondary
         case .verifying:
             return .proofStale
         case .verified:
@@ -256,9 +266,9 @@ enum AttestationStatus: Codable, Equatable, Sendable {
         case .valid:
             let freshnessText = freshness(at: now)?.shortLabel ?? "fresh"
             return AttestationStatusCopy(
-                title: "Proof fetched",
-                detail: "Route and model proof is on this device. Proof does not verify answer quality or truth.",
-                badge: "Fetched \(freshnessText)"
+                title: "Verified",
+                detail: "This device verified signed route and model evidence from TEE-backed infrastructure. Verification does not judge answer quality or truth.",
+                badge: "Verified \(freshnessText)"
             )
         case .stale:
             return AttestationStatusCopy(
@@ -276,9 +286,9 @@ enum AttestationStatus: Codable, Equatable, Sendable {
             )
         case .unknown:
             return AttestationStatusCopy(
-                title: "No proof yet",
-                detail: "No attestation report is on this device yet.",
-                badge: "No proof"
+                title: "Verification pending",
+                detail: "No signed verification report has been checked on this device yet.",
+                badge: "Pending"
             )
         }
     }
@@ -289,9 +299,9 @@ enum AttestationStatus: Codable, Equatable, Sendable {
             switch reason {
             case .routeNotSupported:
                 return AttestationStatusCopy(
-                    title: "Not TEE-attested",
-                    detail: "This route is outside NEAR Private TEE proof. Use a private model for attestation.",
-                    badge: "No TEE proof"
+                    title: "Unverified route",
+                    detail: "This route does not carry NEAR Private verification. Use a private model when verification matters.",
+                    badge: "Unverified"
                 )
             case .serviceUnavailable:
                 return AttestationStatusCopy(
@@ -307,23 +317,23 @@ enum AttestationStatus: Codable, Equatable, Sendable {
                 )
             case .notFetched:
                 return AttestationStatusCopy(
-                    title: "No proof yet",
-                    detail: "Fetch attestation on a NEAR Private model to inspect route and model proof.",
-                    badge: "No proof"
+                    title: "Verification pending",
+                    detail: "Fetch verification on a NEAR Private model to inspect route and model proof.",
+                    badge: "Pending"
                 )
             }
         default:
             return AttestationStatusCopy(
-                title: "No proof yet",
-                detail: "No local proof is available for this route.",
-                badge: "No proof"
+                title: "Verification pending",
+                detail: "No local verification report is available for this route.",
+                badge: "Pending"
             )
         }
     }
 
     func accessibilityLabel(at now: Date = Date()) -> String {
         let copy = userFacingCopy(at: now)
-        return "Attestation state: \(copy.badge). \(copy.title)"
+        return "Verification state: \(copy.badge). \(copy.title)"
     }
 
     func accessibilityHint(at now: Date = Date()) -> String {
@@ -333,7 +343,7 @@ enum AttestationStatus: Codable, Equatable, Sendable {
     var symbolName: String {
         switch state {
         case .valid:
-            return "doc.badge.checkmark"
+            return "checkmark.shield.fill"
         case .stale:
             return "clock.badge.exclamationmark"
         case .mismatch:
@@ -348,7 +358,7 @@ enum AttestationStatus: Codable, Equatable, Sendable {
     var tintColor: Color {
         switch state {
         case .valid:
-            return .textSecondary
+            return .proofVerified
         case .stale:
             return .proofStale
         case .mismatch:
@@ -374,11 +384,11 @@ struct AttestationEducation: Codable, Equatable, Sendable {
 
     static let standard = AttestationEducation(
         headline: "Proof, not a promise.",
-        summary: "Proof checks the private route and model coverage. It does not prove that an answer is true, safe, or complete.",
+        summary: "Proof is verified on this device from signed TEE evidence. It does not prove that an answer is true, safe, or complete.",
         sections: [
             AttestationEducationSection(
                 title: "What is verified",
-                body: "The app can verify evidence for the private route, signing details, freshness, and whether the selected model is covered by the current proof."
+                body: "The app verifies signed evidence for the private route, runtime, signing details, freshness, and whether the selected model is covered by the current report."
             ),
             AttestationEducationSection(
                 title: "What is not verified",
@@ -390,7 +400,7 @@ struct AttestationEducation: Codable, Equatable, Sendable {
             ),
             AttestationEducationSection(
                 title: "Different routes",
-                body: "External, NEAR Cloud, and IronClaw routes may show different states because they are not necessarily covered by the same TEE evidence."
+                body: "External, NEAR Cloud, and IronClaw routes may show different states because they are not necessarily covered by the same TEE-backed evidence."
             )
         ]
     )

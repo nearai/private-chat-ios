@@ -8216,7 +8216,7 @@ private struct SecurityView: View {
                 Label("Verify on-device", systemImage: "checkmark.shield")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .accessibilityHint("Checks the cached attestation proof on this device. It does not verify answer truth.")
+            .accessibilityHint("Checks the cached signed report on this device. It does not verify answer truth.")
 
             ShareLink(
                 item: snapshot.prettyJSON,
@@ -8244,7 +8244,7 @@ private struct SecurityView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .disabled(true)
-            .accessibilityHint("Fetch attestation first to verify proof on this device.")
+            .accessibilityHint("Fetch attestation first to check the signed report on this device.")
 
             Button {} label: {
                 Label("Share Proof JSON", systemImage: "square.and.arrow.up")
@@ -8296,7 +8296,7 @@ private struct SecurityView: View {
         let status = chatStore.currentAttestationStatus
         let copy = status.userFacingCopy()
         let nonceText = snapshot.nonce.isEmpty ? "Nonce is missing." : "Nonce is present."
-        let message = "On-device check: \(copy.title). \(nonceText) This checks proof metadata, not answer truth."
+        let message = "On-device check: \(copy.title). \(nonceText) This verifies signed TEE evidence cached on this device, not answer truth."
         localVerificationMessage = message
         chatStore.bannerMessage = message
     }
@@ -8986,7 +8986,7 @@ private struct AgentMissionControlPanel: View {
         .onAppear {
             #if DEBUG
             if DemoCapture.isEnabled, missionBrief.isEmpty {
-                missionBrief = "Inspect the Q3 Launch project sources, find release risks, and draft the QA plan."
+                missionBrief = "Use the attached project plan and latest nearai/ironclaw PRs to update the plan."
             }
             #endif
         }
@@ -11868,6 +11868,24 @@ private struct SearchContextStrip: View {
                             .frame(height: 34)
                             .background(Color.appPanelBackground, in: Capsule())
                     }
+
+                    if !sources.isEmpty {
+                        NavigationLink {
+                            SourcesDetailView(query: query, sources: sources)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "list.bullet.rectangle")
+                                    .font(.caption2.weight(.bold))
+                                Text("View all")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .foregroundStyle(Color.actionPrimary)
+                            .padding(.horizontal, 11)
+                            .frame(height: 34)
+                            .background(Color.actionPrimary.opacity(0.08), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .padding(.trailing, 2)
             }
@@ -12056,16 +12074,14 @@ struct DemoCaptureRootView: View {
         .onboarding,
         .login,
         .home,
-        .fileAttach,
         .composer,
         .models,
         .glmResult,
         .verification,
-        .cloudModels,
         .council,
-        .chat,
         .councilOutput,
         .project,
+        .fileAttach,
         .agent,
         .ironclawThinking,
         .ironclaw,
@@ -12112,7 +12128,7 @@ struct DemoCaptureRootView: View {
         case .onboarding:
             return 2_000_000_000
         case .login:
-            return 2_300_000_000
+            return 5_000_000_000
         case .home:
             return 4_000_000_000
         case .fileAttach:
@@ -12128,7 +12144,7 @@ struct DemoCaptureRootView: View {
         case .cloudModels:
             return 4_000_000_000
         case .models:
-            return 5_000_000_000
+            return 4_000_000_000
         case .council:
             return 6_000_000_000
         case .composer:
@@ -12181,7 +12197,7 @@ private struct DemoCaptureScreenHost: View {
             case .verification:
                 SecurityView()
             case .models:
-                ModelPickerView(openingCouncil: false)
+                DemoSingleModelPickerView()
             case .cloudModels:
                 DemoNearCloudModelsView()
             case .council:
@@ -12405,86 +12421,142 @@ private struct DemoOnboardingPreviewView: View {
 }
 
 private struct DemoMockLoginView: View {
-    @State private var activeStep = 1
+    @State private var passwordCount = 0
+    @State private var isVerifying = false
+    @State private var isComplete = false
 
-    private let steps = [
-        ("Email", "maya.launch@example.com", "person.text.rectangle"),
-        ("Password", "••••••••••••", "lock.fill"),
-        ("Google account verified", "Returning to NEAR Private Chat", "checkmark.circle.fill"),
-        ("Workspace ready", "Q3 Launch, GLM default, IronClaw connected", "sparkles")
-    ]
+    private let passwordLength = 12
 
     var body: some View {
-        VStack(spacing: 18) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 10) {
-                    Image(systemName: "g.circle.fill")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(Color.actionPrimary)
-                        .frame(width: 36, height: 36)
-                        .background(Color.actionPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Sign in with Google")
-                            .font(.headline.weight(.semibold))
-                        Text("Mock authentication")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 22) {
+                googleWordmark
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Sign in")
+                        .font(.largeTitle.weight(.regular))
+                    Text("to continue to NEAR Private Chat")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
 
-                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
-                    HStack(alignment: .center, spacing: 10) {
-                        Image(systemName: index <= activeStep ? step.2 : "circle")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(index == 2 && index <= activeStep ? Color.trustVerified : (index <= activeStep ? Color.actionPrimary : Color.secondary))
-                            .frame(width: 24, height: 24)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(step.0)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.primary)
-                            Text(step.1)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color.actionPrimary.opacity(0.12))
+                        .frame(width: 24, height: 24)
+                        .overlay {
+                            Image(systemName: "person.fill")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(Color.actionPrimary)
                         }
-                    }
-                    .opacity(index <= activeStep ? 1 : 0.42)
+                    Text("maya.launch@example.com")
+                        .font(.subheadline.weight(.medium))
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 38)
+                .overlay {
+                    Capsule()
+                        .stroke(Color.appBorder, lineWidth: 1)
                 }
 
-                Button {} label: {
-                    Text(activeStep >= 2 ? "Continue to NEAR Private Chat" : "Continue")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Enter your password")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.actionPrimary)
+                    HStack {
+                        Text(String(repeating: "•", count: max(passwordCount, 1)))
+                            .font(.title3.monospaced().weight(.semibold))
+                            .foregroundStyle(.primary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(height: 54)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(Color.actionPrimary, lineWidth: 1.5)
+                    }
+                }
+
+                HStack {
+                    Button("Forgot password?") {}
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.actionPrimary)
+                    Spacer()
+                    Button {} label: {
+                        HStack(spacing: 7) {
+                            if isVerifying {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                    .tint(.white)
+                            }
+                            Text(isComplete ? "Continue" : "Next")
+                        }
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .padding(.horizontal, 22)
+                        .frame(height: 42)
+                        .background(Color.actionPrimary, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(true)
                 }
-                .buttonStyle(.plain)
-                .disabled(true)
-            }
-            .padding(16)
-            .frame(maxWidth: 360, alignment: .leading)
-            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.appBorder, lineWidth: 1)
-            }
 
+                if isComplete {
+                    Label("Google account verified", systemImage: "checkmark.shield.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.trustVerified)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+            }
+            .padding(26)
+            .frame(maxWidth: 430, alignment: .leading)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
+            }
             Spacer(minLength: 0)
         }
-        .padding(28)
+        .padding(.horizontal, 24)
+        .padding(.top, 76)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.appBackground.ignoresSafeArea())
+        .background(Color(red: 0.972, green: 0.974, blue: 0.980).ignoresSafeArea())
         .task {
-            for index in 2..<steps.count {
-                try? await Task.sleep(nanoseconds: 450_000_000)
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            for count in 1...passwordLength {
+                try? await Task.sleep(nanoseconds: 95_000_000)
                 await MainActor.run {
-                    withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
-                        activeStep = index
-                    }
+                    passwordCount = count
+                }
+            }
+            try? await Task.sleep(nanoseconds: 380_000_000)
+            await MainActor.run {
+                isVerifying = true
+            }
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            await MainActor.run {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
+                    isVerifying = false
+                    isComplete = true
                 }
             }
         }
+    }
+
+    private var googleWordmark: some View {
+        HStack(spacing: 0) {
+            Text("G").foregroundStyle(Color(red: 0.259, green: 0.522, blue: 0.957))
+            Text("o").foregroundStyle(Color(red: 0.918, green: 0.263, blue: 0.208))
+            Text("o").foregroundStyle(Color(red: 0.984, green: 0.737, blue: 0.024))
+            Text("g").foregroundStyle(Color(red: 0.259, green: 0.522, blue: 0.957))
+            Text("l").foregroundStyle(Color(red: 0.204, green: 0.659, blue: 0.325))
+            Text("e").foregroundStyle(Color(red: 0.918, green: 0.263, blue: 0.208))
+        }
+        .font(.title2.weight(.medium))
+        .accessibilityLabel("Google")
     }
 }
 
@@ -12492,8 +12564,8 @@ private struct DemoFileAttachmentFlowView: View {
     @State private var phase = 0
 
     private let files = [
-        ("launch-brief.pdf", "PDF document · 1.4 MB", "doc.richtext"),
-        ("risk-table.csv", "CSV spreadsheet · 86 KB", "tablecells")
+        ("reborn-project-plan.md", "Markdown plan · 42 KB", "doc.text"),
+        ("latest-ironclaw-prs.json", "GitHub PR snapshot · 19 KB", "curlybraces")
     ]
 
     var body: some View {
@@ -12524,7 +12596,7 @@ private struct DemoFileAttachmentFlowView: View {
                                 .frame(height: 52)
                             }
                         } header: {
-                            Text("iCloud Drive / Q3 Launch")
+                            Text("iCloud Drive / IronClaw Reborn")
                         }
                     }
                     .listStyle(.insetGrouped)
@@ -12545,7 +12617,7 @@ private struct DemoFileAttachmentFlowView: View {
                             Text("New chat")
                                 .font(.headline.weight(.semibold))
                             Spacer()
-                            ComposerRouteChip(title: "GLM 5.1", symbolName: "cpu", isActive: true, showsChevron: true)
+                            ComposerRouteChip(title: "Hosted IronClaw", symbolName: "terminal", isActive: true, showsChevron: true)
                         }
 
                         Text("Attached from Files")
@@ -12579,7 +12651,7 @@ private struct DemoFileAttachmentFlowView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Summarize launch risks from the brief in five bullets.")
+                            Text("Update this project plan based on the latest IronClaw PRs.")
                                 .font(.body)
                                 .foregroundStyle(.primary)
                                 .padding(12)
@@ -12705,7 +12777,7 @@ private struct DemoGLMAnswerView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("GLM answer first")
                     .font(.headline.weight(.semibold))
-                Text("One private model, project files, citations, then proof.")
+                Text("One private model, live web sources, then proof.")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
             }
@@ -12830,6 +12902,97 @@ private struct DemoNearCloudModelsView: View {
     }
 }
 
+private struct DemoSingleModelPickerView: View {
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    HStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(.secondary)
+                        Text("Search models")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .frame(height: 38)
+                }
+
+                Section("Selected model") {
+                    DemoSingleModelRow(
+                        title: "GLM 5.1",
+                        subtitle: "Default private model",
+                        detail: "NEAR Private route · verified when proof is fresh",
+                        symbolName: "checkmark.shield.fill",
+                        tint: .trustVerified,
+                        isSelected: true
+                    )
+                }
+
+                Section("Switching modes") {
+                    HStack(spacing: 10) {
+                        Image(systemName: "square.grid.2x2")
+                            .foregroundStyle(Color.actionPrimary)
+                            .frame(width: 30, height: 30)
+                            .background(Color.actionPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Council is a separate tab")
+                                .font(.subheadline.weight(.semibold))
+                            Text("Tap Council when you want GLM, Qwen Max, and Opus to answer together.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Model")
+            .platformInlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {}
+                }
+            }
+        }
+    }
+}
+
+private struct DemoSingleModelRow: View {
+    let title: String
+    let subtitle: String
+    let detail: String
+    let symbolName: String
+    let tint: Color
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: symbolName)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(tint)
+                .frame(width: 34, height: 34)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.bold))
+                Text(subtitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Color.trustVerified)
+            }
+        }
+        .padding(.vertical, 5)
+    }
+}
+
 private struct DemoCloudModelRow: View {
     let model: ModelOption
 
@@ -12896,10 +13059,10 @@ private struct DemoCloudModelRow: View {
 
 private struct DemoIronClawThinkingView: View {
     private let sources = [
-        ("launch-brief.pdf", "Project file"),
-        ("risk-table.csv", "Project file"),
-        ("NEAR AI blog", "Saved link"),
-        ("AppShellView.swift", "Repo file")
+        ("reborn-project-plan.md", "Attached plan"),
+        ("#4066 lifecycle registry", "GitHub PR"),
+        ("#4065 SSE replay fallback", "GitHub PR"),
+        ("#4064 GitHub WASM install", "GitHub PR")
     ]
 
     var body: some View {
@@ -12912,38 +13075,35 @@ private struct DemoIronClawThinkingView: View {
 
                     DemoAgentTimelineStep(
                         symbolName: "folder",
-                        title: "Reading project context",
-                        detail: "IronClaw is loading the launch brief, risk table, saved NEAR AI link, and project instructions before touching the repo.",
+                        title: "Reading attached project plan",
+                        detail: "IronClaw is loading reborn-project-plan.md and the project instruction to update the plan from live GitHub evidence.",
                         chips: sources
                     )
 
                     DemoAgentTimelineStep(
                         symbolName: "magnifyingglass",
-                        title: "Inspecting app surfaces",
-                        detail: "Checking onboarding, GLM default route, Verification, model picker, Council, Cloud routes, Agent workspace, and signed export.",
+                        title: "Fetching latest IronClaw PRs",
+                        detail: "Checking nearai/ironclaw open PRs and grouping the work into lifecycle, SSE replay, and first-party GitHub WASM milestones.",
                         chips: [
-                            ("NEARPrivateChatApp.swift", "Route"),
-                            ("ChatStore.swift", "State"),
-                            ("AppShellView.swift", "UI")
+                            ("#4066", "Lifecycle"),
+                            ("#4065", "SSE replay"),
+                            ("#4064", "GitHub WASM")
                         ]
                     )
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Label("Drafting QA patch plan", systemImage: "chevron.left.forwardslash.chevron.right")
+                        Label("Updating project plan", systemImage: "chevron.left.forwardslash.chevron.right")
                             .font(.title3.weight(.semibold))
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("swift")
+                            Text("markdown")
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(.secondary)
                             Text("""
-                            let requiredDemoOrder = [
-                              "Login",
-                              "GLM private answer",
-                              "Verification",
-                              "Council comparison",
-                              "NEAR Cloud models",
-                              "IronClaw completed output"
-                            ]
+                            ## Release train
+                            1. Lifecycle registry (#4066)
+                            2. SSE replay fallback (#4065)
+                            3. GitHub WASM install (#4064)
+                            4. Integration QA across activate -> replay
                             """)
                             .font(.system(.caption, design: .monospaced))
                             .foregroundStyle(.primary)
@@ -12956,7 +13116,7 @@ private struct DemoIronClawThinkingView: View {
                     DemoAgentTimelineStep(
                         symbolName: "checkmark.seal",
                         title: "Preparing completed output",
-                        detail: "The final answer will return a checklist, files inspected, risks found, and release recommendation inside the chat.",
+                        detail: "The final answer returns what changed, why it changed, PR links, risks, and the updated plan inside the chat.",
                         chips: []
                     )
                 }
@@ -13031,8 +13191,8 @@ private struct DemoAgentTimelineStep: View {
 private struct DemoCouncilLineupView: View {
     private let models = [
         ("GLM 5.1", "Verification-first", "NEAR Private · verified", "checkmark.shield.fill"),
-        ("Qwen 3.5 122B", "Launch sequencing", "Open-weight private route", "list.bullet.rectangle"),
-        ("Qwen 3.6 35B", "QA risk", "Fast private reasoning", "wrench.and.screwdriver")
+        ("Qwen Max", "Negotiation mechanics", "NEAR Cloud · privacy proxy", "list.bullet.rectangle"),
+        ("Claude Opus 4.7", "Failure modes", "NEAR Cloud · privacy proxy", "exclamationmark.triangle")
     ]
 
     var body: some View {
@@ -13042,7 +13202,7 @@ private struct DemoCouncilLineupView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Label("Council lineup matches the synthesis", systemImage: "square.grid.2x2")
                             .font(.headline.weight(.semibold))
-                        Text("The next screen uses these same three model views, then GLM writes the synthesis.")
+                        Text("The same Iran prompt goes to GLM, Qwen Max, and Opus 4.7; the next screen shows each view and the synthesis.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -13091,7 +13251,7 @@ private struct DemoCouncilLineupView: View {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text("GLM 5.1 writes the final answer")
                                     .font(.subheadline.weight(.semibold))
-                                Text("The synthesis keeps disagreement visible instead of hiding it.")
+                                Text("The synthesis keeps the headline, mechanics, and risks visible instead of hiding disagreement.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -13132,8 +13292,8 @@ private struct DemoIronClawModesView: View {
                     DemoIronClawModeCard(
                         title: "IronClaw Mobile",
                         subtitle: "Runs on the phone",
-                        bodyText: "Good for project-aware QA notes, local file inspection, and small bounded tasks without connecting a workstation.",
-                        chips: ["Private context", "Phone-safe", "No repo access"],
+                        bodyText: "Good for reading the attached plan, drafting lightweight edits, and checking project context without connecting a workstation.",
+                        chips: ["Attached plan", "Phone-safe", "No repo access"],
                         symbolName: "iphone",
                         tint: .trustVerified
                     )
@@ -13141,8 +13301,8 @@ private struct DemoIronClawModesView: View {
                     DemoIronClawModeCard(
                         title: "Hosted IronClaw",
                         subtitle: "Connected workstation agent",
-                        bodyText: "The hosted run can read repo files, reason over the project brief, draft patches, run tests, and prepare a GitHub-ready QA plan while the phone stays the control surface.",
-                        chips: ["Shell", "Git", "Tests", "GitHub", "Web"],
+                        bodyText: "The hosted run can fetch live GitHub PRs, update the attached plan, inspect repo context, and return a concrete artifact while the phone stays the control surface.",
+                        chips: ["GitHub", "Shell", "Plan update", "Repo context", "Web"],
                         symbolName: "terminal",
                         tint: .actionPrimary
                     )
@@ -13310,10 +13470,10 @@ private struct DemoCouncilComparisonView: View {
         switch message.model {
         case "zai-org/GLM-5.1-FP8":
             return "Verification-first"
-        case "Qwen/Qwen3.5-122B-A10B":
-            return "Launch sequencing"
-        case "Qwen/Qwen3.6-35B-A3B-FP8":
-            return "QA risk"
+        case ModelOption.nearCloudQwenMaxModelID:
+            return "Negotiation mechanics"
+        case "near-cloud/anthropic/claude-opus-4-7":
+            return "Failure modes"
         default:
             return "Raw model view"
         }
@@ -13367,9 +13527,9 @@ private struct DemoIronClawResultView: View {
                         }
 
                         HStack(spacing: 8) {
-                            Label("Q3 Launch", systemImage: "folder")
-                            Label("2 files", systemImage: "paperclip")
-                            Label("1 link", systemImage: "link")
+                            Label("IronClaw Reborn Plan", systemImage: "folder")
+                            Label("reborn-project-plan.md", systemImage: "paperclip")
+                            Label("3 PRs", systemImage: "link")
                         }
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
@@ -13410,7 +13570,7 @@ private struct DemoIronClawResultView: View {
             Label("IronClaw ran against project context.", systemImage: "terminal")
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
-            Text("This is the completed agent result, not a setup screen. It shows the checks, QA plan, and release recommendation returned into the conversation.")
+            Text("This is the completed hosted-agent result, not a setup screen. It updates the attached plan from the latest IronClaw GitHub PRs and returns the artifact into the conversation.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -13485,6 +13645,12 @@ private extension ChatMessage {
         }
         if model == ModelOption.llmCouncilSynthesisModelID {
             return "Council Synthesis"
+        }
+        if model == ModelOption.nearCloudQwenMaxModelID {
+            return "Qwen Max"
+        }
+        if model == "near-cloud/anthropic/claude-opus-4-7" {
+            return "Claude Opus 4.7"
         }
         return model?.split(separator: "/").last.map(String.init) ?? "Assistant"
     }

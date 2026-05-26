@@ -1,9 +1,9 @@
 # NEAR Private Chat iOS - Supademo Real-Capture Spec
 
 Date: 2026-05-25
-Status: Updated after full-cut review
+Status: v7 real-app capture flow
 
-This is a silent real-app capture. Supademo is only for trimming, export formats, and optional crop-safe manual zoom. It must not turn the recording into a narrated storyboard.
+This is a silent real-app capture. Supademo is only for trimming, export formats, and crop-safe manual edits. It must not add narration, captions, labels, or storyboard text.
 
 ## Hard Rules
 
@@ -15,27 +15,28 @@ This is a silent real-app capture. Supademo is only for trimming, export formats
 - No fake phone frame.
 - No screenshot storyboard.
 - No Supademo auto-zoom on chat answer scenes.
-- Preserve the raw simulator frame for GLM answer, Council answer, and IronClaw output.
+- Preserve the raw simulator frame for the GLM answer, Council answer, and IronClaw output.
 
 The video should look like someone calmly using the iOS app. Any tap or focus cue should be visual-only and already present in the raw app capture.
 
 ## Final Scene Order
 
-1. Onboarding and Google mock login, very short.
-2. Home with `Q3 Launch`.
-3. Files picker: attach `launch-brief.pdf` and `risk-table.csv`.
-4. Composer: attached files land above the input.
-5. Model picker: GLM 5.1 selected as the default private route.
-6. Private GLM answer: scroll through the actual answer, citations, sources, and green Verified proof.
-7. Verification: GLM proof immediately after the GLM answer.
-8. NEAR Cloud: brief contrast showing SOTA model override and non-attested/cloud-route distinction.
-9. Council lineup: roles per model plus synthesizer.
-10. Council answer: expanded synthesis and raw model differences.
-11. Project context.
-12. IronClaw modes: Mobile versus Hosted.
-13. Hosted IronClaw thinking: project files, app surfaces, and Swift QA plan.
-14. Hosted IronClaw completed output.
-15. Share: public link and proof/signed export surface.
+1. Onboarding: show Terms, NEAR, Google, GitHub, shared link, and more sign-in options.
+2. Google sign-in: show the Google password screen with password entry and account verification.
+3. Home: show Ask NEAR, Resume cards, and the IronClaw Reborn Plan project.
+4. New chat: no files, no project context. Prompt is `Is the war in Iran ending as of today?`
+5. Model picker: show only GLM 5.1 as the selected single-model route. Council is not shown here.
+6. Private GLM answer: show the full answer, web citations, source chips, `View all`, and the green Verified shield card.
+7. Verification: immediately after GLM, show the shield proof for GLM 5.1 and the TEE-backed signed evidence copy.
+8. Council lineup: explicitly show the same Iran prompt reviewed by GLM 5.1, Qwen Max, and Claude Opus 4.7.
+9. Council answer: show the synthesis and raw model differences so the viewer can see why synthesis is better.
+10. Project Context: switch to the IronClaw Reborn Plan project and show sources/files/instructions.
+11. Files picker: attach `reborn-project-plan.md` and `latest-ironclaw-prs.json`.
+12. Composer with attachments: show the project-plan attachment shelf and the prompt to update the plan from latest IronClaw PRs.
+13. IronClaw modes: show Mobile versus Hosted, with Hosted as the full workstation/GitHub path.
+14. Hosted IronClaw thinking: show it reading the attached plan, fetching latest PRs, and drafting the updated plan.
+15. Hosted IronClaw completed output: show the revised project plan, PR links, risks, and final recommendation.
+16. Share: show public link and Verified JSON / proof export.
 
 ## Supademo Import Settings
 
@@ -54,7 +55,7 @@ Transitions: 250ms cross-dissolve only
 Background: none; preserve the simulator recording
 ```
 
-Critical: if Supademo shrinks or crops the GLM answer or Council answer, discard the export and re-import with auto-zoom, smart crop, and step focus disabled.
+Critical: if Supademo shrinks or crops the GLM answer, Council answer, or IronClaw output, discard the export and re-import with auto-zoom, smart crop, and step focus disabled.
 
 ## Manual Supademo Edits Allowed
 
@@ -63,7 +64,7 @@ Use these sparingly:
 - Trim dead time at the very beginning and end.
 - Add 250ms cross-dissolves between scene boundaries.
 - Add unlabeled click circles only if the raw app pulse is not visible enough.
-- Add a crop-safe manual zoom only on non-chat surfaces: Council lineup, Verification proof rows, IronClaw thinking, Share.
+- Add a crop-safe manual zoom only on non-chat surfaces: Google login, model picker, Council lineup, Verification proof rows, IronClaw thinking, Share.
 
 Do not manually zoom the GLM answer or Council answer. Those are full-screen reading scenes.
 
@@ -72,13 +73,13 @@ Do not manually zoom the GLM answer or Council answer. Those are full-screen rea
 Use the real capture helper:
 
 ```bash
-bash demo/record-supademo-raw.sh
+NEAR_DEMO_AUTOCAPTURE=1 bash demo/record-supademo-raw.sh demo/out/near-private-chat-supademo-v7-raw.mov
 ```
 
-Default output:
+Named v7 output:
 
 ```bash
-demo/out/near-private-chat-supademo-raw.mov
+demo/out/near-private-chat-supademo-v7-google-glm-iran-council-ironclaw-plan.mov
 ```
 
 The helper builds the app, boots the iPhone 17 Pro simulator, sets a clean 9:41 status bar, installs the app, launches the debug capture flow, and records with `simctl recordVideo`.
@@ -87,16 +88,17 @@ The helper builds the app, boots the iPhone 17 Pro simulator, sets a clean 9:41 
 
 Accept the Supademo export only if:
 
-- Onboarding/auth is under 4 seconds total.
-- Files visibly land in the composer attachment shelf.
+- Google login looks like a Google password screen and does not say "mock authentication."
+- The first GLM pass is a new chat with no file attachment and no project context.
+- Model picker shows GLM 5.1 as the single selected route. It does not show Council unless the Council scene is active.
 - GLM answer is readable at full simulator size.
-- The green Verified proof card is visible after the GLM scroll.
-- Verification immediately follows the GLM answer and reflects the GLM route.
-- NEAR Cloud appears after GLM and Verification, not before.
-- Council lineup models match the Council answer models.
+- Web-sourced claims show linked citation markers and a tappable sources row.
+- The green Verified badge uses a shield icon.
+- Verification immediately follows the GLM answer and says the device verifies signed TEE-backed evidence, not that inference ran on the phone.
+- Council uses the same Iran prompt and exactly these models: GLM 5.1, Qwen Max, Claude Opus 4.7.
 - Council answer is readable at full simulator size and shows model disagreement plus synthesis.
-- IronClaw shows Mobile, Hosted, thinking, and completed output.
-- Share holds long enough to see public link/proof export.
+- IronClaw attaches a project plan, fetches/latest PR context, and returns a completed updated-plan artifact.
+- Share holds long enough to see public link and proof export.
 - No voice, captions, text overlays, labels, or Supademo-generated UI appears.
 
 If any item fails, re-export from the raw capture before re-recording.
