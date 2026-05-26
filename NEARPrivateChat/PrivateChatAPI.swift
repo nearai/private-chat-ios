@@ -35,11 +35,17 @@ final class PrivateChatAPI {
         case .google, .github:
             components?.path = "/v1/auth/\(provider.rawValue)"
         }
-        let callbackURL = Self.callbackURL(configuration.callbackURL, state: state)
+        let callbackURL: URL
+        switch provider {
+        case .near:
+            callbackURL = Self.callbackURL(configuration.callbackURL, state: state)
+        case .google, .github:
+            callbackURL = configuration.callbackURL
+        }
         var queryItems = [
             URLQueryItem(name: "frontend_callback", value: callbackURL.absoluteString)
         ]
-        if let state, !state.isEmpty {
+        if provider == .near, let state, !state.isEmpty {
             queryItems.append(URLQueryItem(name: "state", value: state))
         }
         if let codeChallenge, !codeChallenge.isEmpty {
@@ -52,7 +58,11 @@ final class PrivateChatAPI {
         return url
     }
 
-    func parseAuthCallback(_ url: URL, expectedState: String? = nil) throws -> AuthSession {
+    func parseAuthCallback(
+        _ url: URL,
+        expectedState: String? = nil,
+        allowProviderManagedState: Bool = false
+    ) throws -> AuthSession {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             throw APIError.invalidCallback
         }
@@ -60,19 +70,23 @@ final class PrivateChatAPI {
         guard let expectedState, !expectedState.isEmpty else {
             throw APIError.status(401, "Sign-in callbacks must originate from an active app sign-in request.")
         }
-        guard values["state", default: []].contains(expectedState) else {
+        let callbackStates = values["state", default: []].filter { !$0.isEmpty }
+        let hasExpectedState = callbackStates.contains(expectedState)
+        let isActiveProviderCallback = allowProviderManagedState
+        guard hasExpectedState || isActiveProviderCallback else {
             throw APIError.status(401, "Sign-in callback failed state validation.")
         }
+        let token = Self.authToken(from: values)
         if Self.firstNonEmptyValue(named: "code", in: values) != nil,
-           Self.firstNonEmptyValue(named: "token", in: values) == nil {
+           token == nil {
             throw APIError.status(501, "Authorization-code sign-in requires backend PKCE exchange support.")
         }
-        guard let token = Self.firstNonEmptyValue(named: "token", in: values) else {
+        guard let token else {
             throw APIError.invalidCallback
         }
         return AuthSession(
             token: token,
-            sessionID: Self.firstNonEmptyValue(named: "session_id", in: values) ?? "",
+            sessionID: Self.sessionID(from: values) ?? "",
             expiresAt: Self.firstNonEmptyValue(named: "expires_at", in: values),
             isNewUser: Self.firstNonEmptyValue(named: "is_new_user", in: values) == "true"
         )
@@ -109,7 +123,37 @@ final class PrivateChatAPI {
     }
 
     private static func firstNonEmptyValue(named name: String, in values: [String: [String]]) -> String? {
-        values[name]?.first { !$0.isEmpty }
+        values[name]?
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+    }
+
+    private static func authToken(from values: [String: [String]]) -> String? {
+        for name in [
+            "token",
+            "session_token",
+            "sessionToken",
+            "auth_token",
+            "authToken",
+            "access_token",
+            "accessToken",
+            "bearer_token",
+            "bearerToken"
+        ] {
+            if let token = firstNonEmptyValue(named: name, in: values) {
+                return token
+            }
+        }
+        return nil
+    }
+
+    private static func sessionID(from values: [String: [String]]) -> String? {
+        for name in ["session_id", "sessionId", "sid"] {
+            if let sessionID = firstNonEmptyValue(named: name, in: values) {
+                return sessionID
+            }
+        }
+        return nil
     }
 
     func fetchProfile() async throws -> UserProfile {

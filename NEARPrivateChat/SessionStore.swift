@@ -148,7 +148,11 @@ final class SessionStore: NSObject, ObservableObject {
                 state: pendingRequest.state
             )
             let callbackURL = try await startWebAuthentication(url: url)
-            let newSession = try api.parseAuthCallback(callbackURL, expectedState: pendingRequest.state)
+            let newSession = try api.parseAuthCallback(
+                callbackURL,
+                expectedState: pendingRequest.state,
+                allowProviderManagedState: true
+            )
             clearPendingAuthState()
             save(newSession)
             await refreshProfile()

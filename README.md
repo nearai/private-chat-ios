@@ -104,7 +104,7 @@ For a physical iPhone, connect the phone over USB, unlock it, trust the Mac, ena
 ./scripts/run-device.sh
 ```
 
-The app registers the custom callback scheme `nearprivatechat://auth`. The client now generates state plus a PKCE challenge when starting OAuth, but the current hosted auth service still returns the bearer session token to the callback for compatibility. Treat this as an internal build posture until the hosted service supports authorization-code exchange, preferably over universal links.
+The app registers the custom callback scheme `nearprivatechat://auth`. Hosted Google/GitHub auth expects a clean callback base and appends `/auth/callback?token=...&session_id=...`; NEAR wallet login writes the token directly to the callback URL. Treat bearer-token callbacks as an internal build posture until the hosted service supports authorization-code exchange, preferably over universal links.
 
 ## Current Machine
 

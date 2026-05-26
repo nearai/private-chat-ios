@@ -34,6 +34,26 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertTrue(session.isNewUser)
     }
 
+    func testAuthCallbackAcceptsSessionTokenAlias() throws {
+        let api = PrivateChatAPI(configuration: AppConfiguration.production)
+        let url = URL(string: "nearprivatechat://auth?session_token=session-token&sid=sid&state=nonce-1")!
+
+        let session = try api.parseAuthCallback(url, expectedState: "nonce-1")
+
+        XCTAssertEqual(session.token, "session-token")
+        XCTAssertEqual(session.sessionID, "sid")
+    }
+
+    func testAuthCallbackAcceptsAccessTokenAliasFromFragment() throws {
+        let api = PrivateChatAPI(configuration: AppConfiguration.production)
+        let url = URL(string: "nearprivatechat://auth#access_token=session-token&sessionId=sid&state=nonce-1")!
+
+        let session = try api.parseAuthCallback(url, expectedState: "nonce-1")
+
+        XCTAssertEqual(session.token, "session-token")
+        XCTAssertEqual(session.sessionID, "sid")
+    }
+
     func testAuthCallbackToleratesDuplicateStateValues() throws {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
         let url = URL(string: "nearprivatechat://auth?state=provider-state&token=session-token&state=nonce-1")!
@@ -43,10 +63,45 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(session.token, "session-token")
     }
 
-    func testAuthURLIncludesState() throws {
+    func testAuthCallbackRejectsProviderManagedStateByDefault() {
+        let api = PrivateChatAPI(configuration: AppConfiguration.production)
+        let url = URL(string: "nearprivatechat://auth?token=session-token&state=provider-state")!
+
+        XCTAssertThrowsError(try api.parseAuthCallback(url, expectedState: "nonce-1"))
+    }
+
+    func testAuthCallbackAcceptsProviderManagedStateForActiveWebSession() throws {
+        let api = PrivateChatAPI(configuration: AppConfiguration.production)
+        let url = URL(string: "nearprivatechat://auth?token=session-token&session_id=sid&state=provider-state")!
+
+        let session = try api.parseAuthCallback(
+            url,
+            expectedState: "nonce-1",
+            allowProviderManagedState: true
+        )
+
+        XCTAssertEqual(session.token, "session-token")
+        XCTAssertEqual(session.sessionID, "sid")
+    }
+
+    func testAuthCallbackAcceptsMissingAppStateForActiveWebSession() throws {
+        let api = PrivateChatAPI(configuration: AppConfiguration.production)
+        let url = URL(string: "nearprivatechat://auth/auth/callback?token=session-token&session_id=sid")!
+
+        let session = try api.parseAuthCallback(
+            url,
+            expectedState: "nonce-1",
+            allowProviderManagedState: true
+        )
+
+        XCTAssertEqual(session.token, "session-token")
+        XCTAssertEqual(session.sessionID, "sid")
+    }
+
+    func testNearAuthURLIncludesState() throws {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
 
-        let url = try api.authURL(for: OAuthProvider.github, state: "nonce-1")
+        let url = try api.authURL(for: OAuthProvider.near, state: "nonce-1")
 
         XCTAssertTrue(url.absoluteString.contains("state=nonce-1"))
     }
@@ -58,7 +113,8 @@ final class PrivateChatCoreTests: XCTestCase {
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
         let values = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
 
-        XCTAssertEqual(values["state"], "nonce-1")
+        XCTAssertEqual(values["frontend_callback"], AppConfiguration.production.callbackURL.absoluteString)
+        XCTAssertNil(values["state"])
         XCTAssertNil(values["response_type"])
         XCTAssertNil(values["code_challenge"])
         XCTAssertNil(values["code_challenge_method"])
