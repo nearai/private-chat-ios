@@ -1,100 +1,98 @@
-# Handoff: Phase 2 Design System Extraction
+# Handoff: ChatStore Service Split
 
 ## Focus
 
-Pick up architecture cleanup at Phase 2: move reusable visual primitives into design-system/shared-component folders without changing product behavior or visuals.
+Pick up after the structural cleanup. The repo now has feature folders, shared design primitives, a small app shell, and domain model files. The next meaningful speed/reliability work is reducing `App/State/ChatStore.swift`.
 
 Reference docs:
 
 - `CONTEXT.md` for product terms.
 - `docs/architecture/ARCHITECTURE.md` for target shape.
-- `docs/architecture/PLAN.md` for phased migration.
+- `docs/architecture/PLAN.md` for phased migration status.
 
-## Current State
+## Completed On 2026-05-26
 
-Phase 1 is complete.
+Created or populated:
 
-Created:
+- `NEARPrivateChat/App/`
+- `NEARPrivateChat/App/State/`
+- `NEARPrivateChat/Core/API/`
+- `NEARPrivateChat/Core/Auth/`
+- `NEARPrivateChat/Core/DesignSystem/`
+- `NEARPrivateChat/Core/Export/`
+- `NEARPrivateChat/Core/Routing/`
+- `NEARPrivateChat/Core/Security/`
+- `NEARPrivateChat/Core/Services/`
+- `NEARPrivateChat/Core/Streaming/`
+- `NEARPrivateChat/Core/Telemetry/`
+- `NEARPrivateChat/Features/*`
+- `NEARPrivateChat/Shared/*`
 
-- `NEARPrivateChat/App/AppEnvironment.swift`
-- `NEARPrivateChat/App/AppLifecycle.swift`
-- `NEARPrivateChat/App/RootView.swift`
-- `NEARPrivateChat/App/StatusBanner.swift`
-- `NEARPrivateChat/Core/Routing/AppRoute.swift`
-- `NEARPrivateChat/Core/Routing/AppSheet.swift`
-- `NEARPrivateChat/Core/Routing/AppRouter.swift`
-- `NEARPrivateChat/Features/Setup/UserSetupView.swift`
-- `NEARPrivateChat/Features/Setup/LegalTermsRequiredView.swift`
+Major reductions:
 
-`NEARPrivateChatApp.swift` is now mostly app construction and dependency installation. `AppRouter` is injected as an `EnvironmentObject`, but feature-specific navigation and sheets still remain local until their feature extraction phases.
+- `AppShellView.swift`: 1,248 lines -> 96 lines.
+- `Models.swift`: removed from target and split into domain files.
+- Root `NEARPrivateChat/` now mostly contains app resources and privacy metadata.
 
-Codebase still has large concentration:
+Validated:
 
-- `NEARPrivateChat/AppShellView.swift` owns home composition and still coordinates many UI surfaces through extracted sibling files.
-- `NEARPrivateChat/ChatStore.swift` owns broad app state, streaming, routing decisions, persistence, sharing, files, projects, agent, settings.
-- `NEARPrivateChat/Models.swift` mixes domain models, DTOs, storage helpers, design constants, and small UI components.
+- `xcodebuild build -project NEARPrivateChat.xcodeproj -scheme NEARPrivateChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
 
-## Phase 2 Goal
+## Current Hotspot
 
-Create:
+`NEARPrivateChat/App/State/ChatStore.swift` is still the main bottleneck. It remains a compatibility facade, but it currently owns too many responsibilities:
 
-- `NEARPrivateChat/Core/DesignSystem`
-- `NEARPrivateChat/Shared/Components`
-- `NEARPrivateChat/Shared/Components/Markdown`
-- focused files for colors/tokens, typography helpers, haptics, chips, cards, rows, empty states, loading rows, toolbar/icon helpers, and markdown rendering
+- conversation loading/cache
+- message loading/cache
+- streaming and cancellation
+- Council fan-out/synthesis
+- route readiness
+- drafts and large paste persistence
+- project CRUD/context
+- file upload/preview
+- sharing/public links/shared-with-me
+- model selection/pinning
+- billing/settings
+- attestation fetch state
+- IronClaw runtime/handoff state
+- diagnostics and banners
 
-Move reusable visual primitives out of root/feature files. Keep visuals unchanged.
+## Next Phase
 
-## Constraints
+Start with services that are easy to test without rendering SwiftUI:
 
-- Preserve behavior.
-- Preserve visuals except for tiny layout glue required by moved code.
+1. `Core/Streaming/MessageStreamService`
+2. `Core/Streaming/CouncilStreamService`
+3. `Core/Routing/RoutePlanner`
+4. `Features/Chat/ComposerState`
+5. `Features/Chat/MessageTimelineStore`
+6. `Features/Sharing/ShareStore`
+7. `Features/Projects/ProjectStore`
+
+Keep `ChatStore` as a facade while extracting. Do not rewrite UI callers all at once.
+
+## Guardrails
+
+- Preserve behavior while moving code.
+- Keep the app phone-first.
+- Keep hosted API contracts unchanged.
 - No DB migrations.
 - No localhost app.
-- Use `pnpm` only for JS verifier work.
-- Keep SwiftUI components small when extracting, but do not split purely for line count.
-- Prefer feature-first/fractal folders.
-- One component per file after extraction.
-- For tiny docs/style-only work, skip build.
+- Add every new Swift source to `NEARPrivateChat.xcodeproj/project.pbxproj`; this project does not use filesystem-synced groups.
+- Build after Swift file/project changes.
+- Treat `review-artifacts/live-sim-design-review-2026-05-25 2/` as unrelated/untracked unless explicitly asked.
 
-## Suggested Skills
+## Suggested First Extraction
 
-- `build-ios-apps:swiftui-view-refactor` for moving SwiftUI components without behavior drift.
-- `build-ios-apps:swiftui-ui-patterns` for keeping components idiomatic and reusable.
-- `grill-with-docs` if a product term or hard architecture decision needs clarification.
+Extract route planning first if the goal is Council crash/latency work:
 
-## First Files To Inspect
+- Move route decision helpers and readiness issue generation from `ChatStore` to `Core/Routing/RoutePlanner`.
+- Keep a thin forwarding method on `ChatStore`.
+- Add unit tests for GLM default, Council selection, NEAR Cloud key absent, project context, web-needed prompts, and IronClaw unavailable.
 
-- `NEARPrivateChat/AppShellView.swift`
-- `NEARPrivateChat/AppHaptics.swift`
-- `NEARPrivateChat/ChipFlowLayout.swift`
-- `NEARPrivateChat/MarkdownRenderingViews.swift`
-- `NEARPrivateChat/HomeSupportingViews.swift`
-- `NEARPrivateChat/ChatMessageViews.swift`
-- `NEARPrivateChat/ChatStore.swift`
-- `NEARPrivateChat/Models.swift`
-- `NEARPrivateChat.xcodeproj/project.pbxproj`
+Extract sharing first if the goal is correctness:
 
-## Implementation Notes
+- Move share/public-link/shared-with-me mutation into `Features/Sharing/ShareStore`.
+- Keep `ChatStore` publishing the same public properties until views are updated.
 
-- Move files by ownership, not just line count.
-- Keep reusable primitives in `Core/DesignSystem` only when they are genuinely cross-feature.
-- Keep feature-specific presentation in its feature until that feature extraction happens.
-- Remove `private` from moved declarations only where another file must reference them.
-- Project uses manual Xcode groups, not filesystem-synced groups. Add each new Swift file to `.pbxproj` target membership.
-- Prefer moving complete small files first (`AppHaptics.swift`, `ChipFlowLayout.swift`, `MarkdownRenderingViews.swift`) before slicing `AppShellView.swift` again.
-
-## Exit Checks
-
-- Reusable visual primitives no longer default to `AppShellView.swift`.
-- Markdown renderer lives under `Shared/Components/Markdown`.
-- Haptics and layout helpers live under `Core/DesignSystem` or `Shared/Components`.
-- Existing screens render the same.
-- Build succeeds after Swift file/project changes.
-
-## Known Open Decision
-
-Next feature extraction after Phase 2 remains undecided:
-
-- Recommended correctness path: Sharing first.
-- Recommended fast file-size path: Home first.
+Do not start by splitting every `@Published` property. Start by moving behavior with clear inputs/outputs.

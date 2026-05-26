@@ -115,6 +115,121 @@ struct SetupLaunchCard: View {
     }
 }
 
+struct SavedSetupHomeCard: View {
+    let plan: AppSetupPlan
+    let onPrimaryAction: () -> Void
+    let onChangeSetup: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "bubble.left.and.bubble.right.fill")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Color.brandBlue)
+                    .frame(width: 38, height: 38)
+                    .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("No chats yet")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.primaryAction)
+                    Text(plan.launchCardTitle)
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Your saved setup is ready to reopen with the same route, focus, and starter prompt.")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            if !plan.launchCardMetadata.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(plan.launchCardMetadata, id: \.self) { item in
+                            SetupLaunchPill(title: item)
+                        }
+                    }
+                    .padding(.horizontal, 1)
+                }
+                .scrollClipDisabled()
+            }
+
+            if let firstRunDraft = plan.firstRunDraft {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Starter prompt")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Color.textSecondary)
+                    Text(firstRunDraft)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(12)
+                .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+
+            Text(plan.readinessStatus)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                Button(action: onPrimaryAction) {
+                    Label(primaryActionTitle, systemImage: primaryActionSymbolName)
+                        .font(.subheadline.weight(.bold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .background(Color.primaryAction, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                Button("Change setup", action: onChangeSetup)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.textSecondary)
+                    .frame(height: 44)
+                    .padding(.horizontal, 12)
+                    .background(Color.secondarySurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.brandBlue.opacity(0.10), lineWidth: 1)
+        }
+        .shadow(color: Color.brandBlue.opacity(0.05), radius: 12, y: 6)
+    }
+
+    private var primaryActionTitle: String {
+        switch plan.modelRoute {
+        case .ironclaw:
+            return "Start agent chat"
+        case .council:
+            return "Start council chat"
+        case .privateModel:
+            return "Start first chat"
+        }
+    }
+
+    private var primaryActionSymbolName: String {
+        switch plan.modelRoute {
+        case .ironclaw:
+            return "terminal"
+        case .council:
+            return "square.grid.2x2"
+        case .privateModel:
+            return "arrow.right"
+        }
+    }
+}
+
 struct SetupLaunchPill: View {
     let title: String
 

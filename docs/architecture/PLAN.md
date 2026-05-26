@@ -10,8 +10,11 @@ As of 2026-05-26:
 
 - Phase 0 baseline docs exist in `docs/architecture` and `CONTEXT.md`.
 - Phase 1 app shell/routing foundation is complete: root lifecycle, setup, legal gate, status banner, and route/sheet models have moved into `App/`, `Features/Setup/`, and `Core/Routing/`.
-- The earlier UI file-size pass already split many `AppShellView.swift` subviews into top-level Swift files, but they still need to move into final feature/design-system folders in later phases.
-- Next phase: Phase 2 design-system extraction.
+- Phase 2 design-system/shared extraction is complete: haptics, design tokens, brand marks, clipboard, chip layout, view extensions, and markdown rendering now live under `Core/DesignSystem` or `Shared`.
+- Phase 3 feature ownership is materially complete for file placement: Auth, Home, Chat, ModelCatalog, Sharing, Projects, Files, Account, Security, Agent, and Setup now have feature folders.
+- The app shell split is complete enough for continued work: `AppShellView.swift` is down to root navigation/dialog coordination, while `ConversationListView`, shared conversation UI, and `EmptyChatView` live in their owning features.
+- Phase 12 model-file split is complete as a mechanical first pass: the former monolithic `Models.swift` has been replaced by domain model files.
+- Next phase: split `ChatStore` behavior into services/stores, starting with streaming, routing, draft persistence, and sharing.
 
 ## Guardrails
 
@@ -71,6 +74,8 @@ Exit:
 - `AppShellView.swift` no longer owns reusable visual primitives.
 - Feature screens compose shared primitives.
 
+Status: complete on 2026-05-26.
+
 ## Phase 3: Home Feature
 
 - Create `Features/Home`.
@@ -81,6 +86,8 @@ Exit:
 Exit:
 
 - Home feature can be debugged without opening chat/composer/sharing code.
+
+Status: partial/structural complete on 2026-05-26. UI ownership moved; `HomeStore` intentionally deferred until `ChatStore` facade is reduced.
 
 ## Phase 4: Chat Feature
 
@@ -93,6 +100,8 @@ Exit:
 
 - Chat UI no longer depends on home/project/account UI code.
 - Message timeline changes test without rendering SwiftUI.
+
+Status: partial/structural complete on 2026-05-26. Chat UI files moved; `MessageTimelineStore` and `ComposerState` remain next-step work.
 
 ## Phase 5: Streaming And Route Services
 
@@ -186,6 +195,8 @@ Exit:
 Exit:
 
 - No model file mixes API DTOs, storage helpers, view components, and design constants.
+
+Status: complete as a mechanical first pass on 2026-05-26. Follow-up cleanup should refine ownership if a type is found in the wrong first-pass file.
 
 ## Phase 13: Cleanup Gates
 

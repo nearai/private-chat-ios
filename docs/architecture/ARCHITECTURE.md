@@ -2,15 +2,23 @@
 
 ## Current State
 
-The app works, and Phase 1 has started the feature-first migration. Root app shell code now lives in `App/`, setup/legal views live in `Features/Setup/`, and root route/sheet types live in `Core/Routing/`.
+The app works, and the feature-first migration now has real folder ownership.
 
-The remaining concentration is still significant:
+Completed on 2026-05-26:
 
-- `AppShellView.swift` owns home composition and still coordinates chat, model picker, sharing, project context, account, security, agent workspace, and many design primitives through extracted sibling files.
-- `ChatStore.swift` owns conversation state, project state, sharing, files, streaming, source routing, settings, billing, attestation, agent tools, persistence, cache, and banners.
-- `Models.swift` mixes product models, API DTOs, routing semantics, local storage helpers, visual constants, and UI components.
+- Root app construction, lifecycle, legal/setup gating, and status banner live in `App/`.
+- Root route/sheet types and ask/deep-link routing models live in `Core/Routing/`.
+- Reusable design tokens, haptics, layout helpers, brand marks, clipboard, view extensions, and markdown rendering live in `Core/DesignSystem` or `Shared`.
+- Feature UI files now live under `Features/Auth`, `Features/Home`, `Features/Chat`, `Features/ModelCatalog`, `Features/Sharing`, `Features/Projects`, `Features/Files`, `Features/Account`, `Features/Security`, `Features/Agent`, and `Features/Setup`.
+- `AppShellView.swift` is now a small root navigation/dialog coordinator.
+- The old monolithic `Models.swift` has been split into domain model files.
 
-This shape blocks fast debug because feature behavior, UI, network, persistence, and route decisions live in same files.
+The remaining concentration is narrower but still important:
+
+- `App/State/ChatStore.swift` still owns conversation state, project state, sharing, files, streaming, source routing, settings, billing, attestation, agent tools, persistence, cache, and banners.
+- Several first-pass domain model files are mechanically split and may need small ownership corrections as feature stores emerge.
+
+This remaining shape still slows deeper performance/debug work because network, persistence, streaming, and feature mutation are concentrated in `ChatStore`.
 
 ## Target Shape
 
@@ -34,6 +42,7 @@ NEARPrivateChat/
     Routing/
     Security/
     Telemetry/
+    Streaming/
   Features/
     Account/
     Agent/
@@ -85,6 +94,13 @@ Phase 1 completed on 2026-05-26:
 - `App/AppLifecycle.swift` owns root URL, auth, profile, account-switch, and bootstrap callbacks.
 - `Core/Routing/AppRoute.swift`, `AppSheet.swift`, and `AppRouter.swift` establish the route model for later feature extraction.
 - `Features/Setup/UserSetupView.swift` and `LegalTermsRequiredView.swift` own setup/legal UI.
+
+Phase 2/3/4/12 structural pass completed on 2026-05-26:
+
+- `Core/DesignSystem` and `Shared` own reusable presentation primitives.
+- `Features/*` owns feature UI files.
+- `App/AppShellView.swift` is reduced to root shell coordination.
+- Domain models are split across `Core` and `Features`.
 
 ## Routing
 
