@@ -3,6 +3,15 @@ import UniformTypeIdentifiers
 
 struct ChatView: View {
     @EnvironmentObject private var chatStore: ChatStore
+
+    var body: some View {
+        ChatTranscriptView(chatStore: chatStore, transcriptStore: chatStore.transcriptStore)
+    }
+}
+
+private struct ChatTranscriptView: View {
+    let chatStore: ChatStore
+    @ObservedObject var transcriptStore: ChatTranscriptStore
     @State private var lastAutoScrollNanoseconds: UInt64 = 0
     @State private var autoScrollPauseUntilNanoseconds: UInt64 = 0
     @State private var streamAutoScrollSuppressed = false
@@ -11,15 +20,17 @@ struct ChatView: View {
     private static let dragAutoScrollPauseNanoseconds: UInt64 = 1_500_000_000
 
     var body: some View {
-        let displayItems = MessageTimelineStore.displayItems(from: chatStore.messages)
+        let messages = transcriptStore.messages
+        let isStreaming = transcriptStore.isStreaming
+        let displayItems = MessageTimelineStore.displayItems(from: messages)
         let scrollSignature = ChatAutoScrollSignature(
             displayItems: displayItems,
-            messages: chatStore.messages,
-            isStreaming: chatStore.isStreaming
+            messages: messages,
+            isStreaming: isStreaming
         )
 
         VStack(spacing: 0) {
-            ChatToolbar()
+            ChatToolbar(transcriptStore: transcriptStore)
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
                 .padding(.bottom, 8)
@@ -30,7 +41,7 @@ struct ChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 18) {
-                        if chatStore.messages.isEmpty {
+                        if messages.isEmpty {
                             EmptyChatView()
                                 .frame(maxWidth: .infinity)
                                 .padding(.top, 54)
@@ -70,7 +81,7 @@ struct ChatView: View {
                         proxy.scrollTo(targetID, anchor: .bottom)
                     }
                 }
-                .onChange(of: chatStore.isStreaming) { _, isStreaming in
+                .onChange(of: isStreaming) { _, isStreaming in
                     if isStreaming {
                         streamAutoScrollSuppressed = false
                         autoScrollPauseUntilNanoseconds = 0
@@ -93,7 +104,7 @@ struct ChatView: View {
 
             Divider()
                 .opacity(0.55)
-            InputBar()
+            InputBar(transcriptStore: transcriptStore, composerStore: chatStore.composerStore)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .background(Color.appPanelBackground)
@@ -107,7 +118,7 @@ struct ChatView: View {
         if pauseUntil > autoScrollPauseUntilNanoseconds + 100_000_000 {
             autoScrollPauseUntilNanoseconds = pauseUntil
         }
-        if chatStore.isStreaming, !streamAutoScrollSuppressed {
+        if transcriptStore.isStreaming, !streamAutoScrollSuppressed {
             streamAutoScrollSuppressed = true
         }
     }
@@ -392,6 +403,7 @@ private struct CouncilModelProgressRow: View {
 
 private struct ChatToolbar: View {
     @EnvironmentObject private var chatStore: ChatStore
+    @ObservedObject var transcriptStore: ChatTranscriptStore
     @State private var showingShare = false
     @State private var showingModels = false
     @State private var showingSecurity = false
@@ -522,7 +534,7 @@ private struct ChatToolbar: View {
     }
 
     private var shouldShowCompactStatusText: Bool {
-        !chatStore.messages.isEmpty
+        !transcriptStore.messages.isEmpty
     }
 
     private var compactStatusText: String {
@@ -828,31 +840,31 @@ private struct ChatToolbar: View {
             } label: {
                 Label("Copy Transcript", systemImage: "doc.text")
             }
-            .disabled(chatStore.messages.isEmpty)
+            .disabled(transcriptStore.messages.isEmpty)
             Button {
                 prepareExport(.text)
             } label: {
                 Label("Export TXT", systemImage: "doc.plaintext")
             }
-            .disabled(chatStore.messages.isEmpty)
+            .disabled(transcriptStore.messages.isEmpty)
             Button {
                 prepareExport(.json)
             } label: {
                 Label("Export JSON", systemImage: "curlybraces")
             }
-            .disabled(chatStore.messages.isEmpty)
+            .disabled(transcriptStore.messages.isEmpty)
             Button {
                 showingSignedExportNotice = true
             } label: {
                 Label("Export Signed JSON", systemImage: "checkmark.shield")
             }
-            .disabled(chatStore.messages.isEmpty)
+            .disabled(transcriptStore.messages.isEmpty)
             Button {
                 prepareExport(.pdf)
             } label: {
                 Label("Export PDF", systemImage: "doc.richtext")
             }
-            .disabled(chatStore.messages.isEmpty)
+            .disabled(transcriptStore.messages.isEmpty)
         }
 
         Section("Organize") {
@@ -914,7 +926,7 @@ private struct ChatToolbar: View {
         do {
             exportDocument = try ConversationExportBuilder.document(
                 for: chatStore.selectedConversation,
-                messages: chatStore.messages,
+                messages: transcriptStore.messages,
                 format: format,
                 signedContext: signedTranscriptContext
             )

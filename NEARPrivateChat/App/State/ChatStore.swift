@@ -4,17 +4,25 @@ import PDFKit
 #endif
 
 @MainActor
+final class ChatTranscriptStore: ObservableObject {
+    @Published fileprivate(set) var messages: [ChatMessage] = []
+    @Published fileprivate(set) var isStreaming = false
+}
+
+@MainActor
+final class ChatComposerStore: ObservableObject {
+    @Published fileprivate(set) var draft = ""
+    @Published fileprivate(set) var pendingAttachments: [ChatAttachment] = []
+    @Published fileprivate(set) var isUploadingAttachment = false
+    @Published fileprivate(set) var routeReadinessIssue: ChatRouteReadinessIssue?
+}
+
+@MainActor
 final class ChatStore: ObservableObject {
     @Published private(set) var conversations: [ConversationSummary] = []
-    @Published private(set) var messages: [ChatMessage] = []
     @Published private(set) var models: [ModelOption] = []
     @Published private(set) var nearCloudModels: [ModelOption] = []
     @Published private(set) var projects: [ChatProject] = []
-    @Published private(set) var pendingAttachments: [ChatAttachment] = [] {
-        didSet {
-            persistCurrentDraftIfNeeded()
-        }
-    }
     @Published private(set) var shareInfo: ConversationSharesListResponse?
     @Published private(set) var attestationSnapshot: AttestationSnapshot?
     @Published private(set) var attestationFetchErrorMessage: String?
@@ -98,12 +106,6 @@ final class ChatStore: ObservableObject {
             saveIronclawSettings(ironclawSettings)
         }
     }
-    @Published var draft = "" {
-        didSet {
-            handleDraftChange(from: oldValue, to: draft)
-            persistCurrentDraftIfNeeded()
-        }
-    }
     @Published private(set) var isLoading = false
     @Published private(set) var isLoadingShareInfo = false
     @Published private(set) var isLoadingAttestation = false
@@ -112,9 +114,6 @@ final class ChatStore: ObservableObject {
     @Published private(set) var isLoadingRemoteFiles = false
     @Published private(set) var isLoadingRemoteFilePreview = false
     @Published private(set) var isLoadingShareGroups = false
-    @Published private(set) var isStreaming = false
-    @Published private(set) var isUploadingAttachment = false
-    @Published private(set) var routeReadinessIssue: RouteReadinessIssue?
     @Published private(set) var pinnedModelIDs: [String] = [] {
         didSet {
             guard !isResettingAccountScopedState else { return }
@@ -122,6 +121,47 @@ final class ChatStore: ObservableObject {
         }
     }
     @Published var bannerMessage: String?
+
+    let transcriptStore = ChatTranscriptStore()
+    let composerStore = ChatComposerStore()
+
+    private(set) var messages: [ChatMessage] {
+        get { transcriptStore.messages }
+        set { transcriptStore.messages = newValue }
+    }
+
+    private(set) var isStreaming: Bool {
+        get { transcriptStore.isStreaming }
+        set { transcriptStore.isStreaming = newValue }
+    }
+
+    private(set) var pendingAttachments: [ChatAttachment] {
+        get { composerStore.pendingAttachments }
+        set {
+            composerStore.pendingAttachments = newValue
+            persistCurrentDraftIfNeeded()
+        }
+    }
+
+    var draft: String {
+        get { composerStore.draft }
+        set {
+            let previous = composerStore.draft
+            composerStore.draft = newValue
+            handleDraftChange(from: previous, to: newValue)
+            persistCurrentDraftIfNeeded()
+        }
+    }
+
+    private(set) var isUploadingAttachment: Bool {
+        get { composerStore.isUploadingAttachment }
+        set { composerStore.isUploadingAttachment = newValue }
+    }
+
+    private(set) var routeReadinessIssue: RouteReadinessIssue? {
+        get { composerStore.routeReadinessIssue }
+        set { composerStore.routeReadinessIssue = newValue }
+    }
 
     private let api: PrivateChatAPI
     private let ironclawAPI = IronclawAPI()

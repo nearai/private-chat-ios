@@ -47,6 +47,8 @@ private struct SlashCommandSuggestion: Identifiable {
 struct InputBar: View {
     @EnvironmentObject private var chatStore: ChatStore
     @EnvironmentObject private var sessionStore: SessionStore
+    @ObservedObject var transcriptStore: ChatTranscriptStore
+    @ObservedObject var composerStore: ChatComposerStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var isFocused: Bool
     @State private var showingFileImporter = false
@@ -67,13 +69,13 @@ struct InputBar: View {
                 )
             }
 
-            if !chatStore.pendingAttachments.isEmpty {
-                AttachmentStrip(attachments: chatStore.pendingAttachments) { attachment in
+            if !composerStore.pendingAttachments.isEmpty {
+                AttachmentStrip(attachments: composerStore.pendingAttachments) { attachment in
                     chatStore.removePendingAttachment(attachment)
                 }
             }
 
-            if chatStore.isUploadingAttachment {
+            if composerStore.isUploadingAttachment {
                 HStack(spacing: 8) {
                     ProgressView()
                         .controlSize(.small)
@@ -84,7 +86,7 @@ struct InputBar: View {
                 .padding(.horizontal, 2)
             }
 
-            if let issue = chatStore.routeReadinessIssue {
+            if let issue = composerStore.routeReadinessIssue {
                 RouteReadinessRecoveryCard(
                     issue: issue,
                     onPrimaryAction: { handleRouteReadinessRecovery(issue.recoveryAction) },
@@ -106,7 +108,7 @@ struct InputBar: View {
             composerRoutingControls
 
             VStack(alignment: .leading, spacing: 4) {
-                TextField(composerPlaceholder, text: $chatStore.draft, axis: .vertical)
+                TextField(composerPlaceholder, text: draftBinding, axis: .vertical)
                     .textFieldStyle(.plain)
                     .tokenInputTraits()
                     .autocorrectionDisabled()
@@ -120,9 +122,9 @@ struct InputBar: View {
                     .padding(.top, 10)
                     .padding(.bottom, 2)
                     .frame(maxWidth: .infinity, minHeight: 34, alignment: .topLeading)
-                    .disabled(chatStore.isStreaming)
+                    .disabled(transcriptStore.isStreaming)
                     .accessibilityLabel("Message")
-                    .accessibilityHint(chatStore.isStreaming ? "Stop the current response before editing the draft." : "Enter a message or slash command.")
+                    .accessibilityHint(transcriptStore.isStreaming ? "Stop the current response before editing the draft." : "Enter a message or slash command.")
 
                 HStack(spacing: 8) {
                     Button {
@@ -136,13 +138,13 @@ struct InputBar: View {
                             .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    .disabled(chatStore.isStreaming)
+                    .disabled(transcriptStore.isStreaming)
                     .accessibilityLabel("Attach File")
 
                     Spacer(minLength: 0)
 
                     Button {
-                        if chatStore.isStreaming {
+                        if transcriptStore.isStreaming {
                             AppHaptics.mediumImpact()
                             chatStore.cancelStream()
                         } else {
@@ -151,7 +153,7 @@ struct InputBar: View {
                             isFocused = false
                         }
                     } label: {
-                        Image(systemName: chatStore.isStreaming ? "stop.fill" : "arrow.up")
+                        Image(systemName: transcriptStore.isStreaming ? "stop.fill" : "arrow.up")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(sendIconColor)
                             .frame(width: 32, height: 32)
@@ -162,9 +164,9 @@ struct InputBar: View {
                     .scaleEffect(sendButtonScale)
                     .opacity(reduceMotion ? (sendDisabled ? 0.72 : 1) : 1)
                     .animation(sendButtonAnimation, value: canSend)
-                    .animation(sendButtonAnimation, value: chatStore.isStreaming)
-                    .accessibilityLabel(chatStore.isStreaming ? "Stop response" : "Send message")
-                    .accessibilityHint(chatStore.isStreaming ? "Stops the current response." : "Sends the draft and staged attachments.")
+                    .animation(sendButtonAnimation, value: transcriptStore.isStreaming)
+                    .accessibilityLabel(transcriptStore.isStreaming ? "Stop response" : "Send message")
+                    .accessibilityHint(transcriptStore.isStreaming ? "Stops the current response." : "Sends the draft and staged attachments.")
                 }
                 .padding(.horizontal, 6)
                 .padding(.bottom, 6)
@@ -230,27 +232,44 @@ struct InputBar: View {
     }
 
     private var canSend: Bool {
-        chatStore.composerState.hasSendableContent
+        composerState.hasSendableContent
     }
 
     private var sendDisabled: Bool {
-        chatStore.composerState.sendDisabled
+        composerState.sendDisabled
+    }
+
+    private var composerState: ComposerState {
+        ComposerState(
+            draft: composerStore.draft,
+            pendingAttachments: composerStore.pendingAttachments,
+            isStreaming: transcriptStore.isStreaming,
+            routeReadinessTitle: composerStore.routeReadinessIssue?.title,
+            routeReadinessMessage: composerStore.routeReadinessIssue?.message
+        )
+    }
+
+    private var draftBinding: Binding<String> {
+        Binding(
+            get: { composerStore.draft },
+            set: { chatStore.draft = $0 }
+        )
     }
 
     private var sendButtonColor: Color {
-        if chatStore.isStreaming {
+        if transcriptStore.isStreaming {
             return .red.opacity(0.90)
         }
         return sendDisabled ? Color.appSecondaryBackground : Color.brandBlue
     }
 
     private var sendIconColor: Color {
-        sendDisabled && !chatStore.isStreaming ? .secondary : .white
+        sendDisabled && !transcriptStore.isStreaming ? .secondary : .white
     }
 
     private var sendButtonScale: CGFloat {
         guard !reduceMotion else { return 1 }
-        if chatStore.isStreaming {
+        if transcriptStore.isStreaming {
             return 1
         }
         return canSend ? 1 : 0.9
@@ -422,7 +441,7 @@ struct InputBar: View {
                             }
                     }
                     .buttonStyle(.plain)
-                    .disabled(chatStore.isStreaming || chatStore.selectedRouteUsesNearCloud)
+                    .disabled(transcriptStore.isStreaming || chatStore.selectedRouteUsesNearCloud)
                     .accessibilityLabel(selectedFocusMode == mode ? "Focus: \(mode.title), selected" : "Focus: \(mode.title)")
                 }
             }
@@ -464,7 +483,7 @@ struct InputBar: View {
     }
 
     private var slashQuery: String? {
-        let trimmed = chatStore.draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = composerStore.draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix("/") else { return nil }
         let token = trimmed.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true).first ?? Substring(trimmed)
         return String(token.dropFirst()).lowercased()
@@ -530,7 +549,7 @@ struct InputBar: View {
             chatStore.selectSourceMode(.web)
         case .project:
             chatStore.selectSourceMode(chatStore.selectedProject == nil ? .files : .all)
-            if chatStore.selectedProject == nil && chatStore.pendingAttachments.isEmpty {
+            if chatStore.selectedProject == nil && composerStore.pendingAttachments.isEmpty {
                 showingProjectFiles = true
             }
         case .research:
@@ -580,7 +599,7 @@ struct InputBar: View {
     }
 
     private func remainingDraft(after command: String) -> String {
-        let trimmed = chatStore.draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = composerStore.draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.lowercased().hasPrefix(command) else { return "" }
         return trimmed
             .dropFirst(command.count)
