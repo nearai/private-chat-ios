@@ -7,106 +7,20 @@ struct SecurityView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    attestationSummary
+            ScrollView {
+                VStack(spacing: 16) {
+                    verificationHeroCard
+                    verificationDetailsCard
+                    proofActionCard
+                    educationCard
+                    reportCard
                 }
-
-                Section("Current Session") {
-                    SecurityStateRow(title: "Route", value: routeSummary, symbolName: routeSymbolName)
-                    SecurityStateRow(title: "Endpoint", value: endpointSummary, symbolName: "network")
-                    SecurityStateRow(title: "Request signing", value: signingSummary, symbolName: "signature")
-                    SecurityStateRow(title: "Selected model", value: chatStore.selectedModelDisplayName, symbolName: "cpu")
-                }
-
-                Section("Proof Actions") {
-                    proofActionsContent
-                }
-
-                Section("Proof Facts") {
-                    proofFactsContent
-                }
-
-                Section("What This Means") {
-                    ForEach(AttestationEducation.standard.sections) { section in
-                        AttestationEducationRow(section: section)
-                    }
-                }
-
-                Section("Report") {
-                    if let error = chatStore.attestationFetchErrorMessage {
-                        InfoRow(title: "Last fetch", value: error)
-                    }
-                    if let snapshot = chatStore.attestationSnapshot {
-                        InfoRow(
-                            title: "Fetched",
-                            value: snapshot.fetchedAt.formatted(date: .abbreviated, time: .standard)
-                        )
-                        InfoRow(title: "Nonce", value: snapshot.nonce, monospaced: true)
-                        InfoRow(title: "Model", value: proofModelPhrase(snapshot), monospaced: snapshot.model != nil)
-                        InfoRow(title: "Coverage", value: attestationCoveragePhrase(snapshot))
-                        if let address = snapshot.chatGatewayAddress {
-                            InfoRow(title: "Chat gateway", value: address, monospaced: true)
-                        }
-                        if let address = snapshot.cloudGatewayAddress {
-                            InfoRow(title: "Cloud gateway", value: address, monospaced: true)
-                        }
-
-                        DisclosureGroup {
-                            ScrollView(.horizontal, showsIndicators: true) {
-                                Text(snapshot.prettyJSON)
-                                    .font(.caption.monospaced())
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .frame(maxHeight: 220)
-                        } label: {
-                            Label("Raw JSON", systemImage: "curlybraces")
-                        }
-                        .padding(.vertical, 4)
-
-                        Button {
-                            Clipboard.copy(snapshot.prettyJSON)
-                            chatStore.bannerMessage = "Attestation copied."
-                        } label: {
-                            Label("Copy Report", systemImage: "doc.on.doc")
-                        }
-                    } else if chatStore.isLoadingAttestation {
-                        HStack(spacing: 10) {
-                            ProgressView()
-                            Text("Fetching attestation")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        Text("No report fetched yet.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section {
-                    if canFetchAttestation {
-                        Button {
-                            Task { await chatStore.refreshAttestationReport() }
-                        } label: {
-                            Label(
-                                chatStore.attestationSnapshot == nil ? "Fetch Attestation" : "Refresh Attestation",
-                                systemImage: "arrow.clockwise"
-                            )
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.brandBlue)
-                        .disabled(chatStore.isLoadingAttestation)
-                    } else {
-                        Label(fetchAttestationDisabledText, systemImage: "shield.slash")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                .padding(.horizontal, 18)
+                .padding(.top, 10)
+                .padding(.bottom, 24)
             }
-            .navigationTitle("Security")
+            .background(Color.appBackground)
+            .navigationTitle("Verification")
             .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -121,6 +35,254 @@ struct SecurityView: View {
                 }
             }
         }
+        .platformMediumDetent()
+    }
+
+    private var currentProofViewModel: ProofCapsuleViewModel {
+        if chatStore.selectedRouteUsesNearCloud || (chatStore.isCouncilModeEnabled && chatStore.activeCouncilHasNearCloudRoutes) {
+            return ProofCapsuleViewModel(
+                state: .proxied,
+                title: "Privacy proxy",
+                detail: "NEAR Cloud can use app-supplied web and project context, but this route does not carry NEAR Private verification.",
+                badge: "Privacy proxy",
+                symbolName: "eye.slash"
+            )
+        }
+
+        return ProofCapsuleViewModel(
+            status: chatStore.currentAttestationStatus,
+            isLoading: chatStore.isLoadingAttestation,
+            modelID: chatStore.selectedModel
+        )
+    }
+
+    private var verificationHeroCard: some View {
+        let proof = currentProofViewModel
+        return VStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .stroke(proof.tintColor.opacity(0.24), lineWidth: 1)
+                    .frame(width: 64, height: 64)
+                if proof.state == .verifying {
+                    ProgressView()
+                } else {
+                    Image(systemName: proof.symbolName)
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundStyle(proof.tintColor)
+                }
+            }
+
+            VStack(spacing: 7) {
+                Text(proof.title)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+
+                Text(proof.detail)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 330)
+            }
+
+            ProofCapsule(viewModel: proof)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 20)
+        .frame(maxWidth: .infinity)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 1)
+        }
+    }
+
+    private var verificationDetailsCard: some View {
+        VStack(spacing: 0) {
+            VerificationDetailRow(label: "Model", value: chatStore.selectedModelDisplayName, detail: modelDetailText, symbolName: "cpu")
+            Divider().padding(.leading, 108)
+            VerificationDetailRow(label: "Route", value: routeSummary, detail: endpointSummary, symbolName: routeSymbolName)
+            Divider().padding(.leading, 108)
+            VerificationDetailRow(label: "Signing", value: signingSummary, detail: signingDetailText, symbolName: "signature")
+            Divider().padding(.leading, 108)
+            VerificationDetailRow(label: "Freshness", value: freshnessSummary, detail: freshnessDetailText, symbolName: "clock")
+        }
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 1)
+        }
+    }
+
+    private var proofActionCard: some View {
+        VStack(spacing: 8) {
+            if let snapshot = chatStore.attestationSnapshot {
+                Button {
+                    verifyProofOnDevice(snapshot)
+                } label: {
+                    Label("Verify on-device", systemImage: "lock.shield")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                ShareLink(
+                    item: snapshot.prettyJSON,
+                    subject: Text("NEAR Private Chat proof JSON"),
+                    message: Text("Proof JSON only. It does not include conversation text.")
+                ) {
+                    Label("Share with proof", systemImage: "arrow.up.right")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.actionPrimary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                }
+
+                if let localVerificationMessage {
+                    Text(localVerificationMessage)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                }
+            } else {
+                if canFetchAttestation {
+                    Button {
+                        Task { await chatStore.refreshAttestationReport() }
+                    } label: {
+                        Label(
+                            chatStore.isLoadingAttestation ? "Fetching proof" : "Fetch proof",
+                            systemImage: "arrow.clockwise"
+                        )
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(chatStore.isLoadingAttestation)
+                }
+
+                Text(proofActionsUnavailableText)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 1)
+        }
+    }
+
+    private var educationCard: some View {
+        DisclosureGroup {
+            Text(AttestationEducation.standard.summary)
+                .font(.subheadline)
+                .foregroundStyle(Color.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 6)
+        } label: {
+            Text("Why this matters")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+        }
+        .padding(14)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var reportCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Report")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+
+            if let error = chatStore.attestationFetchErrorMessage {
+                InfoRow(title: "Last fetch", value: error)
+            }
+
+            if let snapshot = chatStore.attestationSnapshot {
+                InfoRow(title: "Fetched", value: snapshot.fetchedAt.formatted(date: .abbreviated, time: .standard))
+                InfoRow(title: "Nonce", value: snapshot.nonce, monospaced: true)
+                InfoRow(title: "Coverage", value: attestationCoveragePhrase(snapshot))
+
+                DisclosureGroup {
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        Text(snapshot.prettyJSON)
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 220)
+                    .padding(.top, 6)
+                } label: {
+                    Label("Raw JSON", systemImage: "curlybraces")
+                        .font(.subheadline.weight(.semibold))
+                }
+
+                Button {
+                    Clipboard.copy(snapshot.prettyJSON)
+                    chatStore.bannerMessage = "Proof report copied."
+                } label: {
+                    Label("Copy report", systemImage: "doc.on.doc")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.actionPrimary)
+            } else if chatStore.isLoadingAttestation {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Fetching proof report")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text("No proof report fetched yet.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 1)
+        }
+    }
+
+    private var modelDetailText: String {
+        guard let snapshot = chatStore.attestationSnapshot else {
+            return "Selected for this chat"
+        }
+        return proofModelDetail(snapshot) ?? proofModelPhrase(snapshot)
+    }
+
+    private var signingDetailText: String {
+        guard chatStore.attestationSnapshot != nil else {
+            return "Available after proof fetch"
+        }
+        return "Checked locally from the signed report"
+    }
+
+    private var freshnessSummary: String {
+        chatStore.currentAttestationStatus.freshness()?.shortLabel ?? (chatStore.attestationSnapshot == nil ? "Not fetched" : "Unknown")
+    }
+
+    private var freshnessDetailText: String {
+        chatStore.attestationSnapshot?.fetchedAt.formatted(date: .abbreviated, time: .standard) ?? "Fetch proof to check freshness"
     }
 
     @ViewBuilder
@@ -455,6 +617,47 @@ struct InfoRow: View {
                 .textSelection(.enabled)
         }
         .padding(.vertical, 2)
+    }
+}
+
+private struct VerificationDetailRow: View {
+    let label: String
+    let value: String
+    let detail: String
+    let symbolName: String
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: symbolName)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.textSecondary)
+                .frame(width: 24, height: 24)
+
+            Text(label)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.textSecondary)
+                .textCase(.uppercase)
+                .frame(width: 62, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.84)
+                Text(detail)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(value). \(detail)")
     }
 }
 

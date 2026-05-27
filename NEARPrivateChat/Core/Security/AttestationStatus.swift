@@ -267,7 +267,7 @@ enum AttestationStatus: Codable, Equatable, Sendable {
             let freshnessText = freshness(at: now)?.shortLabel ?? "fresh"
             return AttestationStatusCopy(
                 title: "Verified",
-                detail: "This device verified signed route and model evidence from TEE-backed infrastructure. Verification does not judge answer quality or truth.",
+                detail: "Checked on this device against signed proof from TEE-supported infrastructure. Verification does not judge answer quality or truth.",
                 badge: "Verified \(freshnessText)"
             )
         case .stale:
@@ -384,7 +384,7 @@ struct AttestationEducation: Codable, Equatable, Sendable {
 
     static let standard = AttestationEducation(
         headline: "Proof, not a promise.",
-        summary: "Proof is verified on this device from signed TEE evidence. It does not prove that an answer is true, safe, or complete.",
+        summary: "The app checks signed proof locally. The model runs on TEE-supported infrastructure; verification does not prove the answer is true, safe, or complete.",
         sections: [
             AttestationEducationSection(
                 title: "What is verified",
