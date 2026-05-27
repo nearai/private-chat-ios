@@ -460,7 +460,7 @@ private struct DemoMockLoginView: View {
         .padding(.horizontal, 24)
         .padding(.top, 76)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(red: 0.972, green: 0.974, blue: 0.980).ignoresSafeArea())
+        .background(Color.appBackground.ignoresSafeArea())
         .task {
             try? await Task.sleep(nanoseconds: 600_000_000)
             for count in 1...passwordLength {
@@ -485,12 +485,12 @@ private struct DemoMockLoginView: View {
 
     private var googleWordmark: some View {
         HStack(spacing: 0) {
-            Text("G").foregroundStyle(Color(red: 0.259, green: 0.522, blue: 0.957))
-            Text("o").foregroundStyle(Color(red: 0.918, green: 0.263, blue: 0.208))
-            Text("o").foregroundStyle(Color(red: 0.984, green: 0.737, blue: 0.024))
-            Text("g").foregroundStyle(Color(red: 0.259, green: 0.522, blue: 0.957))
-            Text("l").foregroundStyle(Color(red: 0.204, green: 0.659, blue: 0.325))
-            Text("e").foregroundStyle(Color(red: 0.918, green: 0.263, blue: 0.208))
+            Text("G").foregroundStyle(Color.googleBlue)
+            Text("o").foregroundStyle(Color.googleRed)
+            Text("o").foregroundStyle(Color.googleYellow)
+            Text("g").foregroundStyle(Color.googleBlue)
+            Text("l").foregroundStyle(Color.googleGreen)
+            Text("e").foregroundStyle(Color.googleRed)
         }
         .font(.title2.weight(.medium))
         .accessibilityLabel("Google")

@@ -86,13 +86,13 @@ enum ProjectPalette: String, CaseIterable, Codable, Identifiable {
     var tintColor: Color {
         switch self {
         case .sky: Color.primaryAction
-        case .mint: Color(red: 0.0, green: 0.56, blue: 0.42)
-        case .teal: Color(red: 0.0, green: 0.48, blue: 0.62)
-        case .violet: Color(red: 0.42, green: 0.34, blue: 0.90)
-        case .indigo: Color(red: 0.24, green: 0.31, blue: 0.82)
-        case .rose: Color(red: 0.82, green: 0.24, blue: 0.42)
-        case .amber: Color(red: 0.78, green: 0.45, blue: 0.02)
-        case .slate: Color(red: 0.28, green: 0.33, blue: 0.38)
+        case .mint: Color.proofVerified
+        case .teal: Color.brandSky
+        case .violet: Color.purple
+        case .indigo: Color.indigo
+        case .rose: Color.pink
+        case .amber: Color.proofStale
+        case .slate: Color.textSecondary
         }
     }
 

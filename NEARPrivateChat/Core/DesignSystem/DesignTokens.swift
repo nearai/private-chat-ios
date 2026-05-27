@@ -14,6 +14,12 @@ extension Color {
     static let appSelection = Color(red: 0.86, green: 0.94, blue: 1.0)
     static let appBlueTint = Color(red: 0.92, green: 0.97, blue: 1.0)
     static let appSymbolBlueBackground = Color(red: 0.78, green: 0.91, blue: 1.0)
+    static let commandGradientMid = Color(red: 0.006, green: 0.16, blue: 0.28)
+    static let commandGradientEnd = Color(red: 0.0, green: 0.38, blue: 0.72)
+    static let googleBlue = Color(red: 0.259, green: 0.522, blue: 0.957)
+    static let googleRed = Color(red: 0.918, green: 0.263, blue: 0.208)
+    static let googleYellow = Color(red: 0.984, green: 0.737, blue: 0.024)
+    static let googleGreen = Color(red: 0.204, green: 0.659, blue: 0.325)
     static let actionPrimary = Color.brandBlue
     static let primaryAction = Color.actionPrimary
     static let actionTint = Color.actionPrimary.opacity(0.12)

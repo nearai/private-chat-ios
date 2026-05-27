@@ -912,8 +912,8 @@ struct CommandCardBackground: View {
                 LinearGradient(
                     colors: [
                         Color.brandBlack,
-                        Color(red: 0.006, green: 0.16, blue: 0.28),
-                        Color(red: 0.0, green: 0.38, blue: 0.72)
+                        Color.commandGradientMid,
+                        Color.commandGradientEnd
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
