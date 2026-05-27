@@ -11,6 +11,7 @@ struct ProjectFilesView: View {
     @State private var projectLinkURL = ""
     @State private var showingAddLinkForm = false
     @State private var showingFileLibrary = false
+    @State private var showingInstructionsEditor = false
     @State private var selectedTab: ProjectContextTab = .sources
     @State private var previewFile: RemoteFileInfo?
     @State private var pendingLinkDelete: ProjectLink?
@@ -28,25 +29,18 @@ struct ProjectFilesView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                headerSection
-
-                Section {
-                    Picker("Project Context", selection: $selectedTab) {
-                        ForEach(ProjectContextTab.allCases) { tab in
-                            Text(tab.rawValue).tag(tab)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .accessibilityLabel("Project context section")
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    projectOverviewHeader
+                    knowledgeSection
+                    instructionsSection
+                    chatsInProjectSection
                 }
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-
-                selectedTabContent
+                .padding(.top, 10)
+                .padding(.bottom, 28)
             }
-            .scrollContentBackground(.hidden)
             .background(Color.appBackground)
-            .navigationTitle("Project Context")
+            .navigationTitle("Project")
             .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -74,6 +68,22 @@ struct ProjectFilesView: View {
             .sheet(item: $previewFile) { file in
                 RemoteFilePreviewView(file: file)
                     .environmentObject(chatStore)
+            }
+            .sheet(isPresented: $showingInstructionsEditor) {
+                ProjectInstructionsEditorSheet(
+                    instructions: $projectInstructions,
+                    memory: $projectMemory,
+                    instructionsChanged: instructionsChanged,
+                    memoryChanged: memoryChanged,
+                    saveAction: {
+                        if instructionsChanged {
+                            chatStore.updateSelectedProjectInstructions(projectInstructions)
+                        }
+                        if memoryChanged {
+                            chatStore.updateSelectedProjectMemory(projectMemory)
+                        }
+                    }
+                )
             }
             .confirmationDialog(
                 "Remove this source?",
@@ -152,32 +162,30 @@ struct ProjectFilesView: View {
 
     @ViewBuilder
     private var projectSourceAddMenu: some View {
-        if selectedTab == .sources {
-            Menu {
-                Button {
-                    showingAddLinkForm = true
-                } label: {
-                    Label("Add Link", systemImage: "link.badge.plus")
-                }
-                Button {
-                    showingFileImporter = true
-                } label: {
-                    Label("Add Files", systemImage: "paperclip")
-                }
-                Button {
-                    showingFileLibrary.toggle()
-                    if showingFileLibrary, chatStore.remoteFiles.isEmpty {
-                        Task { await chatStore.refreshRemoteFiles(showErrors: false) }
-                    }
-                } label: {
-                    Label(showingFileLibrary ? "Hide Uploaded Files" : "Browse Uploaded Files", systemImage: "tray.full")
+        Menu {
+            Button {
+                showingFileImporter = true
+            } label: {
+                Label("Add File", systemImage: "paperclip")
+            }
+            Button {
+                showingAddLinkForm = true
+            } label: {
+                Label("Add Link", systemImage: "link.badge.plus")
+            }
+            Button {
+                showingFileLibrary.toggle()
+                if showingFileLibrary, chatStore.remoteFiles.isEmpty {
+                    Task { await chatStore.refreshRemoteFiles(showErrors: false) }
                 }
             } label: {
-                Image(systemName: "plus")
-                    .font(.subheadline.weight(.semibold))
+                Label(showingFileLibrary ? "Hide Uploaded Files" : "Browse Uploaded Files", systemImage: "tray.full")
             }
-            .accessibilityLabel("Add project source")
+        } label: {
+            Image(systemName: "plus")
+                .font(.subheadline.weight(.semibold))
         }
+        .accessibilityLabel("Add project context")
     }
 
     private var pendingLinkDeletePresented: Binding<Bool> {
@@ -208,28 +216,28 @@ struct ProjectFilesView: View {
         )
     }
 
-    private var headerSection: some View {
-        Section {
-            ProjectContextHeroCard(
-                title: chatStore.selectedProject?.name ?? "Project",
-                symbolName: chatStore.selectedProject?.projectIconName ?? ProjectIcon.folder.symbolName,
-                tintColor: chatStore.selectedProject?.tintColor ?? Color.trustFreshAccent,
-                createdAt: chatStore.selectedProject?.createdAt,
-                chats: chatStore.selectedProject?.conversationIDs.count ?? 0,
-                sources: projectSourceCount,
-                notes: chatStore.selectedProjectNotes.count,
-                hasInstructions: !chatStore.selectedProjectInstructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            )
-            .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
-            .listRowBackground(Color.clear)
+    private var projectOverviewHeader: some View {
+        ProjectContextOverviewHeader(
+            title: chatStore.selectedProject?.name ?? "Project",
+            symbolName: chatStore.selectedProject?.projectIconName ?? ProjectIcon.folder.symbolName,
+            tintColor: chatStore.selectedProject?.tintColor ?? Color.actionPrimary,
+            subtitle: projectOverviewSubtitle,
+            metadata: projectOverviewMetadata
+        )
+        .padding(.horizontal, 16)
+    }
 
-            if !projectKnowledgeItems.isEmpty {
-                ProjectKnowledgeSnapshotCard(items: projectKnowledgeItems)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 10, trailing: 16))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-            }
-        }
+    private var projectOverviewSubtitle: String {
+        let hasInstructions = !chatStore.selectedProjectInstructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return hasInstructions ? "Instructions active for new replies." : "Add files or instructions to focus this project."
+    }
+
+    private var projectOverviewMetadata: String {
+        [
+            "\(projectSourceCount) source\(projectSourceCount == 1 ? "" : "s")",
+            "\(chatStore.selectedProjectNotes.count) note\(chatStore.selectedProjectNotes.count == 1 ? "" : "s")",
+            "\(projectConversations.count) chat\(projectConversations.count == 1 ? "" : "s")"
+        ].joined(separator: " · ")
     }
 
     private var projectKnowledgeItems: [ProjectKnowledgeSnapshotCard.Item] {
@@ -282,6 +290,168 @@ struct ProjectFilesView: View {
         case .notes:
             savedSections
         }
+    }
+
+    @ViewBuilder
+    private var knowledgeSection: some View {
+        ProjectContextSectionLabel("Knowledge")
+            .padding(.horizontal, 16)
+
+        if projectSourceCount == 0 {
+            ProjectContextPrimaryEmptyState(
+                title: "Add a file or paste instructions to get started.",
+                actionTitle: "Add a file",
+                action: { showingFileImporter = true }
+            )
+            .padding(.horizontal, 16)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(chatStore.selectedProjectAttachments) { attachment in
+                        ProjectKnowledgePill(
+                            title: attachment.name,
+                            subtitle: attachment.displaySize ?? attachment.displayKind,
+                            symbolName: attachment.systemImageName,
+                            tint: ProjectFileVisual.tint(for: attachment.name)
+                        ) {
+                            pendingAttachmentDelete = attachment
+                        }
+                    }
+
+                    ForEach(chatStore.selectedProjectLinks) { link in
+                        ProjectKnowledgePill(
+                            title: link.displayTitle,
+                            subtitle: link.host ?? "Saved link",
+                            symbolName: "link",
+                            tint: Color.actionPrimary
+                        ) {
+                            pendingLinkDelete = link
+                        }
+                    }
+
+                    ProjectAddKnowledgePill {
+                        showingFileImporter = true
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+
+        if showingAddLinkForm {
+            VStack(alignment: .leading, spacing: 10) {
+                addLinkForm
+            }
+            .padding(14)
+            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.appBorder, lineWidth: 0.5)
+            }
+            .padding(.horizontal, 16)
+        }
+
+        if showingFileLibrary {
+            uploadedFilesPanel
+        }
+    }
+
+    private var instructionsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ProjectContextSectionLabel("Instructions")
+            ProjectInstructionCardV2(
+                instructions: chatStore.selectedProjectInstructions,
+                memory: chatStore.selectedProjectMemorySummary,
+                editAction: { showingInstructionsEditor = true }
+            )
+        }
+        .padding(.horizontal, 16)
+    }
+
+    @ViewBuilder
+    private var chatsInProjectSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ProjectContextSectionLabel("Chats in this project")
+            VStack(spacing: 0) {
+                if projectConversations.isEmpty {
+                    ProjectContextEmptyActionRow(
+                        title: "No chats yet",
+                        message: "New conversations started with this project will appear here.",
+                        systemImage: "bubble.left"
+                    ) {
+                        Button {
+                            dismiss()
+                        } label: {
+                            Label("Back to Chat", systemImage: "bubble.left")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.actionPrimary)
+                    }
+                    .padding(.horizontal, 14)
+                } else {
+                    ForEach(projectConversations) { conversation in
+                        ProjectConversationRow(conversation: conversation)
+                            .dividerIfNeeded(conversation.id != projectConversations.last?.id)
+                    }
+                }
+            }
+            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.appBorder, lineWidth: 0.5)
+            }
+        }
+        .padding(.horizontal, 16)
+    }
+
+    @ViewBuilder
+    private var uploadedFilesPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ProjectContextSectionLabel("Uploaded Files")
+            VStack(spacing: 0) {
+                if chatStore.isLoadingRemoteFiles && chatStore.remoteFiles.isEmpty {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("Loading private files")
+                            .font(.footnote)
+                            .foregroundStyle(Color.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 64)
+                } else if chatStore.remoteFiles.isEmpty {
+                    ProjectContextEmptyActionRow(
+                        title: "No uploaded files",
+                        message: "Tap + to upload a file into this project. Files up to 10 MB are supported.",
+                        systemImage: "tray"
+                    ) {
+                        Button {
+                            showingFileImporter = true
+                        } label: {
+                            Label("Add File", systemImage: "paperclip")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.actionPrimary)
+                    }
+                } else {
+                    ForEach(chatStore.remoteFiles) { file in
+                        RemoteFileRow(
+                            file: file,
+                            onPreview: { previewFile = file },
+                            onAttach: { chatStore.attachRemoteFileToPrompt(file) },
+                            onAddToProject: { chatStore.addRemoteFileToSelectedProject(file) },
+                            onDelete: {
+                                pendingRemoteFileDelete = file
+                            }
+                        )
+                        .dividerIfNeeded(file.id != chatStore.remoteFiles.last?.id)
+                    }
+                }
+            }
+            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.appBorder, lineWidth: 0.5)
+            }
+        }
+        .padding(.horizontal, 16)
     }
 
     @ViewBuilder
@@ -505,6 +675,12 @@ struct ProjectFilesView: View {
         chatStore.selectedProjectLinks.count + chatStore.selectedProjectAttachments.count
     }
 
+    private var projectConversations: [ConversationSummary] {
+        guard let selectedProject = chatStore.selectedProject else { return [] }
+        let ids = Set(selectedProject.conversationIDs)
+        return chatStore.conversations.filter { ids.contains($0.id) && !$0.isArchived }
+    }
+
     private var instructionsChanged: Bool {
         projectInstructions.trimmingCharacters(in: .whitespacesAndNewlines) !=
             chatStore.selectedProjectInstructions.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -532,6 +708,325 @@ struct ProjectFilesView: View {
         return ProjectContextFreshness.label(for: remoteFile.createdAt, prefix: "Added")
     }
 
+}
+
+private struct ProjectContextOverviewHeader: View {
+    let title: String
+    let symbolName: String
+    let tintColor: Color
+    let subtitle: String
+    let metadata: String
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: symbolName)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(tintColor)
+                .frame(width: 44, height: 44)
+                .background(tintColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(2)
+                Text(metadata)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.textTertiary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 0.5)
+        }
+    }
+}
+
+private struct ProjectContextSectionLabel: View {
+    let text: String
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    var body: some View {
+        Text(text.uppercased())
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.textSecondary)
+            .tracking(0.5)
+    }
+}
+
+private struct ProjectContextPrimaryEmptyState: View {
+    let title: String
+    let actionTitle: String
+    let action: () -> Void
+
+    var body: some View {
+        VStack(spacing: 14) {
+            NearMark(size: 44)
+            Text(title)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(action: action) {
+                Label(actionTitle, systemImage: "plus")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.actionPrimary)
+        }
+        .padding(18)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 0.5)
+        }
+    }
+}
+
+private struct ProjectKnowledgePill: View {
+    let title: String
+    let subtitle: String
+    let symbolName: String
+    let tint: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 10) {
+                Image(systemName: symbolName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 30, height: 30)
+                    .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(Color.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(width: 132, height: 116, alignment: .topLeading)
+            .padding(12)
+            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.appBorder, lineWidth: 0.5)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ProjectAddKnowledgePill: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(systemName: "plus")
+                    .font(.title3.weight(.semibold))
+                Text("Add file")
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(Color.actionPrimary)
+            .frame(width: 132, height: 116)
+            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.appBorder, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private enum ProjectFileVisual {
+    static func tint(for filename: String) -> Color {
+        switch (filename as NSString).pathExtension.lowercased() {
+        case "pdf":
+            return Color.actionPrimary
+        case "csv":
+            return Color.brandSky
+        case "json":
+            return Color.textSecondary
+        case "txt", "text", "md", "markdown":
+            return Color.textTertiary
+        default:
+            return Color.actionPrimary
+        }
+    }
+}
+
+private struct ProjectInstructionCardV2: View {
+    let instructions: String
+    let memory: String
+    let editAction: () -> Void
+
+    var body: some View {
+        Button(action: editAction) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "text.alignleft")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.actionPrimary)
+                    .frame(width: 32, height: 32)
+                    .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(primaryText)
+                        .font(.body)
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !secondaryText.isEmpty {
+                        Text(secondaryText)
+                            .font(.footnote)
+                            .foregroundStyle(Color.textSecondary)
+                            .lineLimit(2)
+                    }
+                    Text("Edit")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color.actionPrimary)
+                }
+
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.textTertiary)
+                    .padding(.top, 8)
+            }
+            .padding(14)
+            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.appBorder, lineWidth: 0.5)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var primaryText: String {
+        let trimmed = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "No project instructions yet." : trimmed
+    }
+
+    private var secondaryText: String {
+        let trimmed = memory.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Project notes and memory can be added here." : trimmed
+    }
+}
+
+private struct ProjectConversationRow: View {
+    let conversation: ConversationSummary
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "bubble.left")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.actionPrimary)
+                .frame(width: 32, height: 32)
+                .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(conversation.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(1)
+                Text(relativeCreatedText)
+                    .font(.caption)
+                    .foregroundStyle(Color.textSecondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.textTertiary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    private var relativeCreatedText: String {
+        guard let createdAt = conversation.createdAt else { return "Recent" }
+        return ProjectContextFreshness.relativeDateText(for: Date(timeIntervalSince1970: createdAt))
+    }
+}
+
+private struct ProjectInstructionsEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var instructions: String
+    @Binding var memory: String
+    let instructionsChanged: Bool
+    let memoryChanged: Bool
+    let saveAction: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Instructions") {
+                    TextField("How should the assistant handle this project?", text: $instructions, axis: .vertical)
+                        .lineLimit(4...8)
+                }
+                Section("Notes") {
+                    TextField("What should the assistant remember?", text: $memory, axis: .vertical)
+                        .lineLimit(4...8)
+                }
+            }
+            .navigationTitle("Instructions")
+            .platformInlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        saveAction()
+                        dismiss()
+                    }
+                    .disabled(!instructionsChanged && !memoryChanged)
+                }
+            }
+        }
+        .platformMediumDetent()
+    }
+}
+
+private struct ProjectDividerIfNeeded: ViewModifier {
+    let show: Bool
+
+    func body(content: Content) -> some View {
+        VStack(spacing: 0) {
+            content
+            if show {
+                Rectangle()
+                    .fill(Color.appHairline)
+                    .frame(height: 0.5)
+                    .padding(.leading, 58)
+            }
+        }
+    }
+}
+
+private extension View {
+    func dividerIfNeeded(_ show: Bool) -> some View {
+        modifier(ProjectDividerIfNeeded(show: show))
+    }
 }
 
 private struct ProjectKnowledgeSnapshotCard: View {
