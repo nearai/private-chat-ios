@@ -510,6 +510,16 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertFalse(store.isCouncilModeEnabled)
     }
 
+    @MainActor
+    func testRecommendedCouncilLineupPrioritizesGLMQwenAndOpus() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+
+        store.useDefaultCouncilLineup()
+
+        XCTAssertEqual(store.activeCouncilModels.map(\.displayName), ["GLM 5.1", "Qwen3.7 Max", "Claude Opus 4.7"])
+        XCTAssertEqual(store.selectedModelDisplayName, "GLM 5.1")
+    }
+
     func testHomeSearchContextMatchesSurfaceExplicitProjectHits() {
         let project = ChatProject(
             id: "project-1",

@@ -25,7 +25,8 @@ struct ModelCatalogStore {
     }
 
     var chatModels: [ModelOption] {
-        (models + externalModels).filter { model in
+        let privateModels = models.isEmpty ? Self.fallbackPrivateModels() : models
+        return (privateModels + externalModels).filter { model in
             !model.isUtilityModel && isAllowedByCurrentPlan(model)
         }
     }
@@ -151,6 +152,23 @@ struct ModelCatalogStore {
                 cloudModelID: "openai/gpt-oss-120b",
                 displayName: "GPT OSS 120B",
                 description: "Runs GPT OSS 120B through NEAR Cloud with privacy proxy routing."
+            )
+        ]
+    }
+
+    static func fallbackPrivateModels() -> [ModelOption] {
+        [
+            ModelOption(
+                modelID: "zai-org/GLM-5.1-FP8",
+                publicModel: true,
+                metadata: ModelOption.Metadata(
+                    verifiable: true,
+                    contextLength: nil,
+                    modelDisplayName: "GLM 5.1",
+                    modelDescription: "Default NEAR Private route with verification support.",
+                    modelIcon: nil,
+                    aliases: ["GLM", "GLM 5.1", "NEAR Private", "verified", "private"]
+                )
             )
         ]
     }

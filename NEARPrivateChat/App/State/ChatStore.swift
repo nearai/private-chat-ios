@@ -300,6 +300,12 @@ final class ChatStore: ObservableObject {
             "zai-org/GLM-5.1-FP8"
         ],
         [
+            "near-cloud/qwen3.7-max",
+            "near-cloud/qwen/qwen3.7-max",
+            "qwen/qwen3.7-max",
+            "Qwen/Qwen3.5-122B-A10B"
+        ],
+        [
             "near-cloud/anthropic/claude-opus-4-7",
             "anthropic/claude-opus-4-7",
             "anthropic/claude-opus-4-6",
@@ -311,12 +317,6 @@ final class ChatStore: ObservableObject {
             "near-cloud/openai/gpt-oss-120b",
             "openai/gpt-oss-120b",
             "openai/gpt-5.4"
-        ],
-        [
-            "near-cloud/qwen3.7-max",
-            "near-cloud/qwen/qwen3.7-max",
-            "qwen/qwen3.7-max",
-            "Qwen/Qwen3.5-122B-A10B"
         ],
         [
             "near-cloud/moonshotai/kimi-k2.6",

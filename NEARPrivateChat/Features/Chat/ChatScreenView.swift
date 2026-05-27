@@ -513,7 +513,7 @@ private struct ChatToolbar: View {
             }
         }
         .sheet(isPresented: $showingModels) {
-            ModelPickerView()
+            ModelPickerView(openingCouncil: false)
                 .environmentObject(chatStore)
         }
         .sheet(isPresented: $showingSecurity) {
@@ -773,9 +773,9 @@ private struct ChatToolbar: View {
             showingModels = true
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: chatStore.isCouncilModeEnabled ? "square.grid.2x2" : (chatStore.selectedRouteUsesNearCloud ? "cloud" : "cpu"))
+                Image(systemName: chatStore.selectedRouteUsesNearCloud ? "cloud" : "cpu")
                     .font(.caption.weight(.bold))
-                Text(chatStore.activeModelDisplayName)
+                Text(chatStore.selectedModelDisplayName)
                     .font(.caption.weight(.semibold))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
@@ -797,10 +797,11 @@ private struct ChatToolbar: View {
     }
 
     private var modelSelectorAccessibilityLabel: String {
+        var label = "Select model, currently \(chatStore.selectedModelDisplayName)"
         if chatStore.isCouncilModeEnabled {
-            return "Select model, LLM Council active, \(chatStore.activeCouncilRouteSummary)"
+            label += ", Council active"
         }
-        return "Select model, currently \(chatStore.activeModelDisplayName)"
+        return label
     }
 
     private var projectContextButton: some View {
