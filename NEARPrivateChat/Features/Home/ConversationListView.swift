@@ -149,166 +149,55 @@ struct ConversationListView: View {
     }
 
     var body: some View {
-        List {
-            Section {
-                if isSearchVisible || !searchText.isEmpty {
-                    SidebarSearchField(text: $searchText, prompt: "Search chats, projects, and sources")
-                        .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 5, trailing: 16))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
+        VStack(spacing: 0) {
+            ClaudeHomeTopBar(
+                displayName: sessionStore.displayName,
+                isSearchVisible: isSearchVisible,
+                onAccount: { showingAccountSettings = true },
+                onSearch: toggleSearch,
+                onNewChat: openNewChat
+            )
 
-                HomeFilterStrip(
-                    selectedFilter: $selectedHomeFilter,
-                    counts: filterCounts,
-                    onSelect: selectHomeFilter
-                )
-                .workspaceListRow(top: 4, bottom: 8)
-            }
-            .listSectionSeparator(.hidden)
-
-            if selectedHomeFilter == .all, !resumeConversations.isEmpty {
-                Section {
-                    HomeSectionHeader(title: "Resume")
-                        .workspaceListRow(top: 16, bottom: 5)
-
-                    HomeRecentsRow(
-                        conversations: resumeConversations,
-                        projectNameForConversation: projectName(for:),
-                        onOpenConversation: openConversation
-                    )
-                    .workspaceListRow(top: 0, bottom: 3)
-                }
-                .listSectionSeparator(.hidden)
+            if isSearchVisible || !searchText.isEmpty {
+                SidebarSearchField(text: $searchText, prompt: "Search chats")
+                    .padding(.horizontal, 16)
+                    .padding(.top, 4)
+                    .padding(.bottom, 6)
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            if selectedHomeFilter == .all, !filteredProjects.isEmpty {
-                Section {
-                    HomeSectionHeader(
-                        title: "Projects",
-                        actionTitle: "New",
-                        actionSymbolName: "plus",
-                        action: { showingNewProject = true }
-                    )
-                    .workspaceListRow(top: 16, bottom: 5)
-
-                    ForEach(filteredProjects) { project in
-                        Button {
-                            chatStore.selectProject(project)
-                        } label: {
-                            ProjectRow(
-                                title: project.name,
-                                subtitle: projectSubtitle(project),
-                                symbolName: project.projectIconName,
-                                isSelected: chatStore.selectedProjectID == project.id,
-                                tintColor: project.tintColor,
-                                tintBackground: project.tintBackgroundColor
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button {
-                                chatStore.selectProject(project)
-                            } label: {
-                                Label("Open", systemImage: "folder")
-                            }
-                            Button {
-                                chatStore.selectProject(project)
-                                showingProjectFiles = true
-                            } label: {
-                                Label("Project Context", systemImage: "folder.badge.gearshape")
-                            }
-                            Button {
-                                chatStore.selectProject(project)
-                                openNewChat()
-                            } label: {
-                                Label("New Chat", systemImage: "square.and.pencil")
-                            }
-                            Divider()
-                            Button {
-                                editingProject = project
-                            } label: {
-                                Label("Rename / Style", systemImage: "paintpalette")
-                            }
-                            Divider()
-                            Button {
-                                chatStore.archiveProject(project)
-                            } label: {
-                                Label("Archive", systemImage: "archivebox")
-                            }
-                        }
-                        .workspaceListRow()
-                    }
-                }
-                .listSectionSeparator(.hidden)
-            }
-
-            if selectedHomeFilter == .all, !filteredProjectContextMatches.isEmpty {
-                Section {
-                    HomeSectionHeader(title: "Project Context")
-                        .workspaceListRow(top: 16, bottom: 5)
-
-                    ForEach(filteredProjectContextMatches) { match in
-                        Button {
-                            openProjectContext(match.project)
-                        } label: {
-                            ProjectContextSearchRow(match: match)
-                        }
-                        .buttonStyle(.plain)
-                        .workspaceListRow()
-                    }
-                }
-                .listSectionSeparator(.hidden)
-            }
-
-            if selectedHomeFilter == .all,
-               filteredConversations.isEmpty,
-               filteredProjects.isEmpty,
-               filteredProjectContextMatches.isEmpty {
-                Section {
-                    HomeEmptyState(
+            ScrollView {
+                if filteredConversations.isEmpty {
+                    ClaudeHomeEmptyState(
                         title: searchQuery.isEmpty ? "Ask privately." : "No matching chats",
-                        subtitle: searchQuery.isEmpty ? "Start with a question. NEAR can research, use project context, and verify supported private routes when the answer lands." : "Try a project name, file, link, note, or chat title.",
-                        actionTitle: searchQuery.isEmpty ? "Start a new chat" : nil,
-                        action: searchQuery.isEmpty ? openNewChat : nil
+                        showsAction: searchQuery.isEmpty,
+                        action: openNewChat
                     )
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                }
-            } else if selectedHomeFilter == .all {
-                ForEach(conversationGroups, id: \.title) { group in
-                    Section {
-                        HomeSectionHeader(title: group.title)
-                            .workspaceListRow(top: 18, bottom: 5)
-
-                        ForEach(group.conversations) { conversation in
+                    .frame(maxWidth: .infinity)
+                } else {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(filteredConversations.enumerated()), id: \.element.id) { index, conversation in
                             Button {
                                 openConversation(conversation)
                             } label: {
-                                ConversationRow(
+                                ClaudeThreadRow(
                                     conversation: conversation,
-                                    isSelected: conversation.id == chatStore.selectedConversation?.id
+                                    preview: previewText(for: conversation),
+                                    isLast: index == filteredConversations.count - 1
                                 )
                             }
                             .buttonStyle(.plain)
-                            .workspaceListRow()
-                            .swipeActions(edge: .leading) {
+                            .contextMenu {
                                 Button {
                                     chatStore.togglePinConversation(conversation)
                                 } label: {
                                     Label(conversation.isPinned ? "Unpin" : "Pin", systemImage: conversation.isPinned ? "pin.slash" : "pin")
                                 }
-                                .tint(.brandBlue)
-                            }
-                            .swipeActions(edge: .trailing) {
                                 Button {
                                     chatStore.archiveConversation(conversation)
                                 } label: {
                                     Label("Archive", systemImage: "archivebox")
                                 }
-                                .tint(.secondary)
-
                                 Button(role: .destructive) {
                                     chatStore.requestDeleteConversation(conversation)
                                 } label: {
@@ -317,125 +206,15 @@ struct ConversationListView: View {
                             }
                         }
                     }
+                    .padding(.bottom, 28)
                 }
             }
-
-            if selectedHomeFilter == .shared {
-                Section {
-                    HomeSectionHeader(title: "Shared")
-                        .workspaceListRow(top: 16, bottom: 5)
-
-                    if chatStore.isLoadingSharedWithMe && chatStore.sharedWithMe.isEmpty {
-                        LoadingHomeRow(title: "Loading shared conversations")
-                            .workspaceListRow()
-                    } else if filteredSharedWithMe.isEmpty {
-                        ContentUnavailableView(
-                            searchQuery.isEmpty ? "No shared conversations" : "No matching shared conversations",
-                            systemImage: "person.2.slash"
-                        )
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                    } else {
-                        if searchQuery.isEmpty {
-                            SharedAccessSummaryCard(conversationCount: filteredSharedWithMe.count)
-                                .workspaceListRow(top: 0, bottom: 8)
-                        }
-                        ForEach(filteredSharedWithMe) { item in
-                            NavigationLink(value: item) {
-                                SharedWithMeRow(item: item)
-                            }
-                            .workspaceListRow()
-                        }
-                    }
-                }
-                .listSectionSeparator(.hidden)
-            }
-
-            if selectedHomeFilter == .archived {
-                Section {
-                    HomeSectionHeader(title: "Archived")
-                        .workspaceListRow(top: 16, bottom: 5)
-
-                    if filteredArchivedProjects.isEmpty && filteredArchivedConversations.isEmpty {
-                        ContentUnavailableView(
-                            searchQuery.isEmpty ? "No archived items" : "No matching archived items",
-                            systemImage: "archivebox"
-                        )
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                    } else {
-                        if !filteredArchivedProjects.isEmpty {
-                            HomeSectionHeader(title: "Projects")
-                                .workspaceListRow(top: 0, bottom: 5)
-
-                            ForEach(filteredArchivedProjects) { project in
-                                ProjectRow(
-                                    title: project.name,
-                                    subtitle: archivedProjectSubtitle(project),
-                                    symbolName: project.projectIconName,
-                                    isSelected: false,
-                                    tintColor: project.tintColor,
-                                    tintBackground: project.tintBackgroundColor
-                                )
-                                .contextMenu {
-                                    Button {
-                                        chatStore.unarchiveProject(project)
-                                    } label: {
-                                        Label("Unarchive", systemImage: "arrow.uturn.backward")
-                                    }
-                                    Button {
-                                        editingProject = project
-                                    } label: {
-                                        Label("Rename / Style", systemImage: "paintpalette")
-                                    }
-                                }
-                                .workspaceListRow()
-                            }
-                        }
-
-                        if !filteredArchivedProjects.isEmpty && !filteredArchivedConversations.isEmpty {
-                            HomeSectionHeader(title: "Chats")
-                                .workspaceListRow(top: 12, bottom: 5)
-                        }
-
-                        ForEach(filteredArchivedConversations) { conversation in
-                            Button {
-                                openConversation(conversation)
-                            } label: {
-                                ConversationRow(
-                                    conversation: conversation,
-                                    isSelected: conversation.id == chatStore.selectedConversation?.id
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .workspaceListRow()
-                            .swipeActions(edge: .trailing) {
-                                Button {
-                                    chatStore.unarchiveConversation(conversation)
-                                } label: {
-                                    Label("Unarchive", systemImage: "arrow.uturn.backward")
-                                }
-                                .tint(.brandBlue)
-
-                                Button(role: .destructive) {
-                                    chatStore.requestDeleteConversation(conversation)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                        }
-                    }
-                }
-                .listSectionSeparator(.hidden)
+            .refreshable {
+                await chatStore.refreshConversations()
             }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background(HomeSurfaceBackground())
-        .platformInlineNavigationTitle()
-        .refreshable {
-            await chatStore.refreshConversations()
-        }
+        .background(Color.appBackground.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showingNewProject) {
             NewProjectView()
                 .environmentObject(chatStore)
@@ -457,31 +236,8 @@ struct ConversationListView: View {
             SharedWithMePreviewView(item: item)
                 .environmentObject(chatStore)
         }
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                AccountToolbarButton(onRunSetupAgain: onRunSetupAgain)
-            }
-            ToolbarItem(placement: .principal) {
-                Text("Chats")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.primary)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: 2) {
-                    HomeToolbarIconButton(
-                        symbolName: "magnifyingglass",
-                        accessibilityLabel: isSearchVisible ? "Hide search" : "Search",
-                        action: toggleSearch
-                    )
-                    HomeToolbarIconButton(
-                        symbolName: "square.and.pencil",
-                        accessibilityLabel: "New chat",
-                        action: openNewChat
-                    )
-                }
-            }
-        }
         .task {
+            selectedHomeFilter = .all
             if chatStore.sharedWithMe.isEmpty {
                 await chatStore.refreshSharedWithMe(showErrors: false)
             }
@@ -532,6 +288,10 @@ struct ConversationListView: View {
                 searchText = ""
             }
         }
+    }
+
+    private func previewText(for conversation: ConversationSummary) -> String {
+        chatStore.cachedConversationPreview(for: conversation.id) ?? "Tap to continue this conversation."
     }
 
     private func projectName(for conversation: ConversationSummary) -> String? {

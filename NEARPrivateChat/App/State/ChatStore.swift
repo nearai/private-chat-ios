@@ -5568,6 +5568,29 @@ final class ChatStore: ObservableObject {
         loadLocalMessageCache()[conversationID]
     }
 
+    func cachedConversationPreview(for conversationID: String) -> String? {
+        let sourceMessages: [ChatMessage]
+        if selectedConversation?.id == conversationID, !messages.isEmpty {
+            sourceMessages = messages
+        } else {
+            sourceMessages = loadLocalMessages(for: conversationID) ?? []
+        }
+        return sourceMessages
+            .reversed()
+            .first { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map { Self.compactPreviewText($0.text) }
+    }
+
+    private static func compactPreviewText(_ text: String) -> String {
+        let collapsed = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .split(separator: " ", omittingEmptySubsequences: true)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard collapsed.count > 140 else { return collapsed }
+        return "\(collapsed.prefix(137))..."
+    }
+
     private func loadLocalMessageCache() -> [String: [ChatMessage]] {
         guard let data = fileBackedData(filename: Self.localMessagesCacheFilename, legacyDefaultsKey: Self.localMessagesDefaultsKey),
               let cache = try? JSONDecoder().decode([String: [ChatMessage]].self, from: data) else {

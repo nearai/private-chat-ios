@@ -495,6 +495,213 @@ struct HomeToolbarIconButton: View {
     }
 }
 
+struct ClaudeHomeTopBar: View {
+    let displayName: String
+    let isSearchVisible: Bool
+    let onAccount: () -> Void
+    let onSearch: () -> Void
+    let onNewChat: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button(action: onAccount) {
+                Text(avatarLetter)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.actionPrimary)
+                    .frame(width: 32, height: 32)
+                    .background(Color.actionTint, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .frame(width: 44, height: 44, alignment: .leading)
+            .accessibilityLabel("Account")
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 0) {
+                Button(action: onSearch) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 20, weight: .regular))
+                        .foregroundStyle(isSearchVisible ? Color.actionPrimary : Color.textSecondary)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isSearchVisible ? "Hide search" : "Search")
+
+                Button(action: onNewChat) {
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 20, weight: .regular))
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("New chat")
+            }
+        }
+        .overlay {
+            Text("Chats")
+                .font(.system(size: 17, weight: .semibold))
+                .kerning(-0.2)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+        }
+        .frame(height: 44)
+        .padding(.horizontal, 12)
+        .background(Color.appBackground)
+    }
+
+    private var avatarLetter: String {
+        String(displayName.trimmingCharacters(in: .whitespacesAndNewlines).first ?? "A").uppercased()
+    }
+}
+
+struct ClaudeThreadRow: View {
+    let conversation: ConversationSummary
+    let preview: String
+    let isLast: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(conversation.title)
+                        .font(.system(size: 17, weight: .regular))
+                        .kerning(-0.2)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    Spacer(minLength: 0)
+
+                    Text(timestampText)
+                        .font(.system(size: 11, weight: .regular))
+                        .kerning(0.1)
+                        .foregroundStyle(Color.textTertiary)
+                        .lineLimit(1)
+                }
+
+                Text(preview)
+                    .font(.system(size: 13, weight: .regular))
+                    .kerning(-0.05)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .padding(.top, 11)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .frame(minHeight: 64, alignment: .center)
+            .contentShape(Rectangle())
+
+            if !isLast {
+                Rectangle()
+                    .fill(Color.appHairline)
+                    .frame(height: 0.5)
+                    .padding(.horizontal, 16)
+            }
+        }
+        .background(Color.appBackground)
+    }
+
+    private var timestampText: String {
+        guard let createdAt = conversation.createdAt else { return "Recent" }
+        let date = Date(timeIntervalSince1970: createdAt)
+        let elapsed = max(0, Date().timeIntervalSince(date))
+        if elapsed < 60 {
+            return "Just now"
+        }
+        if elapsed < 3600 {
+            return "\(Int(elapsed / 60))m"
+        }
+        if elapsed < 86_400 {
+            return "\(Int(elapsed / 3600))h"
+        }
+        if elapsed < 172_800 {
+            return "Yesterday"
+        }
+        if elapsed < 604_800 {
+            return date.formatted(.dateTime.weekday(.abbreviated))
+        }
+        return date.formatted(.dateTime.month(.abbreviated).day())
+    }
+}
+
+struct ClaudeHomeEmptyState: View {
+    let title: String
+    let showsAction: Bool
+    let action: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+
+                VStack(spacing: 18) {
+                    ClaudeNearMark(size: 64)
+                        .accessibilityHidden(true)
+
+                    Text(title)
+                        .font(.system(size: 15, weight: .regular))
+                        .kerning(-0.1)
+                        .foregroundStyle(Color.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top, 30)
+
+                Spacer(minLength: 0)
+                    .frame(height: max(24, proxy.size.height * 0.18))
+
+                if showsAction {
+                    Button(action: action) {
+                        Text("Start a new chat")
+                            .font(.system(size: 17, weight: .semibold))
+                            .kerning(-0.2)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .shadow(color: Color.actionPrimary.opacity(0.18), radius: 12, y: 4)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 56)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .frame(minHeight: 560)
+    }
+}
+
+struct ClaudeNearMark: View {
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.225, style: .continuous)
+                .fill(Color.actionPrimary)
+                .shadow(color: Color.actionPrimary.opacity(0.25), radius: 2, y: 1)
+
+            Path { path in
+                path.move(to: CGPoint(x: size * 0.28, y: size * 0.78))
+                path.addLine(to: CGPoint(x: size * 0.28, y: size * 0.22))
+                path.addLine(to: CGPoint(x: size * 0.72, y: size * 0.78))
+                path.addLine(to: CGPoint(x: size * 0.72, y: size * 0.22))
+            }
+            .stroke(
+                Color.white,
+                style: StrokeStyle(
+                    lineWidth: size * 0.133,
+                    lineCap: .round,
+                    lineJoin: .round
+                )
+            )
+            .frame(width: size, height: size)
+        }
+        .frame(width: size, height: size)
+        .accessibilityLabel("NEAR")
+    }
+}
+
 struct HomeEmptyState: View {
     let title: String
     let subtitle: String
