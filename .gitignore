@@ -8,6 +8,7 @@
 /review-artifacts/*.zip
 /review-artifacts/latest-smoke/
 /review-artifacts/screenshots*/
+/review-artifacts/
 *.xcresult
 *.mp4
 *.mov
