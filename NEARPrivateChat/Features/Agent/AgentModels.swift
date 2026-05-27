@@ -7,6 +7,104 @@ struct IronclawSkillProfile: Identifiable, Hashable {
     let summary: String
     let symbolName: String
     let keywords: [String]
+
+    func missionPrompt(seed: String = "", projectName: String? = nil) -> String {
+        let trimmedSeed = seed.trimmingCharacters(in: .whitespacesAndNewlines)
+        let projectLead: String
+        if let projectName = projectName?.trimmingCharacters(in: .whitespacesAndNewlines), !projectName.isEmpty {
+            projectLead = "Use the \(projectName) project context when it helps. "
+        } else {
+            projectLead = ""
+        }
+
+        func prompt(_ blankPrompt: String, _ seededPrefix: String, suffix: String) -> String {
+            if trimmedSeed.isEmpty {
+                return "\(projectLead)\(blankPrompt) \(suffix)"
+            }
+            return "\(projectLead)\(seededPrefix): \(trimmedSeed). \(suffix)"
+        }
+
+        switch id {
+        case "coding":
+            return prompt(
+                "Inspect this code task.",
+                "Implement this change safely",
+                suffix: "Inspect the repo first, make the smallest useful patch, run focused tests, and report changed files plus remaining risks."
+            )
+        case "local-test":
+            return prompt(
+                "Run focused verification on this work.",
+                "Verify this safely",
+                suffix: "Choose the smallest useful build, test, or smoke checks, capture failures clearly, and summarize what still needs manual QA."
+            )
+        case "github-workflow":
+            return prompt(
+                "Triage this GitHub work.",
+                "Handle this GitHub task",
+                suffix: "Inspect the issue, PR, or CI context first, identify the highest-impact next action, and report the concrete follow-up."
+            )
+        case "code-review":
+            return prompt(
+                "Review this code for correctness.",
+                "Review this code carefully",
+                suffix: "Prioritize bugs, regressions, and missing tests. Lead with findings and keep the summary brief."
+            )
+        case "security-review":
+            return prompt(
+                "Review this for security risk.",
+                "Audit this for security risk",
+                suffix: "Focus on auth, secrets, injection, data exposure, and permission boundaries. Call out concrete exploit paths and fixes."
+            )
+        case "qa-review":
+            return prompt(
+                "Create a focused QA pass for this workflow.",
+                "Plan QA for this workflow",
+                suffix: "List repro steps, edge cases, expected outcomes, and the smallest evidence set needed to validate the result."
+            )
+        case "project-setup":
+            return prompt(
+                "Set up this project workspace.",
+                "Turn this into a tracked workspace",
+                suffix: "Identify the files, links, instructions, and first task the project should contain, then suggest the cleanest next action."
+            )
+        case "llm-council":
+            return prompt(
+                "Compare multiple model perspectives on this decision.",
+                "Run a council-style comparison for this",
+                suffix: "Surface strongest agreements, disagreements, and the recommended decision with tradeoffs."
+            )
+        case "product-prioritization":
+            return prompt(
+                "Prioritize this product work.",
+                "Prioritize this product work",
+                suffix: "Rank the options by impact, evidence, effort, and user value, then recommend the highest-leverage next move."
+            )
+        case "decision-capture":
+            return prompt(
+                "Capture this decision clearly.",
+                "Capture this decision",
+                suffix: "Summarize the decision, rationale, alternatives considered, open questions, and follow-up actions."
+            )
+        case "commitment-triage":
+            return prompt(
+                "Extract the commitments from this work.",
+                "Extract commitments from this",
+                suffix: "List owners, deadlines, promised deliverables, risks, and the next follow-up checkpoint."
+            )
+        case "portfolio":
+            return prompt(
+                "Review this portfolio.",
+                "Review this portfolio",
+                suffix: "Summarize positions, risks, rebalancing ideas, and what additional live market context is needed before acting."
+            )
+        default:
+            return prompt(
+                "Help with this task.",
+                "Help with this task",
+                suffix: "Inspect the available context first, choose the smallest useful path, and return concrete next actions."
+            )
+        }
+    }
 }
 
 enum IronclawSkillCatalog {

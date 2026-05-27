@@ -1771,6 +1771,35 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(powerPlan.modelRoute, .council)
     }
 
+    func testIronclawSkillCatalogBlankStatePrefersPhoneFirstAgentSkills() {
+        let skills = IronclawSkillCatalog.suggestedSkills(for: "", limit: 3)
+
+        XCTAssertEqual(skills.map(\.id), ["coding", "local-test", "github-workflow"])
+    }
+
+    func testIronclawSkillMissionPromptUsesProjectContextWhenBlank() throws {
+        let skill = try XCTUnwrap(IronclawSkillCatalog.all.first(where: { $0.id == "coding" }))
+
+        let prompt = skill.missionPrompt(projectName: "NEAR Private Chat")
+
+        XCTAssertTrue(prompt.contains("Use the NEAR Private Chat project context when it helps."))
+        XCTAssertTrue(prompt.contains("Inspect this code task."))
+        XCTAssertTrue(prompt.contains("make the smallest useful patch"))
+    }
+
+    func testIronclawSkillMissionPromptSharpensExistingMission() throws {
+        let skill = try XCTUnwrap(IronclawSkillCatalog.all.first(where: { $0.id == "code-review" }))
+
+        let prompt = skill.missionPrompt(
+            seed: "Review the chat export diff before merging",
+            projectName: "Verifier"
+        )
+
+        XCTAssertTrue(prompt.contains("Use the Verifier project context when it helps."))
+        XCTAssertTrue(prompt.contains("Review this code carefully: Review the chat export diff before merging."))
+        XCTAssertTrue(prompt.contains("Lead with findings"))
+    }
+
     func testModelOptionCapabilitySignalsDrivePickerFilters() {
         let coderVision = ModelOption(
             modelID: "Qwen/Qwen3-VL-Coder",

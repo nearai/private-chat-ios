@@ -145,36 +145,6 @@ private struct AgentMissionControlPanel: View {
         let isAvailable: Bool
     }
 
-    private struct PromptSuggestion: Identifiable {
-        var id: String { title }
-        let title: String
-        let symbolName: String
-        let prompt: String
-    }
-
-    private let promptSuggestions: [PromptSuggestion] = [
-        PromptSuggestion(
-            title: "Repo task",
-            symbolName: "wrench.and.screwdriver",
-            prompt: "Update this repo to "
-        ),
-        PromptSuggestion(
-            title: "PR / issue",
-            symbolName: "arrow.triangle.branch",
-            prompt: "Review this PR or issue and identify the highest-impact fixes: "
-        ),
-        PromptSuggestion(
-            title: "Research",
-            symbolName: "globe",
-            prompt: "Research the latest context on this and turn it into concrete next actions: "
-        ),
-        PromptSuggestion(
-            title: "Plan",
-            symbolName: "checklist",
-            prompt: "Plan the safest way to build this, including tests and risks: "
-        )
-    ]
-
     private var availableCapabilities: [ToolbeltCapability] {
         toolbeltCapabilities.filter(\.isAvailable)
     }
@@ -355,7 +325,7 @@ private struct AgentMissionControlPanel: View {
                 Image(systemName: "sparkles")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(Color.brandSky)
-                Text("Likely tools")
+                Text("Likely skills")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.82))
                     .lineLimit(1)
@@ -385,29 +355,35 @@ private struct AgentMissionControlPanel: View {
 
     private var quickStartRow: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Examples")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.54))
+            HStack(spacing: 8) {
+                Text(trimmedMissionBrief.isEmpty ? "Start from a skill" : "Sharpen this mission")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.54))
+                Spacer(minLength: 0)
+                Text("Templates stay editable")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.42))
+            }
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(promptSuggestions) { suggestion in
+                HStack(spacing: 10) {
+                    ForEach(featuredSkills) { skill in
                         Button {
-                            missionBrief = suggestion.prompt
+                            applySkill(skill)
                         } label: {
-                            Label(suggestion.title, systemImage: suggestion.symbolName)
-                                .font(.caption.weight(.semibold))
-                                .labelStyle(.titleAndIcon)
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 10)
-                                .frame(height: 34)
-                                .background(.white.opacity(0.13), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            AgentSkillLaunchCard(skill: skill, isSuggested: detectedSkills.contains(skill))
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Use \(skill.title) skill")
                     }
                 }
                 .padding(.vertical, 1)
             }
         }
+    }
+
+    private var featuredSkills: [IronclawSkillProfile] {
+        let limit = trimmedMissionBrief.isEmpty ? 5 : 4
+        return IronclawSkillCatalog.suggestedSkills(for: missionBrief, limit: limit)
     }
 
     private var agentContextLine: String {
@@ -469,6 +445,13 @@ private struct AgentMissionControlPanel: View {
         ]
     }
 
+    private func applySkill(_ skill: IronclawSkillProfile) {
+        missionBrief = skill.missionPrompt(
+            seed: trimmedMissionBrief,
+            projectName: chatStore.selectedProject?.name
+        )
+    }
+
     private func launch() {
         if chatStore.ironclawRemoteWorkstationAvailable {
             chatStore.selectModel(ModelOption.ironclawModelID)
@@ -480,6 +463,52 @@ private struct AgentMissionControlPanel: View {
         chatStore.draft = "Agent mission: \(trimmedMissionBrief)"
         chatStore.sendDraft()
         dismiss()
+    }
+}
+
+private struct AgentSkillLaunchCard: View {
+    let skill: IronclawSkillProfile
+    let isSuggested: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: skill.symbolName)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.brandSky)
+                    .frame(width: 28, height: 28)
+                    .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                Spacer(minLength: 0)
+
+                if isSuggested {
+                    Text("Suggested")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Color.brandSky)
+                }
+            }
+
+            Text(skill.title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+            Text(skill.summary)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.white.opacity(0.64))
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Use skill")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.white.opacity(0.88))
+        }
+        .padding(12)
+        .frame(width: 182, alignment: .leading)
+        .frame(minHeight: 118, alignment: .topLeading)
+        .background(.white.opacity(isSuggested ? 0.15 : 0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(isSuggested ? Color.brandSky.opacity(0.58) : .white.opacity(0.10), lineWidth: 1)
+        }
     }
 }
 
