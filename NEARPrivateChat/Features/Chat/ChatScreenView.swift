@@ -579,35 +579,20 @@ private struct ChatToolbar: View {
     }
 
     private var compactToolbar: some View {
-        HStack(alignment: .top, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                Button {
-                    if chatStore.selectedConversation != nil {
-                        showingRename = true
-                    }
-                } label: {
-                    Text(chatStore.selectedConversationTitle)
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.plain)
-                .disabled(chatStore.selectedConversation == nil)
-                .accessibilityLabel("Chat title")
-                .accessibilityHint(chatStore.selectedConversation == nil ? "" : "Renames this chat.")
-
-                if shouldShowCompactStatusText {
-                    Text(compactStatusText)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.82)
-                }
+        // v2: the navigation bar already renders the conversation title, so the
+        // in-body toolbar drops the duplicate title text. Status text remains
+        // (when there are messages) as a thin route/project subtitle.
+        HStack(alignment: .center, spacing: 10) {
+            if shouldShowCompactStatusText {
+                Text(compactStatusText)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Spacer(minLength: 0)
             }
-
-            Spacer(minLength: 0)
 
             modelSelectorButton(maxWidth: 142)
 
