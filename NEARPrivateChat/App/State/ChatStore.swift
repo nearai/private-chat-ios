@@ -4812,10 +4812,19 @@ final class ChatStore: ObservableObject {
         guard !delta.isEmpty else { return }
         pendingTextDeltaByMessageID[messageID, default: ""] += delta
         guard pendingTextDeltaFlushTasks[messageID] == nil else { return }
+        let flushDelay = textDeltaFlushNanoseconds(for: messageID)
         pendingTextDeltaFlushTasks[messageID] = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: Self.streamDeltaFlushNanoseconds)
+            try? await Task.sleep(nanoseconds: flushDelay)
             self?.flushPendingTextDelta(for: messageID)
         }
+    }
+
+    private func textDeltaFlushNanoseconds(for messageID: String) -> UInt64 {
+        guard let message = messages.first(where: { $0.id == messageID }),
+              message.councilBatchID != nil else {
+            return Self.streamDeltaFlushNanoseconds
+        }
+        return MessageStreamService.councilTextDeltaFlushNanoseconds
     }
 
     private func flushPendingTextDelta(for messageID: String) {

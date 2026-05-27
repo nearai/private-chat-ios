@@ -204,7 +204,7 @@ private struct CouncilResponseGroup: View {
             }
 
             if let selectedMessage {
-                MessageBubble(message: selectedMessage)
+                CouncilSelectedMessageView(message: selectedMessage)
             }
         }
         .padding(12)
@@ -216,10 +216,10 @@ private struct CouncilResponseGroup: View {
         .onAppear {
             selectedMessageID = selectedMessageID ?? messages.first?.id
         }
-        .onChange(of: messages) { _, updatedMessages in
+        .onChange(of: messageIDs) { _, _ in
             guard let selectedMessageID,
-                  updatedMessages.contains(where: { $0.id == selectedMessageID }) else {
-                self.selectedMessageID = updatedMessages.first?.id
+                  messages.contains(where: { $0.id == selectedMessageID }) else {
+                self.selectedMessageID = messages.first?.id
                 return
             }
         }
@@ -227,6 +227,10 @@ private struct CouncilResponseGroup: View {
 
     private var batchID: String? {
         messages.first?.councilBatchID
+    }
+
+    private var messageIDs: [String] {
+        messages.map(\.id)
     }
 
     private var preferredMessage: ChatMessage? {
@@ -255,6 +259,55 @@ private struct CouncilResponseGroup: View {
 
     private var canStopWaiting: Bool {
         hasRunningModels && messages.contains(where: \.hasUsableCouncilAnswer)
+    }
+}
+
+private struct CouncilSelectedMessageView: View {
+    let message: ChatMessage
+
+    var body: some View {
+        if message.isStreaming {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(message.modelDisplayName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Text("streaming")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color.brandBlue)
+                }
+
+                if message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(message.streamingStatusText)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(Self.streamingPreview(from: message.text))
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .lineLimit(8)
+                        .textSelection(.enabled)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.appBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else {
+            MessageBubble(message: message)
+        }
+    }
+
+    private static func streamingPreview(from text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        let lines = trimmed
+            .components(separatedBy: .newlines)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !lines.isEmpty else { return trimmed }
+        return lines.suffix(8).joined(separator: "\n")
     }
 }
 
