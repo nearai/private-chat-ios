@@ -1144,7 +1144,7 @@ final class ChatStore: ObservableObject {
             }
         }
 
-        async let conversationLoad: Void = refreshConversations()
+        async let conversationLoad: Void = refreshConversations(showErrors: false)
         async let modelLoad: Void = refreshModels(loadCloudCatalog: nearCloudKeyConfigured)
         async let settingsLoad: Void = refreshUserSettings(showErrors: false)
         _ = await (conversationLoad, modelLoad, settingsLoad)
@@ -1259,7 +1259,7 @@ final class ChatStore: ObservableObject {
         showBanner("Defaults reset.")
     }
 
-    func refreshConversations() async {
+    func refreshConversations(showErrors: Bool = true) async {
         do {
             let fetchedConversations = try await api.fetchConversations()
             if conversations != fetchedConversations {
@@ -1275,7 +1275,9 @@ final class ChatStore: ObservableObject {
             if conversations.isEmpty {
                 conversations = loadCachedConversations()
             }
-            showBanner(conversations.isEmpty ? "Could not refresh chats. Pull to retry." : "Could not refresh chats. Showing cached list.")
+            if showErrors {
+                showBanner(conversations.isEmpty ? "Could not refresh chats. Pull to retry." : "Could not refresh chats. Showing cached list.")
+            }
         }
     }
 

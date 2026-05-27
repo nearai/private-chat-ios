@@ -506,7 +506,7 @@ struct ClaudeHomeTopBar: View {
         HStack(spacing: 0) {
             Button(action: onAccount) {
                 Text(avatarLetter)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold, design: .default))
                     .foregroundStyle(Color.actionPrimary)
                     .frame(width: 32, height: 32)
                     .background(Color.actionTint, in: Circle())
@@ -520,7 +520,7 @@ struct ClaudeHomeTopBar: View {
             HStack(spacing: 0) {
                 Button(action: onSearch) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 20, weight: .regular))
+                        .font(.system(size: 22, weight: .regular, design: .default))
                         .foregroundStyle(isSearchVisible ? Color.actionPrimary : Color.textSecondary)
                         .frame(width: 44, height: 44)
                 }
@@ -529,7 +529,7 @@ struct ClaudeHomeTopBar: View {
 
                 Button(action: onNewChat) {
                     Image(systemName: "square.and.pencil")
-                        .font(.system(size: 20, weight: .regular))
+                        .font(.system(size: 22, weight: .regular, design: .default))
                         .foregroundStyle(Color.textSecondary)
                         .frame(width: 44, height: 44)
                 }
@@ -539,10 +539,11 @@ struct ClaudeHomeTopBar: View {
         }
         .overlay {
             Text("Chats")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 17, weight: .semibold, design: .default))
                 .kerning(-0.2)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
+                .frame(height: 22)
         }
         .frame(height: 44)
         .padding(.horizontal, 12)
@@ -564,7 +565,7 @@ struct ClaudeThreadRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(conversation.title)
-                        .font(.system(size: 17, weight: .regular))
+                        .font(.system(size: 17, weight: .regular, design: .default))
                         .kerning(-0.2)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
@@ -573,14 +574,14 @@ struct ClaudeThreadRow: View {
                     Spacer(minLength: 0)
 
                     Text(timestampText)
-                        .font(.system(size: 11, weight: .regular))
+                        .font(.system(size: 11, weight: .regular, design: .default))
                         .kerning(0.1)
                         .foregroundStyle(Color.textTertiary)
                         .lineLimit(1)
                 }
 
                 Text(preview)
-                    .font(.system(size: 13, weight: .regular))
+                    .font(.system(size: 13, weight: .regular, design: .default))
                     .kerning(-0.05)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
@@ -636,14 +637,15 @@ struct ClaudeHomeEmptyState: View {
                 Spacer(minLength: 0)
 
                 VStack(spacing: 18) {
-                    ClaudeNearMark(size: 64)
+                    NearAppIconMark(size: 64)
                         .accessibilityHidden(true)
 
                     Text(title)
-                        .font(.system(size: 15, weight: .regular))
+                        .font(.system(size: 14.5, weight: .regular, design: .default))
                         .kerning(-0.1)
                         .foregroundStyle(Color.textSecondary)
                         .multilineTextAlignment(.center)
+                        .frame(height: 20)
                 }
                 .padding(.top, 30)
 
@@ -653,9 +655,10 @@ struct ClaudeHomeEmptyState: View {
                 if showsAction {
                     Button(action: action) {
                         Text("Start a new chat")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.system(size: 16, weight: .semibold, design: .default))
                             .kerning(-0.2)
                             .foregroundStyle(.white)
+                            .frame(height: 22)
                             .frame(maxWidth: .infinity)
                             .frame(height: 52)
                             .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -669,36 +672,6 @@ struct ClaudeHomeEmptyState: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .frame(minHeight: 560)
-    }
-}
-
-struct ClaudeNearMark: View {
-    let size: CGFloat
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: size * 0.225, style: .continuous)
-                .fill(Color.actionPrimary)
-                .shadow(color: Color.actionPrimary.opacity(0.25), radius: 2, y: 1)
-
-            Path { path in
-                path.move(to: CGPoint(x: size * 0.28, y: size * 0.78))
-                path.addLine(to: CGPoint(x: size * 0.28, y: size * 0.22))
-                path.addLine(to: CGPoint(x: size * 0.72, y: size * 0.78))
-                path.addLine(to: CGPoint(x: size * 0.72, y: size * 0.22))
-            }
-            .stroke(
-                Color.white,
-                style: StrokeStyle(
-                    lineWidth: size * 0.133,
-                    lineCap: .round,
-                    lineJoin: .round
-                )
-            )
-            .frame(width: size, height: size)
-        }
-        .frame(width: size, height: size)
-        .accessibilityLabel("NEAR")
     }
 }
 

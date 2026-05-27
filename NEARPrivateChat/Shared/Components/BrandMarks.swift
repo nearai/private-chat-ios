@@ -22,11 +22,11 @@ struct NearMark: View {
     var color: Color = .actionPrimary
 
     var body: some View {
-        NearLemniscateShape()
+        NearInfinityGlyphShape()
             .stroke(
                 color,
                 style: StrokeStyle(
-                    lineWidth: max(2, size * 0.105),
+                    lineWidth: max(2, size * 0.135),
                     lineCap: .round,
                     lineJoin: .round
                 )
@@ -36,37 +36,61 @@ struct NearMark: View {
     }
 }
 
-private struct NearLemniscateShape: Shape {
+struct NearAppIconMark: View {
+    var size: CGFloat = 64
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.20, style: .continuous)
+                .fill(Color.actionPrimary)
+                .shadow(color: Color.actionPrimary.opacity(0.18), radius: 2, y: 1)
+
+            NearInfinityGlyphShape()
+                .stroke(
+                    Color.white,
+                    style: StrokeStyle(
+                        lineWidth: max(2, size * 0.135),
+                        lineCap: .round,
+                        lineJoin: .round
+                    )
+                )
+                .frame(width: size, height: size)
+
+            Path { path in
+                path.move(to: CGPoint(x: size * 0.42, y: size * 0.66))
+                path.addLine(to: CGPoint(x: size * 0.57, y: size * 0.51))
+            }
+            .stroke(
+                Color.actionPrimary,
+                style: StrokeStyle(
+                    lineWidth: max(1.5, size * 0.055),
+                    lineCap: .round,
+                    lineJoin: .round
+                )
+            )
+            .frame(width: size, height: size)
+        }
+        .frame(width: size, height: size)
+        .accessibilityLabel("NEAR")
+    }
+}
+
+struct NearInfinityGlyphShape: Shape {
     func path(in rect: CGRect) -> Path {
         let side = min(rect.width, rect.height)
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        let left = CGPoint(x: rect.midX - side * 0.30, y: rect.midY)
-        let right = CGPoint(x: rect.midX + side * 0.30, y: rect.midY)
-        let upper = rect.midY - side * 0.18
-        let lower = rect.midY + side * 0.18
+        let origin = CGPoint(
+            x: rect.midX - side / 2,
+            y: rect.midY - side / 2
+        )
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: origin.x + side * x, y: origin.y + side * y)
+        }
 
         var path = Path()
-        path.move(to: center)
-        path.addCurve(
-            to: left,
-            control1: CGPoint(x: rect.midX - side * 0.12, y: upper),
-            control2: CGPoint(x: rect.midX - side * 0.30, y: upper)
-        )
-        path.addCurve(
-            to: center,
-            control1: CGPoint(x: rect.midX - side * 0.30, y: lower),
-            control2: CGPoint(x: rect.midX - side * 0.12, y: lower)
-        )
-        path.addCurve(
-            to: right,
-            control1: CGPoint(x: rect.midX + side * 0.12, y: upper),
-            control2: CGPoint(x: rect.midX + side * 0.30, y: upper)
-        )
-        path.addCurve(
-            to: center,
-            control1: CGPoint(x: rect.midX + side * 0.30, y: lower),
-            control2: CGPoint(x: rect.midX + side * 0.12, y: lower)
-        )
+        path.move(to: point(0.31, 0.28))
+        path.addLine(to: point(0.31, 0.74))
+        path.addLine(to: point(0.69, 0.28))
+        path.addLine(to: point(0.69, 0.74))
         return path
     }
 }
