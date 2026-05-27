@@ -267,7 +267,7 @@ struct StreamingMessageText: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                Text("\(message.text.count) chars")
+                Text(Self.streamingLengthText(from: message.text))
                     .font(.caption2.monospacedDigit().weight(.medium))
                     .foregroundStyle(.secondary)
             }
@@ -282,11 +282,28 @@ struct StreamingMessageText: View {
     private static func streamingPreview(from text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return " " }
-        let lines = trimmed
+        let cappedText: String
+        let isCapped: Bool
+        if trimmed.utf8.count > 4_000 {
+            cappedText = String(trimmed.suffix(4_000))
+            isCapped = true
+        } else {
+            cappedText = trimmed
+            isCapped = false
+        }
+        let lines = cappedText
             .components(separatedBy: .newlines)
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        guard !lines.isEmpty else { return trimmed }
-        return lines.suffix(12).joined(separator: "\n")
+        let preview = lines.isEmpty ? cappedText : lines.suffix(12).joined(separator: "\n")
+        return isCapped ? "...\n\(preview)" : preview
+    }
+
+    private static func streamingLengthText(from text: String) -> String {
+        let byteCount = text.utf8.count
+        guard byteCount >= 10_000 else {
+            return "\(text.count) chars"
+        }
+        return "~\(byteCount / 1_000)k chars"
     }
 }
 
