@@ -1,6 +1,20 @@
 # NEAR Private Chat iOS - Next Design Pass Brief
 
 Date: 2026-05-25  
+Canonical update: this brief is superseded for the next design push by `NEARPrivateChatIOS-agentic-default-design-spec-2026-05-25.md`.
+
+Use the new spec's principle first:
+
+> Agentic by default. Configurable on demand.
+
+The earlier "connect capabilities, not routes" framing is still valid, but it is now subordinate to a stronger product rule: the app should work beautifully out of the box, choose the right capability automatically, and expose configuration only when the user needs to recover or unlock a missing capability.
+
+Where this brief and the agentic-default spec conflict, the spec wins. `P0.4 - Setup As A Launchpad` is reversed: Setup is deleted as a destination. `P0.7 - Capability Center Shell` is demoted from a destination to a row inside `Power Tools`; capability recovery cards are the actual user-facing surface.
+
+Implementation note: the first code pass has now shipped the orchestrator, Setup deletion, Home/composer collapse, Power Tools demotion, NEAR Cloud app-grounding fix, canonical proof footer state, and the explicit chat-window Model/Council/Effort controls. Use `NEARPrivateChatIOS-agentic-default-implementation-tracker-2026-05-25.md` for current status and remaining work.
+
+Correction note: prior language saying "default model/route: orchestrator decides per prompt" is superseded. The default model is GLM (`zai-org/GLM-5.1-FP8`). Users must be able to choose GLM, IronClaw, Cloud models, Council, and reasoning effort directly from chat. The orchestrator classifies, attaches context, and surfaces recovery/offers; it does not silently switch the chosen route.
+
 Status: Resynthesis of:
 
 - `NEARPrivateChatIOS-elite-design-product-audit-2026-05-25.md`
@@ -11,7 +25,7 @@ Status: Resynthesis of:
 - `NEARPrivateChatIOS-capability-setup-next-level-pass-2026-05-25.md`
 - `NEARPrivateChatIOS-live-app-review-next-pass-2026-05-25.md`
 
-This brief is the recommended working spec for the next design pass. It is intentionally more execution-shaped than the v2 upgrade memo.
+This brief is now a supporting execution note. The recommended working spec is `NEARPrivateChatIOS-agentic-default-design-spec-2026-05-25.md`.
 
 Live-app correction: the 2026-05-25 live Simulator review supersedes the older screenshot-only assumptions. Use `NEARPrivateChatIOS-live-app-review-next-pass-2026-05-25.md` and `review-artifacts/live-app-review-2026-05-25/` as the first source of truth before applying any older audit recommendation.
 
@@ -19,11 +33,11 @@ Live-app correction: the 2026-05-25 live Simulator review supersedes the older s
 
 The v2 upgrade is directionally right, but the live app has already improved substantially. Home, Project Context, model search labels, proof truthfulness, and overflow grouping are better than the older screenshot pack suggested.
 
-The next pass should not start with platform moats like Live Activities or another broad visual reset. It should start with **state truth and capability connection**:
+The next pass should not start with platform moats like Live Activities or another broad visual reset. It should start with **agentic state truth and capability recovery**:
 
-1. Fix live route/setup/proof mismatches.
-2. Add a user-facing Capabilities surface.
-3. Make NEAR AI Cloud and IronClaw connectable from obvious places.
+1. Add the AskOrchestrator contract so route/tool/proof mismatches are resolved before send.
+2. Make NEAR AI Cloud and agent connections appear as just-in-time recovery cards.
+3. Keep capabilities visible inside Power Tools, not as a top-level destination.
 4. Preserve the improved Home and Project Context.
 5. Keep proof language truthful.
 6. Then continue typography/color/intensity cleanup.
@@ -38,7 +52,7 @@ North star:
 
 > Connect capabilities, not routes.
 
-The next pass should make Private Inference, NEAR AI Cloud, IronClaw Agent, and Council feel like one coherent capability system. Private chat must work immediately; Cloud and IronClaw should be optional capabilities the user can connect, test, and use inside the same conversation. Use `NEARPrivateChatIOS-capability-setup-next-level-pass-2026-05-25.md` as the detailed spec for the new `Capabilities` surface, Cloud/IronClaw connection flows, route/trust labels, and missing-dependency recovery cards.
+The next pass should make Private Inference, NEAR AI Cloud, agent runs, and Council feel like one coherent capability system without exposing that system as a default destination. Private chat must work immediately; Cloud and agent setup should appear only when needed inside the same conversation. Use `NEARPrivateChatIOS-agentic-default-design-spec-2026-05-25.md` as the source of truth; use `NEARPrivateChatIOS-capability-setup-next-level-pass-2026-05-25.md` only for implementation details that do not conflict.
 
 ## Hard Rules For The Next Pass
 
@@ -93,12 +107,14 @@ Use a proof state machine:
 
 ```swift
 enum ProofState {
-    case none
-    case fetched
+    case unknown
     case verifying
     case verified
     case stale
     case mismatch
+    case private_
+    case proxied
+    case unverified
 }
 ```
 
@@ -119,8 +135,8 @@ Every screen needs one obvious primary action.
 
 Examples:
 
-- Setup: `Start from this goal`
-- Home: `Ask`
+- Terms: `Continue`
+- Home: `Ask NEAR`
 - Composer: send/stop
 - Security: `Verify proof` or `Fetch proof`
 - Share: `Create private invite` or `Enable public link`, not both as equally loud
@@ -149,7 +165,7 @@ If Agent must be top-level later, add a fourth. Do not exceed four.
 
 ### P0.1 - State Truth Fixes
 
-Fix the live mismatches from `NEARPrivateChatIOS-live-app-review-next-pass-2026-05-25.md`:
+Resolved structurally by Sprint 1 of the agentic-default spec: build `AskOrchestrator` so route/tool/proof mismatches are resolved before send. The old standalone mismatch list remains useful as regression fixtures:
 
 - Setup shows `Ready: LLM Council` while CTA says `Ask a private question`.
 - `Skip setup` applies defaults and starts a draft instead of skipping.
@@ -159,8 +175,8 @@ Fix the live mismatches from `NEARPrivateChatIOS-live-app-review-next-pass-2026-
 
 Deliverable:
 
-- Shared route/setup state source.
-- Snapshot tests for setup CTA/readiness combinations.
+- Shared orchestrator decision object.
+- Snapshot tests for orchestrator route/tool/proof decisions.
 - Tests for Cloud single-model vs Council selection behavior.
 - Tests for IronClaw hosted/mobile empty-state copy.
 
@@ -168,7 +184,7 @@ Deliverable:
 
 After the design implementation lands, capture:
 
-- setup
+- sign-in / terms
 - home default
 - home with project selected
 - composer private
@@ -177,11 +193,11 @@ After the design implementation lands, capture:
 - Cloud selected / missing-key state
 - IronClaw search result
 - Hosted IronClaw missing-workstation state
-- Connect Agent
+- inline agent recovery / agent run
 - Project Context
 - Security/Proof
 - Account top
-- Capabilities states
+- Power Tools capability row and recovery states
 
 Update `latest-screenshot-index-2026-05-25.md`.
 
@@ -213,35 +229,28 @@ Apply this first to:
 - Council status/header
 - Agent run status/card
 
-### P0.4 - Setup As A Launchpad
+### P0.4 - Delete Setup As A Destination
 
-The current setup is better than before, but still too much like a preference form.
+Agentic-default reverses the earlier launchpad proposal.
 
 Target:
 
-- One question: `What should NEAR help with first?`
-- Goal textarea.
-- Three example chips that prefill the textarea.
-- One quiet `Use web` toggle.
-- One optional `Advanced` disclosure.
-- One state-derived CTA.
-- After Start: open chat with prompt prefilled and ready to send.
+```text
+Sign in -> Terms -> Home
+```
 
-Move out of the default path:
+Everything setup used to ask is inferred or deferred:
 
-- Beginner/Power
-- Council preference
-- Agent preference
-- default model
-- developer controls
-- route details
+- Goal: inferred from the first prompt.
+- Beginner/Power: default simple; Power Tools opt-in in Account.
+- Council: offered inline when prompt is decision-shaped.
+- Agent: offered inline when prompt is task-shaped.
+- Default model/route: GLM by default; user-chosen model/Council/IronClaw/Cloud route wins.
+- Saved-material behavior: deferred to first project creation or attachment.
 
-Those can live in Advanced or Settings.
+`Run Setup Again` becomes `Reset defaults`.
 
-Engineering requirement:
-
-- CTA text and selected route must be computed from the same state object.
-- Add snapshot tests for setup states so `Private Chat selected / Start Council` never regresses.
+The old goal-textarea idea is not lost; it becomes the composer empty state and verb-first suggestion chips.
 
 ### P0.5 - Proof Truth Layer
 
@@ -257,12 +266,14 @@ States:
 
 | State | Label | Color role | Meaning |
 | --- | --- | --- | --- |
-| `none` | `No proof` | neutral | no proof fetched |
-| `fetched` | `Proof fetched` | neutral / blue-grey | report exists but not cryptographically verified |
+| `unknown` | `Proof unknown` | neutral | pre-fetch / no check has run yet |
 | `verifying` | `Checking proof` | neutral animated | verification in progress |
 | `verified` | `Verified` | trust green | signature/measurement check passed |
 | `stale` | `Proof stale` | amber | proof too old |
-| `mismatch` | `Proof mismatch` | red | model/route/proof mismatch |
+| `mismatch` | `Proof mismatch` | amber | model/route/proof mismatch |
+| `private_` | `Private` | neutral | private route, no signed proof this turn |
+| `proxied` | `Privacy proxy` | neutral | Cloud route through privacy proxy |
+| `unverified` | `Unverified` | neutral | route carries no proof claim |
 
 Canonical two-sentence explainer:
 
@@ -309,25 +320,22 @@ Definition of done:
 - `brandBlue` only exists in the token definition file.
 - Each main screen has at most one `commandPrimary`.
 
-### P0.7 - Capability Center Shell
+### P0.7 - Power Tools Capability Row
 
-Add a user-facing `Capabilities` surface. It can be a sheet or Settings sub-screen in the first pass, but it must be reachable from Account, route-readiness recovery, Cloud-locked model rows, and Agent setup.
+Demote the earlier Capabilities destination. Keep `Power Tools` as the disclosure because it sets the expectation that these are opt-in advanced controls.
 
-Minimum cards:
+Inside collapsed Power Tools, add a row:
 
-- Private Inference
+`Capabilities & integrations ->`
+
+That detail screen may list:
+
+- Private inference
 - NEAR AI Cloud
-- IronClaw Agent
+- Agent connection
 - Council
 
-Each card must show:
-
-- status
-- one-sentence purpose
-- primary action
-- secondary action where useful
-- trust-boundary copy
-- last checked / needs setup / unavailable state
+Each row/card shows status, one-sentence purpose, primary action, trust-boundary copy, and last checked / needs setup / unavailable state.
 
 Critical copy rule:
 
@@ -337,13 +345,13 @@ Do not imply Cloud or hosted IronClaw turns have private proof unless the select
 
 ### P0.8 - Capability Recovery Cards
 
-Missing dependencies must produce persistent recovery cards, not only banners:
+Missing dependencies must produce persistent recovery cards. These cards are the primary user-facing capability surface in agentic-default:
 
-- Cloud model without key -> `Connect NEAR AI Cloud`
-- Hosted IronClaw without endpoint -> `Connect IronClaw`
+- Cloud model without key -> `Connect NEAR Cloud`
+- Agent task without hosted workstation -> `Connect agent`
 - Council with too few models -> `Customize Council`
 
-The recovery action should deep-link into the relevant `Capabilities` card or setup sub-flow while preserving the user's draft and attachments.
+The recovery action should deep-link into Account -> Power Tools -> relevant setup row while preserving the user's draft and attachments.
 
 ## P1 Work After P0 Lands
 
@@ -366,16 +374,15 @@ Default composer:
 
 - input
 - attachment
-- one source chip
 - send/stop
 
-Hide full focus row behind source chip or Power mode.
+No source chip in the default state. Model, Council, and Effort are visible chat controls; source/web/file routing stays inferred or behind recovery/Details.
 
-The project/source chip is the user's primary answer to:
+The orchestrator is the user's primary answer to:
 
 > What does this answer know?
 
-Tap project/source chip -> Project Sources tab.
+If the orchestrator detects an unresolved conflict, it shows one inline recovery chip below the input. Tapping it opens the relevant recovery sheet or Project Sources tab.
 
 ### P1.3 - CouncilArtifact
 
@@ -429,7 +436,7 @@ Every shared/exported artifact should show:
 - proof short code
 - verify link
 
-If no proof exists, show `No proof attached`, not silence.
+If no proof exists, show `No verification attached`, not silence.
 
 ### P1.6 - Accessibility And Haptics
 
@@ -474,32 +481,32 @@ Do not let these distract from the P0 visual/product truth work.
 
 Use this prompt for Claude or another design agent:
 
-> You are doing the next elite design pass for NEAR Private Chat iOS. Use the actual live app captures in `review-artifacts/live-app-review-2026-05-25/` and `NEARPrivateChatIOS-live-app-review-next-pass-2026-05-25.md` first; older screenshot audits are background only. The app is already better than the old pack implied, so do not restart Home or Project Context. Prioritize live state truth: setup readiness/CTA mismatch, Skip behavior, Cloud single-model vs Council selection, Hosted IronClaw showing Mobile readiness, proof-chip truncation, Connect Agent lacking a real action, and Account hiding Cloud/IronClaw setup. Then design Capabilities for Private Inference, NEAR AI Cloud, IronClaw Agent, and Council. Keep SF Pro, one saturated primary blue per scene, truthful proof language, route/trust labels, and persistent recovery cards.
+> You are doing the next elite design pass for NEAR Private Chat iOS. Use `NEARPrivateChatIOS-agentic-default-design-spec-2026-05-25.md` as the implementation brief and the live simulator captures as evidence. The product principle is: agentic by default, configurable on demand. Do not add a permanent Web/Files/Research capability strip, do not keep Setup as a destination, and do not make Capabilities a top-level surface. Design the default flow as Home -> Ask NEAR -> composer with explicit Model/Council/Effort controls -> selected route runs with orchestrator-supplied context/recovery -> answer footer capsule. Agent, Cloud key, project context conflicts, and hosted workstation setup appear as inline recovery/offers; Council is also a visible user choice. Keep Project Context mostly intact, keep SF Pro, one saturated blue per scene, truthful Verification language, and Power Tools as the disclosure home for advanced controls.
 
 ## Updated Codex Build Prompt
 
 Use this prompt for implementation:
 
-> Implement against the current live app state. First fix the live mismatches: Setup readiness label must match CTA/selected route; Skip must either truly skip or be renamed Use Defaults; selecting a Cloud model must not silently switch into Council unless the UI says Add to Council; Hosted IronClaw must not show Mobile agent ready; proof chip labels must not truncate into unclear text. Then add a Capabilities shell for Private Inference / NEAR AI Cloud / IronClaw Agent / Council and persistent recovery cards for missing Cloud key and hosted IronClaw endpoint. Keep the improved Home and Project Context structure. Verify by launching the app in Simulator and recapturing `review-artifacts/live-app-review-2026-05-25-post-design-push/`.
+> Implement against the current live app state using `NEARPrivateChatIOS-agentic-default-design-spec-2026-05-25.md` as source of truth. First build `AskOrchestrator(prompt, project?, attachments?, history?) -> route/tools/proofPosture/failurePlan` and tests for project files, latest/web, agentic verbs, decision questions, attachments, Cloud-only models, and missing setup, with explicit user route choice preserved. Then collapse Home and Composer: one Ask NEAR action, visible Model/Council/Effort controls, one input, attach, send/stop, no default focus/source strip. Delete Setup as a destination; sign-in goes Terms -> Home. Demote Capabilities to Account -> Power Tools -> Capabilities & integrations. Add inline recovery cards for missing Cloud key, missing agent connection, and project-context conflicts. Keep Project Context mostly intact and verify by launching Simulator and recapturing `review-artifacts/live-app-review-2026-05-25-post-design-push/`.
 
 ## Acceptance Criteria
 
 The next design pass is complete when:
 
 - There is a fresh full screenshot set from the current build.
-- There is a user-facing Capabilities shell with Private Inference, NEAR AI Cloud, IronClaw Agent, and Council cards.
-- NEAR Cloud and IronClaw are easy to find/connect without digging through Account internals.
-- Missing Cloud key / missing IronClaw endpoint produce persistent recovery cards that preserve the draft.
-- Setup is one screen, one question, one primary CTA.
-- CTA text cannot mismatch selected route because it is derived from the same state.
+- There is no default Setup destination; sign-in goes Terms -> Home.
+- Capabilities live inside Account -> Power Tools -> Capabilities & integrations, not as a top-level surface.
+- NEAR Cloud and agent connection are easy to connect from inline recovery cards without digging through Account internals.
+- Missing Cloud key / missing agent connection produce persistent recovery cards that preserve the draft.
+- Route/tool/proof decisions cannot mismatch because they come from the orchestrator.
 - `Verified` only appears when proof state is actually verified.
-- The UI distinguishes `none`, `fetched`, `verifying`, `verified`, `stale`, and `mismatch`.
-- Cloud, Private, IronClaw Mobile, and IronClaw Hosted each have distinct route/trust labels.
+- The UI distinguishes `unknown`, `verifying`, `verified`, `stale`, `mismatch`, `private_`, `proxied`, and `unverified`.
+- Cloud, Private, phone agent, and hosted agent each have distinct route/trust labels in Details/Power Tools.
 - No Cloud UI implies private proof unless the selected route actually provides it.
 - Feature views no longer reference `Color.brandBlue` directly.
 - Each screen has at most one saturated blue primary action.
 - Home shows Ask and Resume without dashboard clutter.
-- Composer default state has input, attachment, source chip, send/stop.
+- Composer default state has Model/Council/Effort, input, attachment, send/stop.
 - Council output is specified as an artifact, not grouped chat bubbles.
 - Agent run is specified as a timeline card, not only a status strip.
 - Horizontal chip rows have accessibility fallbacks.
@@ -518,14 +525,15 @@ The next design pass is complete when:
 ## Practical First PR Sequence
 
 1. Screenshot capture/index script and fresh screenshots.
-2. Setup simplification and CTA single-source-of-truth tests.
-3. Capabilities shell and Account `Power Tools` -> `Capabilities` rename.
-4. Persistent route-readiness recovery cards for Cloud and IronClaw.
-5. ProofState + ProofCapsule + copy cleanup.
-6. Semantic tokens + remove direct `brandBlue` from Setup/Security/Home first.
-7. Typography ladder pass on Setup, Model Picker, Security, Project rows.
-8. Composer source-chip simplification.
-9. CouncilArtifact skeleton.
-10. AgentRunCard skeleton.
+2. AskOrchestrator and route/tool/proof decision tests.
+3. Setup deletion: Sign-in -> Terms -> Home; `Run Setup Again` -> `Reset defaults`.
+4. Persistent recovery cards for Cloud and agent connection.
+5. Power Tools capability row; no Power Tools -> Capabilities rename.
+6. ProofState + ProofCapsule + copy cleanup.
+7. Semantic tokens + remove direct `brandBlue` from Home/Composer/Security first.
+8. Typography ladder pass on Model Picker, Security, Project rows, AgentRunCard.
+9. Composer default collapse and Details override.
+10. CouncilArtifact skeleton as inline offer.
+11. AgentRunCard skeleton.
 
 This sequence turns the design pass from "taste critique" into a controlled product-quality upgrade.

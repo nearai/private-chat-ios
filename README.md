@@ -45,7 +45,7 @@ The helper starts the local IronClaw gateway, then exposes it through Cloudflare
 - Share groups from the web app are available in the native share sheet, including group creation, editing, deletion, member previews, and sharing a conversation with an existing group.
 - Shared-link viewer for `private.near.ai/c/...` conversations before or after sign-in, with read-only clone or writable-open based on API permissions.
 - Shared-link copy-and-continue flow through `/v1/conversations/{id}/clone`.
-- Remote chat settings for web search default and system prompt through `/v1/users/me/settings`.
+- Remote account settings for appearance, notification preference, web-search default, system prompt, large-paste handling, and advanced model params through `/v1/users/me/settings`.
 - Chat import from Account supports native NEAR Private Chat JSON exports and legacy Private Chat history JSON, then creates imported conversations and posts message batches to `/v1/conversations/{id}/items`.
 - Advanced model params from the mobile reference app: `temperature`, `top_p`, and `max_tokens` sync through `/v1/users/me/settings` and are sent on `/v1/responses`.
 - Large pasted text can be uploaded automatically as a `.txt` file attachment, matching the mobile app's file-context behavior.
@@ -104,7 +104,7 @@ For a physical iPhone, connect the phone over USB, unlock it, trust the Mac, ena
 ./scripts/run-device.sh
 ```
 
-The app registers the custom callback scheme `nearprivatechat://auth`. The client now generates state plus a PKCE challenge when starting OAuth, but the current hosted auth service still returns the bearer session token to the callback for compatibility. Treat this as an internal build posture until the hosted service supports authorization-code exchange, preferably over universal links.
+The app registers the custom callback scheme `nearprivatechat://auth`. Hosted Google/GitHub auth expects a clean callback base and appends `/auth/callback?token=...&session_id=...`; NEAR wallet login writes the token directly to the callback URL. Treat bearer-token callbacks as an internal build posture until the hosted service supports authorization-code exchange, preferably over universal links.
 
 ## Current Machine
 
