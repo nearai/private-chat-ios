@@ -3,6 +3,7 @@ import SwiftUI
 struct EmptyChatView: View {
     @EnvironmentObject private var chatStore: ChatStore
     @EnvironmentObject private var sessionStore: SessionStore
+    @State private var showingAccountSettings = false
 
     private struct EmptyPromptSuggestion: Identifiable {
         var id: String { title }
@@ -120,6 +121,11 @@ struct EmptyChatView: View {
             }
         }
         .frame(maxWidth: 360, alignment: .leading)
+        .sheet(isPresented: $showingAccountSettings) {
+            AccountSettingsView(onRunSetupAgain: {})
+                .environmentObject(sessionStore)
+                .environmentObject(chatStore)
+        }
     }
 
     private func suggestionButton(_ suggestion: EmptyPromptSuggestion) -> some View {
@@ -201,6 +207,13 @@ struct EmptyChatView: View {
                     .font(.caption.weight(.medium))
                     .foregroundStyle(Color.primaryAction)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let recommendation = setupQuickstartRecommendation(for: state.plan) {
+                SetupCardRecommendationView(
+                    recommendation: recommendation,
+                    onAction: { runSetupQuickstartRecommendation(for: state.plan) }
+                )
             }
 
             if state.restoreState.needsRestore || state.hasStarterPrompt {
@@ -331,6 +344,76 @@ struct EmptyChatView: View {
             hostedIronclawAvailable: chatStore.ironclawRemoteWorkstationAvailable,
             nearCloudKeyConfigured: chatStore.nearCloudKeyConfigured
         )
+    }
+
+    private var setupRouteBlock: CapabilityRouteBlock? {
+        guard let issue = chatStore.routeReadinessIssue else { return nil }
+        switch issue.route {
+        case .nearCloud:
+            return .nearCloudKeyRequired
+        case .hostedIronclaw:
+            return .hostedIronclawEndpointRequired
+        case .council:
+            return .councilNeedsModels
+        }
+    }
+
+    private func setupQuickstartNextStep(for plan: AppSetupPlan) -> CapabilityNextStep? {
+        let recommendation = CapabilityNextStepPlanner.recommend(
+            routeBlock: setupRouteBlock,
+            setupPlan: plan,
+            currentRoute: chatStore.selectedRouteKind,
+            hasFreshPrivateProof: true,
+            hostedIronclawAvailable: chatStore.ironclawRemoteWorkstationAvailable,
+            autoCouncilReady: chatStore.defaultCouncilModels.count >= 2
+        )
+
+        guard let recommendation else { return nil }
+        switch recommendation.kind {
+        case .openCloud, .openAgent, .useAutoCouncil:
+            return recommendation
+        case .openSecurity, .rerunSetup:
+            return nil
+        }
+    }
+
+    private func setupQuickstartRecommendation(for plan: AppSetupPlan) -> SetupCardRecommendation? {
+        guard let recommendation = setupQuickstartNextStep(for: plan) else { return nil }
+        return SetupCardRecommendation(
+            title: recommendation.title,
+            detail: recommendation.detail,
+            actionTitle: recommendation.actionTitle,
+            actionSymbolName: setupQuickstartRecommendationSymbolName(for: recommendation.kind)
+        )
+    }
+
+    private func setupQuickstartRecommendationSymbolName(for kind: CapabilityNextStepKind) -> String {
+        switch kind {
+        case .openCloud:
+            return "key"
+        case .openAgent:
+            return "point.3.connected.trianglepath.dotted"
+        case .useAutoCouncil:
+            return "square.grid.2x2"
+        case .openSecurity:
+            return "checkmark.shield"
+        case .rerunSetup:
+            return "arrow.counterclockwise"
+        }
+    }
+
+    private func runSetupQuickstartRecommendation(for plan: AppSetupPlan) {
+        guard let recommendation = setupQuickstartNextStep(for: plan) else { return }
+        switch recommendation.kind {
+        case .openCloud, .openAgent:
+            AppHaptics.lightImpact()
+            showingAccountSettings = true
+        case .useAutoCouncil:
+            AppHaptics.selection()
+            chatStore.useDefaultCouncilLineup()
+        case .openSecurity, .rerunSetup:
+            break
+        }
     }
 
     private func fillDraft(for suggestion: EmptyPromptSuggestion) {

@@ -7,6 +7,7 @@ struct ConversationListView: View {
     @State private var selectedHomeFilter: HomeFilter = .all
     @State private var showingNewProject = false
     @State private var showingProjectFiles = false
+    @State private var showingAccountSettings = false
     @State private var editingProject: ChatProject?
     let onOpenChat: () -> Void
     let onStartNewChat: () -> Void
@@ -167,7 +168,9 @@ struct ConversationListView: View {
                 Section {
                     SetupLaunchCard(
                         plan: pendingSetupLaunchCard.plan,
+                        recommendation: setupCardRecommendation(for: pendingSetupLaunchCard.plan),
                         onPrimaryAction: { openPendingSetupLaunchCard(pendingSetupLaunchCard) },
+                        onRecommendationAction: { runSetupCardRecommendation(for: pendingSetupLaunchCard.plan) },
                         onDismiss: { dismissPendingSetupLaunchCard(pendingSetupLaunchCard) }
                     )
                     .workspaceListRow(top: 12, bottom: 4)
@@ -272,7 +275,9 @@ struct ConversationListView: View {
                         SavedSetupHomeCard(
                             plan: emptyHomeSetupState.plan,
                             restoreState: emptyHomeSetupState.restoreState,
+                            recommendation: setupCardRecommendation(for: emptyHomeSetupState.plan),
                             onPrimaryAction: { reopenSavedSetup(emptyHomeSetupState) },
+                            onRecommendationAction: { runSetupCardRecommendation(for: emptyHomeSetupState.plan) },
                             onChangeSetup: onRunSetupAgain
                         )
                         .workspaceListRow(top: 18, bottom: 8)
@@ -424,6 +429,11 @@ struct ConversationListView: View {
             EditProjectView(project: project)
                 .environmentObject(chatStore)
         }
+        .sheet(isPresented: $showingAccountSettings) {
+            AccountSettingsView(onRunSetupAgain: onRunSetupAgain)
+                .environmentObject(sessionStore)
+                .environmentObject(chatStore)
+        }
         .navigationDestination(for: SharedConversationInfo.self) { item in
             SharedWithMePreviewView(item: item)
                 .environmentObject(chatStore)
@@ -516,7 +526,82 @@ struct ConversationListView: View {
         chatStore.bannerMessage = "Setup saved. Start from Home whenever you're ready."
     }
 
+    private var setupRouteBlock: CapabilityRouteBlock? {
+        guard let issue = chatStore.routeReadinessIssue else { return nil }
+        switch issue.route {
+        case .nearCloud:
+            return .nearCloudKeyRequired
+        case .hostedIronclaw:
+            return .hostedIronclawEndpointRequired
+        case .council:
+            return .councilNeedsModels
+        }
+    }
+
+    private func setupCardNextStep(for plan: AppSetupPlan) -> CapabilityNextStep? {
+        let recommendation = CapabilityNextStepPlanner.recommend(
+            routeBlock: setupRouteBlock,
+            setupPlan: plan,
+            currentRoute: chatStore.selectedRouteKind,
+            hasFreshPrivateProof: true,
+            hostedIronclawAvailable: chatStore.ironclawRemoteWorkstationAvailable,
+            autoCouncilReady: chatStore.defaultCouncilModels.count >= 2
+        )
+
+        guard let recommendation else { return nil }
+        switch recommendation.kind {
+        case .openCloud, .openAgent, .useAutoCouncil:
+            return recommendation
+        case .openSecurity, .rerunSetup:
+            return nil
+        }
+    }
+
+    private func setupCardRecommendation(for plan: AppSetupPlan) -> SetupCardRecommendation? {
+        guard let recommendation = setupCardNextStep(for: plan) else { return nil }
+        return SetupCardRecommendation(
+            title: recommendation.title,
+            detail: recommendation.detail,
+            actionTitle: recommendation.actionTitle,
+            actionSymbolName: setupCardRecommendationSymbolName(for: recommendation.kind)
+        )
+    }
+
+    private func setupCardRecommendationSymbolName(for kind: CapabilityNextStepKind) -> String {
+        switch kind {
+        case .openCloud:
+            return "key"
+        case .openAgent:
+            return "point.3.connected.trianglepath.dotted"
+        case .useAutoCouncil:
+            return "square.grid.2x2"
+        case .openSecurity:
+            return "checkmark.shield"
+        case .rerunSetup:
+            return "arrow.counterclockwise"
+        }
+    }
+
+    private func runSetupCardRecommendation(for plan: AppSetupPlan) {
+        guard let recommendation = setupCardNextStep(for: plan) else { return }
+        switch recommendation.kind {
+        case .openCloud, .openAgent:
+            AppHaptics.lightImpact()
+            showingAccountSettings = true
+        case .useAutoCouncil:
+            AppHaptics.selection()
+            chatStore.useDefaultCouncilLineup()
+        case .openSecurity, .rerunSetup:
+            break
+        }
+    }
+
     private func reopenSavedSetup(_ state: SetupLaunchCardState) {
+        if !state.restoreState.needsRestore, state.plan.firstRunDraft == nil {
+            AppHaptics.selection()
+            openNewChat()
+            return
+        }
         AppHaptics.lightImpact()
         chatStore.applySetupProfile(state.profile)
     }

@@ -1476,6 +1476,7 @@ final class PrivateChatCoreTests: XCTestCase {
 
         let suggestions = profile.normalizedForDefaults.emptyStatePromptSuggestions
 
+        XCTAssertNil(profile.normalizedForDefaults.firstRunDraft)
         XCTAssertEqual(profile.normalizedForDefaults.emptyStateSubtitle, "Start with a safe repo plan, then verify the patch or test pass.")
         XCTAssertEqual(suggestions.map(\.title), ["Repo plan", "Review repo", "Focused tests"])
         XCTAssertEqual(suggestions.first?.prompt, "Plan the first repo task: what to inspect, what to change, and which focused tests should run.")
@@ -1545,6 +1546,31 @@ final class PrivateChatCoreTests: XCTestCase {
         profile.useCases = [.buildAgents]
         profile.contextStyle = .project
         profile.wantsIronclaw = true
+
+        let plan = AppSetupPlan(profile: profile, readiness: .optimistic)
+        let runtime = SetupRuntimeSnapshot(
+            modelRoute: plan.modelRoute,
+            focusMode: plan.focusMode,
+            webSearchEnabled: profile.wantsWeb,
+            researchModeEnabled: false,
+            selectedProjectName: plan.starterProjectName
+        )
+
+        let restoreState = SetupRestorePlanner.evaluate(profile: profile, plan: plan, runtime: runtime)
+
+        XCTAssertFalse(restoreState.needsRestore)
+        XCTAssertEqual(
+            restoreState.summaryText,
+            "Your saved setup is ready to reopen with the same route and focus defaults."
+        )
+    }
+
+    func testSetupRestorePlannerUsesStarterPromptSummaryWhenGoalExists() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .buildAgents
+        profile.useCases = [.buildAgents]
+        profile.contextStyle = .project
+        profile.goalText = "Review the repo and plan the first safe patch."
 
         let plan = AppSetupPlan(profile: profile, readiness: .optimistic)
         let runtime = SetupRuntimeSnapshot(
@@ -1640,6 +1666,37 @@ final class PrivateChatCoreTests: XCTestCase {
             XCTAssertEqual(plan.goalText, preset.prompt)
             XCTAssertNotNil(plan.firstRunDraft)
         }
+    }
+
+    @MainActor
+    func testApplyingSetupWithoutGoalKeepsExistingDraft() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        store.draft = "Keep this draft."
+
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .buildAgents
+        profile.useCases = [.buildAgents]
+        profile.contextStyle = .project
+
+        store.applySetupProfile(profile)
+
+        XCTAssertEqual(store.draft, "Keep this draft.")
+    }
+
+    @MainActor
+    func testApplyingSetupWithGoalSeedsStarterDraft() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        store.draft = "Old draft"
+
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .research
+        profile.useCases = [.research]
+        profile.contextStyle = .project
+        profile.goalText = "Map the strongest privacy proof workflow."
+
+        store.applySetupProfile(profile)
+
+        XCTAssertEqual(store.draft, "Create a sourced research brief for this goal: Map the strongest privacy proof workflow.")
     }
 
     func testUserSetupExperienceModeDefaultsAndRoundTrips() throws {

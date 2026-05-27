@@ -8,6 +8,7 @@ struct AuthView: View {
     @State private var showingMoreSignInOptions = false
     @State private var showingLegalTerms = false
     @State private var hasAcceptedLegalTerms = LegalTermsAcceptanceStore.hasPendingCurrentVersion()
+    @State private var hasReviewedLegalTerms = LegalTermsAcceptanceStore.hasPendingCurrentVersion()
     @State private var token = ""
 
     var body: some View {
@@ -20,6 +21,8 @@ struct AuthView: View {
                         get: { hasAcceptedLegalTerms },
                         set: updateLegalTermsAcceptance
                     ),
+                    hasReviewedTerms: hasReviewedLegalTerms,
+                    onAttemptAccept: promptForTerms,
                     showingTerms: $showingLegalTerms
                 )
                 .frame(maxWidth: 360)
@@ -106,7 +109,9 @@ struct AuthView: View {
             .platformMediumDetent()
         }
         #endif
-        .sheet(isPresented: $showingLegalTerms) {
+        .sheet(isPresented: $showingLegalTerms, onDismiss: {
+            hasReviewedLegalTerms = true
+        }) {
             LegalTermsSheet()
         }
         .sheet(isPresented: $showingSharedLink) {
@@ -253,13 +258,19 @@ private struct ProviderButton: View {
 
 private struct LegalTermsAcceptanceCard: View {
     @Binding var isAccepted: Bool
+    let hasReviewedTerms: Bool
+    let onAttemptAccept: () -> Void
     @Binding var showingTerms: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
                 Button {
-                    isAccepted.toggle()
+                    if hasReviewedTerms {
+                        isAccepted.toggle()
+                    } else {
+                        onAttemptAccept()
+                    }
                 } label: {
                     Image(systemName: isAccepted ? "checkmark.square.fill" : "square")
                         .font(.title3.weight(.semibold))
@@ -270,21 +281,26 @@ private struct LegalTermsAcceptanceCard: View {
                 .accessibilityLabel(isAccepted ? "Terms accepted" : "Accept terms")
 
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Review terms to continue")
+                    Text("Before you continue")
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
-                    Text(LegalTerms.acceptanceText)
+                    Text(LegalTerms.acceptancePrompt)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
+            Text(LegalTerms.acceptanceCheckboxText)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(hasReviewedTerms ? .primary : .secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             HStack(spacing: 10) {
                 Button {
                     showingTerms = true
                 } label: {
-                    Label("Review terms", systemImage: "doc.text.magnifyingglass")
+                    Label(hasReviewedTerms ? "Review again" : "Review terms", systemImage: "doc.text.magnifyingglass")
                         .font(.caption.weight(.bold))
                         .frame(maxWidth: .infinity)
                         .frame(height: 34)
@@ -300,6 +316,11 @@ private struct LegalTermsAcceptanceCard: View {
                     .frame(height: 34)
                     .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
+
+            Text(hasReviewedTerms ? "Terms reviewed. Sign-in stays locked until you confirm acceptance." : "Open the current terms once before you confirm acceptance.")
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
         .background(.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))

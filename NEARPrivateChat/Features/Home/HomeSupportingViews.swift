@@ -1,8 +1,17 @@
 import SwiftUI
 
+struct SetupCardRecommendation {
+    let title: String
+    let detail: String
+    let actionTitle: String
+    let actionSymbolName: String
+}
+
 struct SetupLaunchCard: View {
     let plan: AppSetupPlan
+    let recommendation: SetupCardRecommendation?
     let onPrimaryAction: () -> Void
+    let onRecommendationAction: (() -> Void)?
     let onDismiss: () -> Void
 
     var body: some View {
@@ -63,6 +72,13 @@ struct SetupLaunchCard: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            if let recommendation {
+                SetupCardRecommendationView(
+                    recommendation: recommendation,
+                    onAction: onRecommendationAction
+                )
+            }
+
             HStack(spacing: 10) {
                 Button(action: onPrimaryAction) {
                     Label(primaryActionTitle, systemImage: primaryActionSymbolName)
@@ -93,6 +109,9 @@ struct SetupLaunchCard: View {
     }
 
     private var primaryActionTitle: String {
+        guard plan.firstRunDraft != nil else {
+            return "Apply setup"
+        }
         switch plan.modelRoute {
         case .ironclaw:
             return "Open agent prompt"
@@ -104,6 +123,9 @@ struct SetupLaunchCard: View {
     }
 
     private var primaryActionSymbolName: String {
+        guard plan.firstRunDraft != nil else {
+            return "slider.horizontal.3"
+        }
         switch plan.modelRoute {
         case .ironclaw:
             return "terminal"
@@ -118,7 +140,9 @@ struct SetupLaunchCard: View {
 struct SavedSetupHomeCard: View {
     let plan: AppSetupPlan
     let restoreState: SetupRestoreState
+    let recommendation: SetupCardRecommendation?
     let onPrimaryAction: () -> Void
+    let onRecommendationAction: (() -> Void)?
     let onChangeSetup: () -> Void
 
     var body: some View {
@@ -179,6 +203,13 @@ struct SavedSetupHomeCard: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            if let recommendation {
+                SetupCardRecommendationView(
+                    recommendation: recommendation,
+                    onAction: onRecommendationAction
+                )
+            }
+
             HStack(spacing: 10) {
                 Button(action: onPrimaryAction) {
                     Label(primaryActionTitle, systemImage: primaryActionSymbolName)
@@ -212,6 +243,9 @@ struct SavedSetupHomeCard: View {
         if restoreState.needsRestore {
             return "Restore saved setup"
         }
+        guard plan.firstRunDraft != nil else {
+            return "Start new chat"
+        }
         switch plan.modelRoute {
         case .ironclaw:
             return "Start agent chat"
@@ -226,6 +260,9 @@ struct SavedSetupHomeCard: View {
         if restoreState.needsRestore {
             return "arrow.counterclockwise"
         }
+        guard plan.firstRunDraft != nil else {
+            return "bubble.left.and.bubble.right"
+        }
         switch plan.modelRoute {
         case .ironclaw:
             return "terminal"
@@ -234,6 +271,38 @@ struct SavedSetupHomeCard: View {
         case .privateModel:
             return "arrow.right"
         }
+    }
+}
+
+struct SetupCardRecommendationView: View {
+    let recommendation: SetupCardRecommendation
+    let onAction: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(recommendation.title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.primaryAction)
+
+            Text(recommendation.detail)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let onAction {
+                Button(action: onAction) {
+                    Label(recommendation.actionTitle, systemImage: recommendation.actionSymbolName)
+                        .font(.caption.weight(.bold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.primaryAction)
+                .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+        }
+        .padding(12)
+        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
