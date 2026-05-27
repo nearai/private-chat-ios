@@ -4784,55 +4784,70 @@ final class ChatStore: ObservableObject {
         conversationID: String,
         assistantMessageID: String?
     ) async {
-        guard let assistantMessageID,
-              let index = messages.firstIndex(where: { $0.id == assistantMessageID }) else {
+        guard let assistantMessageID else {
             return
         }
 
         switch event {
         case let .created(responseID):
             flushPendingTextDelta(for: assistantMessageID)
-            messages[index].responseID = responseID
+            updateMessage(assistantMessageID) { message in
+                message.responseID = responseID
+            }
         case .reasoningStarted:
-            if messages[index].text.isEmpty {
-                messages[index].status = "reasoning"
+            updateMessage(assistantMessageID) { message in
+                if message.text.isEmpty {
+                    message.status = "reasoning"
+                }
             }
         case let .approvalNeeded(approval):
             flushPendingTextDelta(for: assistantMessageID)
-            messages[index].pendingApproval = approval
-            messages[index].status = "approval"
-            messages[index].isStreaming = false
-        case let .webSearchStarted(query):
-            messages[index].status = "searching"
-            messages[index].searchQuery = query
-        case let .webSearchCompleted(query, sources):
-            messages[index].status = messages[index].text.isEmpty ? "thinking" : messages[index].status
-            messages[index].searchQuery = query ?? messages[index].searchQuery
-            messages[index].sources = Self.uniqueSources(messages[index].sources + sources)
-        case let .textDelta(delta):
-            if messages[index].text.isEmpty && messages[index].status == "searching" {
-                messages[index].status = "streaming"
+            updateMessage(assistantMessageID) { message in
+                message.pendingApproval = approval
+                message.status = "approval"
+                message.isStreaming = false
             }
-            if !delta.isEmpty, messages[index].firstTokenAt == nil {
-                messages[index].firstTokenAt = Date()
+        case let .webSearchStarted(query):
+            updateMessage(assistantMessageID) { message in
+                message.status = "searching"
+                message.searchQuery = query
+            }
+        case let .webSearchCompleted(query, sources):
+            updateMessage(assistantMessageID) { message in
+                message.status = message.text.isEmpty ? "thinking" : message.status
+                message.searchQuery = query ?? message.searchQuery
+                message.sources = Self.uniqueSources(message.sources + sources)
+            }
+        case let .textDelta(delta):
+            if !delta.isEmpty {
+                updateMessage(assistantMessageID) { message in
+                    if message.text.isEmpty && message.status == "searching" {
+                        message.status = "streaming"
+                    }
+                    if message.firstTokenAt == nil {
+                        message.firstTokenAt = Date()
+                    }
+                }
             }
             appendBufferedTextDelta(delta, to: assistantMessageID)
         case let .itemDone(text):
             flushPendingTextDelta(for: assistantMessageID)
             if let text, !text.isEmpty {
-                let existingText = messages[index].text
-                if messages[index].firstTokenAt == nil {
-                    messages[index].firstTokenAt = Date()
-                }
-                let shouldReplaceFailure = messages[index].status == "failed" || Self.localFailureMessage(from: existingText) != nil
-                if existingText.isEmpty || shouldReplaceFailure || text.contains(existingText) {
-                    messages[index].text = text
-                } else if !existingText.contains(text) {
-                    messages[index].text += "\n\n\(text)"
-                }
-                if messages[index].status != "approval" {
-                    messages[index].status = "streaming"
-                    messages[index].isStreaming = true
+                updateMessage(assistantMessageID) { message in
+                    let existingText = message.text
+                    if message.firstTokenAt == nil {
+                        message.firstTokenAt = Date()
+                    }
+                    let shouldReplaceFailure = message.status == "failed" || Self.localFailureMessage(from: existingText) != nil
+                    if existingText.isEmpty || shouldReplaceFailure || text.contains(existingText) {
+                        message.text = text
+                    } else if !existingText.contains(text) {
+                        message.text += "\n\n\(text)"
+                    }
+                    if message.status != "approval" {
+                        message.status = "streaming"
+                        message.isStreaming = true
+                    }
                 }
             }
         case let .titleUpdated(title):
@@ -4843,49 +4858,67 @@ final class ChatStore: ObservableObject {
             }
         case let .completed(responseID):
             flushPendingTextDelta(for: assistantMessageID)
-            guard messages[index].status != "failed", messages[index].status != "approval" else {
-                messages[index].responseID = responseID ?? messages[index].responseID
-                messages[index].isStreaming = false
-                return
-            }
-            messages[index].responseID = responseID ?? messages[index].responseID
-            if messages[index].sources.isEmpty {
-                messages[index].sources = Self.inferredSources(from: messages[index].text)
-            }
-            messages[index].status = "completed"
-            messages[index].isStreaming = false
-            if let localFailure = Self.localFailureMessage(from: messages[index].text) {
-                messages[index].status = "failed"
-                messages[index].text = localFailure
+            updateMessage(assistantMessageID) { message in
+                guard message.status != "failed", message.status != "approval" else {
+                    message.responseID = responseID ?? message.responseID
+                    message.isStreaming = false
+                    return
+                }
+                message.responseID = responseID ?? message.responseID
+                if message.sources.isEmpty {
+                    message.sources = Self.inferredSources(from: message.text)
+                }
+                message.status = "completed"
+                message.isStreaming = false
+                if let localFailure = Self.localFailureMessage(from: message.text) {
+                    message.status = "failed"
+                    message.text = localFailure
+                }
             }
         case let .failed(message):
             flushPendingTextDelta(for: assistantMessageID)
             let displayMessage = Self.displayFailureMessage(message)
-            messages[index].status = "failed"
-            messages[index].isStreaming = false
-            if messages[index].text.isEmpty || Self.localFailureMessage(from: messages[index].text) != nil {
-                messages[index].text = displayMessage
-            } else if !messages[index].text.localizedCaseInsensitiveContains(displayMessage) {
-                messages[index].text += "\n\nResponse failed: \(displayMessage)"
+            updateMessage(assistantMessageID) { message in
+                message.status = "failed"
+                message.isStreaming = false
+                if message.text.isEmpty || Self.localFailureMessage(from: message.text) != nil {
+                    message.text = displayMessage
+                } else if !message.text.localizedCaseInsensitiveContains(displayMessage) {
+                    message.text += "\n\nResponse failed: \(displayMessage)"
+                }
             }
         }
     }
 
+    @discardableResult
+    private func updateMessage(_ messageID: String, mutate: (inout ChatMessage) -> Void) -> Bool {
+        var updatedMessages = messages
+        guard let index = updatedMessages.firstIndex(where: { $0.id == messageID }) else {
+            return false
+        }
+        let originalMessage = updatedMessages[index]
+        mutate(&updatedMessages[index])
+        guard updatedMessages[index] != originalMessage else {
+            return false
+        }
+        messages = updatedMessages
+        return true
+    }
+
     private func finishAssistantMessage(_ messageID: String) {
         flushPendingTextDelta(for: messageID)
-        guard let index = messages.firstIndex(where: { $0.id == messageID }) else {
-            return
-        }
-        messages[index].isStreaming = false
-        if messages[index].status != "failed", messages[index].status != "approval" {
-            messages[index].status = "completed"
-        }
-        if messages[index].firstTokenAt == nil,
-           !messages[index].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            messages[index].firstTokenAt = Date()
-        }
-        if messages[index].sources.isEmpty {
-            messages[index].sources = Self.inferredSources(from: messages[index].text)
+        updateMessage(messageID) { message in
+            message.isStreaming = false
+            if message.status != "failed", message.status != "approval" {
+                message.status = "completed"
+            }
+            if message.firstTokenAt == nil,
+               !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                message.firstTokenAt = Date()
+            }
+            if message.sources.isEmpty {
+                message.sources = Self.inferredSources(from: message.text)
+            }
         }
     }
 
