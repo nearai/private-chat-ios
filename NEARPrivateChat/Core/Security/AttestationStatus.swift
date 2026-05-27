@@ -109,7 +109,7 @@ struct ProofCapsuleViewModel: Codable, Equatable, Sendable {
         if isLoading {
             state = .verifying
             title = "Checking proof"
-            detail = "Fetching the latest attestation report for this private route."
+            detail = "Fetching signed proof for this private route."
             badge = "Checking"
             symbolName = "arrow.triangle.2.circlepath"
             return
@@ -384,15 +384,15 @@ struct AttestationEducation: Codable, Equatable, Sendable {
 
     static let standard = AttestationEducation(
         headline: "Proof, not a promise.",
-        summary: "The app checks signed proof locally. The model runs on TEE-supported infrastructure; verification does not prove the answer is true, safe, or complete.",
+        summary: "Checked on this device against signed proof from TEE-supported infrastructure.",
         sections: [
             AttestationEducationSection(
                 title: "What is verified",
-                body: "The app verifies signed evidence for the private route, runtime, signing details, freshness, and whether the selected model is covered by the current report."
+                body: "The app verifies signed evidence for the private route, runtime, signing details, freshness, and whether the selected model is covered by the current proof."
             ),
             AttestationEducationSection(
                 title: "What is not verified",
-                body: "Attestation does not judge the truthfulness, safety, reasoning quality, or completeness of the model's answer."
+                body: "Verification does not judge the truthfulness, safety, reasoning quality, or completeness of the model's answer."
             ),
             AttestationEducationSection(
                 title: "Stale or unavailable",
@@ -400,7 +400,7 @@ struct AttestationEducation: Codable, Equatable, Sendable {
             ),
             AttestationEducationSection(
                 title: "Different routes",
-                body: "External, NEAR Cloud, and IronClaw routes may show different states because they are not necessarily covered by the same TEE-backed evidence."
+                body: "External, NEAR Cloud, and IronClaw routes may show different states because they are not necessarily covered by the same hardware-rooted proof."
             )
         ]
     )

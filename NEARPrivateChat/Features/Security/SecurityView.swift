@@ -298,12 +298,12 @@ struct SecurityView: View {
 
             ShareLink(
                 item: snapshot.prettyJSON,
-                subject: Text("NEAR Private Chat attestation JSON"),
-                message: Text("Attestation JSON only. It does not include conversation text.")
+                subject: Text("NEAR Private Chat proof JSON"),
+                message: Text("Proof JSON only. It does not include conversation text.")
             ) {
                 Label("Share Proof JSON", systemImage: "square.and.arrow.up")
             }
-            .accessibilityHint("Shares only the attestation JSON report.")
+            .accessibilityHint("Shares only the signed proof JSON.")
 
             if let localVerificationMessage {
                 Text(localVerificationMessage)
@@ -322,14 +322,14 @@ struct SecurityView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .disabled(true)
-            .accessibilityHint("Fetch attestation first to check the signed report on this device.")
+            .accessibilityHint("Fetch proof first to check the signed report on this device.")
 
             Button {} label: {
                 Label("Share Proof JSON", systemImage: "square.and.arrow.up")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .disabled(true)
-            .accessibilityHint("Fetch attestation first to share proof JSON.")
+            .accessibilityHint("Fetch proof first to share proof JSON.")
         }
     }
 
@@ -460,10 +460,10 @@ struct SecurityView: View {
 
     private var proofActionsUnavailableText: String {
         if chatStore.isLoadingAttestation {
-            return "Fetching attestation JSON. Proof actions will unlock when a report is on this device."
+            return "Fetching signed proof. Proof actions will unlock when the report is on this device."
         }
         if canFetchAttestation {
-            return "Fetch attestation to enable on-device verification and proof JSON sharing."
+            return "Fetch proof to enable on-device verification and proof JSON sharing."
         }
         return fetchAttestationDisabledText
     }
