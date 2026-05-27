@@ -477,6 +477,76 @@ struct HomeSectionHeader: View {
     }
 }
 
+struct HomeToolbarIconButton: View {
+    let symbolName: String
+    let accessibilityLabel: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbolName)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Color.textSecondary)
+                .frame(width: 38, height: 38)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+struct HomeEmptyState: View {
+    let title: String
+    let subtitle: String
+    let actionTitle: String?
+    let action: (() -> Void)?
+
+    var body: some View {
+        VStack(spacing: 22) {
+            Spacer(minLength: 30)
+
+            VStack(spacing: 14) {
+                PrivacySeal(size: 64)
+                    .accessibilityHidden(true)
+
+                VStack(spacing: 7) {
+                    Text(title)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+
+                    Text(subtitle)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Color.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 14)
+            }
+
+            Spacer(minLength: 28)
+
+            if let actionTitle, let action {
+                Button(action: action) {
+                    Text(actionTitle)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 8)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 420)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 18)
+    }
+}
+
 struct HomeHeroActions: View {
     let showsAgent: Bool
     let projectTitle: String

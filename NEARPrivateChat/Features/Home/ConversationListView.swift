@@ -8,6 +8,7 @@ struct ConversationListView: View {
     @State private var showingNewProject = false
     @State private var showingProjectFiles = false
     @State private var showingAccountSettings = false
+    @State private var isSearchVisible = false
     @State private var editingProject: ChatProject?
     let onOpenChat: () -> Void
     let onStartNewChat: () -> Void
@@ -150,17 +151,13 @@ struct ConversationListView: View {
     var body: some View {
         List {
             Section {
-                WorkspaceCommandHeader(
-                    title: "NEAR Private Chat",
-                    subtitle: "Ready to answer, research, or take action.",
-                    onNewChat: openNewChat
-                )
-                .workspaceListRow()
-
-                SidebarSearchField(text: $searchText, prompt: "Search chats, projects, and sources")
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 5, trailing: 16))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
+                if isSearchVisible || !searchText.isEmpty {
+                    SidebarSearchField(text: $searchText, prompt: "Search chats, projects, and sources")
+                        .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 5, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
 
                 HomeFilterStrip(
                     selectedFilter: $selectedHomeFilter,
@@ -170,20 +167,6 @@ struct ConversationListView: View {
                 .workspaceListRow(top: 4, bottom: 8)
             }
             .listSectionSeparator(.hidden)
-
-            if let pendingSetupLaunchCard {
-                Section {
-                    SetupLaunchCard(
-                        plan: pendingSetupLaunchCard.plan,
-                        recommendation: setupCardRecommendation(for: pendingSetupLaunchCard.plan),
-                        onPrimaryAction: { openPendingSetupLaunchCard(pendingSetupLaunchCard) },
-                        onRecommendationAction: { runSetupCardRecommendation(for: pendingSetupLaunchCard.plan) },
-                        onDismiss: { dismissPendingSetupLaunchCard(pendingSetupLaunchCard) }
-                    )
-                    .workspaceListRow(top: 12, bottom: 4)
-                }
-                .listSectionSeparator(.hidden)
-            }
 
             if selectedHomeFilter == .all, !resumeConversations.isEmpty {
                 Section {
@@ -284,25 +267,14 @@ struct ConversationListView: View {
                filteredProjects.isEmpty,
                filteredProjectContextMatches.isEmpty {
                 Section {
-                    if let emptyHomeSetupState {
-                        SavedSetupHomeCard(
-                            plan: emptyHomeSetupState.plan,
-                            restoreState: emptyHomeSetupState.restoreState,
-                            recommendation: setupCardRecommendation(for: emptyHomeSetupState.plan),
-                            onPrimaryAction: { reopenSavedSetup(emptyHomeSetupState) },
-                            onRecommendationAction: { runSetupCardRecommendation(for: emptyHomeSetupState.plan) },
-                            onChangeSetup: onRunSetupAgain
-                        )
-                        .workspaceListRow(top: 18, bottom: 8)
-                    } else {
-                        ContentUnavailableView(
-                            searchQuery.isEmpty ? (chatStore.selectedProject == nil ? "No chats" : "No project chats") : "No matching chats",
-                            systemImage: "bubble.left.and.bubble.right",
-                            description: searchQuery.isEmpty ? nil : Text("Try a project name, file, link, note, or chat title.")
-                        )
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                    }
+                    HomeEmptyState(
+                        title: searchQuery.isEmpty ? "Ask privately." : "No matching chats",
+                        subtitle: searchQuery.isEmpty ? "Start with a question. NEAR can research, use project context, and verify supported private routes when the answer lands." : "Try a project name, file, link, note, or chat title.",
+                        actionTitle: searchQuery.isEmpty ? "Start a new chat" : nil,
+                        action: searchQuery.isEmpty ? openNewChat : nil
+                    )
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 }
             } else if selectedHomeFilter == .all {
                 ForEach(conversationGroups, id: \.title) { group in
@@ -486,13 +458,27 @@ struct ConversationListView: View {
                 .environmentObject(chatStore)
         }
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                AccountToolbarButton(onRunSetupAgain: onRunSetupAgain)
+            }
             ToolbarItem(placement: .principal) {
                 Text("Chats")
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(.primary)
             }
-            ToolbarItem(placement: .automatic) {
-                AccountToolbarButton(onRunSetupAgain: onRunSetupAgain)
+            ToolbarItem(placement: .topBarTrailing) {
+                HStack(spacing: 2) {
+                    HomeToolbarIconButton(
+                        symbolName: "magnifyingglass",
+                        accessibilityLabel: isSearchVisible ? "Hide search" : "Search",
+                        action: toggleSearch
+                    )
+                    HomeToolbarIconButton(
+                        symbolName: "square.and.pencil",
+                        accessibilityLabel: "New chat",
+                        action: openNewChat
+                    )
+                }
             }
         }
         .task {
@@ -535,6 +521,15 @@ struct ConversationListView: View {
         } else if filter == .shared, chatStore.sharedWithMe.isEmpty {
             Task {
                 await chatStore.refreshSharedWithMe(showErrors: false)
+            }
+        }
+    }
+
+    private func toggleSearch() {
+        withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+            isSearchVisible.toggle()
+            if !isSearchVisible {
+                searchText = ""
             }
         }
     }
