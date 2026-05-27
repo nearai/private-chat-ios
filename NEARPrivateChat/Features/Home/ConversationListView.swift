@@ -46,12 +46,19 @@ struct ConversationListView: View {
     }
 
     private var filteredProjects: [ChatProject] {
-        guard !searchQuery.isEmpty else { return chatStore.projects }
-        return chatStore.projects.filter { projectMatchesSearch($0) }
+        let projects = chatStore.visibleProjects
+        guard !searchQuery.isEmpty else { return projects }
+        return projects.filter { projectMatchesSearch($0) }
+    }
+
+    private var filteredArchivedProjects: [ChatProject] {
+        let projects = chatStore.archivedProjects
+        guard !searchQuery.isEmpty else { return projects }
+        return projects.filter { projectMatchesSearch($0) }
     }
 
     private var filteredProjectContextMatches: [HomeProjectContextMatch] {
-        HomeSearchIndex.projectContextMatches(query: searchQuery, projects: chatStore.projects)
+        HomeSearchIndex.projectContextMatches(query: searchQuery, projects: chatStore.visibleProjects)
     }
 
     private var setupReadinessSnapshot: AppSetupReadinessSnapshot {
@@ -241,6 +248,12 @@ struct ConversationListView: View {
                             } label: {
                                 Label("Rename / Style", systemImage: "paintpalette")
                             }
+                            Divider()
+                            Button {
+                                chatStore.archiveProject(project)
+                            } label: {
+                                Label("Archive", systemImage: "archivebox")
+                            }
                         }
                         .workspaceListRow()
                     }
@@ -371,14 +384,48 @@ struct ConversationListView: View {
                     HomeSectionHeader(title: "Archived")
                         .workspaceListRow(top: 16, bottom: 5)
 
-                    if filteredArchivedConversations.isEmpty {
+                    if filteredArchivedProjects.isEmpty && filteredArchivedConversations.isEmpty {
                         ContentUnavailableView(
-                            searchQuery.isEmpty ? "No archived conversations" : "No matching archived conversations",
+                            searchQuery.isEmpty ? "No archived items" : "No matching archived items",
                             systemImage: "archivebox"
                         )
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                     } else {
+                        if !filteredArchivedProjects.isEmpty {
+                            HomeSectionHeader(title: "Projects")
+                                .workspaceListRow(top: 0, bottom: 5)
+
+                            ForEach(filteredArchivedProjects) { project in
+                                ProjectRow(
+                                    title: project.name,
+                                    subtitle: archivedProjectSubtitle(project),
+                                    symbolName: project.projectIconName,
+                                    isSelected: false,
+                                    tintColor: project.tintColor,
+                                    tintBackground: project.tintBackgroundColor
+                                )
+                                .contextMenu {
+                                    Button {
+                                        chatStore.unarchiveProject(project)
+                                    } label: {
+                                        Label("Unarchive", systemImage: "arrow.uturn.backward")
+                                    }
+                                    Button {
+                                        editingProject = project
+                                    } label: {
+                                        Label("Rename / Style", systemImage: "paintpalette")
+                                    }
+                                }
+                                .workspaceListRow()
+                            }
+                        }
+
+                        if !filteredArchivedProjects.isEmpty && !filteredArchivedConversations.isEmpty {
+                            HomeSectionHeader(title: "Chats")
+                                .workspaceListRow(top: 12, bottom: 5)
+                        }
+
                         ForEach(filteredArchivedConversations) { conversation in
                             Button {
                                 openConversation(conversation)
@@ -477,7 +524,7 @@ struct ConversationListView: View {
         [
             .all: chatStore.allVisibleConversations.count,
             .shared: chatStore.sharedWithMe.count,
-            .archived: chatStore.archivedConversations.count
+            .archived: chatStore.archivedConversations.count + chatStore.archivedProjects.count
         ]
     }
 
@@ -497,7 +544,7 @@ struct ConversationListView: View {
            selectedProject.conversationIDs.contains(conversation.id) {
             return selectedProject.name
         }
-        return chatStore.projects.first { $0.conversationIDs.contains(conversation.id) }?.name
+        return chatStore.visibleProjects.first { $0.conversationIDs.contains(conversation.id) }?.name
     }
 
     private func projectSubtitle(_ project: ChatProject) -> String {
@@ -507,6 +554,18 @@ struct ConversationListView: View {
         }
         parts.append(contentsOf: contextSubtitleParts(project))
         return parts.isEmpty ? "Ready for sources" : parts.joined(separator: " · ")
+    }
+
+    private func archivedProjectSubtitle(_ project: ChatProject) -> String {
+        var parts = ["Archived project"]
+        if let archivedAt = project.archivedAt {
+            parts.append(archivedAt.formatted(date: .abbreviated, time: .omitted))
+        }
+        let activeContext = contextSubtitleParts(project)
+        if !activeContext.isEmpty {
+            parts.append(activeContext.joined(separator: " · "))
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func openPendingSetupLaunchCard(_ state: SetupLaunchCardState) {

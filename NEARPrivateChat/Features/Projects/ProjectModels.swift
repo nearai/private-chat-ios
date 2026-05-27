@@ -230,6 +230,7 @@ struct ChatProject: Identifiable, Codable, Hashable {
     var id: String
     var name: String
     var createdAt: Date
+    var archivedAt: Date?
     var conversationIDs: [String]
     var attachments: [ChatAttachment]
     var instructions: String
@@ -243,6 +244,7 @@ struct ChatProject: Identifiable, Codable, Hashable {
         id: String,
         name: String,
         createdAt: Date,
+        archivedAt: Date? = nil,
         conversationIDs: [String],
         attachments: [ChatAttachment] = [],
         instructions: String = "",
@@ -255,6 +257,7 @@ struct ChatProject: Identifiable, Codable, Hashable {
         self.id = id
         self.name = name
         self.createdAt = createdAt
+        self.archivedAt = archivedAt
         self.conversationIDs = conversationIDs
         self.attachments = attachments
         self.instructions = instructions
@@ -269,6 +272,7 @@ struct ChatProject: Identifiable, Codable, Hashable {
         case id
         case name
         case createdAt
+        case archivedAt
         case conversationIDs
         case attachments
         case instructions
@@ -284,6 +288,7 @@ struct ChatProject: Identifiable, Codable, Hashable {
         id = try container.decode(String.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
+        archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
         conversationIDs = try container.decode([String].self, forKey: .conversationIDs)
         attachments = try container.decodeIfPresent([ChatAttachment].self, forKey: .attachments) ?? []
         instructions = try container.decodeIfPresent(String.self, forKey: .instructions) ?? ""
@@ -314,5 +319,9 @@ struct ChatProject: Identifiable, Codable, Hashable {
 
     var tintBackgroundColor: Color {
         projectPalette.backgroundColor
+    }
+
+    var isArchived: Bool {
+        archivedAt != nil
     }
 }

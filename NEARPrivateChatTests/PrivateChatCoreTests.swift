@@ -798,6 +798,45 @@ final class PrivateChatCoreTests: XCTestCase {
 
         XCTAssertEqual(decoded.projectIconName, ProjectIcon.agent.symbolName)
         XCTAssertEqual(decoded.projectPalette, .mint)
+        XCTAssertFalse(decoded.isArchived)
+    }
+
+    func testProjectArchiveStateRoundTripsAndDefaultsToActive() throws {
+        let archivedPayload = Data("""
+        {
+          "id": "project-1",
+          "name": "Archived",
+          "createdAt": 123,
+          "archivedAt": 456,
+          "conversationIDs": [],
+          "attachments": [],
+          "instructions": "",
+          "memorySummary": "",
+          "links": [],
+          "notes": []
+        }
+        """.utf8)
+
+        let archivedProject = try JSONDecoder().decode(ChatProject.self, from: archivedPayload)
+        XCTAssertTrue(archivedProject.isArchived)
+        XCTAssertNotNil(archivedProject.archivedAt)
+
+        let activePayload = Data("""
+        {
+          "id": "project-2",
+          "name": "Active",
+          "createdAt": 123,
+          "conversationIDs": [],
+          "attachments": [],
+          "instructions": "",
+          "memorySummary": "",
+          "links": [],
+          "notes": []
+        }
+        """.utf8)
+
+        let activeProject = try JSONDecoder().decode(ChatProject.self, from: activePayload)
+        XCTAssertFalse(activeProject.isArchived)
     }
 
     func testProjectIdentityCatalogSupportsSearchablePhoneChoices() {
@@ -843,6 +882,32 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(store.selectedProject?.name, "Q3 Launch")
         XCTAssertEqual(store.visibleConversations.map(\.id), ["pinned", "normal"])
         XCTAssertEqual(store.archivedConversations.map(\.id), ["archived"])
+    }
+
+    func testProjectStoreSeparatesVisibleAndArchivedProjects() {
+        let active = ChatProject(
+            id: "project-1",
+            name: "Active",
+            createdAt: Date(timeIntervalSince1970: 1_000),
+            conversationIDs: []
+        )
+        let archived = ChatProject(
+            id: "project-2",
+            name: "Archived",
+            createdAt: Date(timeIntervalSince1970: 2_000),
+            archivedAt: Date(timeIntervalSince1970: 3_000),
+            conversationIDs: []
+        )
+
+        let store = ProjectStore(
+            projects: [archived, active],
+            selectedProjectID: archived.id,
+            conversations: []
+        )
+
+        XCTAssertNil(store.selectedProject)
+        XCTAssertEqual(store.visibleProjects.map(\.id), ["project-1"])
+        XCTAssertEqual(store.archivedProjects.map(\.id), ["project-2"])
     }
 
     func testFileStoreAttachmentLimitsAreExplicitAndReusable() {

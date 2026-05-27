@@ -7,7 +7,19 @@ struct ProjectStore {
 
     var selectedProject: ChatProject? {
         guard let selectedProjectID else { return nil }
-        return projects.first(where: { $0.id == selectedProjectID })
+        return projects.first(where: { $0.id == selectedProjectID && !$0.isArchived })
+    }
+
+    var visibleProjects: [ChatProject] {
+        projects
+            .filter { !$0.isArchived }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    var archivedProjects: [ChatProject] {
+        projects
+            .filter(\.isArchived)
+            .sorted { ($0.archivedAt ?? $0.createdAt) > ($1.archivedAt ?? $1.createdAt) }
     }
 
     var projectScopedConversations: [ConversationSummary] {

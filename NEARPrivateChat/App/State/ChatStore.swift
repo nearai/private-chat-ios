@@ -420,6 +420,14 @@ final class ChatStore: ObservableObject {
         projectStore.archivedConversations
     }
 
+    var visibleProjects: [ChatProject] {
+        projectStore.visibleProjects
+    }
+
+    var archivedProjects: [ChatProject] {
+        projectStore.archivedProjects
+    }
+
     var composerState: ComposerState {
         ComposerState(
             draft: draft,
@@ -2039,6 +2047,10 @@ final class ChatStore: ObservableObject {
     }
 
     func selectProject(_ project: ChatProject) {
+        guard !project.isArchived else {
+            showBanner("Unarchive this project before opening it.")
+            return
+        }
         persistCurrentDraftIfNeeded()
         selectedProjectID = project.id
         let projectConversationIDs = Set(project.conversationIDs)
@@ -2124,6 +2136,37 @@ final class ChatStore: ObservableObject {
         }
         saveProjects()
         showBanner("Project updated.")
+    }
+
+    func archiveProject(_ project: ChatProject) {
+        guard let index = projects.firstIndex(where: { $0.id == project.id }) else {
+            showBanner("Project not found.")
+            return
+        }
+        guard !projects[index].isArchived else {
+            showBanner("Project already archived.")
+            return
+        }
+        projects[index].archivedAt = Date()
+        if selectedProjectID == project.id {
+            selectedProjectID = nil
+        }
+        saveProjects()
+        showBanner("Project archived.")
+    }
+
+    func unarchiveProject(_ project: ChatProject) {
+        guard let index = projects.firstIndex(where: { $0.id == project.id }) else {
+            showBanner("Project not found.")
+            return
+        }
+        guard projects[index].isArchived else {
+            showBanner("Project is already active.")
+            return
+        }
+        projects[index].archivedAt = nil
+        saveProjects()
+        showBanner("Project restored.")
     }
 
     func updateSelectedProjectInstructions(_ instructions: String) {
@@ -7002,9 +7045,17 @@ final class ChatStore: ObservableObject {
     private func ensureMobileProject(named rawName: String, includeConversationID conversationID: String?) -> ChatProject {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         if let index = projectIndex(matching: name) {
+            var didChange = false
+            if projects[index].isArchived {
+                projects[index].archivedAt = nil
+                didChange = true
+            }
             selectedProjectID = projects[index].id
             if let conversationID, !projects[index].conversationIDs.contains(conversationID) {
                 projects[index].conversationIDs.append(conversationID)
+                didChange = true
+            }
+            if didChange {
                 saveProjects()
             }
             return projects[index]
