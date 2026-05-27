@@ -14,6 +14,7 @@ struct UserSetupView: View {
     @State private var profile: UserSetupProfile
     @State private var editedDefaultToggles: Set<SetupDefaultToggle> = []
     @State private var editedContextStyle = false
+    @State private var showsCapabilitySetup: Bool
 
     init(
         initialProfile: UserSetupProfile = .defaults,
@@ -25,6 +26,13 @@ struct UserSetupView: View {
         self.onComplete = onComplete
         self.onSkip = onSkip
         _profile = State(initialValue: initialProfile)
+        _showsCapabilitySetup = State(
+            initialValue: initialProfile.experienceMode == .power ||
+                initialProfile.wantsIronclaw ||
+                initialProfile.wantsCouncil ||
+                initialProfile.contextStyle != .simple ||
+                initialProfile.wantsWeb
+        )
     }
 
     var body: some View {
@@ -37,9 +45,11 @@ struct UserSetupView: View {
 
                     setupExamples
 
+                    setupUseCases
+
                     setupExperienceMode
 
-                    SetupQuietWebToggle(isOn: setupToggleBinding(.web, keyPath: \.wantsWeb))
+                    setupCapabilitiesDisclosure
 
                     SetupReadinessLine(plan: setupPlan)
 
@@ -76,7 +86,7 @@ struct UserSetupView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(primarySetupActionTitle)
 
-            Button("Skip setup") {
+            Button("Not now") {
                 onSkip()
             }
             .font(.footnote.weight(.semibold))
@@ -152,8 +162,78 @@ struct UserSetupView: View {
                     symbolName: mode.symbolName,
                     isSelected: profile.experienceMode == mode
                 ) {
-                    profile.experienceMode = mode
+                    setExperienceMode(mode)
                 }
+            }
+        }
+    }
+
+    private var setupUseCases: some View {
+        setupSection(title: "What should work first?") {
+            ForEach(UserSetupUseCase.allCases) { useCase in
+                SetupChoiceRow(
+                    title: useCase.title,
+                    subtitle: useCase.subtitle,
+                    symbolName: useCase.symbolName,
+                    isSelected: profile.useCases.contains(useCase),
+                    selectionStyle: .multi
+                ) {
+                    profile.toggleUseCase(useCase)
+                    applyUseCaseDefaultsFromSelection()
+                }
+            }
+        }
+    }
+
+    private var setupContextStyle: some View {
+        setupSection(title: "Sources & memory") {
+            ForEach(UserSetupContextStyle.allCases) { style in
+                SetupChoiceRow(
+                    title: style.title,
+                    subtitle: style.subtitle,
+                    symbolName: style.symbolName,
+                    isSelected: profile.contextStyle == style
+                ) {
+                    profile.contextStyle = style
+                    editedContextStyle = true
+                }
+            }
+        }
+    }
+
+    private var setupCapabilitiesDisclosure: some View {
+        setupSection(title: "Connect more capabilities") {
+            DisclosureGroup(isExpanded: $showsCapabilitySetup) {
+                VStack(alignment: .leading, spacing: 16) {
+                    setupContextStyle
+
+                    SetupQuietWebToggle(isOn: setupToggleBinding(.web, keyPath: \.wantsWeb))
+
+                    setupAdvancedRoutesContent
+
+                    Text("You can change these defaults later from Account without resetting chats.")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, 12)
+            } label: {
+                SetupCapabilityDisclosureLabel(
+                    title: capabilityDisclosureTitle,
+                    detail: capabilityDisclosureDetail,
+                    sourceStyle: profile.contextStyle.title,
+                    webEnabled: profile.wantsWeb,
+                    wantsIronclaw: profile.wantsIronclaw,
+                    wantsCouncil: profile.wantsCouncil,
+                    experienceMode: profile.experienceMode
+                )
+            }
+            .tint(.primary)
+            .padding(12)
+            .background(Color.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.border, lineWidth: 1)
             }
         }
     }
@@ -171,10 +251,10 @@ struct UserSetupView: View {
             profile.wantsWeb = false
         }
         if !editedDefaultToggles.contains(.ironclaw) {
-            profile.wantsIronclaw = selected.contains(.buildAgents)
+            profile.wantsIronclaw = profile.experienceMode == .power && selected.contains(.buildAgents)
         }
         if !editedDefaultToggles.contains(.council) {
-            profile.wantsCouncil = selected.contains(.research) && !profile.wantsIronclaw
+            profile.wantsCouncil = profile.experienceMode == .power && selected.contains(.research) && !profile.wantsIronclaw
         }
         if !editedContextStyle {
             if selected.contains(.research) || selected.contains(.buildAgents) || selected.contains(.teamProjects) {
@@ -195,6 +275,84 @@ struct UserSetupView: View {
         )
     }
 
+    private func setExperienceMode(_ mode: UserSetupExperienceMode) {
+        guard profile.experienceMode != mode else { return }
+        profile.experienceMode = mode
+        if mode == .beginner {
+            editedDefaultToggles.remove(.ironclaw)
+            editedDefaultToggles.remove(.council)
+            profile.wantsIronclaw = false
+            profile.wantsCouncil = false
+        } else {
+            showsCapabilitySetup = true
+            applyUseCaseDefaultsFromSelection()
+        }
+    }
+
+    private var capabilityDisclosureTitle: String {
+        if profile.experienceMode == .power {
+            return "Power controls are available"
+        }
+        return "Private-first defaults are enough to start"
+    }
+
+    private var capabilityDisclosureDetail: String {
+        if profile.experienceMode == .power {
+            return "Adjust source style, live web, Council, and agent routes before your first chat."
+        }
+        return "Expand only if you want to tune sources, web behavior, or advanced routes now."
+    }
+
+    @ViewBuilder
+    private var setupAdvancedRoutesContent: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("Routes")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.secondary)
+
+            if profile.experienceMode == .power {
+                VStack(spacing: 8) {
+                    SetupToggleRow(
+                        title: "IronClaw agent",
+                        subtitle: ironclawToggleSubtitle,
+                        symbolName: "terminal",
+                        isOn: setupToggleBinding(.ironclaw, keyPath: \.wantsIronclaw)
+                    )
+
+                    SetupToggleRow(
+                        title: "LLM Council",
+                        subtitle: councilToggleSubtitle,
+                        symbolName: "square.grid.2x2",
+                        isOn: setupToggleBinding(.council, keyPath: \.wantsCouncil)
+                    )
+                }
+            } else {
+                SetupInfoCard(
+                    title: "Beginner mode keeps routes simple",
+                    detail: "Start with private chat, sources, and project memory first. Switch to Power whenever you want agents or Council visible from day one.",
+                    symbolName: "sparkles"
+                )
+            }
+        }
+    }
+
+    private var ironclawToggleSubtitle: String {
+        if readiness.ironclawMobileAvailable {
+            return "Phone-safe agent tasks and project actions stay one tap away."
+        }
+        return "Private chat stays ready first while IronClaw Mobile finishes loading."
+    }
+
+    private var councilToggleSubtitle: String {
+        if !readiness.modelCatalogLoaded {
+            return "The lineup is still loading. Private chat stays ready first."
+        }
+        if readiness.councilReady {
+            return "Compare multiple models from the same prompt when you need a sharper answer."
+        }
+        return "Needs at least two available models. Private chat stays ready first."
+    }
+
     private var setupExamples: some View {
         VStack(alignment: .leading, spacing: 9) {
             Text("Start with an example")
@@ -208,7 +366,12 @@ struct UserSetupView: View {
                             isSelected: profile.useCases == [preset.useCase] && profile.goalText == preset.prompt
                         ) {
                             profile.applyStarterPreset(preset)
+                            if preset.wantsIronclaw || preset.wantsCouncil {
+                                profile.experienceMode = .power
+                                showsCapabilitySetup = true
+                            }
                             editedContextStyle = true
+                            editedDefaultToggles.insert(.web)
                             editedDefaultToggles.insert(.ironclaw)
                             editedDefaultToggles.insert(.council)
                         }
@@ -219,7 +382,12 @@ struct UserSetupView: View {
                     ForEach(UserSetupStarterPreset.allCases) { preset in
                         Button {
                             profile.applyStarterPreset(preset)
+                            if preset.wantsIronclaw || preset.wantsCouncil {
+                                profile.experienceMode = .power
+                                showsCapabilitySetup = true
+                            }
                             editedContextStyle = true
+                            editedDefaultToggles.insert(.web)
                             editedDefaultToggles.insert(.ironclaw)
                             editedDefaultToggles.insert(.council)
                         } label: {
@@ -236,6 +404,131 @@ struct UserSetupView: View {
                 }
             }
         }
+    }
+}
+
+private struct SetupInfoCard: View {
+    let title: String
+    let detail: String
+    let symbolName: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: symbolName)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(Color.brandBlue)
+                .frame(width: 36, height: 36)
+                .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(detail)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(Color.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.border, lineWidth: 1)
+        }
+    }
+}
+
+private struct SetupCapabilityDisclosureLabel: View {
+    let title: String
+    let detail: String
+    let sourceStyle: String
+    let webEnabled: Bool
+    let wantsIronclaw: Bool
+    let wantsCouncil: Bool
+    let experienceMode: UserSetupExperienceMode
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: experienceMode == .power ? "bolt.circle.fill" : "slider.horizontal.3")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Color.brandBlue)
+                    .frame(width: 36, height: 36)
+                    .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(detail)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(summaryPills, id: \.title) { pill in
+                        SetupSummaryPill(title: pill.title, isActive: pill.isActive)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(summaryPills, id: \.title) { pill in
+                        SetupSummaryPill(title: pill.title, isActive: pill.isActive)
+                    }
+                }
+            }
+        }
+    }
+
+    private var summaryPills: [SetupCapabilitySummaryItem] {
+        var pills = [
+            SetupCapabilitySummaryItem(title: sourceStyle, isActive: true),
+            SetupCapabilitySummaryItem(title: webEnabled ? "Web on" : "Web off", isActive: webEnabled)
+        ]
+
+        if wantsIronclaw {
+            pills.append(SetupCapabilitySummaryItem(title: "Agent", isActive: true))
+        }
+        if wantsCouncil {
+            pills.append(SetupCapabilitySummaryItem(title: "Council", isActive: true))
+        }
+        if experienceMode == .power && !wantsIronclaw && !wantsCouncil {
+            pills.append(SetupCapabilitySummaryItem(title: "Power", isActive: true))
+        }
+
+        return pills
+    }
+}
+
+private struct SetupCapabilitySummaryItem: Hashable {
+    let title: String
+    let isActive: Bool
+}
+
+private struct SetupSummaryPill: View {
+    let title: String
+    let isActive: Bool
+
+    var body: some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(isActive ? Color.primaryAction : Color.textSecondary)
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(isActive ? Color.selectionSubtle : Color.secondarySurface, in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(isActive ? Color.primaryAction.opacity(0.16) : Color.appBorder, lineWidth: 1)
+            }
     }
 }
 

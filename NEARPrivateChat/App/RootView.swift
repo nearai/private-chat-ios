@@ -114,11 +114,9 @@ struct RootView: View {
 
     private func beginSetupRerun() {
         guard sessionStore.isSignedIn, let accountID = sessionStore.setupAccountID else { return }
-        let defaults = UserSetupProfile.defaults.normalizedForDefaults
-        UserSetupStorage.saveWithoutPendingLaunchCard(defaults, for: accountID)
-        chatStore.resetInteractionDefaults()
-        recordSetupTelemetry(profile: defaults, outcome: .completed)
-        presentedSetupAccountID = nil
+        UserSetupStorage.clearCompletion(for: accountID)
+        UserSetupStorage.clearPendingLaunchCard(for: accountID)
+        presentedSetupAccountID = accountID
     }
 
     private func completeSetup(_ profile: UserSetupProfile, for accountID: String) {

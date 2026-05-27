@@ -230,6 +230,10 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
     var wantsCouncil: Bool {
         self == .researchBrief
     }
+
+    var wantsWeb: Bool {
+        self == .researchBrief
+    }
 }
 
 struct SetupPromptSuggestion: Identifiable, Hashable {
@@ -591,6 +595,7 @@ struct UserSetupProfile: Codable, Hashable {
         useCases = [preset.useCase]
         goalText = preset.prompt
         contextStyle = preset.contextStyle
+        wantsWeb = preset.wantsWeb
         wantsIronclaw = preset.wantsIronclaw
         wantsCouncil = preset.wantsCouncil
     }
@@ -687,12 +692,13 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
 
     init(profile: UserSetupProfile, readiness: AppSetupReadinessSnapshot = .optimistic) {
         let profile = profile.normalizedForDefaults
-        let usesCouncil = !profile.wantsIronclaw && profile.wantsCouncil && readiness.councilReady
-        modelRoute = usesCouncil ? .council : .privateModel
+        let usesIronclaw = profile.wantsIronclaw && readiness.ironclawMobileAvailable
+        let usesCouncil = !usesIronclaw && profile.wantsCouncil && readiness.councilReady
+        modelRoute = usesIronclaw ? .ironclaw : (usesCouncil ? .council : .privateModel)
         focusMode = profile.contextStyle.sourceMode
         focusBehavior = Self.focusBehavior(for: profile)
         starterProjectName = profile.setupStarterProjectName
-        agentEnabled = false
+        agentEnabled = profile.wantsIronclaw
         councilEnabled = profile.wantsCouncil
         expectedFirstAction = Self.expectedFirstAction(for: profile, readiness: readiness, modelRoute: modelRoute)
         goalText = profile.goalText
@@ -761,6 +767,9 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
         if !goal.isEmpty {
             return "Start from your goal"
         }
+        if profile.wantsIronclaw, !readiness.ironclawMobileAvailable {
+            return "Start private chat while agent tools load"
+        }
         if profile.wantsCouncil, !readiness.councilReady {
             return readiness.modelCatalogLoaded
                 ? "Start private chat; Council needs models"
@@ -786,6 +795,9 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
         readiness: AppSetupReadinessSnapshot,
         modelRoute: AppSetupModelRoute
     ) -> String {
+        if profile.wantsIronclaw, !readiness.ironclawMobileAvailable {
+            return "IronClaw Mobile is still loading; private chat is ready first."
+        }
         if profile.wantsCouncil {
             if !readiness.modelCatalogLoaded {
                 return "Council lineup will be checked after models load."
@@ -798,6 +810,63 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
             return "Private model catalog is still loading."
         }
         return "Ready: \(modelRoute.title)"
+    }
+}
+
+struct SetupRuntimeSnapshot: Equatable {
+    var modelRoute: AppSetupModelRoute
+    var focusMode: ChatSourceMode
+    var webSearchEnabled: Bool
+    var researchModeEnabled: Bool
+    var selectedProjectName: String?
+}
+
+struct SetupRestoreState: Equatable {
+    let needsRestore: Bool
+    let summaryText: String
+}
+
+enum SetupRestorePlanner {
+    static func evaluate(
+        profile: UserSetupProfile,
+        plan: AppSetupPlan,
+        runtime: SetupRuntimeSnapshot
+    ) -> SetupRestoreState {
+        if runtime.modelRoute != plan.modelRoute {
+            return SetupRestoreState(
+                needsRestore: true,
+                summaryText: "Current route changed. Restore saved setup to return to your saved route."
+            )
+        }
+
+        let expectedResearchMode = profile.useCases.contains(.research) && plan.modelRoute != .ironclaw
+        if runtime.focusMode != plan.focusMode ||
+            runtime.webSearchEnabled != profile.wantsWeb ||
+            runtime.researchModeEnabled != expectedResearchMode {
+            return SetupRestoreState(
+                needsRestore: true,
+                summaryText: "Context defaults changed. Restore saved setup to recover your saved web, focus, and research defaults."
+            )
+        }
+
+        if let starterProjectName = plan.starterProjectName {
+            if runtime.selectedProjectName != starterProjectName {
+                return SetupRestoreState(
+                    needsRestore: true,
+                    summaryText: "\"\(starterProjectName)\" is not active right now. Restore saved setup to reopen that workspace."
+                )
+            }
+        } else if runtime.selectedProjectName != nil && profile.contextStyle == .simple {
+            return SetupRestoreState(
+                needsRestore: true,
+                summaryText: "A project is active, but your saved setup starts without project memory."
+            )
+        }
+
+        return SetupRestoreState(
+            needsRestore: false,
+            summaryText: "Your saved setup is ready to reopen with the same route, focus, and starter prompt."
+        )
     }
 }
 
@@ -859,7 +928,7 @@ enum CapabilityNextStepPlanner {
             break
         }
 
-        if setupPlan.agentEnabled && !hostedIronclawAvailable {
+        if setupPlan.agentEnabled && currentRoute != .ironclawMobile && !hostedIronclawAvailable {
             return CapabilityNextStep(
                 title: "Finish agent setup",
                 detail: "Your defaults expect agent work. Connect a hosted workstation when you need repo, shell, or approval-gated tasks.",

@@ -64,6 +64,16 @@ struct ConversationListView: View {
         )
     }
 
+    private var currentSetupRuntimeSnapshot: SetupRuntimeSnapshot {
+        SetupRuntimeSnapshot(
+            modelRoute: currentModelRoute,
+            focusMode: chatStore.sourceMode,
+            webSearchEnabled: chatStore.webSearchEnabled,
+            researchModeEnabled: chatStore.researchModeEnabled,
+            selectedProjectName: chatStore.selectedProject?.name
+        )
+    }
+
     private var pendingSetupLaunchCard: SetupLaunchCardState? {
         guard let savedSetupState,
               UserSetupStorage.hasPendingLaunchCard(for: savedSetupState.accountID) else {
@@ -79,10 +89,16 @@ struct ConversationListView: View {
               let profile = UserSetupStorage.load(for: accountID) else {
             return nil
         }
+        let plan = AppSetupPlan(profile: profile, readiness: setupReadinessSnapshot)
         return SetupLaunchCardState(
             accountID: accountID,
             profile: profile,
-            plan: AppSetupPlan(profile: profile, readiness: setupReadinessSnapshot)
+            plan: plan,
+            restoreState: SetupRestorePlanner.evaluate(
+                profile: profile,
+                plan: plan,
+                runtime: currentSetupRuntimeSnapshot
+            )
         )
     }
 
@@ -255,6 +271,7 @@ struct ConversationListView: View {
                     if let emptyHomeSetupState {
                         SavedSetupHomeCard(
                             plan: emptyHomeSetupState.plan,
+                            restoreState: emptyHomeSetupState.restoreState,
                             onPrimaryAction: { reopenSavedSetup(emptyHomeSetupState) },
                             onChangeSetup: onRunSetupAgain
                         )
@@ -504,6 +521,17 @@ struct ConversationListView: View {
         chatStore.applySetupProfile(state.profile)
     }
 
+    private var currentModelRoute: AppSetupModelRoute {
+        if chatStore.selectedModelOption?.isIronclawMobileRuntime == true ||
+            chatStore.selectedModelOption?.isIronclawHostedModel == true {
+            return .ironclaw
+        }
+        if chatStore.isCouncilModeEnabled {
+            return .council
+        }
+        return .privateModel
+    }
+
     private func projectMatchesSearch(_ project: ChatProject) -> Bool {
         project.name.localizedCaseInsensitiveContains(searchQuery) ||
         project.instructions.localizedCaseInsensitiveContains(searchQuery) ||
@@ -539,4 +567,3 @@ struct ConversationListView: View {
         count > 0 ? countLabel(count, singular: singular) : nil
     }
 }
-

@@ -11,6 +11,40 @@ struct EmptyChatView: View {
         let prompt: String
     }
 
+    private struct SetupQuickstartState {
+        let profile: UserSetupProfile
+        let plan: AppSetupPlan
+        let restoreState: SetupRestoreState
+
+        var hasStarterPrompt: Bool {
+            plan.firstRunDraft != nil
+        }
+
+        var primaryActionTitle: String {
+            switch (restoreState.needsRestore, hasStarterPrompt) {
+            case (true, true):
+                return "Restore saved setup"
+            case (true, false):
+                return "Restore saved setup"
+            case (false, true):
+                return "Use starter prompt"
+            case (false, false):
+                return "Setup ready"
+            }
+        }
+
+        var primaryActionSymbolName: String {
+            switch (restoreState.needsRestore, hasStarterPrompt) {
+            case (true, _):
+                return "arrow.counterclockwise"
+            case (false, true):
+                return "text.cursor"
+            case (false, false):
+                return "checkmark.circle"
+            }
+        }
+    }
+
     private var emptyHeroSubtitle: String {
         if let project = chatStore.selectedProject {
             let contextCount = chatStore.activeProjectContextAttachments.count + chatStore.activeProjectContextLinks.count
@@ -55,6 +89,10 @@ struct EmptyChatView: View {
                 }
             }
 
+            if let setupQuickstartState {
+                setupQuickstartCard(setupQuickstartState)
+            }
+
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) {
                     ForEach(emptyPromptSuggestions) { suggestion in
@@ -66,8 +104,7 @@ struct EmptyChatView: View {
                 Menu {
                     ForEach(emptyPromptSuggestions) { suggestion in
                         Button {
-                            AppHaptics.selection()
-                            chatStore.draft = suggestion.prompt
+                            fillDraft(for: suggestion)
                         } label: {
                             Label(suggestion.title, systemImage: suggestion.symbolName)
                         }
@@ -87,8 +124,7 @@ struct EmptyChatView: View {
 
     private func suggestionButton(_ suggestion: EmptyPromptSuggestion) -> some View {
         Button {
-            AppHaptics.selection()
-            chatStore.draft = suggestion.prompt
+            fillDraft(for: suggestion)
         } label: {
             Label(suggestion.title, systemImage: suggestion.symbolName)
                 .font(.caption.weight(.semibold))
@@ -102,6 +138,111 @@ struct EmptyChatView: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Use suggestion, \(suggestion.title)")
         .accessibilityHint("Fills the composer without sending.")
+    }
+
+    private func setupQuickstartCard(_ state: SetupQuickstartState) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: state.plan.modelRoute.symbolName)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Color.brandBlue)
+                    .frame(width: 36, height: 36)
+                    .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Setup quickstart")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.primaryAction)
+                    Text(state.plan.launchCardTitle)
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(state.plan.launchCardSubtitle)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            if !state.plan.launchCardMetadata.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(state.plan.launchCardMetadata, id: \.self) { item in
+                            SetupLaunchPill(title: item)
+                        }
+                    }
+                    .padding(.horizontal, 1)
+                }
+                .scrollClipDisabled()
+            }
+
+            if let firstRunDraft = state.plan.firstRunDraft {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Starter prompt")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Color.textSecondary)
+                    Text(firstRunDraft)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(12)
+                .background(Color.secondarySurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+
+            Text(state.plan.readinessStatus)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if state.restoreState.needsRestore {
+                Text(state.restoreState.summaryText)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.primaryAction)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if state.restoreState.needsRestore || state.hasStarterPrompt {
+                HStack(spacing: 10) {
+                    Button {
+                        runSetupQuickstart(state)
+                    } label: {
+                        Label(state.primaryActionTitle, systemImage: state.primaryActionSymbolName)
+                            .font(.caption.weight(.bold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 38)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white)
+                    .background(Color.primaryAction, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                    if state.restoreState.needsRestore, state.hasStarterPrompt {
+                        Button {
+                            useSetupPrompt(state)
+                        } label: {
+                            Label("Use starter prompt", systemImage: "text.cursor")
+                                .font(.caption.weight(.semibold))
+                                .frame(height: 38)
+                                .padding(.horizontal, 10)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.textSecondary)
+                        .background(Color.secondarySurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                }
+            } else {
+                Text("This chat already matches your saved setup defaults.")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.textSecondary)
+            }
+        }
+        .padding(12)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.brandBlue.opacity(0.10), lineWidth: 1)
+        }
     }
 
     private var emptyPromptSuggestions: [EmptyPromptSuggestion] {
@@ -165,5 +306,113 @@ struct EmptyChatView: View {
     private var setupProfileWithGoal: UserSetupProfile? {
         guard let setupProfile, !setupProfile.normalizedGoalText.isEmpty else { return nil }
         return setupProfile
+    }
+
+    private var setupQuickstartState: SetupQuickstartState? {
+        guard let profile = setupProfile else { return nil }
+        let plan = AppSetupPlan(profile: profile, readiness: setupReadinessSnapshot)
+        return SetupQuickstartState(
+            profile: profile,
+            plan: plan,
+            restoreState: SetupRestorePlanner.evaluate(
+                profile: profile,
+                plan: plan,
+                runtime: currentSetupRuntimeSnapshot
+            )
+        )
+    }
+
+    private var setupReadinessSnapshot: AppSetupReadinessSnapshot {
+        AppSetupReadinessSnapshot(
+            modelCatalogLoaded: !chatStore.models.isEmpty,
+            privateModelAvailable: chatStore.pickerModels.contains { !$0.isExternalModel },
+            defaultCouncilModelCount: chatStore.defaultCouncilModels.count,
+            ironclawMobileAvailable: chatStore.agentModels.contains { $0.id == ModelOption.ironclawMobileModelID },
+            hostedIronclawAvailable: chatStore.ironclawRemoteWorkstationAvailable,
+            nearCloudKeyConfigured: chatStore.nearCloudKeyConfigured
+        )
+    }
+
+    private func fillDraft(for suggestion: EmptyPromptSuggestion) {
+        AppHaptics.selection()
+        chatStore.draft = suggestion.prompt
+    }
+
+    private func runSetupQuickstart(_ state: SetupQuickstartState) {
+        if state.restoreState.needsRestore {
+            AppHaptics.lightImpact()
+            chatStore.applySetupProfile(state.profile)
+            return
+        }
+
+        useSetupPrompt(state)
+    }
+
+    private func useSetupPrompt(_ state: SetupQuickstartState) {
+        guard let prompt = state.plan.firstRunDraft else { return }
+        AppHaptics.selection()
+        recordPromptTelemetry(for: state.profile)
+        chatStore.draft = prompt
+    }
+
+    private var currentSetupRuntimeSnapshot: SetupRuntimeSnapshot {
+        SetupRuntimeSnapshot(
+            modelRoute: currentModelRoute,
+            focusMode: chatStore.sourceMode,
+            webSearchEnabled: chatStore.webSearchEnabled,
+            researchModeEnabled: chatStore.researchModeEnabled,
+            selectedProjectName: chatStore.selectedProject?.name
+        )
+    }
+
+    private var currentModelRoute: AppSetupModelRoute {
+        if chatStore.selectedModelOption?.isIronclawMobileRuntime == true ||
+            chatStore.selectedModelOption?.isIronclawHostedModel == true {
+            return .ironclaw
+        }
+        if chatStore.isCouncilModeEnabled {
+            return .council
+        }
+        return .privateModel
+    }
+
+    private func recordPromptTelemetry(for profile: UserSetupProfile) {
+        let store = PrivateTelemetryStore()
+        let context = TelemetryContext(
+            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "local",
+            profileBucket: profile.telemetryProfileBucket
+        )
+        try? store.record(.promptChipUsed(profile.telemetryPromptChip), context: context)
+    }
+}
+
+private extension UserSetupProfile {
+    var telemetryPromptChip: TelemetryPromptChip {
+        switch useCases.setupPrimaryUseCase {
+        case .privateChat:
+            return .ask
+        case .research:
+            return .research
+        case .buildAgents:
+            return .agent
+        case .teamProjects:
+            return .sourceQA
+        }
+    }
+
+    var telemetryProfileBucket: TelemetryProfileBucket {
+        if useCases.count > 1 {
+            return .mixed
+        }
+        switch useCases.setupPrimaryUseCase {
+        case .privateChat:
+            return .privateChat
+        case .research:
+            return .research
+        case .buildAgents:
+            return .agentWork
+        case .teamProjects:
+            return .mixed
+        }
     }
 }

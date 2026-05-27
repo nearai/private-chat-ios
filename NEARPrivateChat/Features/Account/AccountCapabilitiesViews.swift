@@ -69,9 +69,14 @@ struct AccountSettingsView: View {
                         dismiss()
                         onRunSetupAgain()
                     } label: {
-                        Label("Reset Defaults", systemImage: "arrow.counterclockwise")
+                        Label("Run Setup Again", systemImage: "slider.horizontal.3")
                     }
-                    Text("Keeps your chats, projects, and account. It resets route, model, and composer defaults without opening setup.")
+                    Button {
+                        chatStore.resetInteractionDefaults()
+                    } label: {
+                        Label("Reset Active Defaults", systemImage: "arrow.counterclockwise")
+                    }
+                    Text("Run Setup Again reopens onboarding with your saved goal and setup profile. Reset Active Defaults keeps your chats and account, but only restores the current route, model, and composer defaults.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

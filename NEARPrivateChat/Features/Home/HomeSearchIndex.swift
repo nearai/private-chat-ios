@@ -28,6 +28,7 @@ struct SetupLaunchCardState: Identifiable {
     let accountID: String
     let profile: UserSetupProfile
     let plan: AppSetupPlan
+    let restoreState: SetupRestoreState
 
     var id: String {
         "\(accountID)-\(plan.id)"

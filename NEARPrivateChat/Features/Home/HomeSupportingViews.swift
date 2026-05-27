@@ -117,6 +117,7 @@ struct SetupLaunchCard: View {
 
 struct SavedSetupHomeCard: View {
     let plan: AppSetupPlan
+    let restoreState: SetupRestoreState
     let onPrimaryAction: () -> Void
     let onChangeSetup: () -> Void
 
@@ -137,9 +138,9 @@ struct SavedSetupHomeCard: View {
                         .font(.headline.weight(.bold))
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("Your saved setup is ready to reopen with the same route, focus, and starter prompt.")
+                    Text(restoreState.summaryText)
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(restoreState.needsRestore ? Color.primaryAction : Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -208,6 +209,9 @@ struct SavedSetupHomeCard: View {
     }
 
     private var primaryActionTitle: String {
+        if restoreState.needsRestore {
+            return "Restore saved setup"
+        }
         switch plan.modelRoute {
         case .ironclaw:
             return "Start agent chat"
@@ -219,6 +223,9 @@ struct SavedSetupHomeCard: View {
     }
 
     private var primaryActionSymbolName: String {
+        if restoreState.needsRestore {
+            return "arrow.counterclockwise"
+        }
         switch plan.modelRoute {
         case .ironclaw:
             return "terminal"

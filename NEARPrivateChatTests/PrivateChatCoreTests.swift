@@ -1297,18 +1297,20 @@ final class PrivateChatCoreTests: XCTestCase {
     func testAppSetupPlanReflectsAgentProfile() {
         var profile = UserSetupProfile.defaults
         profile.useCase = .buildAgents
+        profile.useCases = [.buildAgents]
         profile.contextStyle = .project
         profile.wantsIronclaw = true
         profile.wantsCouncil = true
 
         let plan = AppSetupPlan(profile: profile)
 
-        XCTAssertEqual(plan.modelRoute, .privateModel)
+        XCTAssertEqual(plan.modelRoute, .ironclaw)
         XCTAssertEqual(plan.focusMode, .all)
         XCTAssertEqual(plan.starterProjectName, "Build Workspace")
-        XCTAssertFalse(plan.agentEnabled)
+        XCTAssertTrue(plan.agentEnabled)
         XCTAssertTrue(plan.councilEnabled)
         XCTAssertEqual(plan.expectedFirstAction, "Plan a build task")
+        XCTAssertEqual(plan.readinessStatus, "Ready: IronClaw agent")
     }
 
     func testUserSetupNormalizationPreservesExplicitDefaults() {
@@ -1392,6 +1394,28 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(plan.readinessStatus, "Council needs at least two available models; private chat is ready first.")
     }
 
+    func testAppSetupPlanFallsBackWhenIronclawMobileIsNotReady() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .buildAgents
+        profile.useCases = [.buildAgents]
+        profile.wantsIronclaw = true
+        let readiness = AppSetupReadinessSnapshot(
+            modelCatalogLoaded: true,
+            privateModelAvailable: true,
+            defaultCouncilModelCount: 3,
+            ironclawMobileAvailable: false,
+            hostedIronclawAvailable: false,
+            nearCloudKeyConfigured: false
+        )
+
+        let plan = AppSetupPlan(profile: profile, readiness: readiness)
+
+        XCTAssertEqual(plan.modelRoute, .privateModel)
+        XCTAssertTrue(plan.agentEnabled)
+        XCTAssertEqual(plan.expectedFirstAction, "Start private chat while agent tools load")
+        XCTAssertEqual(plan.readinessStatus, "IronClaw Mobile is still loading; private chat is ready first.")
+    }
+
     func testSetupGoalCreatesFirstRunDraftAndProjectInstructions() {
         var profile = UserSetupProfile.defaults
         profile.useCase = .research
@@ -1457,6 +1481,77 @@ final class PrivateChatCoreTests: XCTestCase {
 
         XCTAssertEqual(plan.launchCardMetadata, ["Private model", "Project", "Project Workspace"])
         XCTAssertEqual(plan.launchCardSubtitle, "Ready now: Private model · Project · Project Workspace")
+    }
+
+    func testSetupRestorePlannerFlagsRouteDrift() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .research
+        profile.useCases = [.research]
+        profile.wantsCouncil = true
+
+        let plan = AppSetupPlan(profile: profile, readiness: .optimistic)
+        let runtime = SetupRuntimeSnapshot(
+            modelRoute: .privateModel,
+            focusMode: plan.focusMode,
+            webSearchEnabled: profile.wantsWeb,
+            researchModeEnabled: true,
+            selectedProjectName: plan.starterProjectName
+        )
+
+        let restoreState = SetupRestorePlanner.evaluate(profile: profile, plan: plan, runtime: runtime)
+
+        XCTAssertTrue(restoreState.needsRestore)
+        XCTAssertEqual(restoreState.summaryText, "Current route changed. Restore saved setup to return to your saved route.")
+    }
+
+    func testSetupRestorePlannerFlagsContextDriftIncludingWebDefaults() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .research
+        profile.useCases = [.research]
+        profile.wantsWeb = true
+        profile.contextStyle = .project
+
+        let plan = AppSetupPlan(profile: profile, readiness: .optimistic)
+        let runtime = SetupRuntimeSnapshot(
+            modelRoute: plan.modelRoute,
+            focusMode: plan.focusMode,
+            webSearchEnabled: false,
+            researchModeEnabled: true,
+            selectedProjectName: plan.starterProjectName
+        )
+
+        let restoreState = SetupRestorePlanner.evaluate(profile: profile, plan: plan, runtime: runtime)
+
+        XCTAssertTrue(restoreState.needsRestore)
+        XCTAssertEqual(
+            restoreState.summaryText,
+            "Context defaults changed. Restore saved setup to recover your saved web, focus, and research defaults."
+        )
+    }
+
+    func testSetupRestorePlannerStaysAlignedWhenRuntimeMatchesSavedSetup() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .buildAgents
+        profile.useCases = [.buildAgents]
+        profile.contextStyle = .project
+        profile.wantsIronclaw = true
+
+        let plan = AppSetupPlan(profile: profile, readiness: .optimistic)
+        let runtime = SetupRuntimeSnapshot(
+            modelRoute: plan.modelRoute,
+            focusMode: plan.focusMode,
+            webSearchEnabled: profile.wantsWeb,
+            researchModeEnabled: false,
+            selectedProjectName: plan.starterProjectName
+        )
+
+        let restoreState = SetupRestorePlanner.evaluate(profile: profile, plan: plan, runtime: runtime)
+
+        XCTAssertFalse(restoreState.needsRestore)
+        XCTAssertEqual(
+            restoreState.summaryText,
+            "Your saved setup is ready to reopen with the same route, focus, and starter prompt."
+        )
     }
 
     func testSetupCTAIsDerivedFromSinglePlanState() {
@@ -1528,6 +1623,9 @@ final class PrivateChatCoreTests: XCTestCase {
 
             XCTAssertEqual(profile.goalText, preset.prompt)
             XCTAssertEqual(profile.useCases, [preset.useCase])
+            XCTAssertEqual(profile.wantsWeb, preset.wantsWeb)
+            XCTAssertEqual(profile.wantsIronclaw, preset.wantsIronclaw)
+            XCTAssertEqual(profile.wantsCouncil, preset.wantsCouncil)
             XCTAssertEqual(plan.expectedFirstAction, "Start from your goal")
             XCTAssertEqual(plan.goalText, preset.prompt)
             XCTAssertNotNil(plan.firstRunDraft)
