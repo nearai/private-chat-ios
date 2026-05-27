@@ -27,6 +27,7 @@ struct AccountSettingsView: View {
     @State private var showingSecurity = false
     @State private var isImportingChats = false
     @State private var powerToolsUnlocked = false
+    @AppStorage("account.powerToolsExpanded") private var powerToolsExpanded = false
     @FocusState private var focusedPowerToolField: PowerToolField?
 
     private enum PowerToolField: Hashable {
@@ -38,363 +39,12 @@ struct AccountSettingsView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    HStack(spacing: 12) {
-                        Circle()
-                            .fill(Color.brandBlue.opacity(0.13))
-                            .frame(width: 44, height: 44)
-                            .overlay {
-                                Text(String(sessionStore.displayName.prefix(1)).uppercased())
-                                    .font(.headline.weight(.bold))
-                                    .foregroundStyle(Color.brandBlue)
-                            }
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(sessionStore.displayName)
-                                .font(.headline)
-                                .lineLimit(1)
-                            if let email = sessionStore.profile?.user.email {
-                                Text(email)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-
-                Section("Defaults") {
-                    Button {
-                        dismiss()
-                        onRunSetupAgain()
-                    } label: {
-                        Label("Run Setup Again", systemImage: "slider.horizontal.3")
-                    }
-                    Button {
-                        chatStore.resetInteractionDefaults()
-                    } label: {
-                        Label("Reset Active Defaults", systemImage: "arrow.counterclockwise")
-                    }
-                    Text("Run Setup Again reopens onboarding with your saved goal and setup profile. Reset Active Defaults keeps your chats and account, but only restores the current route, model, and composer defaults.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label("Appearance", systemImage: "circle.lefthalf.filled")
-                            .font(.subheadline.weight(.semibold))
-
-                        Picker("Appearance", selection: $appearancePreference) {
-                            ForEach(AppAppearancePreference.allCases) { option in
-                                Text(option.rawValue).tag(option)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-
-                        Text(appearancePreference.detail)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.vertical, 4)
-
-                    Toggle("Notifications preference", isOn: $notificationPreferenceEnabled)
-                    Toggle("Web Search by Default", isOn: $webSearchEnabled)
-                    Toggle("Large Paste as File", isOn: $largeTextAsFileEnabled)
-
-                    Button {
-                        Task { await saveChatSettings() }
-                    } label: {
-                        Label(isSavingSettings ? "Saving Preferences" : "Save Preferences", systemImage: "checkmark.circle")
-                    }
-                    .disabled(isSavingSettings)
-                } header: {
-                    Text("Preferences")
-                } footer: {
-                    Text("Appearance and notification preference sync with your NEAR Private account. Native push delivery is not enabled in this iPhone build yet.")
-                }
-
-                if showsPowerTools {
-                    Section("Capabilities") {
-                        Button {
-                            showingCapabilities = true
-                        } label: {
-                            CapabilitiesEntryRow(
-                                statusLine: capabilitySummary,
-                                detail: "Capabilities, trust, and integrations"
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    Section("Developer Diagnostics") {
-                        if chatStore.diagnosticChecks.isEmpty {
-                            InfoRow(title: "Preflight", value: "Run before demos to verify models, web, IronClaw, and keys.")
-                        } else {
-                            ForEach(chatStore.diagnosticChecks) { check in
-                                DiagnosticCheckRow(check: check)
-                            }
-                        }
-
-                        Button {
-                            Task { await chatStore.runDiagnostics() }
-                        } label: {
-                            Label(chatStore.isRunningDiagnostics ? "Running Diagnostics" : "Run Full Diagnostics", systemImage: "stethoscope")
-                        }
-                        .disabled(chatStore.isRunningDiagnostics)
-                    }
-                }
-
-                if showsPowerTools {
-                    Section("Composer") {
-                        TextField("System prompt", text: $systemPrompt, axis: .vertical)
-                            .textFieldStyle(.plain)
-                            .lineLimit(3...8)
-                            .padding(10)
-                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
-                    }
-                }
-
-                Section("Privacy") {
-                    Button {
-                        showingChatImporter = true
-                    } label: {
-                        Label(isImportingChats ? "Importing Chats" : "Import Chats", systemImage: "square.and.arrow.down")
-                    }
-                    .disabled(isImportingChats)
-                }
-
-                Section("Sharing") {
-                    Button {
-                        showingShareGroups = true
-                    } label: {
-                        Label("Manage Share Groups", systemImage: "person.3")
-                    }
-                }
-
-                Section("Models & Billing") {
-                    InfoRow(title: "Status", value: chatStore.billingSnapshot?.summary ?? "Not loaded")
-                    if let active = chatStore.billingSnapshot?.activeSubscription {
-                        InfoRow(title: "Provider", value: active.provider)
-                        if let currentPeriodEnd = active.currentPeriodEnd {
-                            InfoRow(title: "Renews", value: formattedBillingDate(currentPeriodEnd))
-                        }
-                    }
-                    ForEach(Array((chatStore.billingSnapshot?.plans ?? []).prefix(3))) { plan in
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(plan.name)
-                                .font(.subheadline.weight(.semibold))
-                            Text(planDetail(plan))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    Button {
-                        Task { await chatStore.refreshBilling() }
-                    } label: {
-                        Label(chatStore.isLoadingBilling ? "Refreshing Billing" : "Refresh Billing", systemImage: "creditcard")
-                    }
-                    .disabled(chatStore.isLoadingBilling)
-                }
-
-                if showsPowerTools {
-                    Section("Developer") {
-                        DisclosureGroup {
-                            VStack(alignment: .leading, spacing: 12) {
-                                InfoRow(title: "Endpoint", value: AppConfiguration.production.baseURL.absoluteString, monospaced: true)
-                                InfoRow(title: "Callback", value: AppConfiguration.production.callbackURL.absoluteString, monospaced: true)
-                                InfoRow(title: "Auth", value: sessionStore.session?.sessionID.isEmpty == false ? "Browser session" : "Session token")
-
-                                Divider()
-
-                                AdvancedParamField(
-                                    title: "Temperature",
-                                    detail: "0-2",
-                                    placeholder: "Default",
-                                    text: $temperature,
-                                    keyboard: .decimalPad
-                                )
-                                .focused($focusedPowerToolField, equals: .temperature)
-                                AdvancedParamField(
-                                    title: "Top P",
-                                    detail: "0-1",
-                                    placeholder: "Default",
-                                    text: $topP,
-                                    keyboard: .decimalPad
-                                )
-                                AdvancedParamField(
-                                    title: "Max Tokens",
-                                    detail: "1-200000",
-                                    placeholder: "Default",
-                                    text: $maxTokens,
-                                    keyboard: .numberPad
-                                )
-                                InfoRow(title: "Active", value: advancedParams.summary)
-
-                                HStack {
-                                    Button {
-                                        Task { await saveChatSettings() }
-                                    } label: {
-                                        Label(isSavingSettings ? "Saving" : "Save", systemImage: "checkmark.circle")
-                                    }
-                                    .disabled(isSavingSettings)
-
-                                    Spacer()
-
-                                    Button {
-                                        temperature = ""
-                                        topP = ""
-                                        maxTokens = ""
-                                        reasoningEffort = .automatic
-                                    } label: {
-                                        Label("Reset", systemImage: "arrow.counterclockwise")
-                                    }
-                                }
-                            }
-                            .padding(.top, 10)
-                        } label: {
-                            Label("Connection & Advanced Params", systemImage: "hammer")
-                        }
-                    }
-
-                    Section("Models") {
-                        NearCloudConnectionCard(
-                            apiKey: $nearCloudAPIKey,
-                            isConnected: chatStore.nearCloudKeyConfigured,
-                            isConnecting: chatStore.isTestingNearCloudKey,
-                            isAutoConnecting: chatStore.isConnectingNearCloudAccount,
-                            modelCount: chatStore.cloudModels.count,
-                            onConnectAccount: connectNearCloudAccount,
-                            onOpenCloud: openNearCloudSignup,
-                            onPasteKey: pasteNearCloudKeyFromClipboard,
-                            onConnect: connectNearCloud,
-                            onRemove: {
-                                chatStore.clearNearCloudAPIKey()
-                                nearCloudAPIKey = ""
-                            }
-                        )
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("Reasoning effort", systemImage: "brain.head.profile")
-                                .font(.subheadline.weight(.semibold))
-                            Picker("Reasoning effort", selection: $reasoningEffort) {
-                                ForEach(ModelReasoningEffort.allCases) { effort in
-                                    Text(effort.title).tag(effort)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                            Text(reasoningEffort.detail)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text("Applied to NEAR Cloud chat requests as a reasoning budget when the provider supports it. Auto omits the field.")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Button {
-                                Task { await saveChatSettings() }
-                            } label: {
-                                Label(isSavingSettings ? "Saving" : "Save Cloud Defaults", systemImage: "checkmark.circle")
-                            }
-                            .disabled(isSavingSettings)
-                        }
-                        .padding(.vertical, 4)
-
-                        SecureField("Paste key here", text: $nearCloudAPIKey)
-                            .tokenInputTraits()
-                            .focused($focusedPowerToolField, equals: .nearCloudKey)
-                    }
-
-                    Section("Integrations") {
-                        InfoRow(title: "Status", value: chatStore.ironclawStatusText)
-                        Toggle("Enable Hosted Agent", isOn: $ironclawEnabled)
-
-                        IronclawBridgeReadinessCard(
-                            endpointConnected: chatStore.ironclawRemoteWorkstationAvailable,
-                            tokenConfigured: chatStore.ironclawTokenConfigured,
-                            lastVerifiedAt: chatStore.ironclawLastVerifiedAt,
-                            isChecking: chatStore.isTestingIronclawWorkstation,
-                            toolNames: chatStore.ironclawToolNames
-                        )
-
-                        TextField("https://your-ironclaw.example.com", text: $ironclawEndpoint)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
-                            .tokenInputTraits()
-                            .focused($focusedPowerToolField, equals: .ironclawEndpoint)
-
-                        SecureField(chatStore.ironclawTokenConfigured ? "Token saved" : "Bearer token", text: $ironclawToken)
-                            .tokenInputTraits()
-
-                        TextField("Optional thread id", text: $ironclawThreadID)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .tokenInputTraits()
-
-                        Text("Use a public HTTPS bridge from your computer, for example Cloudflare Tunnel, Tailscale Funnel, or ngrok. Direct LAN and localhost URLs are blocked on iPhone builds. Use Tools to verify shell/git before a serious run.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        HStack {
-                            Button {
-                                saveIronclawBridge()
-                            } label: {
-                                Label("Save Bridge", systemImage: "point.3.connected.trianglepath.dotted")
-                            }
-
-                            Spacer()
-
-                            Button {
-                                Task { await chatStore.testIronclawConnection() }
-                            } label: {
-                                Label(chatStore.isTestingIntegration ? "Testing" : "Test", systemImage: "checkmark.circle")
-                            }
-                            .disabled(chatStore.isTestingIntegration)
-
-                            Button {
-                                Task { await chatStore.testIronclawWorkstation() }
-                            } label: {
-                                Label(chatStore.isTestingIronclawWorkstation ? "Checking" : "Tools", systemImage: "terminal")
-                            }
-                            .disabled(chatStore.isTestingIronclawWorkstation)
-                        }
-
-                        if chatStore.ironclawSettings.hasEndpoint || chatStore.ironclawTokenConfigured {
-                            Button(role: .destructive) {
-                                chatStore.disconnectIronclaw()
-                                loadIronclawBridge()
-                            } label: {
-                                Label("Disconnect IronClaw", systemImage: "trash")
-                            }
-                        }
-                    }
-                } else {
-                    Section("Capabilities") {
-                        PowerToolsUnlockCard(
-                            onShowAll: { revealPowerTools() },
-                            onCloudKey: { revealPowerTools(focus: .nearCloudKey) },
-                            onIronclaw: { revealPowerTools(focus: .ironclawEndpoint) },
-                            onAdvanced: { revealPowerTools(focus: .temperature) },
-                            onDiagnostics: {
-                                revealPowerTools()
-                                Task { await chatStore.runDiagnostics() }
-                            }
-                        )
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    }
-                }
-
-                Section {
-                    Button(role: .destructive) {
-                        sessionStore.signOut()
-                        dismiss()
-                    } label: {
-                        Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
-                    }
-                }
+                accountSection
+                appearanceSection
+                privacySection
+                modelDefaultsSection
+                powerToolsSection
+                aboutSection
             }
             .navigationTitle("Account")
             .platformInlineNavigationTitle()
@@ -456,6 +106,291 @@ struct AccountSettingsView: View {
             }
         }
         .platformLargeDetent()
+    }
+
+    private var accountSection: some View {
+        Section("Account") {
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(Color.actionTint)
+                    .frame(width: 44, height: 44)
+                    .overlay {
+                        Text(String(sessionStore.displayName.prefix(1)).uppercased())
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(Color.actionPrimary)
+                    }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(sessionStore.displayName)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text(sessionStore.profile?.user.email ?? "Signed in")
+                        .font(.footnote)
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.vertical, 4)
+
+            InfoRow(title: "Sign-in method", value: sessionStore.session?.sessionID.isEmpty == false ? "Browser session" : "Session token")
+            InfoRow(title: "Plan", value: chatStore.billingSnapshot?.activeSubscription?.plan.capitalized ?? chatStore.currentBillingPlanName.capitalized)
+            if let currentPeriodEnd = chatStore.billingSnapshot?.activeSubscription?.currentPeriodEnd {
+                InfoRow(title: "Renews", value: formattedBillingDate(currentPeriodEnd))
+            }
+            Button(role: .destructive) {
+                sessionStore.signOut()
+                dismiss()
+            } label: {
+                Text("Sign Out")
+                    .foregroundStyle(Color.proofMismatch)
+            }
+        }
+    }
+
+    private var appearanceSection: some View {
+        Section("Appearance") {
+            VStack(alignment: .leading, spacing: 10) {
+                Picker("Theme", selection: $appearancePreference) {
+                    ForEach(AppAppearancePreference.allCases) { option in
+                        Text(option.rawValue).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(appearancePreference.detail)
+                    .font(.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.vertical, 4)
+
+            InfoRow(title: "Dynamic Type", value: "Uses iOS setting")
+            Toggle("Notifications preference", isOn: $notificationPreferenceEnabled)
+        }
+    }
+
+    private var privacySection: some View {
+        Section("Privacy") {
+            Button {
+                showingChatImporter = true
+            } label: {
+                Label(isImportingChats ? "Importing Chats" : "Import Chats", systemImage: "square.and.arrow.down")
+            }
+            .disabled(isImportingChats)
+
+            Button {
+                chatStore.bannerMessage = "Export data is handled from each chat's share menu."
+            } label: {
+                Label("Export Data", systemImage: "square.and.arrow.up")
+            }
+
+            Button(role: .destructive) {
+                chatStore.bannerMessage = "Bulk delete needs a confirmation flow before it can run."
+            } label: {
+                Text("Delete All Chats")
+                    .foregroundStyle(Color.proofMismatch)
+            }
+        }
+    }
+
+    private var modelDefaultsSection: some View {
+        Section("Model Defaults") {
+            InfoRow(title: "Default model", value: "GLM 5.1")
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Default reasoning effort")
+                    .font(.subheadline.weight(.semibold))
+                Picker("Default reasoning effort", selection: $reasoningEffort) {
+                    ForEach(ModelReasoningEffort.allCases) { effort in
+                        Text(effort.title).tag(effort)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Text(reasoningEffort.detail)
+                    .font(.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.vertical, 4)
+
+            Toggle("Default web search", isOn: $webSearchEnabled)
+
+            Button {
+                Task { await saveChatSettings() }
+            } label: {
+                Label(isSavingSettings ? "Saving Defaults" : "Save Defaults", systemImage: "checkmark.circle")
+            }
+            .disabled(isSavingSettings)
+        }
+    }
+
+    private var powerToolsSection: some View {
+        Section {
+            DisclosureGroup(isExpanded: $powerToolsExpanded) {
+                VStack(alignment: .leading, spacing: 14) {
+                    NearCloudConnectionCard(
+                        apiKey: $nearCloudAPIKey,
+                        isConnected: chatStore.nearCloudKeyConfigured,
+                        isConnecting: chatStore.isTestingNearCloudKey,
+                        isAutoConnecting: chatStore.isConnectingNearCloudAccount,
+                        modelCount: chatStore.cloudModels.count,
+                        onConnectAccount: connectNearCloudAccount,
+                        onOpenCloud: openNearCloudSignup,
+                        onPasteKey: pasteNearCloudKeyFromClipboard,
+                        onConnect: connectNearCloud,
+                        onRemove: {
+                            chatStore.clearNearCloudAPIKey()
+                            nearCloudAPIKey = ""
+                        }
+                    )
+
+                    SecureField("Fallback Cloud key", text: $nearCloudAPIKey)
+                        .tokenInputTraits()
+                        .focused($focusedPowerToolField, equals: .nearCloudKey)
+
+                    Divider()
+
+                    InfoRow(title: "IronClaw", value: chatStore.ironclawStatusText)
+                    Toggle("Enable Hosted Agent", isOn: $ironclawEnabled)
+                    IronclawBridgeReadinessCard(
+                        endpointConnected: chatStore.ironclawRemoteWorkstationAvailable,
+                        tokenConfigured: chatStore.ironclawTokenConfigured,
+                        lastVerifiedAt: chatStore.ironclawLastVerifiedAt,
+                        isChecking: chatStore.isTestingIronclawWorkstation,
+                        toolNames: chatStore.ironclawToolNames
+                    )
+                    TextField("Hosted HTTPS endpoint", text: $ironclawEndpoint)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .tokenInputTraits()
+                        .focused($focusedPowerToolField, equals: .ironclawEndpoint)
+                    SecureField(chatStore.ironclawTokenConfigured ? "Token saved" : "Bearer token", text: $ironclawToken)
+                        .tokenInputTraits()
+                    TextField("Optional thread id", text: $ironclawThreadID)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .tokenInputTraits()
+
+                    HStack {
+                        Button {
+                            saveIronclawBridge()
+                        } label: {
+                            Label("Save Bridge", systemImage: "point.3.connected.trianglepath.dotted")
+                        }
+
+                        Spacer()
+
+                        Button {
+                            Task { await chatStore.testIronclawConnection() }
+                        } label: {
+                            Label(chatStore.isTestingIntegration ? "Testing" : "Test", systemImage: "checkmark.circle")
+                        }
+                        .disabled(chatStore.isTestingIntegration)
+
+                        Button {
+                            Task { await chatStore.testIronclawWorkstation() }
+                        } label: {
+                            Label(chatStore.isTestingIronclawWorkstation ? "Checking" : "Tools", systemImage: "terminal")
+                        }
+                        .disabled(chatStore.isTestingIronclawWorkstation)
+                    }
+
+                    if chatStore.ironclawSettings.hasEndpoint || chatStore.ironclawTokenConfigured {
+                        Button(role: .destructive) {
+                            chatStore.disconnectIronclaw()
+                            loadIronclawBridge()
+                        } label: {
+                            Label("Disconnect IronClaw", systemImage: "trash")
+                        }
+                    }
+
+                    Divider()
+
+                    Button {
+                        showingCapabilities = true
+                    } label: {
+                        Label("Capabilities & integrations", systemImage: "square.grid.2x2")
+                    }
+
+                    if chatStore.diagnosticChecks.isEmpty {
+                        InfoRow(title: "Diagnostics", value: "Not run")
+                    } else {
+                        ForEach(chatStore.diagnosticChecks) { check in
+                            DiagnosticCheckRow(check: check)
+                        }
+                    }
+                    Button {
+                        Task { await chatStore.runDiagnostics() }
+                    } label: {
+                        Label(chatStore.isRunningDiagnostics ? "Running Diagnostics" : "Run Diagnostics", systemImage: "stethoscope")
+                    }
+                    .disabled(chatStore.isRunningDiagnostics)
+
+                    DisclosureGroup {
+                        VStack(alignment: .leading, spacing: 12) {
+                            InfoRow(title: "Endpoint", value: AppConfiguration.production.baseURL.absoluteString, monospaced: true)
+                            InfoRow(title: "Callback", value: AppConfiguration.production.callbackURL.absoluteString, monospaced: true)
+                            InfoRow(title: "Auth", value: sessionStore.session?.sessionID.isEmpty == false ? "Browser session" : "Session token")
+                            AdvancedParamField(title: "Temperature", detail: "0-2", placeholder: "Default", text: $temperature, keyboard: .decimalPad)
+                                .focused($focusedPowerToolField, equals: .temperature)
+                            AdvancedParamField(title: "Top P", detail: "0-1", placeholder: "Default", text: $topP, keyboard: .decimalPad)
+                            AdvancedParamField(title: "Max Tokens", detail: "1-200000", placeholder: "Default", text: $maxTokens, keyboard: .numberPad)
+                            InfoRow(title: "Active", value: advancedParams.summary)
+                            TextField("System prompt", text: $systemPrompt, axis: .vertical)
+                                .textFieldStyle(.plain)
+                                .lineLimit(3...8)
+                                .padding(10)
+                                .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10))
+                            Toggle("Large Paste as File", isOn: $largeTextAsFileEnabled)
+                            Button {
+                                Task { await saveChatSettings() }
+                            } label: {
+                                Label(isSavingSettings ? "Saving" : "Save Advanced Settings", systemImage: "checkmark.circle")
+                            }
+                            .disabled(isSavingSettings)
+                        }
+                        .padding(.top, 10)
+                    } label: {
+                        Label("Endpoints & developer settings", systemImage: "hammer")
+                    }
+                }
+                .padding(.vertical, 10)
+            } label: {
+                Label("Advanced controls", systemImage: "wrench.and.screwdriver")
+                    .font(.subheadline.weight(.semibold))
+            }
+        } header: {
+            Text("Power Tools")
+        } footer: {
+            Text("Private chat works without these. Open Power Tools only when a route or integration asks for it.")
+        }
+    }
+
+    private var aboutSection: some View {
+        Section("About") {
+            InfoRow(title: "Version", value: appVersion, monospaced: true)
+            Button {
+                openLegalURL(LegalTerms.nearAIServicesTermsURL)
+            } label: {
+                Label("Terms", systemImage: "doc.text")
+            }
+            Button {
+                openLegalURL(LegalTerms.nearAIPrivacyPolicyURL)
+            } label: {
+                Label("Privacy Policy", systemImage: "hand.raised")
+            }
+            Button {
+                chatStore.bannerMessage = "Acknowledgments will be added before TestFlight."
+            } label: {
+                Label("Acknowledgments", systemImage: "text.book.closed")
+            }
+            Text("https://private.near.ai")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(Color.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .listRowBackground(Color.clear)
+        }
     }
 
     private func saveChatSettings() async {
@@ -520,6 +455,16 @@ struct AccountSettingsView: View {
     private func openNearCloudSignup() {
         guard let url = URL(string: "https://cloud.near.ai") else { return }
         openURL(url)
+    }
+
+    private func openLegalURL(_ url: URL) {
+        openURL(url)
+    }
+
+    private var appVersion: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
+        return "\(version) (\(build))"
     }
 
     private func pasteNearCloudKeyFromClipboard() {
