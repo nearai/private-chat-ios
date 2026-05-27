@@ -20,9 +20,10 @@ private struct ChatTranscriptView: View {
     private static let dragAutoScrollPauseNanoseconds: UInt64 = 1_500_000_000
 
     var body: some View {
-        let messages = transcriptStore.messages
-        let isStreaming = transcriptStore.isStreaming
-        let displayItems = MessageTimelineStore.displayItems(from: messages)
+        let transcript = transcriptStore.state
+        let messages = transcript.messages
+        let isStreaming = transcript.isStreaming
+        let displayItems = transcript.displayItems
         let scrollSignature = ChatAutoScrollSignature(
             displayItems: displayItems,
             messages: messages,
