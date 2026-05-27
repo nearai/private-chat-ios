@@ -93,12 +93,6 @@ struct InputBar: View {
                     onSwitchPrivate: { chatStore.performRouteReadinessRecovery(.switchToPrivate) },
                     onViewCapabilities: { showingCapabilities = true }
                 )
-            } else if let notice = chatStore.selectedRouteNotice {
-                Label(notice, systemImage: chatStore.selectedRouteUsesNearCloud ? "cloud" : "point.3.connected.trianglepath.dotted")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .padding(.horizontal, 2)
             }
 
             if !visibleSlashCommands.isEmpty {
@@ -107,42 +101,45 @@ struct InputBar: View {
 
             composerRoutingControls
 
-            VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .bottom, spacing: 8) {
+                Button {
+                    AppHaptics.selection()
+                    showingFileImporter = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .disabled(transcriptStore.isStreaming)
+                .accessibilityLabel("Attach File")
+
                 TextField(composerPlaceholder, text: draftBinding, axis: .vertical)
                     .textFieldStyle(.plain)
                     .tokenInputTraits()
                     .autocorrectionDisabled()
                     .lineLimit(1...6)
                     .focused($isFocused)
+                    .font(.body)
                     .onSubmit {
                         chatStore.sendDraft()
                         isFocused = false
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.top, 10)
-                    .padding(.bottom, 2)
-                    .frame(maxWidth: .infinity, minHeight: 34, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .center)
                     .disabled(transcriptStore.isStreaming)
                     .accessibilityLabel("Message")
                     .accessibilityHint(transcriptStore.isStreaming ? "Stop the current response before editing the draft." : "Enter a message or slash command.")
 
-                HStack(spacing: 8) {
-                    Button {
-                        AppHaptics.selection()
-                        showingFileImporter = true
-                    } label: {
-                        Image(systemName: "paperclip")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 34, height: 34)
-                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(transcriptStore.isStreaming)
-                    .accessibilityLabel("Attach File")
+                if !canSend && !transcriptStore.isStreaming {
+                    Image(systemName: "mic.fill")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(width: 44, height: 44)
+                        .accessibilityLabel("Voice input")
+                }
 
-                    Spacer(minLength: 0)
-
+                if canSend || transcriptStore.isStreaming {
                     Button {
                         if transcriptStore.isStreaming {
                             AppHaptics.mediumImpact()
@@ -153,11 +150,11 @@ struct InputBar: View {
                             isFocused = false
                         }
                     } label: {
-                        Image(systemName: transcriptStore.isStreaming ? "stop.fill" : "arrow.up")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(sendIconColor)
-                            .frame(width: 32, height: 32)
-                            .background(sendButtonColor, in: Circle())
+                        Image(systemName: transcriptStore.isStreaming ? "stop.fill" : "arrow.up.circle.fill")
+                            .font(.system(size: 36, weight: .semibold))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(transcriptStore.isStreaming ? Color.proofMismatch : Color.actionPrimary)
+                            .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
                     .disabled(sendDisabled)
@@ -168,15 +165,16 @@ struct InputBar: View {
                     .accessibilityLabel(transcriptStore.isStreaming ? "Stop response" : "Send message")
                     .accessibilityHint(transcriptStore.isStreaming ? "Stops the current response." : "Sends the draft and staged attachments.")
                 }
-                .padding(.horizontal, 6)
-                .padding(.bottom, 6)
             }
-            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .glassBackground(in: Capsule())
             .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(isFocused ? Color.brandBlue.opacity(0.45) : Color.appBorder, lineWidth: 1)
+                Capsule()
+                    .stroke(isFocused ? Color.actionPrimary.opacity(0.38) : Color.appBorder, lineWidth: 0.5)
             }
         }
+        .safeAreaPadding(.bottom, 8)
         .fileImporter(
             isPresented: $showingFileImporter,
             allowedContentTypes: [.pdf, .plainText, .text, .commaSeparatedText, .json, .data],
@@ -258,9 +256,9 @@ struct InputBar: View {
 
     private var sendButtonColor: Color {
         if transcriptStore.isStreaming {
-            return .red.opacity(0.90)
+            return .proofMismatch
         }
-        return sendDisabled ? Color.appSecondaryBackground : Color.brandBlue
+        return sendDisabled ? Color.appSecondaryBackground : Color.actionPrimary
     }
 
     private var sendIconColor: Color {
@@ -280,24 +278,7 @@ struct InputBar: View {
     }
 
     private var composerPlaceholder: String {
-        if chatStore.selectedRouteUsesNearCloud || chatStore.selectedProviderDisplayName == "IronClaw" {
-            return chatStore.inputPlaceholder
-        }
-        if researchButtonActive {
-            return "Ask for a researched answer with citations"
-        }
-        switch chatStore.sourceMode {
-        case .auto:
-            return "Ask anything"
-        case .web:
-            return "Ask with live web"
-        case .files:
-            return "Ask your project files"
-        case .links:
-            return "Ask your saved links"
-        case .all:
-            return "Ask across sources"
-        }
+        "Ask privately."
     }
 
     private var researchButtonActive: Bool {
@@ -326,7 +307,7 @@ struct InputBar: View {
                 } label: {
                     ComposerRouteChip(
                         title: chatStore.isCouncilModeEnabled ? "Council \(chatStore.activeCouncilModels.count)" : "Council",
-                        symbolName: "square.grid.2x2",
+                        symbolName: "person.3",
                         isActive: chatStore.isCouncilModeEnabled,
                         showsChevron: true
                     )
@@ -335,34 +316,41 @@ struct InputBar: View {
                 .accessibilityLabel(chatStore.isCouncilModeEnabled ? "LLM Council active" : "Configure LLM Council")
                 .accessibilityHint("Opens the Council lineup for the next message.")
 
-                Menu {
-                    ForEach(ModelReasoningEffort.allCases) { effort in
-                        Button {
-                            chatStore.setReasoningEffort(effort)
-                        } label: {
-                            Label(effort.title, systemImage: effort == chatStore.advancedModelParams.reasoningEffort ? "checkmark" : "circle")
+                if selectedModelSupportsReasoningEffort {
+                    Menu {
+                        ForEach(ModelReasoningEffort.allCases) { effort in
+                            Button {
+                                chatStore.setReasoningEffort(effort)
+                            } label: {
+                                Label(effort.title, systemImage: effort == chatStore.advancedModelParams.reasoningEffort ? "checkmark" : "circle")
+                            }
                         }
-                    }
-                    Divider()
-                    Button {
-                        openModelPicker(openingCouncil: false)
+                        Divider()
+                        Button {
+                            openModelPicker(openingCouncil: false)
+                        } label: {
+                            Label("Open model settings", systemImage: "slider.horizontal.3")
+                        }
                     } label: {
-                        Label("Open model settings", systemImage: "slider.horizontal.3")
+                        ComposerRouteChip(
+                            title: "Effort \(chatStore.advancedModelParams.reasoningEffort.title)",
+                            symbolName: "gauge.medium",
+                            isActive: chatStore.advancedModelParams.reasoningEffort != .automatic,
+                            showsChevron: true
+                        )
                     }
-                } label: {
-                    ComposerRouteChip(
-                        title: "Effort \(chatStore.advancedModelParams.reasoningEffort.title)",
-                        symbolName: "brain.head.profile",
-                        isActive: chatStore.advancedModelParams.reasoningEffort != .automatic,
-                        showsChevron: true
-                    )
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Reasoning effort \(chatStore.advancedModelParams.reasoningEffort.title)")
+                    .accessibilityHint("Changes reasoning effort from the chat window.")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Reasoning effort \(chatStore.advancedModelParams.reasoningEffort.title)")
-                .accessibilityHint("Changes reasoning effort from the chat window.")
             }
             .padding(.horizontal, 1)
         }
+    }
+
+    private var selectedModelSupportsReasoningEffort: Bool {
+        guard let model = chatStore.selectedModelOption else { return false }
+        return model.isRecommendedReasoningModel || model.isNearCloudModel
     }
 
     private var composerModelSymbolName: String {
@@ -645,18 +633,18 @@ struct ComposerRouteChip: View {
     }
 
     private var activeForeground: Color {
-        symbolName == "brain.head.profile" ? Color.brandBlack : Color.brandBlue
+        symbolName == "gauge.medium" ? Color.brandBlack : Color.actionPrimary
     }
 
     private var background: Color {
         if isActive {
-            return symbolName == "brain.head.profile" ? Color.brandSky.opacity(0.55) : Color.brandBlue.opacity(0.08)
+            return symbolName == "gauge.medium" ? Color.brandSky.opacity(0.55) : Color.actionTint
         }
         return Color.appPanelBackground
     }
 
     private var border: Color {
-        isActive ? Color.brandBlue.opacity(0.16) : Color.appBorder
+        isActive ? Color.actionPrimary.opacity(0.16) : Color.appBorder
     }
 }
 
