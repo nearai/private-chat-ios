@@ -8,12 +8,11 @@ struct AuthView: View {
     @State private var showingMoreSignInOptions = false
     @State private var showingLegalTerms = false
     @State private var hasAcceptedLegalTerms = LegalTermsAcceptanceStore.hasPendingCurrentVersion()
-    @State private var hasReviewedLegalTerms = LegalTermsAcceptanceStore.hasPendingCurrentVersion()
     @State private var token = ""
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 22) {
+            VStack(spacing: 18) {
                 AuthHeroCard()
 
                 LegalTermsAcceptanceCard(
@@ -21,8 +20,6 @@ struct AuthView: View {
                         get: { hasAcceptedLegalTerms },
                         set: updateLegalTermsAcceptance
                     ),
-                    hasReviewedTerms: hasReviewedLegalTerms,
-                    onAttemptAccept: promptForTerms,
                     showingTerms: $showingLegalTerms
                 )
                 .frame(maxWidth: 360)
@@ -50,7 +47,7 @@ struct AuthView: View {
                         Button {
                             showingTokenLogin = true
                         } label: {
-                            AuthUtilityButtonLabel(title: "Developer session token", systemImage: "key")
+                            DebugSessionTokenLabel()
                         }
                         .buttonStyle(.plain)
                         .disabled(!hasAcceptedLegalTerms)
@@ -59,7 +56,7 @@ struct AuthView: View {
                         Label("More sign-in options", systemImage: "ellipsis.circle")
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .center)
                     }
                     .tint(.secondary)
                     .padding(.top, 2)
@@ -72,7 +69,9 @@ struct AuthView: View {
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity)
-            .padding(28)
+            .padding(.horizontal, 28)
+            .padding(.top, 102)
+            .padding(.bottom, 28)
         }
         .scrollDismissesKeyboard(.interactively)
         .background { HomeSurfaceBackground().ignoresSafeArea() }
@@ -109,9 +108,7 @@ struct AuthView: View {
             .platformMediumDetent()
         }
         #endif
-        .sheet(isPresented: $showingLegalTerms, onDismiss: {
-            hasReviewedLegalTerms = true
-        }) {
+        .sheet(isPresented: $showingLegalTerms) {
             LegalTermsSheet()
         }
         .sheet(isPresented: $showingSharedLink) {
@@ -141,55 +138,20 @@ struct AuthView: View {
 
 struct AuthHeroCard: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 14) {
-                PrivacySeal(size: 56)
-                    .accessibilityHidden(true)
+        VStack(spacing: 28) {
+            PrivacySeal(size: 48)
+                .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("NEAR Private Chat")
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.82)
-                    Text("Private AI chat with cryptographic proof, shared links, projects, and agent power when you need it.")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.64))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            HStack(spacing: 8) {
-                AuthHeroMetric(title: "Proof", symbolName: "checkmark.shield")
-                AuthHeroMetric(title: "Private", symbolName: "lock.shield")
-                AuthHeroMetric(title: "Shareable", symbolName: "link")
-            }
+            Text("Private AI with verifiable answers.")
+                .font(.system(size: 26, weight: .semibold))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 280)
         }
-        .padding(18)
-        .frame(maxWidth: 390, alignment: .leading)
-        .background { CommandCardBackground(cornerRadius: 8) }
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(.white.opacity(0.11), lineWidth: 1)
-        }
-        .shadow(color: Color.brandBlue.opacity(0.14), radius: 18, y: 8)
-    }
-}
-
-private struct AuthHeroMetric: View {
-    let title: String
-    let symbolName: String
-
-    var body: some View {
-        Label(title, systemImage: symbolName)
-            .font(.caption.weight(.semibold))
-            .labelStyle(.titleAndIcon)
-            .foregroundStyle(Color.brandSky)
-            .lineLimit(1)
-            .minimumScaleFactor(0.86)
-            .frame(maxWidth: .infinity)
-            .frame(height: 34)
-            .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .frame(maxWidth: 360)
+        .padding(.bottom, 112)
     }
 }
 
@@ -200,17 +162,47 @@ private struct AuthUtilityButtonLabel: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: systemImage)
-                .font(.headline)
-                .frame(width: 22)
+                .font(.footnote.weight(.semibold))
             Text(title)
-                .fontWeight(.medium)
-            Spacer()
+                .font(.subheadline.weight(.medium))
         }
-        .foregroundStyle(Color.brandBlue)
-        .padding(.horizontal, 16)
-        .frame(height: 54)
+        .foregroundStyle(Color.textSecondary)
         .frame(maxWidth: .infinity)
-        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
+        .frame(height: 40)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct DebugSessionTokenLabel: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "key")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.actionPrimary)
+                .frame(width: 28, height: 28)
+                .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Developer session token")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                Text("DEBUG · paste a session JWT")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(Color.textSecondary)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.textTertiary)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 58)
+        .frame(maxWidth: .infinity)
+        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                .foregroundStyle(Color.appBorder)
+        }
     }
 }
 
@@ -234,22 +226,21 @@ private struct ProviderButton: View {
                     .font(.headline)
                     .frame(width: 22)
                 Text(provider.title)
-                    .fontWeight(.medium)
-                Spacer()
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity)
                 if isLoading {
                     ProgressView()
+                        .tint(isEnabled ? .white : Color.textTertiary)
                 } else {
-                    Image(systemName: "arrow.up.forward")
-                        .font(.footnote.weight(.bold))
-                        .foregroundStyle(provider == .near ? .white.opacity(0.72) : Color.brandBlue.opacity(0.72))
+                    Color.clear
+                        .frame(width: 22, height: 22)
                 }
             }
-            .foregroundStyle(provider == .near ? .white : Color.brandBlue)
-            .padding(.horizontal, 16)
-            .frame(height: 54)
+            .foregroundStyle(isEnabled ? .white : Color.textTertiary)
+            .padding(.horizontal, 18)
+            .frame(height: 52)
             .frame(maxWidth: .infinity)
-            .background(provider == .near ? Color.brandBlue : Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
-            .opacity(isEnabled ? 1 : 0.48)
+            .background(isEnabled ? Color.actionPrimary : Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(isLoading)
@@ -258,78 +249,48 @@ private struct ProviderButton: View {
 
 private struct LegalTermsAcceptanceCard: View {
     @Binding var isAccepted: Bool
-    let hasReviewedTerms: Bool
-    let onAttemptAccept: () -> Void
     @Binding var showingTerms: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                Button {
-                    if hasReviewedTerms {
-                        isAccepted.toggle()
-                    } else {
-                        onAttemptAccept()
-                    }
-                } label: {
-                    Image(systemName: isAccepted ? "checkmark.square.fill" : "square")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(isAccepted ? Color.brandBlue : .secondary)
-                        .frame(width: 30, height: 30)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isAccepted ? "Terms accepted" : "Accept terms")
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Before you continue")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.primary)
-                    Text(LegalTerms.acceptancePrompt)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+        HStack(alignment: .center, spacing: 10) {
+            Button {
+                isAccepted.toggle()
+            } label: {
+                Image(systemName: isAccepted ? "checkmark.square.fill" : "square")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(isAccepted ? Color.actionPrimary : Color.textTertiary)
+                    .frame(width: 24, height: 24)
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isAccepted ? "Terms accepted" : "Accept terms")
 
-            Text(LegalTerms.acceptanceCheckboxText)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(hasReviewedTerms ? .primary : .secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text("I agree to the Terms and Privacy")
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: 10) {
-                Button {
-                    showingTerms = true
-                } label: {
-                    Label(hasReviewedTerms ? "Review again" : "Review terms", systemImage: "doc.text.magnifyingglass")
-                        .font(.caption.weight(.bold))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 34)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.brandBlue)
-                .background(Color.brandBlue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                Text("v\(LegalTerms.version)")
-                    .font(.caption2.monospaced().weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-                    .frame(height: 34)
-                    .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Button {
+                showingTerms = true
+            } label: {
+                Text("Read terms")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.actionPrimary)
+                    .lineLimit(1)
             }
-
-            Text(hasReviewedTerms ? "Terms reviewed. Sign-in stays locked until you confirm acceptance." : "Open the current terms once before you confirm acceptance.")
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            .buttonStyle(.plain)
         }
-        .padding(14)
-        .background(.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(.horizontal, 14)
+        .frame(height: 44)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(isAccepted ? Color.brandBlue.opacity(0.28) : Color.gray.opacity(0.12), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(isAccepted ? Color.actionPrimary.opacity(0.22) : Color.appBorder, lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.04), radius: 12, y: 5)
+        .shadow(color: .black.opacity(0.03), radius: 10, y: 4)
     }
+
 }
 
 struct LegalTermsSheet: View {
