@@ -214,7 +214,11 @@ private struct CouncilResponseGroup: View {
             }
 
             if let selectedMessage {
-                CouncilSelectedMessageView(message: selectedMessage, chatStore: chatStore)
+                CouncilSelectedMessageView(
+                    message: selectedMessage,
+                    chatStore: chatStore,
+                    preferLightweightPreview: hasRunningModels
+                )
             }
         }
         .padding(12)
@@ -290,6 +294,7 @@ private struct CouncilResponseGroup: View {
 private struct CouncilSelectedMessageView: View {
     let message: ChatMessage
     let chatStore: ChatStore
+    let preferLightweightPreview: Bool
 
     var body: some View {
         if message.isStreaming {
@@ -297,9 +302,89 @@ private struct CouncilSelectedMessageView: View {
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.appBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else if preferLightweightPreview {
+            CouncilAnswerPreview(message: message)
         } else {
             MessageBubble(message: message, chatStore: chatStore)
         }
+    }
+}
+
+private struct CouncilAnswerPreview: View {
+    let message: ChatMessage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: statusSymbolName)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(statusTint)
+                Text(message.modelDisplayName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Text(statusText)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(statusTint)
+            }
+
+            if previewText.isEmpty {
+                Text("Waiting for an answer.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(previewText)
+                    .font(.callout)
+                    .lineSpacing(2)
+                    .lineLimit(12)
+                    .foregroundStyle(.primary)
+                    .textSelection(.enabled)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.appBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var previewText: String {
+        let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        let cappedText: String
+        let isCapped: Bool
+        if trimmed.utf8.count > 4_000 {
+            cappedText = String(trimmed.suffix(4_000))
+            isCapped = true
+        } else {
+            cappedText = trimmed
+            isCapped = false
+        }
+        let lines = cappedText
+            .components(separatedBy: .newlines)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let preview = lines.isEmpty ? cappedText : lines.suffix(12).joined(separator: "\n")
+        return isCapped ? "...\n\(preview)" : preview
+    }
+
+    private var statusText: String {
+        if message.status == "failed" {
+            return "Failed"
+        }
+        return message.hasUsableCouncilAnswer ? "Ready" : "Pending"
+    }
+
+    private var statusSymbolName: String {
+        if message.status == "failed" {
+            return "exclamationmark.triangle.fill"
+        }
+        return message.hasUsableCouncilAnswer ? "checkmark.circle.fill" : "circle"
+    }
+
+    private var statusTint: Color {
+        if message.status == "failed" {
+            return .red
+        }
+        return message.hasUsableCouncilAnswer ? Color.verifiedGreen : .secondary
     }
 }
 

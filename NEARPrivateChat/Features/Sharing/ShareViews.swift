@@ -10,6 +10,19 @@ private enum SharePublicLinkExpiry: String, CaseIterable, Identifiable {
     var isAvailable: Bool {
         self == .manual
     }
+
+    static var availableCases: [SharePublicLinkExpiry] {
+        allCases.filter(\.isAvailable)
+    }
+
+    var availabilityDetail: String {
+        switch self {
+        case .manual:
+            return "Public links stay active until you disable them."
+        case .sevenDays, .thirtyDays:
+            return "Timed expiry is coming soon."
+        }
+    }
 }
 
 struct ShareConversationView: View {
@@ -210,13 +223,12 @@ struct ShareConversationView: View {
             }
 
             Menu {
-                ForEach(SharePublicLinkExpiry.allCases) { expiry in
+                ForEach(SharePublicLinkExpiry.availableCases) { expiry in
                     Button {
                         publicLinkExpiry = expiry
                     } label: {
                         Label(expiry.rawValue, systemImage: publicLinkExpiry == expiry ? "checkmark" : "clock")
                     }
-                    .disabled(!expiry.isAvailable)
                 }
             } label: {
                 Label("Expiry: \(publicLinkExpiry.rawValue)", systemImage: "clock")
@@ -225,6 +237,11 @@ struct ShareConversationView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .disabled(publicShareEnabled)
+
+            Text("Timed expiry is coming soon. Right now public links stay on until you disable them.")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             if publicShareEnabled, let publicURL {
                 Text(publicURL.absoluteString)
@@ -809,7 +826,7 @@ private struct PublicLinkPreviewView: View {
                                 Text(conversation.title)
                                     .font(.headline)
                                     .lineLimit(2)
-                                Text("Anyone with the URL can read this conversation.")
+                                Text("Anyone with the URL can read this conversation until you disable the link.")
                                     .font(.footnote.weight(.medium))
                                     .foregroundStyle(Color.textSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -827,6 +844,13 @@ private struct PublicLinkPreviewView: View {
                     SharePreviewRow(title: "Sources", value: sourceCount == 0 ? "None attached" : "\(sourceCount)", symbolName: "link")
                     SharePreviewRow(title: "Expiry", value: expiry.rawValue, symbolName: "clock")
                     SharePreviewRow(title: "Account metadata", value: "Owner identity is not added to the link preview.", symbolName: "person.crop.circle.badge.xmark")
+                }
+
+                Section {
+                    Text(expiry.availabilityDetail)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Section {

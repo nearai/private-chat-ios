@@ -4,61 +4,6 @@ import PDFKit
 #endif
 
 @MainActor
-final class ChatTranscriptStore: ObservableObject {
-    @Published fileprivate(set) var state = ChatTranscriptState()
-
-    fileprivate(set) var messages: [ChatMessage] {
-        get { state.messages }
-        set {
-            guard state.messages != newValue else { return }
-            state = state.updating(messages: newValue)
-        }
-    }
-
-    fileprivate(set) var isStreaming: Bool {
-        get { state.isStreaming }
-        set {
-            guard state.isStreaming != newValue else { return }
-            state = state.updating(isStreaming: newValue)
-        }
-    }
-}
-
-struct ChatTranscriptState {
-    let messages: [ChatMessage]
-    let displayItems: [ChatDisplayItem]
-    let isStreaming: Bool
-
-    init(messages: [ChatMessage] = [], isStreaming: Bool = false) {
-        self.messages = messages
-        self.displayItems = MessageTimelineStore.displayItems(from: messages)
-        self.isStreaming = isStreaming
-    }
-
-    private init(messages: [ChatMessage], displayItems: [ChatDisplayItem], isStreaming: Bool) {
-        self.messages = messages
-        self.displayItems = displayItems
-        self.isStreaming = isStreaming
-    }
-
-    func updating(messages: [ChatMessage]) -> ChatTranscriptState {
-        ChatTranscriptState(messages: messages, isStreaming: isStreaming)
-    }
-
-    func updating(isStreaming: Bool) -> ChatTranscriptState {
-        ChatTranscriptState(messages: messages, displayItems: displayItems, isStreaming: isStreaming)
-    }
-}
-
-@MainActor
-final class ChatComposerStore: ObservableObject {
-    @Published fileprivate(set) var draft = ""
-    @Published fileprivate(set) var pendingAttachments: [ChatAttachment] = []
-    @Published fileprivate(set) var isUploadingAttachment = false
-    @Published fileprivate(set) var routeReadinessIssue: ChatRouteReadinessIssue?
-}
-
-@MainActor
 final class ChatStore: ObservableObject {
     @Published private(set) var conversations: [ConversationSummary] = []
     @Published private(set) var models: [ModelOption] = []
@@ -4820,12 +4765,17 @@ final class ChatStore: ObservableObject {
             }
         case let .textDelta(delta):
             if !delta.isEmpty {
-                updateMessage(assistantMessageID) { message in
-                    if message.text.isEmpty && message.status == "searching" {
-                        message.status = "streaming"
-                    }
-                    if message.firstTokenAt == nil {
-                        message.firstTokenAt = Date()
+                let messageNeedsFirstTokenUpdate = messages.first(where: { $0.id == assistantMessageID }).map { message in
+                    message.firstTokenAt == nil || (message.text.isEmpty && message.status == "searching")
+                } ?? false
+                if messageNeedsFirstTokenUpdate {
+                    updateMessage(assistantMessageID) { message in
+                        if message.text.isEmpty && message.status == "searching" {
+                            message.status = "streaming"
+                        }
+                        if message.firstTokenAt == nil {
+                            message.firstTokenAt = Date()
+                        }
                     }
                 }
             }
