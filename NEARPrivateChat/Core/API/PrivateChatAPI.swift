@@ -52,29 +52,64 @@ final class PrivateChatAPI {
         return url
     }
 
-    func parseAuthCallback(_ url: URL, expectedState: String? = nil) throws -> AuthSession {
+    func parseAuthCallback(
+        _ url: URL,
+        expectedState: String? = nil
+    ) throws -> AuthCodeCallback {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             throw APIError.invalidCallback
         }
-        let values = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        let values = Self.callbackValues(from: components)
         guard let expectedState, !expectedState.isEmpty else {
             throw APIError.status(401, "Sign-in callbacks must originate from an active app sign-in request.")
         }
-        guard values["state"] == expectedState else {
+        let callbackStates = values["state", default: []].filter { !$0.isEmpty }
+        let hasExpectedState = callbackStates.contains(expectedState)
+        guard hasExpectedState else {
             throw APIError.status(401, "Sign-in callback failed state validation.")
         }
-        if values["code"]?.isEmpty == false, values["token"]?.isEmpty != false {
-            throw APIError.status(501, "Authorization-code sign-in requires backend PKCE exchange support.")
+        guard Self.authToken(from: values) == nil else {
+            throw APIError.status(426, "This app no longer accepts bearer tokens through sign-in links. Update the auth service to return an authorization code.")
         }
-        guard let token = values["token"], !token.isEmpty else {
+        guard let code = Self.firstNonEmptyValue(named: "code", in: values) else {
             throw APIError.invalidCallback
         }
-        return AuthSession(
-            token: token,
-            sessionID: values["session_id"] ?? "",
-            expiresAt: values["expires_at"],
-            isNewUser: values["is_new_user"] == "true"
+        return AuthCodeCallback(
+            code: code,
+            state: expectedState,
+            providerState: callbackStates.first { $0 != expectedState }
         )
+    }
+
+    func exchangeAuthCode(
+        provider: OAuthProvider,
+        callback: AuthCodeCallback,
+        codeVerifier: String
+    ) async throws -> AuthSession {
+        let payload = AuthCodeExchangePayload(
+            provider: provider.rawValue,
+            code: callback.code,
+            codeVerifier: codeVerifier,
+            redirectURI: Self.callbackURL(configuration.callbackURL, state: callback.state).absoluteString,
+            state: callback.state
+        )
+        do {
+            let response: AuthCodeExchangeResponse = try await request(
+                "/v1/auth/\(provider.rawValue)/exchange",
+                method: "POST",
+                body: payload,
+                authenticated: false
+            )
+            return response.session
+        } catch APIError.status(let code, _) where code == 404 || code == 405 {
+            let response: AuthCodeExchangeResponse = try await request(
+                "/v1/auth/exchange",
+                method: "POST",
+                body: payload,
+                authenticated: false
+            )
+            return response.session
+        }
     }
 
     private static func callbackURL(_ url: URL, state: String?) -> URL {
@@ -87,6 +122,58 @@ final class PrivateChatAPI {
         queryItems.append(URLQueryItem(name: "state", value: state))
         components.queryItems = queryItems
         return components.url ?? url
+    }
+
+    private static func callbackValues(from components: URLComponents) -> [String: [String]] {
+        var values: [String: [String]] = [:]
+        append(components.queryItems, to: &values)
+        if let fragment = components.fragment,
+           let fragmentComponents = URLComponents(string: "nearprivatechat://auth?\(fragment)") {
+            append(fragmentComponents.queryItems, to: &values)
+        }
+        return values
+    }
+
+    private static func append(_ queryItems: [URLQueryItem]?, to values: inout [String: [String]]) {
+        for item in queryItems ?? [] {
+            let name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+            values[name, default: []].append(item.value ?? "")
+        }
+    }
+
+    private static func firstNonEmptyValue(named name: String, in values: [String: [String]]) -> String? {
+        values[name]?
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+    }
+
+    private static func authToken(from values: [String: [String]]) -> String? {
+        for name in [
+            "token",
+            "session_token",
+            "sessionToken",
+            "auth_token",
+            "authToken",
+            "access_token",
+            "accessToken",
+            "bearer_token",
+            "bearerToken"
+        ] {
+            if let token = firstNonEmptyValue(named: name, in: values) {
+                return token
+            }
+        }
+        return nil
+    }
+
+    private static func sessionID(from values: [String: [String]]) -> String? {
+        for name in ["session_id", "sessionId", "sid"] {
+            if let sessionID = firstNonEmptyValue(named: name, in: values) {
+                return sessionID
+            }
+        }
+        return nil
     }
 
     func fetchProfile() async throws -> UserProfile {
@@ -134,7 +221,11 @@ final class PrivateChatAPI {
         return response.models
     }
 
-    func fetchNearCloudModels() async throws -> [ModelOption] {
+    func connectNearCloudAccount() async throws -> NearCloudConnectResponse {
+        try await request("/v1/near-cloud/connect", method: "POST", body: NearCloudConnectPayload(), authenticated: true)
+    }
+
+    func fetchNearCloudModels(apiKey: String? = nil) async throws -> [ModelOption] {
         guard let url = URL(string: "https://cloud-api.near.ai/v1/model/list") else {
             throw APIError.invalidURL
         }
@@ -142,6 +233,9 @@ final class PrivateChatAPI {
         request.httpMethod = "GET"
         request.timeoutInterval = Self.streamTimeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let apiKey = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
         let response: ModelListResponse = try await perform(request)
         return response.models
     }
@@ -1088,6 +1182,8 @@ final class PrivateChatAPI {
 private struct EmptyResponse: Decodable {}
 
 private struct EmptyPayload: Encodable {}
+
+private struct NearCloudConnectPayload: Encodable {}
 
 private enum SharePermission: String {
     case read

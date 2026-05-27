@@ -6,15 +6,9 @@ import PDFKit
 @MainActor
 final class ChatStore: ObservableObject {
     @Published private(set) var conversations: [ConversationSummary] = []
-    @Published private(set) var messages: [ChatMessage] = []
     @Published private(set) var models: [ModelOption] = []
     @Published private(set) var nearCloudModels: [ModelOption] = []
     @Published private(set) var projects: [ChatProject] = []
-    @Published private(set) var pendingAttachments: [ChatAttachment] = [] {
-        didSet {
-            persistCurrentDraftIfNeeded()
-        }
-    }
     @Published private(set) var shareInfo: ConversationSharesListResponse?
     @Published private(set) var attestationSnapshot: AttestationSnapshot?
     @Published private(set) var attestationFetchErrorMessage: String?
@@ -26,6 +20,8 @@ final class ChatStore: ObservableObject {
     @Published private(set) var nearCloudKeyConfigured = false
     @Published private(set) var billingSnapshot: BillingSnapshot?
     @Published private(set) var isLoadingBilling = false
+    @Published private(set) var isTestingNearCloudKey = false
+    @Published private(set) var isConnectingNearCloudAccount = false
     @Published private(set) var diagnosticChecks: [AppDiagnosticCheck] = []
     @Published private(set) var isRunningDiagnostics = false
     @Published private(set) var isTestingIronclawWorkstation = false
@@ -64,6 +60,8 @@ final class ChatStore: ObservableObject {
             UserDefaults.standard.set(webSearchEnabled, forKey: scopedDefaultsKey(Self.webSearchDefaultsKey))
         }
     }
+    @Published private(set) var notificationPreferenceEnabled = false
+    @Published private(set) var appearancePreference: AppAppearancePreference = .system
     @Published var sourceMode: ChatSourceMode = .auto {
         didSet {
             UserDefaults.standard.set(sourceMode.rawValue, forKey: scopedDefaultsKey(Self.sourceModeDefaultsKey))
@@ -94,12 +92,6 @@ final class ChatStore: ObservableObject {
             saveIronclawSettings(ironclawSettings)
         }
     }
-    @Published var draft = "" {
-        didSet {
-            handleDraftChange(from: oldValue, to: draft)
-            persistCurrentDraftIfNeeded()
-        }
-    }
     @Published private(set) var isLoading = false
     @Published private(set) var isLoadingShareInfo = false
     @Published private(set) var isLoadingAttestation = false
@@ -108,9 +100,6 @@ final class ChatStore: ObservableObject {
     @Published private(set) var isLoadingRemoteFiles = false
     @Published private(set) var isLoadingRemoteFilePreview = false
     @Published private(set) var isLoadingShareGroups = false
-    @Published private(set) var isStreaming = false
-    @Published private(set) var isUploadingAttachment = false
-    @Published private(set) var routeReadinessIssue: RouteReadinessIssue?
     @Published private(set) var pinnedModelIDs: [String] = [] {
         didSet {
             guard !isResettingAccountScopedState else { return }
@@ -118,6 +107,47 @@ final class ChatStore: ObservableObject {
         }
     }
     @Published var bannerMessage: String?
+
+    let transcriptStore = ChatTranscriptStore()
+    let composerStore = ChatComposerStore()
+
+    private(set) var messages: [ChatMessage] {
+        get { transcriptStore.messages }
+        set { transcriptStore.messages = newValue }
+    }
+
+    private(set) var isStreaming: Bool {
+        get { transcriptStore.isStreaming }
+        set { transcriptStore.isStreaming = newValue }
+    }
+
+    private(set) var pendingAttachments: [ChatAttachment] {
+        get { composerStore.pendingAttachments }
+        set {
+            composerStore.pendingAttachments = newValue
+            persistCurrentDraftIfNeeded()
+        }
+    }
+
+    var draft: String {
+        get { composerStore.draft }
+        set {
+            let previous = composerStore.draft
+            composerStore.draft = newValue
+            handleDraftChange(from: previous, to: newValue)
+            persistCurrentDraftIfNeeded()
+        }
+    }
+
+    private(set) var isUploadingAttachment: Bool {
+        get { composerStore.isUploadingAttachment }
+        set { composerStore.isUploadingAttachment = newValue }
+    }
+
+    private(set) var routeReadinessIssue: RouteReadinessIssue? {
+        get { composerStore.routeReadinessIssue }
+        set { composerStore.routeReadinessIssue = newValue }
+    }
 
     private let api: PrivateChatAPI
     private let ironclawAPI = IronclawAPI()
@@ -130,11 +160,17 @@ final class ChatStore: ObservableObject {
         }
     }
     private var pendingHostedHandoffContinuation: HostedHandoffContinuation?
+    private var currentUserMessageMetadata: MessageMetadata?
     private var storageAccountID = "signed-out"
     private var draftPersistenceScopeID = "home"
     private var suppressDraftPersistence = false
     private var loadMessagesTask: Task<Void, Never>?
     private var loadMessagesGeneration = 0
+    private var bootstrapInFlightAccountID: String?
+    private var lastBootstrappedAccountID: String?
+    private var accountBackgroundRefreshTask: Task<Void, Never>?
+    private var pendingTextDeltaByMessageID: [String: String] = [:]
+    private var pendingTextDeltaFlushTask: Task<Void, Never>?
     private struct PersistedDraftState: Codable {
         var text: String
         var attachments: [ChatAttachment]
@@ -162,7 +198,8 @@ final class ChatStore: ObservableObject {
     private static let selectedModelDefaultsKey = "selectedModel"
     private static let councilModelDefaultsKey = "councilModelIDs"
     private static let pinnedModelDefaultsKey = "pinnedModelIDs"
-    private static let maxCouncilModels = 4
+    private static let maxCouncilModels = 3
+    private static let maxConcurrentCouncilStreams = CouncilStreamService.defaultConcurrentStreamLimit
     private static let maxPinnedModels = 12
     private static let selectedProjectDefaultsKey = "selectedProjectID"
     private static let draftDefaultsKeyPrefix = "draftByScope"
@@ -190,6 +227,7 @@ final class ChatStore: ObservableObject {
     nonisolated private static let maxPDFExtractionSeconds: TimeInterval = 5
     private static let maxPromptAttachments = 5
     private static let maxProjectAttachments = 12
+    private static let streamDeltaFlushNanoseconds: UInt64 = MessageStreamService.textDeltaFlushNanoseconds
     private static let largePasteThresholdBytes = 8 * 1024
     private static let largePasteThresholdCharacters = 5_000
     private static let staleRunningMessageInterval: TimeInterval = 120
@@ -360,59 +398,40 @@ final class ChatStore: ObservableObject {
         let stoppedEarly: Bool
     }
 
-    struct RouteReadinessIssue: Identifiable, Hashable {
-        enum BlockedRoute: String, Hashable {
-            case nearCloud
-            case hostedIronclaw
-            case council
-        }
+    typealias RouteReadinessIssue = ChatRouteReadinessIssue
 
-        enum RecoveryAction: String, Hashable {
-            case addNearCloudKey
-            case configureIronClawEndpoint
-            case switchToPrivate
-            case editCouncilLineup
-        }
-
-        let route: BlockedRoute
-        let title: String
-        let message: String
-        let recoveryAction: RecoveryAction
-        let recoveryTitle: String
-
-        var id: String { route.rawValue }
-    }
-
-    private var projectScopedConversations: [ConversationSummary] {
-        guard let selectedProject else { return conversations }
-        let ids = Set(selectedProject.conversationIDs)
-        return conversations.filter { ids.contains($0.id) }
+    private var projectStore: ProjectStore {
+        ProjectStore(
+            projects: projects,
+            selectedProjectID: selectedProjectID,
+            conversations: conversations
+        )
     }
 
     var visibleConversations: [ConversationSummary] {
-        projectScopedConversations
-            .filter { !$0.isArchived }
-            .sorted { lhs, rhs in
-                if lhs.isPinned != rhs.isPinned { return lhs.isPinned }
-                return (lhs.createdAt ?? 0) > (rhs.createdAt ?? 0)
-            }
+        projectStore.visibleConversations
     }
 
     var allVisibleConversations: [ConversationSummary] {
-        conversations
-            .filter { !$0.isArchived }
-            .sorted { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }
+        projectStore.allVisibleConversations
     }
 
     var archivedConversations: [ConversationSummary] {
-        conversations
-            .filter(\.isArchived)
-            .sorted { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }
+        projectStore.archivedConversations
+    }
+
+    var composerState: ComposerState {
+        ComposerState(
+            draft: draft,
+            pendingAttachments: pendingAttachments,
+            isStreaming: isStreaming,
+            routeReadinessTitle: routeReadinessIssue?.title,
+            routeReadinessMessage: routeReadinessIssue?.message
+        )
     }
 
     var selectedProject: ChatProject? {
-        guard let selectedProjectID else { return nil }
-        return projects.first(where: { $0.id == selectedProjectID })
+        projectStore.selectedProject
     }
 
     var selectedProjectAttachments: [ChatAttachment] {
@@ -650,10 +669,7 @@ final class ChatStore: ObservableObject {
     }
 
     var pinnedPickerModels: [ModelOption] {
-        let available = pickerModels
-        return pinnedModelIDs.compactMap { id in
-            available.first { $0.id == id }
-        }
+        modelCatalog.pinnedPickerModels(from: pinnedModelIDs)
     }
 
     var selectedProviderDisplayName: String {
@@ -720,6 +736,10 @@ final class ChatStore: ObservableObject {
         return privateRouteAttestationStatus
     }
 
+    var shouldShowSharedAuthorNames: Bool {
+        ShareStore.shouldShowSharedAuthorNames(sharedPreview: sharedPreview, shareInfo: shareInfo)
+    }
+
     private var privateRouteAttestationStatus: AttestationStatus {
         if attestationSnapshot == nil, attestationFetchErrorMessage != nil {
             return .unavailable(reason: .serviceUnavailable)
@@ -737,16 +757,7 @@ final class ChatStore: ObservableObject {
     }
 
     nonisolated static func routeKind(forModelID modelID: String) -> ChatRouteKind {
-        if modelID == ModelOption.nearCloudQwenMaxModelID || modelID.hasPrefix(ModelOption.nearCloudModelPrefix) {
-            return .nearCloud
-        }
-        if modelID == ModelOption.ironclawMobileModelID {
-            return .ironclawMobile
-        }
-        if modelID == ModelOption.ironclawModelID {
-            return .ironclawHosted
-        }
-        return .nearPrivate
+        RoutePlanner.routeKind(forModelID: modelID)
     }
 
     nonisolated static func routeReadinessIssue(
@@ -757,44 +768,14 @@ final class ChatStore: ObservableObject {
         hostedIronclawEndpointUsable: Bool,
         hostedIronclawEndpointMessage: String? = nil
     ) -> RouteReadinessIssue? {
-        let councilModelIDs = uniqueStrings(
-            requestedCouncilModelIDs.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        ).filter { !$0.isEmpty }
-
-        if isCouncilRequested, councilModelIDs.count < 2 {
-            return RouteReadinessIssue(
-                route: .council,
-                title: "Council needs two models",
-                message: "Choose at least two usable Council models, or switch to a single private model. Your draft and attachments were kept.",
-                recoveryAction: .editCouncilLineup,
-                recoveryTitle: "Edit Council"
-            )
-        }
-
-        let modelIDs = isCouncilRequested ? councilModelIDs : [selectedModelID]
-        if modelIDs.contains(where: { routeKind(forModelID: $0) == .nearCloud }), !nearCloudKeyConfigured {
-            return RouteReadinessIssue(
-                route: .nearCloud,
-                title: "NEAR Cloud key required",
-                message: "Add a NEAR Cloud API key in Account before sending with this route. Your draft and attachments were kept.",
-                recoveryAction: .addNearCloudKey,
-                recoveryTitle: "Add Key"
-            )
-        }
-
-        if modelIDs.contains(where: { routeKind(forModelID: $0) == .ironclawHosted }), !hostedIronclawEndpointUsable {
-            let endpointMessage = hostedIronclawEndpointMessage?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let detail = endpointMessage?.isEmpty == false ? endpointMessage! : "Add a hosted HTTPS IronClaw endpoint in Account before sending."
-            return RouteReadinessIssue(
-                route: .hostedIronclaw,
-                title: "Hosted IronClaw endpoint required",
-                message: "\(detail) Your draft and attachments were kept.",
-                recoveryAction: .configureIronClawEndpoint,
-                recoveryTitle: "Configure Endpoint"
-            )
-        }
-
-        return nil
+        RoutePlanner.routeReadinessIssue(
+            selectedModelID: selectedModelID,
+            requestedCouncilModelIDs: requestedCouncilModelIDs,
+            isCouncilRequested: isCouncilRequested,
+            nearCloudKeyConfigured: nearCloudKeyConfigured,
+            hostedIronclawEndpointUsable: hostedIronclawEndpointUsable,
+            hostedIronclawEndpointMessage: hostedIronclawEndpointMessage
+        )
     }
 
     nonisolated static func sourceRoutingSemantics(
@@ -803,7 +784,7 @@ final class ChatStore: ObservableObject {
         webSearchEnabled: Bool,
         route: ChatRouteKind
     ) -> ChatSourceRoutingSemantics {
-        ChatSourceRoutingSemantics.evaluate(
+        RoutePlanner.sourceRoutingSemantics(
             sourceMode: sourceMode,
             researchModeEnabled: researchModeEnabled,
             webSearchEnabled: webSearchEnabled,
@@ -883,7 +864,7 @@ final class ChatStore: ObservableObject {
         case "IronClaw":
             return selectedModelOption?.isIronclawMobileRuntime == true ? "Ask IronClaw Mobile or the workstation" : "Ask the hosted IronClaw workstation"
         case "NEAR Cloud":
-            return nearCloudKeyConfigured ? "Ask \(selectedModelDisplayName)" : "Add NEAR Cloud API key"
+            return nearCloudKeyConfigured ? "Ask \(selectedModelDisplayName)" : "Connect NEAR Cloud"
         default:
             switch sourceMode {
             case .auto:
@@ -900,29 +881,34 @@ final class ChatStore: ObservableObject {
         }
     }
 
+    private var modelCatalog: ModelCatalogStore {
+        ModelCatalogStore(
+            models: models,
+            nearCloudModels: nearCloudModels,
+            allowedModelIDs: currentPlanAllowedModelIDs,
+            preferredModelIDs: preferredModelIDs,
+            nearCloudPreferredModelIDs: nearCloudPreferredModelIDs
+        )
+    }
+
     var externalModels: [ModelOption] {
-        var external: [ModelOption] = [Self.ironclawMobileModel(), Self.ironclawModel()]
-        external.append(contentsOf: cloudRouteModels)
-        return external
+        modelCatalog.externalModels
     }
 
     var agentModels: [ModelOption] {
-        [Self.ironclawMobileModel(), Self.ironclawModel()]
+        modelCatalog.agentModels
     }
 
     var cloudModels: [ModelOption] {
-        rankedModels(from: cloudRouteModels)
+        modelCatalog.cloudModels
     }
 
     private var cloudRouteModels: [ModelOption] {
-        let routes = Self.uniqueModels(nearCloudModels + Self.fallbackNearCloudModels())
-        return routes.filter { !$0.isUtilityModel }
+        modelCatalog.cloudRouteModels
     }
 
     var chatModels: [ModelOption] {
-        (models + externalModels).filter { model in
-            !model.isUtilityModel && isAllowedByCurrentPlan(model)
-        }
+        modelCatalog.chatModels
     }
 
     var currentBillingPlanName: String {
@@ -935,31 +921,31 @@ final class ChatStore: ObservableObject {
     }
 
     var pickerModels: [ModelOption] {
-        chatModels.filter { !$0.isDeprecatedPickerModel }
+        modelCatalog.pickerModels
     }
 
     var eliteModels: [ModelOption] {
-        rankedModels(from: pickerModels.filter { !$0.isOpenWeightCandidate && $0.isEliteModel })
+        modelCatalog.rankedModels(from: pickerModels.filter { !$0.isOpenWeightCandidate && $0.isEliteModel })
     }
 
     var openWeightModels: [ModelOption] {
-        rankedModels(from: pickerModels.filter { $0.isOpenWeightCandidate })
+        modelCatalog.rankedModels(from: pickerModels.filter { $0.isOpenWeightCandidate })
     }
 
     var privateModels: [ModelOption] {
-        rankedModels(from: pickerModels.filter { !$0.isOpenWeightCandidate && $0.isPrivateVerifiableChatModel && !$0.isEliteModel })
+        modelCatalog.rankedModels(from: pickerModels.filter { !$0.isOpenWeightCandidate && $0.isPrivateVerifiableChatModel && !$0.isEliteModel })
     }
 
     var standardModels: [ModelOption] {
-        rankedModels(from: pickerModels.filter { !$0.isExternalModel && !$0.isOpenWeightCandidate && !$0.isEliteModel && !$0.isPrivateVerifiableChatModel && !$0.isLowerPriorityModel })
+        modelCatalog.rankedModels(from: pickerModels.filter { !$0.isExternalModel && !$0.isOpenWeightCandidate && !$0.isEliteModel && !$0.isPrivateVerifiableChatModel && !$0.isLowerPriorityModel })
     }
 
     var lowerPriorityModels: [ModelOption] {
-        rankedModels(from: pickerModels.filter { !$0.isExternalModel && !$0.isOpenWeightCandidate && $0.isLowerPriorityModel })
+        modelCatalog.rankedModels(from: pickerModels.filter { !$0.isExternalModel && !$0.isOpenWeightCandidate && $0.isLowerPriorityModel })
     }
 
     var otherModels: [ModelOption] {
-        rankedModels(from: pickerModels.filter { !$0.isExternalModel && !$0.isEliteModel })
+        modelCatalog.rankedModels(from: pickerModels.filter { !$0.isExternalModel && !$0.isEliteModel })
     }
 
     func canUseInCouncil(_ modelID: String) -> Bool {
@@ -1094,7 +1080,7 @@ final class ChatStore: ObservableObject {
                 switchToPrivateFallbackModel()
             }
         case .addNearCloudKey:
-            showBanner("Add your NEAR Cloud API key in Account, then send again.")
+            showBanner("Connect NEAR Cloud in Account, then send again.")
         case .configureIronClawEndpoint:
             showBanner("Configure the hosted IronClaw endpoint in Account, then send again.")
         }
@@ -1108,7 +1094,7 @@ final class ChatStore: ObservableObject {
         }
         ironclawSettings = .default
         ironclawTokenConfigured = false
-        nearCloudKeyConfigured = true
+        nearCloudKeyConfigured = false
         selectedModel = Self.defaultModelID
         councilModelIDs = [Self.defaultModelID]
         selectedProjectID = nil
@@ -1127,15 +1113,58 @@ final class ChatStore: ObservableObject {
             return
         }
         #endif
-        await withLoading {
-            async let conversationLoad: Void = refreshConversations()
-            async let modelLoad: Void = refreshModels()
-            async let settingsLoad: Void = refreshUserSettings(showErrors: false)
-            async let billingLoad: Void = refreshBilling(showErrors: false)
-            async let ironclawToolsLoad: Void = refreshIronclawTools()
-            async let sharedLoad: Void = refreshSharedWithMe(showErrors: false)
-            _ = await (conversationLoad, modelLoad, settingsLoad, billingLoad, ironclawToolsLoad, sharedLoad)
-            ensureSelectedModelIsAvailable(shouldShowBanner: false)
+        let accountID = storageAccountID
+        if bootstrapInFlightAccountID == accountID {
+            return
+        }
+        if lastBootstrappedAccountID == accountID, !models.isEmpty {
+            scheduleAccountBackgroundRefresh(for: accountID)
+            return
+        }
+
+        bootstrapInFlightAccountID = accountID
+        let shouldShowBlockingLoader = conversations.isEmpty && models.isEmpty
+        if shouldShowBlockingLoader {
+            isLoading = true
+        }
+        defer {
+            if shouldShowBlockingLoader {
+                isLoading = false
+            }
+            if bootstrapInFlightAccountID == accountID {
+                bootstrapInFlightAccountID = nil
+            }
+        }
+
+        async let conversationLoad: Void = refreshConversations()
+        async let modelLoad: Void = refreshModels(loadCloudCatalog: nearCloudKeyConfigured)
+        async let settingsLoad: Void = refreshUserSettings(showErrors: false)
+        _ = await (conversationLoad, modelLoad, settingsLoad)
+
+        guard storageAccountID == accountID else { return }
+        ensureSelectedModelIsAvailable(shouldShowBanner: false)
+        lastBootstrappedAccountID = accountID
+        scheduleAccountBackgroundRefresh(for: accountID)
+    }
+
+    private func scheduleAccountBackgroundRefresh(for accountID: String? = nil) {
+        let resolvedAccountID = accountID ?? storageAccountID
+        accountBackgroundRefreshTask?.cancel()
+        accountBackgroundRefreshTask = Task { @MainActor [weak self] in
+            guard let self, self.storageAccountID == resolvedAccountID else { return }
+            await self.refreshBilling(showErrors: false)
+            guard !Task.isCancelled, self.storageAccountID == resolvedAccountID else { return }
+            await self.refreshSharedWithMe(showErrors: false)
+            guard !Task.isCancelled, self.storageAccountID == resolvedAccountID else { return }
+            if self.ironclawSettings.hasUsableHostedEndpoint {
+                await self.refreshIronclawTools()
+            }
+        }
+    }
+
+    private func scheduleConversationListRefresh() {
+        Task { @MainActor [weak self] in
+            await self?.refreshConversations()
         }
     }
 
@@ -1152,9 +1181,29 @@ final class ChatStore: ObservableObject {
         loadAccountScopedState()
     }
 
+    func updateCurrentUser(profile: UserProfile?) {
+        guard let user = profile?.user else {
+            currentUserMessageMetadata = nil
+            return
+        }
+
+        let authorID = user.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        let authorName = user.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let metadata = MessageMetadata(
+            authorID: authorID.isEmpty ? nil : authorID,
+            authorName: authorName.isEmpty ? nil : authorName
+        )
+        currentUserMessageMetadata = metadata.authorID == nil && metadata.authorName == nil ? nil : metadata
+    }
+
     func reset() {
         streamTask?.cancel()
         streamTask = nil
+        cancelPendingTextDeltaFlushes()
+        accountBackgroundRefreshTask?.cancel()
+        accountBackgroundRefreshTask = nil
+        bootstrapInFlightAccountID = nil
+        lastBootstrappedAccountID = nil
         currentCouncilAssistantMessageIDs = []
         conversations = []
         messages = []
@@ -1167,6 +1216,7 @@ final class ChatStore: ObservableObject {
         pendingExternalDeepLink = nil
         pendingHostedHandoffPreflight = nil
         pendingHostedHandoffContinuation = nil
+        currentUserMessageMetadata = nil
         approvedHostedHandoffFingerprint = nil
         routeReadinessIssue = nil
         pendingAttachments = []
@@ -1203,10 +1253,14 @@ final class ChatStore: ObservableObject {
 
     func refreshConversations() async {
         do {
-            conversations = try await api.fetchConversations()
-            cacheConversations(conversations)
+            let fetchedConversations = try await api.fetchConversations()
+            if conversations != fetchedConversations {
+                conversations = fetchedConversations
+            }
+            cacheConversations(fetchedConversations)
             if let selectedConversation,
-               let refreshed = conversations.first(where: { $0.id == selectedConversation.id }) {
+               let refreshed = fetchedConversations.first(where: { $0.id == selectedConversation.id }),
+               self.selectedConversation != refreshed {
                 self.selectedConversation = refreshed
             }
         } catch {
@@ -1281,15 +1335,22 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    func refreshModels() async {
+    func refreshModels(loadCloudCatalog: Bool = false) async {
         do {
-            async let privateCatalog = api.fetchModels()
-            async let cloudCatalog = api.fetchNearCloudModels()
-            let fetched = try await privateCatalog
-            let fetchedCloud = (try? await cloudCatalog) ?? []
+            let fetched = try await api.fetchModels()
+            let fetchedCloud = loadCloudCatalog
+                ? (try? await api.fetchNearCloudModels(apiKey: loadNearCloudAPIKey())) ?? []
+                : []
             deniedOpenWeightModelIDs.removeAll()
-            models = fetched
-            nearCloudModels = Self.nearCloudRouteModels(from: fetchedCloud)
+            if models != fetched {
+                models = fetched
+            }
+            if loadCloudCatalog {
+                let routeModels = Self.nearCloudRouteModels(from: fetchedCloud)
+                if nearCloudModels != routeModels {
+                    nearCloudModels = routeModels
+                }
+            }
             if nearCloudModels.isEmpty {
                 nearCloudModels = Self.fallbackNearCloudModels()
             }
@@ -1327,6 +1388,8 @@ final class ChatStore: ObservableObject {
     func saveUserSettings(
         systemPrompt: String,
         webSearchEnabled: Bool,
+        notificationEnabled: Bool,
+        appearancePreference: AppAppearancePreference,
         largeTextAsFileEnabled: Bool,
         advancedParams: AdvancedModelParams
     ) async {
@@ -1335,14 +1398,14 @@ final class ChatStore: ObservableObject {
             let response = try await api.updateUserSettings(
                 systemPrompt: systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines),
                 webSearchEnabled: webSearchEnabled,
-                notificationEnabled: lastRemoteSettings.notification ?? false,
-                appearance: lastRemoteSettings.appearance ?? "System",
+                notificationEnabled: notificationEnabled,
+                appearance: appearancePreference.rawValue,
                 largeTextAsFile: largeTextAsFileEnabled,
                 advancedParams: sanitizedParams
             )
             apply(remoteSettings: response.settings)
             advancedModelParams = sanitizedParams
-            showBanner("Chat settings saved.")
+            showBanner("Account preferences saved.")
         } catch {
             showBanner(error.localizedDescription)
         }
@@ -1475,7 +1538,7 @@ final class ChatStore: ObservableObject {
         clearAttestationState()
         councilModelIDs = isCouncilEligible(model) ? [modelID] : []
         if model.isNearCloudModel, !nearCloudKeyConfigured {
-            showBanner("Using \(model.displayName). Add a NEAR Cloud API key in Account before sending.")
+            showBanner("Using \(model.displayName). Connect NEAR Cloud in Account before sending.")
         } else {
             showBanner("Using \(modelDisplayName(for: modelID)).")
         }
@@ -1580,7 +1643,7 @@ final class ChatStore: ObservableObject {
     func saveNearCloudAPIKey(_ apiKey: String) {
         let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else {
-            showBanner("Paste a NEAR Cloud API key first.")
+            showBanner("Paste a NEAR Cloud key first.")
             return
         }
 
@@ -1588,15 +1651,71 @@ final class ChatStore: ObservableObject {
             try KeychainStore.save(trimmedKey, account: scopedKeychainAccount(Self.nearCloudAPIKeychainAccount))
             nearCloudKeyConfigured = true
             routeReadinessIssue = nil
-            showBanner("NEAR Cloud API key saved.")
+            showBanner("NEAR Cloud key saved.")
         } catch {
             showBanner(error.localizedDescription)
         }
     }
 
+    func connectNearCloudAccount() async -> Bool {
+        isConnectingNearCloudAccount = true
+        defer { isConnectingNearCloudAccount = false }
+
+        do {
+            let response = try await api.connectNearCloudAccount()
+            guard let apiKey = response.apiKey?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty else {
+                let message = response.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+                showBanner(message?.isEmpty == false ? message! : "Cloud auto-connect is not available yet. Open Cloud, create a key, then paste it here.")
+                return false
+            }
+
+            let fetchedCloud = response.models.isEmpty
+                ? try await api.fetchNearCloudModels(apiKey: apiKey)
+                : response.models
+            try KeychainStore.save(apiKey, account: scopedKeychainAccount(Self.nearCloudAPIKeychainAccount))
+            nearCloudKeyConfigured = true
+            routeReadinessIssue = nil
+            let routeModels = Self.nearCloudRouteModels(from: fetchedCloud)
+            nearCloudModels = routeModels.isEmpty ? Self.fallbackNearCloudModels() : routeModels
+            showBanner("NEAR Cloud connected. \(nearCloudModels.count) models ready.")
+            return true
+        } catch APIError.status(let code, _) where code == 404 || code == 405 {
+            showBanner("Cloud auto-connect is not available yet. Open Cloud, create a key, then paste it here.")
+            return false
+        } catch {
+            showBanner("Cloud auto-connect failed: \(Self.displayFailureMessage(error.localizedDescription))")
+            return false
+        }
+    }
+
+    func connectNearCloudAPIKey(_ apiKey: String) async -> Bool {
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else {
+            showBanner("Paste a NEAR Cloud key first.")
+            return false
+        }
+
+        isTestingNearCloudKey = true
+        defer { isTestingNearCloudKey = false }
+
+        do {
+            let fetchedCloud = try await api.fetchNearCloudModels(apiKey: trimmedKey)
+            try KeychainStore.save(trimmedKey, account: scopedKeychainAccount(Self.nearCloudAPIKeychainAccount))
+            nearCloudKeyConfigured = true
+            routeReadinessIssue = nil
+            let routeModels = Self.nearCloudRouteModels(from: fetchedCloud)
+            nearCloudModels = routeModels.isEmpty ? Self.fallbackNearCloudModels() : routeModels
+            showBanner("NEAR Cloud connected. \(nearCloudModels.count) models ready.")
+            return true
+        } catch {
+            showBanner("NEAR Cloud key was not saved: \(Self.displayFailureMessage(error.localizedDescription))")
+            return false
+        }
+    }
+
     func clearNearCloudAPIKey() {
         KeychainStore.delete(account: scopedKeychainAccount(Self.nearCloudAPIKeychainAccount))
-        nearCloudKeyConfigured = true
+        nearCloudKeyConfigured = false
         if selectedModelOption?.isNearCloudModel == true {
             selectedModel = Self.defaultModelID
         }
@@ -1675,7 +1794,7 @@ final class ChatStore: ObservableObject {
             AppDiagnosticCheck(title: "Web grounding", detail: "Searching a live AI-news query.", state: .running),
             AppDiagnosticCheck(title: "IronClaw bridge", detail: "Checking hosted endpoint and bearer token.", state: .running),
             AppDiagnosticCheck(title: "IronClaw workstation", detail: "Verifying hosted shell/git tools.", state: .running),
-            AppDiagnosticCheck(title: "NEAR Cloud", detail: nearCloudKeyConfigured ? "API key saved." : "No NEAR Cloud key saved.", state: nearCloudKeyConfigured ? .passed : .warning)
+            AppDiagnosticCheck(title: "NEAR Cloud", detail: nearCloudKeyConfigured ? "Connected." : "Not connected.", state: nearCloudKeyConfigured ? .passed : .warning)
         ]
         defer {
             isRunningDiagnostics = false
@@ -1775,19 +1894,32 @@ final class ChatStore: ObservableObject {
 
     func applySetupProfile(_ rawProfile: UserSetupProfile) {
         let profile = rawProfile.normalizedForDefaults
+        let readiness = AppSetupReadinessSnapshot(
+            modelCatalogLoaded: !models.isEmpty,
+            privateModelAvailable: pickerModels.contains { !$0.isExternalModel },
+            defaultCouncilModelCount: defaultCouncilModels.count,
+            ironclawMobileAvailable: agentModels.contains { $0.id == ModelOption.ironclawMobileModelID },
+            hostedIronclawAvailable: ironclawRemoteWorkstationAvailable,
+            nearCloudKeyConfigured: nearCloudKeyConfigured
+        )
+        let plan = AppSetupPlan(profile: profile, readiness: readiness)
         webSearchEnabled = profile.wantsWeb
-        sourceMode = profile.contextStyle.sourceMode
-        researchModeEnabled = profile.useCases.contains(.research) && !profile.wantsIronclaw
+        sourceMode = plan.focusMode
+        researchModeEnabled = profile.useCases.contains(.research) && plan.modelRoute != .ironclaw
 
-        let requestedCouncilModelIDs = profile.wantsCouncil && !models.isEmpty ? defaultCouncilModelIDs() : []
-        if profile.wantsIronclaw {
+        let requestedCouncilModelIDs = plan.modelRoute == .council ? defaultCouncilModelIDs() : []
+        switch plan.modelRoute {
+        case .ironclaw:
             selectedModel = ModelOption.ironclawMobileModelID
+            councilModelIDs = []
+        case .council:
             councilModelIDs = requestedCouncilModelIDs
-        } else if requestedCouncilModelIDs.count > 1 {
-            councilModelIDs = requestedCouncilModelIDs
-            selectedModel = requestedCouncilModelIDs[0]
-        } else {
-            if selectedModelOption?.isIronclawModel == true {
+            selectedModel = requestedCouncilModelIDs.first ?? preferredAvailableModel() ?? Self.defaultModelID
+        case .privateModel:
+            let selectedModelIsUsablePrivateModel =
+                pickerModels.contains(where: { $0.id == selectedModel && !$0.isExternalModel }) &&
+                Self.routeKind(forModelID: selectedModel) == .nearPrivate
+            if !selectedModelIsUsablePrivateModel {
                 selectedModel = preferredAvailableModel() ?? Self.defaultModelID
             }
             councilModelIDs = canUseInCouncil(selectedModel) ? [selectedModel] : []
@@ -1795,6 +1927,7 @@ final class ChatStore: ObservableObject {
 
         if let projectName = profile.setupStarterProjectName {
             let project = ensureMobileProject(named: projectName, includeConversationID: nil)
+            selectedProjectID = project.id
             if let index = projects.firstIndex(where: { $0.id == project.id }) {
                 var didChangeProject = false
                 let instructions = profile.setupProjectInstructions
@@ -1815,9 +1948,31 @@ final class ChatStore: ObservableObject {
             startNewConversation()
             self.draft = draft
             openSelectedConversationToken = UUID()
-            showBanner("Setup applied. First prompt ready.")
+            showBanner(setupAppliedBanner(for: plan, profile: profile, openedDraft: true))
         } else {
-            showBanner("Setup applied.")
+            showBanner(setupAppliedBanner(for: plan, profile: profile, openedDraft: false))
+        }
+    }
+
+    private func setupAppliedBanner(for plan: AppSetupPlan, profile: UserSetupProfile, openedDraft: Bool) -> String {
+        if profile.wantsIronclaw, plan.modelRoute != .ironclaw {
+            return openedDraft
+                ? "Setup applied. Private prompt ready while agent tools stay unavailable."
+                : "Setup applied. Private route is ready while agent tools stay unavailable."
+        }
+        if profile.wantsCouncil, plan.modelRoute != .council {
+            return openedDraft
+                ? "Setup applied. Private prompt ready while Council finishes loading."
+                : "Setup applied. Private route is ready while Council finishes loading."
+        }
+
+        switch plan.modelRoute {
+        case .ironclaw:
+            return openedDraft ? "Setup applied. Agent prompt ready." : "Setup applied. Agent route ready."
+        case .council:
+            return openedDraft ? "Setup applied. Council prompt ready." : "Setup applied. Council route ready."
+        case .privateModel:
+            return openedDraft ? "Setup applied. First prompt ready." : "Setup applied."
         }
     }
 
@@ -2094,12 +2249,16 @@ final class ChatStore: ObservableObject {
     }
 
     func addAttachment(from url: URL) async {
-        guard pendingAttachments.count < Self.maxPromptAttachments else {
-            showBanner("Attach up to five files at once.")
-            return
-        }
-        guard pendingAttachments.count + activeProjectContextAttachments.count < Self.maxProjectAttachments else {
-            showBanner("This prompt already has enough file context.")
+        switch FileStore.promptAttachmentLimit(
+            pendingCount: pendingAttachments.count,
+            projectContextCount: activeProjectContextAttachments.count,
+            maxPromptAttachments: Self.maxPromptAttachments,
+            maxContextAttachments: Self.maxProjectAttachments
+        ) {
+        case .allowed:
+            break
+        case let .blocked(message):
+            showBanner(message)
             return
         }
 
@@ -2119,8 +2278,14 @@ final class ChatStore: ObservableObject {
             showBanner("Select a project first.")
             return
         }
-        guard projects[projectIndex].attachments.count < Self.maxProjectAttachments else {
-            showBanner("Keep project context to twelve files or fewer.")
+        switch FileStore.projectAttachmentLimit(
+            projectAttachmentCount: projects[projectIndex].attachments.count,
+            maxProjectAttachments: Self.maxProjectAttachments
+        ) {
+        case .allowed:
+            break
+        case let .blocked(message):
+            showBanner(message)
             return
         }
 
@@ -2176,12 +2341,16 @@ final class ChatStore: ObservableObject {
             showBanner("\(attachment.name) is already attached.")
             return
         }
-        guard pendingAttachments.count < Self.maxPromptAttachments else {
-            showBanner("Attach up to five files at once.")
-            return
-        }
-        guard pendingAttachments.count + activeProjectContextAttachments.count < Self.maxProjectAttachments else {
-            showBanner("This prompt already has enough file context.")
+        switch FileStore.promptAttachmentLimit(
+            pendingCount: pendingAttachments.count,
+            projectContextCount: activeProjectContextAttachments.count,
+            maxPromptAttachments: Self.maxPromptAttachments,
+            maxContextAttachments: Self.maxProjectAttachments
+        ) {
+        case .allowed:
+            break
+        case let .blocked(message):
+            showBanner(message)
             return
         }
         pendingAttachments.append(attachment)
@@ -2200,8 +2369,14 @@ final class ChatStore: ObservableObject {
             showBanner("\(attachment.name) is already in this project.")
             return
         }
-        guard projects[projectIndex].attachments.count < Self.maxProjectAttachments else {
-            showBanner("Keep project context to twelve files or fewer.")
+        switch FileStore.projectAttachmentLimit(
+            projectAttachmentCount: projects[projectIndex].attachments.count,
+            maxProjectAttachments: Self.maxProjectAttachments
+        ) {
+        case .allowed:
+            break
+        case let .blocked(message):
+            showBanner(message)
             return
         }
 
@@ -2317,12 +2492,16 @@ final class ChatStore: ObservableObject {
               shouldPromoteLargePaste(previous: previous, current: currentValue) else {
             return
         }
-        guard pendingAttachments.count < Self.maxPromptAttachments else {
-            showBanner("Attach up to five files at once.")
-            return
-        }
-        guard pendingAttachments.count + activeProjectContextAttachments.count < Self.maxProjectAttachments else {
-            showBanner("This prompt already has enough file context.")
+        switch FileStore.promptAttachmentLimit(
+            pendingCount: pendingAttachments.count,
+            projectContextCount: activeProjectContextAttachments.count,
+            maxPromptAttachments: Self.maxPromptAttachments,
+            maxContextAttachments: Self.maxProjectAttachments
+        ) {
+        case .allowed:
+            break
+        case let .blocked(message):
+            showBanner(message)
             return
         }
         guard currentValue.utf8.count <= Self.maxFileUploadBytes else {
@@ -2936,7 +3115,7 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    func openSharedConversation(from value: String, knownCanWrite: Bool? = nil) async {
+    func openSharedConversation(from value: String, knownCanWrite: Bool? = nil, sourceLabel: String? = nil) async {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let conversationID = Self.conversationID(from: trimmed) else {
             showBanner("Paste a private.near.ai conversation link or conversation ID.")
@@ -2960,7 +3139,7 @@ final class ChatStore: ObservableObject {
             let snapshot = try await SharedConversationSnapshot(
                 conversation: conversation,
                 messages: Self.chatMessages(from: items.data),
-                source: trimmed,
+                source: sourceLabel ?? trimmed,
                 canWrite: canWrite,
                 loadedAt: Date()
             )
@@ -3010,22 +3189,18 @@ final class ChatStore: ObservableObject {
         loadMessagesGeneration += 1
         loadMessagesTask?.cancel()
         loadMessagesTask = nil
-        isLoading = false
     }
 
     private func loadMessages(for conversation: ConversationSummary, preferCached: Bool, generation: Int) async {
-        isLoading = true
-        defer {
-            if loadMessagesGeneration == generation {
-                isLoading = false
-            }
-        }
+        scheduleSilentShareInfoRefresh(for: conversation, generation: generation)
 
         let cachedMessages = loadLocalMessages(for: conversation.id)
         if preferCached, let cachedMessages, !cachedMessages.isEmpty {
             let normalizedMessages = Self.normalizedMessages(cachedMessages, assumingStreamLost: true)
             if canApplyMessageLoad(for: conversation.id, generation: generation) {
-                messages = normalizedMessages
+                if messages != normalizedMessages {
+                    messages = normalizedMessages
+                }
                 restoreSelectedModel(from: normalizedMessages)
                 if normalizedMessages != cachedMessages {
                     saveLocalMessages(for: conversation.id)
@@ -3042,9 +3217,11 @@ final class ChatStore: ObservableObject {
             let preferredResponseID = selectedResponseVariantByConversationID[conversation.id]
             let remoteMessages = Self.chatMessages(from: response.data, preferredResponseID: preferredResponseID)
             let loadedMessages = Self.mergedMessages(remoteMessages: remoteMessages, localCache: cachedMessages)
-            messages = loadedMessages
+            if messages != loadedMessages {
+                messages = loadedMessages
+            }
             restoreSelectedModel(from: loadedMessages)
-            if loadedMessages.contains(where: { Self.isExternalModel($0.model ?? "") }) {
+            if loadedMessages != cachedMessages {
                 saveLocalMessages(for: conversation.id)
             }
         } catch is CancellationError {
@@ -3059,6 +3236,18 @@ final class ChatStore: ObservableObject {
         }
     }
 
+    private func scheduleSilentShareInfoRefresh(for conversation: ConversationSummary, generation: Int) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let loadedShareInfo = await self.silentShareInfo(for: conversation)
+            guard self.canApplyMessageLoad(for: conversation.id, generation: generation),
+                  self.shareInfo != loadedShareInfo else {
+                return
+            }
+            self.shareInfo = loadedShareInfo
+        }
+    }
+
     func selectResponseVariant(_ responseID: String) {
         guard !isStreaming else { return }
         guard let conversation = selectedConversation else { return }
@@ -3070,6 +3259,15 @@ final class ChatStore: ObservableObject {
         !Task.isCancelled &&
             loadMessagesGeneration == generation &&
             selectedConversation?.id == conversationID
+    }
+
+    private func silentShareInfo(for conversation: ConversationSummary) async -> ConversationSharesListResponse? {
+        #if DEBUG
+        if DemoCapture.isEnabled {
+            return Self.demoShareInfo(for: conversation)
+        }
+        #endif
+        return try? await api.fetchConversationShares(conversation.id)
     }
 
     nonisolated static func mergedMessages(remoteMessages: [ChatMessage], localCache: [ChatMessage]?) -> [ChatMessage] {
@@ -3282,10 +3480,16 @@ final class ChatStore: ObservableObject {
         for text: String,
         appendUserMessage: Bool = true
     ) -> RouteReadinessIssue? {
-        let councilRequested = appendUserMessage && isCouncilModeEnabled
+        let promptWantsCouncil = Self.promptRequestsCouncil(text)
+        let councilRequested = appendUserMessage &&
+            (isCouncilModeEnabled || councilModelIDs.count > 1 || promptWantsCouncil)
         let requestedCouncilIDs: [String]
         if councilRequested {
-            requestedCouncilIDs = requestCouncilModelIDs(for: selectedModel)
+            if promptWantsCouncil, !isCouncilModeEnabled, councilModelIDs.count <= 1 {
+                requestedCouncilIDs = defaultCouncilModelIDs()
+            } else {
+                requestedCouncilIDs = requestCouncilModelIDs(for: selectedModel)
+            }
         } else {
             requestedCouncilIDs = []
         }
@@ -3344,10 +3548,12 @@ final class ChatStore: ObservableObject {
         isStreaming = false
         if let currentAssistantMessageID,
            let index = messages.firstIndex(where: { $0.id == currentAssistantMessageID }) {
+            flushPendingTextDelta(for: currentAssistantMessageID)
             messages[index].isStreaming = false
             messages[index].status = "cancelled"
         }
         for messageID in currentCouncilAssistantMessageIDs {
+            flushPendingTextDelta(for: messageID)
             if let index = messages.firstIndex(where: { $0.id == messageID }) {
                 messages[index].isStreaming = false
                 messages[index].status = "cancelled"
@@ -3542,7 +3748,7 @@ final class ChatStore: ObservableObject {
                 await refreshModels()
             }
             if billingSnapshot == nil {
-                await refreshBilling(showErrors: false)
+                scheduleAccountBackgroundRefresh()
             }
             ensureSelectedModelIsAvailable(shouldShowBanner: true)
             routeCurrentPromptIfNeeded(text, attachments: attachments)
@@ -3553,14 +3759,6 @@ final class ChatStore: ObservableObject {
             routeReadinessIssue = nil
             let routedText = phoneAgentMissionPromptIfNeeded(for: text) ?? text
             let existingConversation = selectedConversation
-            let conversation = try await ensureConversation(for: text, attachments: attachments)
-            selectedConversation = conversation
-            transitionDraftScopeToCurrentSelection(loadDraft: false)
-            organizePhoneAgentConversationIfNeeded(
-                conversation: conversation,
-                originalText: text,
-                routedText: routedText
-            )
             let requestedModel = selectedModel
             let requestModel = requestedModel
             let previousAssistantMessage = messages.last(where: { $0.role == .assistant })
@@ -3569,6 +3767,14 @@ final class ChatStore: ObservableObject {
             let requestInitiator = initiator ?? (existingConversation == nil ? "new_chat" : "new_message")
             let councilModelIDs = appendUserMessage ? requestCouncilModelIDs(for: requestModel) : []
             if councilModelIDs.count > 1 {
+                let conversation = try await ensureConversation(for: text, attachments: attachments)
+                selectedConversation = conversation
+                transitionDraftScopeToCurrentSelection(loadDraft: false)
+                organizePhoneAgentConversationIfNeeded(
+                    conversation: conversation,
+                    originalText: text,
+                    routedText: routedText
+                )
                 try await sendCouncilTurn(
                     text: text,
                     routedText: routedText,
@@ -3591,7 +3797,8 @@ final class ChatStore: ObservableObject {
                 responseID: nil,
                 previousResponseID: previousResponseID,
                 isStreaming: false,
-                attachments: attachments
+                attachments: attachments,
+                metadata: currentUserMessageMetadata
             )
             let assistantMessage = ChatMessage(
                 id: "local-assistant-\(UUID().uuidString)",
@@ -3609,6 +3816,15 @@ final class ChatStore: ObservableObject {
                 messages.append(userMessage)
             }
             messages.append(assistantMessage)
+
+            let conversation = try await ensureConversation(for: text, attachments: attachments)
+            selectedConversation = conversation
+            transitionDraftScopeToCurrentSelection(loadDraft: false)
+            organizePhoneAgentConversationIfNeeded(
+                conversation: conversation,
+                originalText: text,
+                routedText: routedText
+            )
 
             let finalModel = try await streamResponseWithFallback(
                 initialModel: requestModel,
@@ -3630,9 +3846,10 @@ final class ChatStore: ObservableObject {
             if Self.isExternalModel(finalModel) {
                 saveLocalMessages(for: conversation.id)
             } else {
-                await loadMessages(for: conversation)
+                saveLocalMessages(for: conversation.id)
+                scheduleMessageLoad(for: conversation, preferCached: false)
             }
-            await refreshConversations()
+            scheduleConversationListRefresh()
             return true
         } catch is CancellationError {
             cancelStream()
@@ -3678,7 +3895,8 @@ final class ChatStore: ObservableObject {
             previousResponseID: previousResponseID,
             councilBatchID: batchID,
             isStreaming: false,
-            attachments: attachments
+            attachments: attachments,
+            metadata: currentUserMessageMetadata
         )
         let assistantMessages = modelIDs.enumerated().map { offset, modelID in
             ChatMessage(
@@ -3694,7 +3912,11 @@ final class ChatStore: ObservableObject {
                 isStreaming: true
             )
         }
-        let assistantIDByModel = Dictionary(uniqueKeysWithValues: zip(modelIDs, assistantMessages.map(\.id)))
+        let assistantIDByModel = zip(modelIDs, assistantMessages.map(\.id)).reduce(into: [String: String]()) { mapping, pair in
+            if mapping[pair.0] == nil {
+                mapping[pair.0] = pair.1
+            }
+        }
 
         currentAssistantMessageID = nil
         currentCouncilAssistantMessageIDs = assistantMessages.map(\.id)
@@ -3703,8 +3925,10 @@ final class ChatStore: ObservableObject {
         showBanner("LLM Council running \(modelIDs.count) models.")
 
         let outcome = await withTaskGroup(of: CouncilStreamResult.self, returning: CouncilRunOutcome.self) { group in
-            for modelID in modelIDs {
-                guard let assistantID = assistantIDByModel[modelID] else { continue }
+            var pendingModelIDs = modelIDs
+
+            func enqueueModel(_ modelID: String) {
+                guard let assistantID = assistantIDByModel[modelID] else { return }
                 group.addTask { @MainActor [weak self] in
                     guard let self else {
                         return CouncilStreamResult(
@@ -3762,6 +3986,11 @@ final class ChatStore: ObservableObject {
                 }
             }
 
+            let initialTaskCount = min(Self.maxConcurrentCouncilStreams, pendingModelIDs.count)
+            for _ in 0..<initialTaskCount {
+                enqueueModel(pendingModelIDs.removeFirst())
+            }
+
             group.addTask { @MainActor [weak self] in
                 await self?.waitForCouncilStopSignal(batchID: batchID) ?? .stopSignal(batchID: batchID)
             }
@@ -3775,6 +4004,9 @@ final class ChatStore: ObservableObject {
                     continue
                 }
                 collected.append(result)
+                if !stoppedEarly, !pendingModelIDs.isEmpty {
+                    enqueueModel(pendingModelIDs.removeFirst())
+                }
             }
             group.cancelAll()
             return CouncilRunOutcome(results: collected, stoppedEarly: stoppedEarly)
@@ -3809,7 +4041,7 @@ final class ChatStore: ObservableObject {
         } else {
             showBanner("Council finished with \(successfulResults.count) answers.")
         }
-        await refreshConversations()
+        scheduleConversationListRefresh()
     }
 
     private func waitForCouncilStopSignal(batchID: String) async -> CouncilStreamResult {
@@ -3834,7 +4066,11 @@ final class ChatStore: ObservableObject {
         modelIDs: [String],
         successfulResults: [CouncilStreamResult]
     ) async {
-        let resultByModel = Dictionary(uniqueKeysWithValues: successfulResults.map { ($0.modelID, $0) })
+        let resultByModel = successfulResults.reduce(into: [String: CouncilStreamResult]()) { mapping, result in
+            if mapping[result.modelID] == nil {
+                mapping[result.modelID] = result
+            }
+        }
         let responses = modelIDs.compactMap { modelID -> (String, String)? in
             guard let result = resultByModel[modelID],
                   let message = messages.first(where: { $0.id == result.messageID }),
@@ -4059,7 +4295,7 @@ final class ChatStore: ObservableObject {
     ) async throws {
         guard let apiKey = loadNearCloudAPIKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
               !apiKey.isEmpty else {
-            throw APIError.status(401, "Add a NEAR Cloud API key in Account to use \(modelDisplayName(for: modelID)).")
+            throw APIError.status(401, "Connect NEAR Cloud in Account to use \(modelDisplayName(for: modelID)).")
         }
         guard let cloudModelID = nearCloudUnderlyingModelID(for: modelID) else {
             throw APIError.status(400, "That NEAR Cloud model route is not valid.")
@@ -4493,52 +4729,75 @@ final class ChatStore: ObservableObject {
         conversationID: String,
         assistantMessageID: String?
     ) async {
-        guard let assistantMessageID,
-              let index = messages.firstIndex(where: { $0.id == assistantMessageID }) else {
+        guard let assistantMessageID else {
             return
         }
 
         switch event {
         case let .created(responseID):
-            messages[index].responseID = responseID
+            flushPendingTextDelta(for: assistantMessageID)
+            updateMessage(assistantMessageID) { message in
+                message.responseID = responseID
+            }
         case .reasoningStarted:
-            if messages[index].text.isEmpty {
-                messages[index].status = "reasoning"
+            updateMessage(assistantMessageID) { message in
+                if message.text.isEmpty {
+                    message.status = "reasoning"
+                }
             }
         case let .approvalNeeded(approval):
-            messages[index].pendingApproval = approval
-            messages[index].status = "approval"
-            messages[index].isStreaming = false
+            flushPendingTextDelta(for: assistantMessageID)
+            updateMessage(assistantMessageID) { message in
+                message.pendingApproval = approval
+                message.status = "approval"
+                message.isStreaming = false
+            }
         case let .webSearchStarted(query):
-            messages[index].status = "searching"
-            messages[index].searchQuery = query
+            updateMessage(assistantMessageID) { message in
+                message.status = "searching"
+                message.searchQuery = query
+            }
         case let .webSearchCompleted(query, sources):
-            messages[index].status = messages[index].text.isEmpty ? "thinking" : messages[index].status
-            messages[index].searchQuery = query ?? messages[index].searchQuery
-            messages[index].sources = Self.uniqueSources(messages[index].sources + sources)
+            updateMessage(assistantMessageID) { message in
+                message.status = message.text.isEmpty ? "thinking" : message.status
+                message.searchQuery = query ?? message.searchQuery
+                message.sources = Self.uniqueSources(message.sources + sources)
+            }
         case let .textDelta(delta):
-            if messages[index].text.isEmpty && messages[index].status == "searching" {
-                messages[index].status = "streaming"
+            if !delta.isEmpty {
+                let messageNeedsFirstTokenUpdate = messages.first(where: { $0.id == assistantMessageID }).map { message in
+                    message.firstTokenAt == nil || (message.text.isEmpty && message.status == "searching")
+                } ?? false
+                if messageNeedsFirstTokenUpdate {
+                    updateMessage(assistantMessageID) { message in
+                        if message.text.isEmpty && message.status == "searching" {
+                            message.status = "streaming"
+                        }
+                        if message.firstTokenAt == nil {
+                            message.firstTokenAt = Date()
+                        }
+                    }
+                }
             }
-            if !delta.isEmpty, messages[index].firstTokenAt == nil {
-                messages[index].firstTokenAt = Date()
-            }
-            messages[index].text += delta
+            appendBufferedTextDelta(delta, to: assistantMessageID)
         case let .itemDone(text):
+            flushPendingTextDelta(for: assistantMessageID)
             if let text, !text.isEmpty {
-                let existingText = messages[index].text
-                if messages[index].firstTokenAt == nil {
-                    messages[index].firstTokenAt = Date()
-                }
-                let shouldReplaceFailure = messages[index].status == "failed" || Self.localFailureMessage(from: existingText) != nil
-                if existingText.isEmpty || shouldReplaceFailure || text.contains(existingText) {
-                    messages[index].text = text
-                } else if !existingText.contains(text) {
-                    messages[index].text += "\n\n\(text)"
-                }
-                if messages[index].status != "approval" {
-                    messages[index].status = "streaming"
-                    messages[index].isStreaming = true
+                updateMessage(assistantMessageID) { message in
+                    let existingText = message.text
+                    if message.firstTokenAt == nil {
+                        message.firstTokenAt = Date()
+                    }
+                    let shouldReplaceFailure = message.status == "failed" || Self.localFailureMessage(from: existingText) != nil
+                    if existingText.isEmpty || shouldReplaceFailure || text.contains(existingText) {
+                        message.text = text
+                    } else if !existingText.contains(text) {
+                        message.text += "\n\n\(text)"
+                    }
+                    if message.status != "approval" {
+                        message.status = "streaming"
+                        message.isStreaming = true
+                    }
                 }
             }
         case let .titleUpdated(title):
@@ -4548,48 +4807,133 @@ final class ChatStore: ObservableObject {
                 selectedConversation = conversations[conversationIndex]
             }
         case let .completed(responseID):
-            guard messages[index].status != "failed", messages[index].status != "approval" else {
-                messages[index].responseID = responseID ?? messages[index].responseID
-                messages[index].isStreaming = false
-                return
-            }
-            messages[index].responseID = responseID ?? messages[index].responseID
-            if messages[index].sources.isEmpty {
-                messages[index].sources = Self.inferredSources(from: messages[index].text)
-            }
-            messages[index].status = "completed"
-            messages[index].isStreaming = false
-            if let localFailure = Self.localFailureMessage(from: messages[index].text) {
-                messages[index].status = "failed"
-                messages[index].text = localFailure
+            flushPendingTextDelta(for: assistantMessageID)
+            updateMessage(assistantMessageID) { message in
+                guard message.status != "failed", message.status != "approval" else {
+                    message.responseID = responseID ?? message.responseID
+                    message.isStreaming = false
+                    return
+                }
+                message.responseID = responseID ?? message.responseID
+                if message.sources.isEmpty {
+                    message.sources = Self.inferredSources(from: message.text)
+                }
+                message.status = "completed"
+                message.isStreaming = false
+                if let localFailure = Self.localFailureMessage(from: message.text) {
+                    message.status = "failed"
+                    message.text = localFailure
+                }
             }
         case let .failed(message):
+            flushPendingTextDelta(for: assistantMessageID)
             let displayMessage = Self.displayFailureMessage(message)
-            messages[index].status = "failed"
-            messages[index].isStreaming = false
-            if messages[index].text.isEmpty || Self.localFailureMessage(from: messages[index].text) != nil {
-                messages[index].text = displayMessage
-            } else if !messages[index].text.localizedCaseInsensitiveContains(displayMessage) {
-                messages[index].text += "\n\nResponse failed: \(displayMessage)"
+            updateMessage(assistantMessageID) { message in
+                message.status = "failed"
+                message.isStreaming = false
+                if message.text.isEmpty || Self.localFailureMessage(from: message.text) != nil {
+                    message.text = displayMessage
+                } else if !message.text.localizedCaseInsensitiveContains(displayMessage) {
+                    message.text += "\n\nResponse failed: \(displayMessage)"
+                }
             }
         }
     }
 
+    @discardableResult
+    private func updateMessage(_ messageID: String, mutate: (inout ChatMessage) -> Void) -> Bool {
+        var updatedMessages = messages
+        guard let index = updatedMessages.firstIndex(where: { $0.id == messageID }) else {
+            return false
+        }
+        let originalMessage = updatedMessages[index]
+        mutate(&updatedMessages[index])
+        guard updatedMessages[index] != originalMessage else {
+            return false
+        }
+        messages = updatedMessages
+        return true
+    }
+
     private func finishAssistantMessage(_ messageID: String) {
-        guard let index = messages.firstIndex(where: { $0.id == messageID }) else {
+        flushPendingTextDelta(for: messageID)
+        updateMessage(messageID) { message in
+            message.isStreaming = false
+            if message.status != "failed", message.status != "approval" {
+                message.status = "completed"
+            }
+            if message.firstTokenAt == nil,
+               !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                message.firstTokenAt = Date()
+            }
+            if message.sources.isEmpty {
+                message.sources = Self.inferredSources(from: message.text)
+            }
+        }
+    }
+
+    private func appendBufferedTextDelta(_ delta: String, to messageID: String) {
+        guard !delta.isEmpty else { return }
+        pendingTextDeltaByMessageID[messageID, default: ""] += delta
+        guard pendingTextDeltaFlushTask == nil else { return }
+        let flushDelay = pendingTextDeltaFlushNanoseconds()
+        pendingTextDeltaFlushTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: flushDelay)
+            guard !Task.isCancelled else { return }
+            self?.flushPendingTextDeltas()
+        }
+    }
+
+    private func pendingTextDeltaFlushNanoseconds() -> UInt64 {
+        let pendingIDs = Set(pendingTextDeltaByMessageID.keys)
+        guard !pendingIDs.isEmpty,
+              pendingIDs.allSatisfy({ messageID in
+                  messages.first(where: { $0.id == messageID })?.councilBatchID != nil
+              }) else {
+            return Self.streamDeltaFlushNanoseconds
+        }
+        return MessageStreamService.councilTextDeltaFlushNanoseconds
+    }
+
+    private func flushPendingTextDelta(for messageID: String) {
+        guard let delta = pendingTextDeltaByMessageID.removeValue(forKey: messageID),
+              !delta.isEmpty,
+              let index = messages.firstIndex(where: { $0.id == messageID }) else {
             return
         }
-        messages[index].isStreaming = false
-        if messages[index].status != "failed", messages[index].status != "approval" {
-            messages[index].status = "completed"
+        var updatedMessages = messages
+        updatedMessages[index].text += delta
+        messages = updatedMessages
+        if pendingTextDeltaByMessageID.isEmpty {
+            pendingTextDeltaFlushTask?.cancel()
+            pendingTextDeltaFlushTask = nil
         }
-        if messages[index].firstTokenAt == nil,
-           !messages[index].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            messages[index].firstTokenAt = Date()
+    }
+
+    private func flushPendingTextDeltas() {
+        pendingTextDeltaFlushTask = nil
+        let pendingDeltas = pendingTextDeltaByMessageID
+        pendingTextDeltaByMessageID.removeAll()
+        guard !pendingDeltas.isEmpty else { return }
+
+        var updatedMessages = messages
+        var didApplyDelta = false
+        for (messageID, delta) in pendingDeltas where !delta.isEmpty {
+            guard let index = updatedMessages.firstIndex(where: { $0.id == messageID }) else {
+                continue
+            }
+            updatedMessages[index].text += delta
+            didApplyDelta = true
         }
-        if messages[index].sources.isEmpty {
-            messages[index].sources = Self.inferredSources(from: messages[index].text)
+        if didApplyDelta {
+            messages = updatedMessages
         }
+    }
+
+    private func cancelPendingTextDeltaFlushes() {
+        pendingTextDeltaFlushTask?.cancel()
+        pendingTextDeltaFlushTask = nil
+        pendingTextDeltaByMessageID.removeAll()
     }
 
     func resolveIronclawApproval(
@@ -4794,6 +5138,8 @@ final class ChatStore: ObservableObject {
 
     private func apply(remoteSettings: RemoteUserSettings) {
         lastRemoteSettings = remoteSettings
+        notificationPreferenceEnabled = remoteSettings.notification ?? false
+        appearancePreference = AppAppearancePreference(remoteValue: remoteSettings.appearance)
         if let remoteWebSearch = remoteSettings.webSearch {
             webSearchEnabled = remoteWebSearch
         }
@@ -4819,7 +5165,7 @@ final class ChatStore: ObservableObject {
 
         let storedModel = UserDefaults.standard.string(forKey: scopedDefaultsKey(Self.selectedModelDefaultsKey))
         let initialModel = storedModel ?? Self.defaultModelID
-        selectedModel = initialModel == ModelOption.ironclawModelID && !loadedIronclawSettings.hasUsableHostedEndpoint ? Self.defaultModelID : initialModel
+        selectedModel = Self.routeKind(forModelID: initialModel).isIronclawRoute ? Self.defaultModelID : initialModel
         let storedCouncilModelIDs = loadStoredCouncilModelIDs()
         councilModelIDs = storedCouncilModelIDs.isEmpty ? [selectedModel] : storedCouncilModelIDs
         pinnedModelIDs = loadPinnedModelIDs()
@@ -5247,138 +5593,19 @@ final class ChatStore: ObservableObject {
     }
 
     private static func ironclawMobileModel() -> ModelOption {
-        ModelOption(
-            modelID: ModelOption.ironclawMobileModelID,
-            publicModel: true,
-            metadata: ModelOption.Metadata(
-                verifiable: false,
-                contextLength: nil,
-                modelDisplayName: "IronClaw Mobile",
-                modelDescription: "Runs an iOS-safe IronClaw runtime with NEAR Private inference, web search, attachments, projects, and automatic hosted workstation handoff for git/code/shell tasks.",
-                modelIcon: nil,
-                aliases: ["IronClaw", "mobile runtime", "agent", "iOS", "workstation", "git", "code"]
-            )
-        )
+        ModelCatalogStore.ironclawMobileModel()
     }
 
     private static func ironclawModel() -> ModelOption {
-        ModelOption(
-            modelID: ModelOption.ironclawModelID,
-            publicModel: true,
-            metadata: ModelOption.Metadata(
-                verifiable: false,
-                contextLength: nil,
-                modelDisplayName: "Hosted IronClaw",
-                modelDescription: "Connect a hosted IronClaw HTTPS workstation for git, code, shell, research, and software tasks.",
-                modelIcon: nil,
-                aliases: ["IronClaw", "Hosted IronClaw", "agent", "hosted endpoint", "workstation", "git", "code", "shell"]
-            )
-        )
-    }
-
-    private static func nearCloudQwenMaxModel() -> ModelOption {
-        ModelOption(
-            modelID: ModelOption.nearCloudQwenMaxModelID,
-            publicModel: true,
-            metadata: ModelOption.Metadata(
-                verifiable: false,
-                contextLength: nil,
-                modelDisplayName: "Qwen 3.7 Max",
-                modelDescription: "Runs qwen/qwen3.7-max through NEAR Cloud with privacy proxy routing and app-supplied context.",
-                modelIcon: nil,
-                aliases: ["NEAR Cloud", "Qwen", "Qwen 3.7 Max", "Alibaba", "closed-source", "privacy proxy"]
-            )
-        )
+        ModelCatalogStore.ironclawModel()
     }
 
     private static func fallbackNearCloudModels() -> [ModelOption] {
-        [
-            nearCloudFallbackModel(
-                cloudModelID: "anthropic/claude-opus-4-7",
-                displayName: "Claude Opus 4.7",
-                description: "Runs Claude Opus 4.7 through NEAR Cloud with privacy proxy routing."
-            ),
-            nearCloudFallbackModel(
-                cloudModelID: "openai/gpt-5.5",
-                displayName: "GPT-5.5",
-                description: "Runs GPT-5.5 through NEAR Cloud with privacy proxy routing."
-            ),
-            nearCloudFallbackModel(
-                cloudModelID: "qwen/qwen3.7-max",
-                displayName: "Qwen3.7 Max",
-                description: "Runs Qwen3.7 Max through NEAR Cloud with privacy proxy routing."
-            ),
-            nearCloudFallbackModel(
-                cloudModelID: "moonshotai/kimi-k2.6",
-                displayName: "Kimi K2.6",
-                description: "Runs Kimi K2.6 through NEAR Cloud with privacy proxy routing."
-            ),
-            nearCloudFallbackModel(
-                cloudModelID: "google/gemini-3.5-flash",
-                displayName: "Gemini 3.5 Flash",
-                description: "Runs Gemini 3.5 Flash through NEAR Cloud with privacy proxy routing."
-            ),
-            nearCloudFallbackModel(
-                cloudModelID: "openai/gpt-oss-120b",
-                displayName: "GPT OSS 120B",
-                description: "Runs GPT OSS 120B through NEAR Cloud with privacy proxy routing."
-            )
-        ]
-    }
-
-    private static func nearCloudFallbackModel(
-        cloudModelID: String,
-        displayName: String,
-        description: String
-    ) -> ModelOption {
-        ModelOption(
-            modelID: nearCloudRouteModelID(for: cloudModelID),
-            publicModel: true,
-            metadata: ModelOption.Metadata(
-                verifiable: false,
-                contextLength: nil,
-                modelDisplayName: displayName,
-                modelDescription: description,
-                modelIcon: nil,
-                aliases: ["NEAR Cloud", cloudModelID, displayName, "privacy proxy", "unverified"]
-            )
-        )
+        ModelCatalogStore.fallbackNearCloudModels()
     }
 
     private static func nearCloudRouteModels(from cloudModels: [ModelOption]) -> [ModelOption] {
-        var seen = Set<String>()
-        return cloudModels.compactMap { model in
-            let cloudID = model.nearCloudUnderlyingModelID ?? model.id
-            let normalizedID = cloudID.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !normalizedID.isEmpty, seen.insert(normalizedID.lowercased()).inserted else {
-                return nil
-            }
-            let aliases = uniqueStrings(["NEAR Cloud", "privacy proxy", "unverified", normalizedID, model.displayName] + (model.metadata?.aliases ?? []))
-            let description = model.metadata?.modelDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let routeDescription = description?.isEmpty == false
-                ? "\(description!) Runs through NEAR Cloud with privacy proxy routing."
-                : "Runs \(model.displayName) through NEAR Cloud with privacy proxy routing."
-            return ModelOption(
-                modelID: nearCloudRouteModelID(for: normalizedID),
-                publicModel: model.publicModel,
-                metadata: ModelOption.Metadata(
-                    verifiable: false,
-                    contextLength: model.metadata?.contextLength,
-                    modelDisplayName: model.displayName,
-                    modelDescription: routeDescription,
-                    modelIcon: model.metadata?.modelIcon,
-                    aliases: aliases
-                )
-            )
-        }
-    }
-
-    private static func nearCloudRouteModelID(for cloudModelID: String) -> String {
-        let normalized = cloudModelID.trimmingCharacters(in: .whitespacesAndNewlines)
-        if normalized.localizedCaseInsensitiveCompare("qwen/qwen3.7-max") == .orderedSame {
-            return ModelOption.nearCloudQwenMaxModelID
-        }
-        return ModelOption.nearCloudModelID(for: normalized)
+        ModelCatalogStore.nearCloudRouteModels(from: cloudModels)
     }
 
     nonisolated private static func uniqueStrings(_ values: [String]) -> [String] {
@@ -5390,21 +5617,6 @@ final class ChatStore: ObservableObject {
                 continue
             }
             output.append(trimmed)
-        }
-        return output
-    }
-
-    nonisolated private static func uniqueModels(_ models: [ModelOption]) -> [ModelOption] {
-        var seen = Set<String>()
-        var output: [ModelOption] = []
-        for model in models {
-            let key = (model.nearCloudUnderlyingModelID ?? model.id)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-            guard !key.isEmpty, seen.insert(key).inserted else {
-                continue
-            }
-            output.append(model)
         }
         return output
     }
@@ -6193,18 +6405,49 @@ final class ChatStore: ObservableObject {
     }
 
     private func routeCurrentPromptIfNeeded(_ text: String, attachments: [ChatAttachment]) {
-        _ = AskOrchestrator.decide(
-            AskOrchestrator.Input(
-                prompt: text,
-                selectedRoute: selectedRouteKind,
-                hasProjectContext: selectedProjectID != nil || !activeProjectContextAttachments.isEmpty || !activeProjectContextLinks.isEmpty,
-                hasPromptAttachments: !promptOnlyAttachments(from: attachments).isEmpty,
-                nearCloudKeyConfigured: nearCloudKeyConfigured,
-                hostedAgentAvailable: ironclawRemoteWorkstationAvailable,
-                councilAvailable: defaultCouncilModelIDs().count > 1,
-                councilActive: isCouncilModeEnabled
-            )
-        )
+        if selectedModel != ModelOption.ironclawModelID,
+           selectedModel != ModelOption.ironclawMobileModelID,
+           Self.promptNeedsRemoteWorkstation(text),
+           ironclawRemoteWorkstationAvailable {
+            selectedModel = ModelOption.ironclawModelID
+            clearAttestationState()
+            showBanner("Switched to IronClaw because this prompt needs hosted agent tools.")
+            return
+        }
+
+        if routeCouncilIfNeeded(text) {
+            return
+        }
+
+        guard selectedModelOption?.isNearCloudModel == true,
+              Self.promptNeedsLiveWeb(text),
+              !shouldUseAppWebGrounding(model: selectedModel, prompt: text),
+              let privateModel = preferredAvailableModel() else {
+            return
+        }
+        selectedModel = privateModel
+        clearAttestationState()
+        showBanner("Switched to \(modelDisplayName(for: privateModel)) because this prompt needs NEAR Private web search.")
+    }
+
+    private func routeCouncilIfNeeded(_ text: String) -> Bool {
+        guard Self.promptRequestsCouncil(text),
+              selectedModel != ModelOption.ironclawModelID,
+              selectedModel != ModelOption.ironclawMobileModelID else {
+            return false
+        }
+        if isCouncilModeEnabled {
+            return true
+        }
+        let ids = defaultCouncilModelIDs()
+        guard ids.count > 1 else {
+            return false
+        }
+        selectedModel = ids[0]
+        councilModelIDs = ids
+        clearAttestationState()
+        showBanner("LLM Council selected for a multi-model answer.")
+        return true
     }
 
     private func ensureSelectedModelIsAvailable(shouldShowBanner: Bool) {
@@ -6334,10 +6577,7 @@ final class ChatStore: ObservableObject {
     }
 
     private static func model(_ model: ModelOption, matchesCandidateID candidateID: String) -> Bool {
-        let candidate = candidateID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !candidate.isEmpty else { return false }
-        let comparableIDs = uniqueStrings([model.id, model.nearCloudUnderlyingModelID].compactMap { $0 })
-        return comparableIDs.contains { $0.localizedCaseInsensitiveCompare(candidate) == .orderedSame }
+        ModelCatalogStore.model(model, matchesCandidateID: candidateID)
     }
 
     private func requestCouncilModelIDs(for requestModel: String) -> [String] {
@@ -6379,12 +6619,7 @@ final class ChatStore: ObservableObject {
     }
 
     private func visibleOutputTimeout(for model: String) -> TimeInterval? {
-        if Self.routeKind(forModelID: model) == .nearCloud ||
-            model == ModelOption.ironclawModelID ||
-            model == ModelOption.ironclawMobileModelID {
-            return nil
-        }
-        return 90
+        MessageStreamService.visibleOutputTimeout(for: model)
     }
 
     private func modelDisplayName(for modelID: String) -> String {
@@ -6451,42 +6686,7 @@ final class ChatStore: ObservableObject {
     }
 
     private func rankedModels(from source: [ModelOption]) -> [ModelOption] {
-        source.sorted { lhs, rhs in
-            let lhsRank = modelRank(lhs)
-            let rhsRank = modelRank(rhs)
-            if lhsRank != rhsRank {
-                return lhsRank < rhsRank
-            }
-            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
-        }
-    }
-
-    private func modelRank(_ model: ModelOption) -> Int {
-        let comparableIDs = Self.uniqueStrings([model.id, model.nearCloudUnderlyingModelID].compactMap { $0 })
-        if model.isNearCloudModel,
-           let cloudIndex = nearCloudPreferredModelIDs.firstIndex(where: { preferredID in
-               comparableIDs.contains { $0.localizedCaseInsensitiveCompare(preferredID) == .orderedSame }
-           }) {
-            return cloudIndex
-        }
-        if let preferredIndex = preferredModelIDs.firstIndex(where: { preferredID in
-            comparableIDs.contains { $0.localizedCaseInsensitiveCompare(preferredID) == .orderedSame }
-        }) {
-            return preferredIndex
-        }
-        if model.isEliteModel {
-            return 100
-        }
-        if model.isRecommendedReasoningModel && !model.isLowerPriorityModel {
-            return 200
-        }
-        if model.isPrivateVerifiableChatModel {
-            return 300
-        }
-        if model.isLowerPriorityModel {
-            return 1_000
-        }
-        return model.isAnthropicModel ? 450 : 500
+        modelCatalog.rankedModels(from: source)
     }
 
     private func updateCurrentExchange(to model: String, shouldClearText: Bool = true) {
@@ -6516,6 +6716,7 @@ final class ChatStore: ObservableObject {
             return
         }
 
+        flushPendingTextDelta(for: currentAssistantMessageID)
         messages[index].text = preservedText
         messages[index].status = "streaming"
         messages[index].responseID = nil
@@ -7844,7 +8045,8 @@ final class ChatStore: ObservableObject {
                     searchQuery: item.role == .assistant ? queryByResponseID[item.responseID] ?? nil : nil,
                     sources: item.role == .assistant ? sourcesByResponseID[item.responseID] ?? [] : [],
                     attachments: item.role == .user ? attachments(from: item.content ?? []) : [],
-                    branchVariant: item.role == .assistant ? branchVariants[item.responseID] : nil
+                    branchVariant: item.role == .assistant ? branchVariants[item.responseID] : nil,
+                    metadata: item.metadata
                 )
             }
         return normalizedMessages(messages, assumingStreamLost: false)

@@ -1,408 +1,12 @@
 import SwiftUI
 
-#if DEBUG
-enum DemoCaptureScreen: String, CaseIterable {
-    case onboarding
-    case login
-    case home
-    case fileAttach
-    case glmResult
-    case chat
-    case councilOutput
-    case verification
-    case models
-    case cloudModels
-    case council
-    case composer
-    case agent
-    case ironclawThinking
-    case ironclaw
-    case project
-    case share
-
-    init(rawValueOrDefault rawValue: String?) {
-        guard let normalized = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-              let screen = DemoCaptureScreen.allCases.first(where: { $0.rawValue.lowercased() == normalized }) else {
-            self = .onboarding
-            return
-        }
-        self = screen
-    }
-}
-
-enum DemoCapture {
-    static var isEnabled: Bool {
-        CommandLine.arguments.contains("-NEARDemoCapture") ||
-            ProcessInfo.processInfo.environment["NEAR_DEMO_CAPTURE"] == "1"
-    }
-
-    static var isAutoPlayEnabled: Bool {
-        CommandLine.arguments.contains("-NEARDemoAutoPlay") ||
-            ProcessInfo.processInfo.environment["NEAR_DEMO_AUTOPLAY"] == "1"
-    }
-
-    static var initialScreen: DemoCaptureScreen {
-        let argumentPrefix = "-NEARDemoScreen="
-        let argumentValue = CommandLine.arguments.first { $0.hasPrefix(argumentPrefix) }
-            .map { String($0.dropFirst(argumentPrefix.count)) }
-        return DemoCaptureScreen(rawValueOrDefault: argumentValue ?? ProcessInfo.processInfo.environment["NEAR_DEMO_SCREEN"])
-    }
-
-    static var autoPlayDelayNanoseconds: UInt64 {
-        let argumentPrefix = "-NEARDemoAutoPlayDelayMS="
-        let argumentValue = CommandLine.arguments.first { $0.hasPrefix(argumentPrefix) }
-            .flatMap { UInt64(String($0.dropFirst(argumentPrefix.count))) }
-        let environmentValue = ProcessInfo.processInfo.environment["NEAR_DEMO_AUTOPLAY_DELAY_MS"].flatMap(UInt64.init)
-        return (argumentValue ?? environmentValue ?? 0) * 1_000_000
-    }
-}
-#endif
-
-@main
-struct NEARPrivateChatApp: App {
-    @StateObject private var sessionStore: SessionStore
-    @StateObject private var chatStore: ChatStore
-
-    init() {
-        let api = PrivateChatAPI(configuration: .production)
-        let sessionStore = SessionStore(api: api)
-        _sessionStore = StateObject(wrappedValue: sessionStore)
-        _chatStore = StateObject(wrappedValue: ChatStore(api: api))
-    }
-
-    var body: some Scene {
-        WindowGroup {
-            RootView()
-                .environmentObject(sessionStore)
-                .environmentObject(chatStore)
-                .onOpenURL { url in
-                    if !sessionStore.handleIncomingURL(url) {
-                        chatStore.handleIncomingURL(url)
-                    }
-                }
-                .task {
-                    await prepareAuthenticatedChatState()
-                }
-                .onChange(of: sessionStore.session?.token) { _, token in
-                    Task {
-                        #if DEBUG
-                        if DemoCapture.isEnabled {
-                            sessionStore.configureDemoCaptureSession()
-                            chatStore.prepareDemoCapture(screen: DemoCapture.initialScreen)
-                            return
-                        }
-                        #endif
-                        if token == nil {
-                            chatStore.prepareForAuthenticatedAccount(nil)
-                        } else {
-                            await prepareAuthenticatedChatState()
-                        }
-                    }
-                }
-                .onChange(of: sessionStore.setupAccountID) { _, accountID in
-                    guard sessionStore.isSignedIn else { return }
-                    #if DEBUG
-                    if DemoCapture.isEnabled {
-                        chatStore.prepareForAuthenticatedAccount(accountID)
-                        chatStore.prepareDemoCapture(screen: DemoCapture.initialScreen)
-                        return
-                    }
-                    #endif
-                    if let accountID,
-                       UserSetupStorage.isFallbackAccountID(accountID),
-                       sessionStore.profile == nil {
-                        return
-                    }
-                    Task {
-                        chatStore.prepareForAuthenticatedAccount(accountID)
-                        await chatStore.bootstrap()
-                    }
-                }
-        }
-    }
-
-    @MainActor
-    private func prepareAuthenticatedChatState() async {
-        #if DEBUG
-        if DemoCapture.isEnabled {
-            sessionStore.configureDemoCaptureSession()
-            chatStore.prepareForAuthenticatedAccount(sessionStore.setupAccountID)
-            chatStore.prepareDemoCapture(screen: DemoCapture.initialScreen)
-            return
-        }
-        #endif
-
-        guard sessionStore.isSignedIn else { return }
-        await sessionStore.refreshProfile()
-        chatStore.prepareForAuthenticatedAccount(sessionStore.setupAccountID)
-        await chatStore.bootstrap()
-    }
-}
-
-private struct RootView: View {
-    @EnvironmentObject private var sessionStore: SessionStore
-    @EnvironmentObject private var chatStore: ChatStore
-    @State private var setupAccountID: String?
-    @State private var legalTermsAccepted = true
-
-    var body: some View {
-        Group {
-            #if DEBUG
-            if DemoCapture.isEnabled {
-                DemoCaptureRootView(screen: DemoCapture.initialScreen, autoPlay: DemoCapture.isAutoPlayEnabled)
-            } else {
-                authenticatedRoot
-            }
-            #else
-            authenticatedRoot
-            #endif
-        }
-        .onAppear {
-            refreshLegalTermsAcceptance()
-            refreshSetupPresentation()
-        }
-        .onChange(of: sessionStore.session?.token) { _, _ in
-            refreshLegalTermsAcceptance()
-            refreshSetupPresentation()
-        }
-        .onChange(of: sessionStore.setupAccountID) { oldAccountID, accountID in
-            refreshLegalTermsAcceptance(previousAccountID: oldAccountID, currentAccountID: accountID)
-            refreshSetupPresentation(previousAccountID: oldAccountID)
-        }
-        .overlay(alignment: .top) {
-            #if DEBUG
-            let shouldSuppressDemoBanner = DemoCapture.isEnabled
-            #else
-            let shouldSuppressDemoBanner = false
-            #endif
-            if !shouldSuppressDemoBanner, let message = sessionStore.bannerMessage ?? chatStore.bannerMessage {
-                StatusBanner(message: message)
-                    .padding(.top, 12)
-                    .padding(.horizontal, 16)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var authenticatedRoot: some View {
-        if sessionStore.isSignedIn {
-            if legalTermsAccepted {
-                AppShellView {
-                    beginSetupRerun()
-                }
-            } else {
-                LegalTermsRequiredView {
-                    acceptLegalTermsForCurrentAccount()
-                }
-            }
-        } else {
-            AuthView()
-        }
-    }
-
-    private var currentSetupProfile: UserSetupProfile {
-        UserSetupProfile.inferredCurrentDefaults(
-            webSearchEnabled: chatStore.webSearchEnabled,
-            sourceMode: chatStore.sourceMode,
-            selectedModelID: chatStore.selectedModel,
-            hasSelectedProject: chatStore.selectedProjectID != nil,
-            isCouncilModeEnabled: chatStore.isCouncilModeEnabled,
-            researchModeEnabled: chatStore.researchModeEnabled
-        )
-    }
-
-    private var setupReadinessSnapshot: AppSetupReadinessSnapshot {
-        AppSetupReadinessSnapshot(
-            modelCatalogLoaded: !chatStore.models.isEmpty,
-            privateModelAvailable: chatStore.pickerModels.contains { !$0.isExternalModel },
-            defaultCouncilModelCount: chatStore.defaultCouncilModels.count,
-            ironclawMobileAvailable: chatStore.agentModels.contains { $0.id == ModelOption.ironclawMobileModelID },
-            hostedIronclawAvailable: chatStore.ironclawRemoteWorkstationAvailable,
-            nearCloudKeyConfigured: chatStore.nearCloudKeyConfigured
-        )
-    }
-
-    private func beginSetupRerun() {
-        guard sessionStore.isSignedIn, let accountID = sessionStore.setupAccountID else { return }
-        setupAccountID = accountID
-        UserSetupStorage.save(.defaults, for: accountID)
-        chatStore.resetInteractionDefaults()
-        recordSetupTelemetry(profile: .defaults, outcome: .completed)
-    }
-
-    private func recordSetupTelemetry(profile: UserSetupProfile, outcome: TelemetrySetupOutcome) {
-        let store = PrivateTelemetryStore()
-        let context = TelemetryContext(
-            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "local",
-            profileBucket: profile.telemetryProfileBucket
-        )
-        try? store.record(.setupGoalSelected(profile.telemetrySetupGoal), context: context)
-        try? store.record(.setupCompletedOrSkipped(outcome), context: context)
-    }
-
-    private func refreshLegalTermsAcceptance(previousAccountID: String? = nil, currentAccountID: String? = nil) {
-        guard sessionStore.isSignedIn, let accountID = currentAccountID ?? sessionStore.setupAccountID else {
-            legalTermsAccepted = true
-            return
-        }
-
-        if let previousAccountID, previousAccountID != accountID {
-            LegalTermsAcceptanceStore.migrate(from: previousAccountID, to: accountID)
-        }
-
-        if LegalTermsAcceptanceStore.hasAcceptedCurrentVersion(for: accountID) ||
-            LegalTermsAcceptanceStore.consumePendingAcceptance(for: accountID) {
-            legalTermsAccepted = true
-            return
-        }
-
-        legalTermsAccepted = false
-    }
-
-    private func acceptLegalTermsForCurrentAccount() {
-        guard let accountID = sessionStore.setupAccountID else { return }
-        LegalTermsAcceptanceStore.acceptCurrentVersion(for: accountID)
-        legalTermsAccepted = true
-        refreshSetupPresentation()
-    }
-
-    private func refreshSetupPresentation(previousAccountID: String? = nil) {
-        guard sessionStore.isSignedIn, let accountID = sessionStore.setupAccountID else {
-            setupAccountID = nil
-            return
-        }
-
-        guard LegalTermsAcceptanceStore.hasAcceptedCurrentVersion(for: accountID) else {
-            setupAccountID = accountID
-            return
-        }
-
-        if let previousAccountID, previousAccountID != accountID {
-            UserSetupStorage.migrate(from: previousAccountID, to: accountID)
-        } else if let setupAccountID, setupAccountID != accountID {
-            UserSetupStorage.migrate(from: setupAccountID, to: accountID)
-        }
-
-        setupAccountID = accountID
-        if !UserSetupStorage.isCompleted(for: accountID) {
-            UserSetupStorage.save(.defaults, for: accountID)
-            recordSetupTelemetry(profile: .defaults, outcome: .skipped)
-        }
-    }
-}
-
-private struct LegalTermsRequiredView: View {
-    let onAccept: () -> Void
-    @State private var showingTerms = false
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 18) {
-                AuthHeroCard()
-
-                VStack(alignment: .leading, spacing: 14) {
-                    Label("Review terms to continue", systemImage: "doc.text.magnifyingglass")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(.primary)
-
-                    Text("Accept the current Terms before using private chat, Cloud models, files, sharing, web grounding, Council, or agent tools.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(LegalTerms.signupSummary, id: \.self) { item in
-                            Label(item, systemImage: "checkmark.circle")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Button {
-                        showingTerms = true
-                    } label: {
-                        Label("Review terms", systemImage: "doc.text.magnifyingglass")
-                            .font(.subheadline.weight(.bold))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 44)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.brandBlue)
-                    .background(Color.brandBlue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                    Button {
-                        onAccept()
-                    } label: {
-                        Text("Accept and continue")
-                            .font(.headline.weight(.bold))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 52)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.white)
-                    .background(Color.brandBlue, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-                .padding(18)
-                .frame(maxWidth: 390, alignment: .leading)
-                .background(.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.brandBlue.opacity(0.16), lineWidth: 1)
-                }
-                .shadow(color: .black.opacity(0.04), radius: 12, y: 5)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(28)
-        }
-        .background { HomeSurfaceBackground().ignoresSafeArea() }
-        .sheet(isPresented: $showingTerms) {
-            LegalTermsSheet()
-        }
-    }
-}
-
-private extension UserSetupProfile {
-    var telemetrySetupGoal: TelemetrySetupGoal {
-        if useCases.count > 1 {
-            return .unsure
-        }
-        switch useCases.setupPrimaryUseCase {
-        case .privateChat:
-            return .privateChat
-        case .research:
-            return .research
-        case .buildAgents:
-            return .agentWork
-        case .teamProjects:
-            return .verifiedMode
-        }
-    }
-
-    var telemetryProfileBucket: TelemetryProfileBucket {
-        if useCases.count > 1 {
-            return .mixed
-        }
-        switch useCases.setupPrimaryUseCase {
-        case .privateChat:
-            return .privateChat
-        case .research:
-            return .research
-        case .buildAgents:
-            return .agentWork
-        case .teamProjects:
-            return .mixed
-        }
-    }
-}
-
 private enum SetupDefaultToggle: Hashable {
     case web
     case ironclaw
     case council
 }
 
-private struct UserSetupView: View {
+struct UserSetupView: View {
     @EnvironmentObject private var chatStore: ChatStore
     let readiness: AppSetupReadinessSnapshot
     let onComplete: (UserSetupProfile) -> Void
@@ -410,6 +14,7 @@ private struct UserSetupView: View {
     @State private var profile: UserSetupProfile
     @State private var editedDefaultToggles: Set<SetupDefaultToggle> = []
     @State private var editedContextStyle = false
+    @State private var showsCapabilitySetup: Bool
 
     init(
         initialProfile: UserSetupProfile = .defaults,
@@ -421,6 +26,13 @@ private struct UserSetupView: View {
         self.onComplete = onComplete
         self.onSkip = onSkip
         _profile = State(initialValue: initialProfile)
+        _showsCapabilitySetup = State(
+            initialValue: initialProfile.experienceMode == .power ||
+                initialProfile.wantsIronclaw ||
+                initialProfile.wantsCouncil ||
+                initialProfile.contextStyle != .simple ||
+                initialProfile.wantsWeb
+        )
     }
 
     var body: some View {
@@ -433,9 +45,15 @@ private struct UserSetupView: View {
 
                     setupExamples
 
-                    SetupQuietWebToggle(isOn: setupToggleBinding(.web, keyPath: \.wantsWeb))
+                    setupUseCases
 
-                    SetupReadinessLine(plan: AppSetupPlan(profile: profile.normalizedForDefaults, readiness: readiness))
+                    setupExperienceMode
+
+                    setupCapabilitiesDisclosure
+
+                    SetupReadinessLine(plan: setupPlan)
+
+                    setupPreview
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 18)
@@ -468,7 +86,7 @@ private struct UserSetupView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(primarySetupActionTitle)
 
-            Button("Skip setup") {
+            Button("Not now") {
                 onSkip()
             }
             .font(.footnote.weight(.semibold))
@@ -486,7 +104,11 @@ private struct UserSetupView: View {
     }
 
     private var primarySetupActionTitle: String {
-        AppSetupPlan(profile: profile.normalizedForDefaults, readiness: readiness).expectedFirstAction
+        setupPlan.expectedFirstAction
+    }
+
+    private var setupPlan: AppSetupPlan {
+        AppSetupPlan(profile: profile.normalizedForDefaults, readiness: readiness)
     }
 
     private var setupHero: some View {
@@ -531,6 +153,97 @@ private struct UserSetupView: View {
         }
     }
 
+    private var setupExperienceMode: some View {
+        setupSection(title: "How much control do you want?") {
+            ForEach(UserSetupExperienceMode.allCases) { mode in
+                SetupChoiceRow(
+                    title: mode.title,
+                    subtitle: mode.subtitle,
+                    symbolName: mode.symbolName,
+                    isSelected: profile.experienceMode == mode
+                ) {
+                    setExperienceMode(mode)
+                }
+            }
+        }
+    }
+
+    private var setupUseCases: some View {
+        setupSection(title: "What should work first?") {
+            ForEach(UserSetupUseCase.allCases) { useCase in
+                SetupChoiceRow(
+                    title: useCase.title,
+                    subtitle: useCase.subtitle,
+                    symbolName: useCase.symbolName,
+                    isSelected: profile.useCases.contains(useCase),
+                    selectionStyle: .multi
+                ) {
+                    profile.toggleUseCase(useCase)
+                    applyUseCaseDefaultsFromSelection()
+                }
+            }
+        }
+    }
+
+    private var setupContextStyle: some View {
+        setupSection(title: "Sources & memory") {
+            ForEach(UserSetupContextStyle.allCases) { style in
+                SetupChoiceRow(
+                    title: style.title,
+                    subtitle: style.subtitle,
+                    symbolName: style.symbolName,
+                    isSelected: profile.contextStyle == style
+                ) {
+                    profile.contextStyle = style
+                    editedContextStyle = true
+                }
+            }
+        }
+    }
+
+    private var setupCapabilitiesDisclosure: some View {
+        setupSection(title: "Connect more capabilities") {
+            DisclosureGroup(isExpanded: $showsCapabilitySetup) {
+                VStack(alignment: .leading, spacing: 16) {
+                    setupContextStyle
+
+                    SetupQuietWebToggle(isOn: setupToggleBinding(.web, keyPath: \.wantsWeb))
+
+                    setupAdvancedRoutesContent
+
+                    Text("You can change these defaults later from Account without resetting chats.")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, 12)
+            } label: {
+                SetupCapabilityDisclosureLabel(
+                    title: capabilityDisclosureTitle,
+                    detail: capabilityDisclosureDetail,
+                    sourceStyle: profile.contextStyle.title,
+                    webEnabled: profile.wantsWeb,
+                    wantsIronclaw: profile.wantsIronclaw,
+                    wantsCouncil: profile.wantsCouncil,
+                    experienceMode: profile.experienceMode
+                )
+            }
+            .tint(.primary)
+            .padding(12)
+            .background(Color.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.border, lineWidth: 1)
+            }
+        }
+    }
+
+    private var setupPreview: some View {
+        setupSection(title: "What will happen next") {
+            SetupPlanPreviewCard(plan: setupPlan)
+        }
+    }
+
     private func applyUseCaseDefaultsFromSelection() {
         let selected = Set(profile.useCases)
         profile.useCase = profile.useCases.setupPrimaryUseCase
@@ -538,10 +251,10 @@ private struct UserSetupView: View {
             profile.wantsWeb = false
         }
         if !editedDefaultToggles.contains(.ironclaw) {
-            profile.wantsIronclaw = selected.contains(.buildAgents)
+            profile.wantsIronclaw = profile.experienceMode == .power && selected.contains(.buildAgents)
         }
         if !editedDefaultToggles.contains(.council) {
-            profile.wantsCouncil = selected.contains(.research) && !profile.wantsIronclaw
+            profile.wantsCouncil = profile.experienceMode == .power && selected.contains(.research) && !profile.wantsIronclaw
         }
         if !editedContextStyle {
             if selected.contains(.research) || selected.contains(.buildAgents) || selected.contains(.teamProjects) {
@@ -562,6 +275,84 @@ private struct UserSetupView: View {
         )
     }
 
+    private func setExperienceMode(_ mode: UserSetupExperienceMode) {
+        guard profile.experienceMode != mode else { return }
+        profile.experienceMode = mode
+        if mode == .beginner {
+            editedDefaultToggles.remove(.ironclaw)
+            editedDefaultToggles.remove(.council)
+            profile.wantsIronclaw = false
+            profile.wantsCouncil = false
+        } else {
+            showsCapabilitySetup = true
+            applyUseCaseDefaultsFromSelection()
+        }
+    }
+
+    private var capabilityDisclosureTitle: String {
+        if profile.experienceMode == .power {
+            return "Power controls are available"
+        }
+        return "Private-first defaults are enough to start"
+    }
+
+    private var capabilityDisclosureDetail: String {
+        if profile.experienceMode == .power {
+            return "Adjust source style, live web, Council, and agent routes before your first chat."
+        }
+        return "Expand only if you want to tune sources, web behavior, or advanced routes now."
+    }
+
+    @ViewBuilder
+    private var setupAdvancedRoutesContent: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("Routes")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.secondary)
+
+            if profile.experienceMode == .power {
+                VStack(spacing: 8) {
+                    SetupToggleRow(
+                        title: "IronClaw agent",
+                        subtitle: ironclawToggleSubtitle,
+                        symbolName: "terminal",
+                        isOn: setupToggleBinding(.ironclaw, keyPath: \.wantsIronclaw)
+                    )
+
+                    SetupToggleRow(
+                        title: "LLM Council",
+                        subtitle: councilToggleSubtitle,
+                        symbolName: "square.grid.2x2",
+                        isOn: setupToggleBinding(.council, keyPath: \.wantsCouncil)
+                    )
+                }
+            } else {
+                SetupInfoCard(
+                    title: "Beginner mode keeps routes simple",
+                    detail: "Start with private chat, sources, and project memory first. Switch to Power whenever you want agents or Council visible from day one.",
+                    symbolName: "sparkles"
+                )
+            }
+        }
+    }
+
+    private var ironclawToggleSubtitle: String {
+        if readiness.ironclawMobileAvailable {
+            return "Phone-safe agent tasks and project actions stay one tap away."
+        }
+        return "Private chat stays ready first while IronClaw Mobile finishes loading."
+    }
+
+    private var councilToggleSubtitle: String {
+        if !readiness.modelCatalogLoaded {
+            return "The lineup is still loading. Private chat stays ready first."
+        }
+        if readiness.councilReady {
+            return "Compare multiple models from the same prompt when you need a sharper answer."
+        }
+        return "Needs at least two available models. Private chat stays ready first."
+    }
+
     private var setupExamples: some View {
         VStack(alignment: .leading, spacing: 9) {
             Text("Start with an example")
@@ -575,7 +366,12 @@ private struct UserSetupView: View {
                             isSelected: profile.useCases == [preset.useCase] && profile.goalText == preset.prompt
                         ) {
                             profile.applyStarterPreset(preset)
+                            if preset.wantsIronclaw || preset.wantsCouncil {
+                                profile.experienceMode = .power
+                                showsCapabilitySetup = true
+                            }
                             editedContextStyle = true
+                            editedDefaultToggles.insert(.web)
                             editedDefaultToggles.insert(.ironclaw)
                             editedDefaultToggles.insert(.council)
                         }
@@ -586,7 +382,12 @@ private struct UserSetupView: View {
                     ForEach(UserSetupStarterPreset.allCases) { preset in
                         Button {
                             profile.applyStarterPreset(preset)
+                            if preset.wantsIronclaw || preset.wantsCouncil {
+                                profile.experienceMode = .power
+                                showsCapabilitySetup = true
+                            }
                             editedContextStyle = true
+                            editedDefaultToggles.insert(.web)
                             editedDefaultToggles.insert(.ironclaw)
                             editedDefaultToggles.insert(.council)
                         } label: {
@@ -603,6 +404,131 @@ private struct UserSetupView: View {
                 }
             }
         }
+    }
+}
+
+private struct SetupInfoCard: View {
+    let title: String
+    let detail: String
+    let symbolName: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: symbolName)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(Color.brandBlue)
+                .frame(width: 36, height: 36)
+                .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(detail)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(Color.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.border, lineWidth: 1)
+        }
+    }
+}
+
+private struct SetupCapabilityDisclosureLabel: View {
+    let title: String
+    let detail: String
+    let sourceStyle: String
+    let webEnabled: Bool
+    let wantsIronclaw: Bool
+    let wantsCouncil: Bool
+    let experienceMode: UserSetupExperienceMode
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: experienceMode == .power ? "bolt.circle.fill" : "slider.horizontal.3")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Color.brandBlue)
+                    .frame(width: 36, height: 36)
+                    .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(detail)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(summaryPills, id: \.title) { pill in
+                        SetupSummaryPill(title: pill.title, isActive: pill.isActive)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(summaryPills, id: \.title) { pill in
+                        SetupSummaryPill(title: pill.title, isActive: pill.isActive)
+                    }
+                }
+            }
+        }
+    }
+
+    private var summaryPills: [SetupCapabilitySummaryItem] {
+        var pills = [
+            SetupCapabilitySummaryItem(title: sourceStyle, isActive: true),
+            SetupCapabilitySummaryItem(title: webEnabled ? "Web on" : "Web off", isActive: webEnabled)
+        ]
+
+        if wantsIronclaw {
+            pills.append(SetupCapabilitySummaryItem(title: "Agent", isActive: true))
+        }
+        if wantsCouncil {
+            pills.append(SetupCapabilitySummaryItem(title: "Council", isActive: true))
+        }
+        if experienceMode == .power && !wantsIronclaw && !wantsCouncil {
+            pills.append(SetupCapabilitySummaryItem(title: "Power", isActive: true))
+        }
+
+        return pills
+    }
+}
+
+private struct SetupCapabilitySummaryItem: Hashable {
+    let title: String
+    let isActive: Bool
+}
+
+private struct SetupSummaryPill: View {
+    let title: String
+    let isActive: Bool
+
+    var body: some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(isActive ? Color.primaryAction : Color.textSecondary)
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(isActive ? Color.selectionSubtle : Color.secondarySurface, in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(isActive ? Color.primaryAction.opacity(0.16) : Color.appBorder, lineWidth: 1)
+            }
     }
 }
 
@@ -917,23 +843,5 @@ struct SetupPlanLine: View {
         default:
             return 1
         }
-    }
-}
-
-private struct StatusBanner: View {
-    let message: String
-
-    var body: some View {
-        Text(message)
-            .font(.footnote.weight(.medium))
-            .foregroundStyle(.primary)
-            .lineLimit(2)
-            .truncationMode(.tail)
-            .multilineTextAlignment(.leading)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .frame(maxWidth: 360, alignment: .leading)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-            .shadow(color: .black.opacity(0.12), radius: 16, y: 6)
     }
 }

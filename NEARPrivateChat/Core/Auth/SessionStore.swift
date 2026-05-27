@@ -18,10 +18,12 @@ final class SessionStore: NSObject, ObservableObject {
     private let api: PrivateChatAPI
     private var webSession: ASWebAuthenticationSession?
     private let keychainAccount = "session"
+    private let profileCacheAccount = "profile"
     private let simulatorFallbackKey = "debug.session"
     private let pendingAuthStateKey = "pendingAuthState"
     private let simulatorFallbackTTL: TimeInterval = 24 * 60 * 60
     private let pendingAuthTTL: TimeInterval = 10 * 60
+    private var isRefreshingProfile = false
 
     var isSignedIn: Bool { session?.token.isEmpty == false }
     var displayName: String { profile?.user.name ?? profile?.user.email ?? "NEAR AI" }
@@ -36,9 +38,42 @@ final class SessionStore: NSObject, ObservableObject {
     init(api: PrivateChatAPI) {
         self.api = api
         super.init()
+        #if DEBUG
+        if DemoCapture.isEnabled {
+            configureDemoCaptureSession()
+            return
+        }
+        #endif
         session = loadStoredSession()
         api.authToken = session?.token
+        if session != nil {
+            profile = loadCachedProfile()
+        }
     }
+
+    #if DEBUG
+    func configureDemoCaptureSession() {
+        let demoSession = AuthSession(
+            token: "demo-capture-token",
+            sessionID: "demo-capture-session",
+            expiresAt: nil,
+            isNewUser: false
+        )
+        session = demoSession
+        api.authToken = demoSession.token
+        profile = UserProfile(
+            user: UserProfile.User(
+                id: "demo.capture.near",
+                email: "demo@near.ai",
+                name: "Demo Account",
+                avatarURL: nil
+            ),
+            linkedAccounts: [
+                UserProfile.LinkedAccount(provider: "github", linkedAt: "2026-05-25T13:41:00Z")
+            ]
+        )
+    }
+    #endif
 
     func signIn(with provider: OAuthProvider) {
         Task { await authenticate(with: provider) }
@@ -52,7 +87,7 @@ final class SessionStore: NSObject, ObservableObject {
         }
         let newSession = AuthSession(token: trimmed, sessionID: "", expiresAt: nil, isNewUser: false)
         save(newSession)
-        Task { await refreshProfile() }
+        Task { await refreshProfile(force: true) }
     }
 
     @discardableResult
@@ -62,13 +97,22 @@ final class SessionStore: NSObject, ObservableObject {
             return false
         }
         do {
-            let expectedState = try requirePendingAuthState()
-            let newSession = try api.parseAuthCallback(url, expectedState: expectedState)
+            let pendingRequest = try requirePendingAuthRequest()
+            let callback = try api.parseAuthCallback(url, expectedState: pendingRequest.state)
             clearPendingAuthState()
-            save(newSession)
             Task {
-                await refreshProfile()
-                showBanner(newSession.isNewUser ? "Account created." : "Signed in.")
+                do {
+                    let newSession = try await api.exchangeAuthCode(
+                        provider: pendingRequest.provider,
+                        callback: callback,
+                        codeVerifier: pendingRequest.codeVerifier
+                    )
+                    save(newSession)
+                    await refreshProfile(force: true)
+                    showBanner(newSession.isNewUser ? "Account created." : "Signed in.")
+                } catch {
+                    showBanner(error.localizedDescription)
+                }
             }
         } catch {
             clearPendingAuthState()
@@ -77,13 +121,26 @@ final class SessionStore: NSObject, ObservableObject {
         return true
     }
 
-    func refreshProfile() async {
+    func refreshProfile(force: Bool = true) async {
         guard isSignedIn else { return }
+        if !force, profile != nil {
+            return
+        }
+        guard !isRefreshingProfile else { return }
+        isRefreshingProfile = true
+        defer { isRefreshingProfile = false }
+
         do {
-            profile = try await api.fetchProfile()
+            let fetchedProfile = try await api.fetchProfile()
+            profile = fetchedProfile
+            saveCachedProfile(fetchedProfile)
         } catch {
             showBanner(error.localizedDescription)
         }
+    }
+
+    func scheduleProfileRefresh(force: Bool = false) {
+        Task { await refreshProfile(force: force) }
     }
 
     func signOut() {
@@ -104,6 +161,7 @@ final class SessionStore: NSObject, ObservableObject {
             profile = nil
             clearPendingAuthState()
             KeychainStore.delete(account: keychainAccount)
+            KeychainStore.delete(account: profileCacheAccount)
             deleteSimulatorFallbackSession()
         }
     }
@@ -114,17 +172,22 @@ final class SessionStore: NSObject, ObservableObject {
         defer { isAuthenticating = false }
 
         do {
-            let pendingRequest = createPendingAuthRequest()
+            let pendingRequest = createPendingAuthRequest(provider: provider)
             let url = try api.authURL(
                 for: provider,
                 state: pendingRequest.state,
                 codeChallenge: pendingRequest.codeChallenge
             )
             let callbackURL = try await startWebAuthentication(url: url)
-            let newSession = try api.parseAuthCallback(callbackURL, expectedState: pendingRequest.state)
+            let callback = try api.parseAuthCallback(callbackURL, expectedState: pendingRequest.state)
+            let newSession = try await api.exchangeAuthCode(
+                provider: provider,
+                callback: callback,
+                codeVerifier: pendingRequest.codeVerifier
+            )
             clearPendingAuthState()
             save(newSession)
-            await refreshProfile()
+            await refreshProfile(force: true)
             showBanner(newSession.isNewUser ? "Account created." : "Signed in.")
         } catch {
             clearPendingAuthState()
@@ -132,11 +195,12 @@ final class SessionStore: NSObject, ObservableObject {
         }
     }
 
-    private func createPendingAuthRequest() -> PendingAuthRequest {
+    private func createPendingAuthRequest(provider: OAuthProvider) -> PendingAuthRequest {
         let state = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
         let codeVerifier = Self.makePKCECodeVerifier()
         let envelope = PendingAuthRequest(
             state: state,
+            providerRawValue: provider.rawValue,
             codeVerifier: codeVerifier,
             expiresAt: Date().addingTimeInterval(pendingAuthTTL)
         )
@@ -146,7 +210,7 @@ final class SessionStore: NSObject, ObservableObject {
         return envelope
     }
 
-    private func requirePendingAuthState() throws -> String {
+    private func requirePendingAuthRequest() throws -> PendingAuthRequest {
         guard let data = UserDefaults.standard.data(forKey: pendingAuthStateKey),
               let envelope = try? JSONDecoder().decode(PendingAuthRequest.self, from: data),
               !envelope.state.isEmpty else {
@@ -156,7 +220,7 @@ final class SessionStore: NSObject, ObservableObject {
             clearPendingAuthState()
             throw APIError.status(401, "The sign-in callback expired. Try signing in again.")
         }
-        return envelope.state
+        return envelope
     }
 
     private func clearPendingAuthState() {
@@ -165,7 +229,10 @@ final class SessionStore: NSObject, ObservableObject {
 
     nonisolated private static func makePKCECodeVerifier() -> String {
         var bytes = [UInt8](repeating: 0, count: 32)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        if status != errSecSuccess {
+            return UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        }
         return base64URLEncoded(Data(bytes))
     }
 
@@ -182,8 +249,13 @@ final class SessionStore: NSObject, ObservableObject {
     }
 
     private func save(_ newSession: AuthSession) {
+        let sessionChanged = session?.token != newSession.token || session?.sessionID != newSession.sessionID
         session = newSession
         api.authToken = newSession.token
+        if sessionChanged {
+            profile = nil
+            KeychainStore.delete(account: profileCacheAccount)
+        }
 
         do {
             try KeychainStore.save(newSession, account: keychainAccount)
@@ -195,6 +267,14 @@ final class SessionStore: NSObject, ObservableObject {
                 showBanner("Signed in for this launch. Keychain storage is unavailable in this build.")
             }
         }
+    }
+
+    private func loadCachedProfile() -> UserProfile? {
+        (try? KeychainStore.read(UserProfile.self, account: profileCacheAccount)) ?? nil
+    }
+
+    private func saveCachedProfile(_ profile: UserProfile) {
+        try? KeychainStore.save(profile, account: profileCacheAccount)
     }
 
     private func loadStoredSession() -> AuthSession? {
@@ -288,8 +368,13 @@ final class SessionStore: NSObject, ObservableObject {
 
 private struct PendingAuthRequest: Codable {
     var state: String
+    var providerRawValue: String
     var codeVerifier: String
     var expiresAt: Date
+
+    var provider: OAuthProvider {
+        OAuthProvider(rawValue: providerRawValue) ?? .google
+    }
 
     var codeChallenge: String {
         SessionStore.codeChallenge(for: codeVerifier)

@@ -16,12 +16,18 @@ bash "$ROOT_DIR/demo/preflight.sh"
 
 mkdir -p "$OUT_DIR"
 
-echo "Booting $DEVICE_NAME..."
-xcrun simctl boot "$DEVICE_NAME" >/dev/null 2>&1 || true
-xcrun simctl bootstatus "$DEVICE_NAME" -b >/dev/null
+DEVICE_ID="$(xcrun simctl list devices available | sed -n "s/^[[:space:]]*$DEVICE_NAME (\([A-F0-9-]*\)) (.*$/\1/p" | head -n 1)"
+if [[ -z "$DEVICE_ID" ]]; then
+  echo "Simulator not found: $DEVICE_NAME" >&2
+  exit 1
+fi
+
+echo "Booting $DEVICE_NAME ($DEVICE_ID)..."
+xcrun simctl boot "$DEVICE_ID" >/dev/null 2>&1 || true
+xcrun simctl bootstatus "$DEVICE_ID" -b >/dev/null
 
 echo "Setting clean simulator status bar..."
-xcrun simctl status_bar booted override \
+xcrun simctl status_bar "$DEVICE_ID" override \
   --time 9:41 \
   --dataNetwork wifi \
   --wifiMode active \
@@ -44,16 +50,16 @@ if [[ ! -d "$APP_PATH" ]]; then
 fi
 
 echo "Installing app..."
-xcrun simctl uninstall booted "$BUNDLE_ID" >/dev/null 2>&1 || true
-xcrun simctl install booted "$APP_PATH"
+xcrun simctl uninstall "$DEVICE_ID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+xcrun simctl install "$DEVICE_ID" "$APP_PATH"
 
-xcrun simctl terminate booted "$BUNDLE_ID" >/dev/null 2>&1 || true
+xcrun simctl terminate "$DEVICE_ID" "$BUNDLE_ID" >/dev/null 2>&1 || true
 
 if [[ "$AUTOCAPTURE" == "1" ]]; then
   echo "Recording real app capture to $RAW_VIDEO..."
   rm -f "$RAW_VIDEO"
 
-  xcrun simctl launch booted "$BUNDLE_ID" \
+  xcrun simctl launch "$DEVICE_ID" "$BUNDLE_ID" \
     -NEARDemoCapture \
     -NEARDemoAutoPlay \
     "-NEARDemoScreen=$DEMO_SCREEN" \
@@ -61,7 +67,7 @@ if [[ "$AUTOCAPTURE" == "1" ]]; then
 
   sleep 1
 
-  xcrun simctl io booted recordVideo "$RAW_VIDEO" >/tmp/near-private-chat-recordVideo.log 2>&1 &
+  xcrun simctl io "$DEVICE_ID" recordVideo "$RAW_VIDEO" >/tmp/near-private-chat-recordVideo.log 2>&1 &
   RECORD_PID=$!
   cleanup() {
     if kill -0 "$RECORD_PID" >/dev/null 2>&1; then
@@ -86,7 +92,7 @@ if [[ "$AUTOCAPTURE" == "1" ]]; then
 fi
 
 echo "Launching app..."
-xcrun simctl launch booted "$BUNDLE_ID" -NEARDemoCapture "-NEARDemoScreen=$DEMO_SCREEN"
+xcrun simctl launch "$DEVICE_ID" "$BUNDLE_ID" -NEARDemoCapture "-NEARDemoScreen=$DEMO_SCREEN"
 
 cat <<EOF
 
@@ -105,4 +111,4 @@ EOF
 
 read -r
 rm -f "$RAW_VIDEO"
-xcrun simctl io booted recordVideo "$RAW_VIDEO"
+xcrun simctl io "$DEVICE_ID" recordVideo "$RAW_VIDEO"
