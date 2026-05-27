@@ -113,6 +113,19 @@ struct ModelPickerView: View {
         return activeModels + candidates.filter { !activeIDSet.contains($0.id) }
     }
 
+    private var selectedSingleModelProviderName: String {
+        guard let model = chatStore.selectedModelOption else {
+            return "NEAR Private"
+        }
+        if model.isIronclawModel {
+            return "IronClaw"
+        }
+        if model.isNearCloudModel {
+            return "NEAR Cloud"
+        }
+        return "NEAR Private"
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -133,7 +146,7 @@ struct ModelPickerView: View {
                             ModelPickerSummary(
                                 selectedModelName: chatStore.selectedModelDisplayName,
                                 selectedModelID: chatStore.selectedModel,
-                                providerName: chatStore.selectedProviderDisplayName,
+                                providerName: selectedSingleModelProviderName,
                                 modelCount: chatStore.pickerModels.count,
                                 councilModelNames: [],
                                 webSearchEnabled: chatStore.effectiveWebSearchEnabled,

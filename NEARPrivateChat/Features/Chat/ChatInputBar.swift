@@ -311,33 +311,29 @@ struct InputBar: View {
                     openModelPicker(openingCouncil: false)
                 } label: {
                     ComposerRouteChip(
-                        title: chatStore.activeModelDisplayName,
+                        title: chatStore.selectedModelDisplayName,
                         symbolName: composerModelSymbolName,
                         isActive: true,
                         showsChevron: true
                     )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Model \(chatStore.activeModelDisplayName)")
+                .accessibilityLabel("Model \(chatStore.selectedModelDisplayName)")
                 .accessibilityHint("Choose GLM, NEAR Cloud, or another model for the next message.")
 
                 Button {
-                    if chatStore.isCouncilModeEnabled {
-                        openModelPicker(openingCouncil: true)
-                    } else {
-                        chatStore.useDefaultCouncilLineup()
-                    }
+                    openModelPicker(openingCouncil: true)
                 } label: {
                     ComposerRouteChip(
                         title: chatStore.isCouncilModeEnabled ? "Council \(chatStore.activeCouncilModels.count)" : "Council",
                         symbolName: "square.grid.2x2",
                         isActive: chatStore.isCouncilModeEnabled,
-                        showsChevron: chatStore.isCouncilModeEnabled
+                        showsChevron: true
                     )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(chatStore.isCouncilModeEnabled ? "LLM Council active" : "Enable LLM Council")
-                .accessibilityHint(chatStore.isCouncilModeEnabled ? "Customize the Council lineup." : "Uses the recommended Council lineup for the next message.")
+                .accessibilityLabel(chatStore.isCouncilModeEnabled ? "LLM Council active" : "Configure LLM Council")
+                .accessibilityHint("Opens the Council lineup for the next message.")
 
                 Menu {
                     ForEach(ModelReasoningEffort.allCases) { effort in
@@ -370,9 +366,6 @@ struct InputBar: View {
     }
 
     private var composerModelSymbolName: String {
-        if chatStore.isCouncilModeEnabled {
-            return "square.grid.2x2"
-        }
         if chatStore.selectedModelOption?.isIronclawModel == true {
             return "terminal"
         }
