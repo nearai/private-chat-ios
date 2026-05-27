@@ -16,9 +16,12 @@ extension Color {
     static let appSymbolBlueBackground = Color(red: 0.78, green: 0.91, blue: 1.0)
     static let actionPrimary = Color.brandBlue
     static let primaryAction = Color.actionPrimary
+    static let actionTint = Color.actionPrimary.opacity(0.12)
+    static let actionPress = Color.actionPrimary.opacity(0.85)
     static let proofVerified = Color(red: 0.082, green: 0.745, blue: 0.325)
     static let proofStale = Color(red: 0.961, green: 0.651, blue: 0.137)
     static let proofMismatch = Color(red: 0.898, green: 0.282, blue: 0.302)
+    static let failedColor = Color.proofMismatch
     static let routeCloud = Color.textSecondary
     static let routePrivate = Color.proofVerified
     static let selectionSubtle = Color.appSelection
@@ -66,6 +69,10 @@ extension Color {
         light: UIColor(red: 0.153, green: 0.153, blue: 0.153, alpha: 0.72),
         dark: UIColor.white.withAlphaComponent(0.68)
     )
+    static let textTertiary = dynamicColor(
+        light: UIColor.black.withAlphaComponent(0.46),
+        dark: UIColor.white.withAlphaComponent(0.46)
+    )
     #elseif canImport(AppKit)
     static let appBackground = Color(red: 0.972, green: 0.974, blue: 0.966)
     static let appSecondaryBackground = Color(red: 0.944, green: 0.949, blue: 0.944)
@@ -73,6 +80,7 @@ extension Color {
     static let appBorder = Color.brandBlack.opacity(0.08)
     static let appHairline = Color.brandBlack.opacity(0.05)
     static let textSecondary = Color.brandDarkGrey.opacity(0.72)
+    static let textTertiary = Color.brandBlack.opacity(0.46)
     #else
     static let appBackground = Color(red: 0.972, green: 0.974, blue: 0.966)
     static let appSecondaryBackground = Color(red: 0.944, green: 0.949, blue: 0.944)
@@ -80,6 +88,7 @@ extension Color {
     static let appBorder = Color.brandBlack.opacity(0.08)
     static let appHairline = Color.brandBlack.opacity(0.05)
     static let textSecondary = Color.brandDarkGrey.opacity(0.72)
+    static let textTertiary = Color.brandBlack.opacity(0.46)
     #endif
 
     static let surface = Color.appBackground

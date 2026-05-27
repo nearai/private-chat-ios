@@ -62,6 +62,7 @@
 		E10000000000000000000002 /* BrandMarks.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000002 /* BrandMarks.swift */; };
 		E10000000000000000000003 /* ViewPlatformExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000003 /* ViewPlatformExtensions.swift */; };
 		E10000000000000000000004 /* Clipboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000004 /* Clipboard.swift */; };
+		E10000000000000000000005 /* GlassMaterial.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000005 /* GlassMaterial.swift */; };
 		F10000000000000000000001 /* ConversationListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000001 /* ConversationListView.swift */; };
 		F10000000000000000000002 /* SharedConversationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000002 /* SharedConversationSheet.swift */; };
 		F10000000000000000000003 /* EmptyChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000003 /* EmptyChatView.swift */; };
@@ -151,6 +152,7 @@
 		E20000000000000000000002 /* BrandMarks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandMarks.swift; sourceTree = "<group>"; };
 		E20000000000000000000003 /* ViewPlatformExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewPlatformExtensions.swift; sourceTree = "<group>"; };
 		E20000000000000000000004 /* Clipboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clipboard.swift; sourceTree = "<group>"; };
+		E20000000000000000000005 /* GlassMaterial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassMaterial.swift; sourceTree = "<group>"; };
 		F20000000000000000000001 /* ConversationListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListView.swift; sourceTree = "<group>"; };
 		F20000000000000000000002 /* SharedConversationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedConversationSheet.swift; sourceTree = "<group>"; };
 		F20000000000000000000003 /* EmptyChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyChatView.swift; sourceTree = "<group>"; };
@@ -284,6 +286,7 @@
 			children = (
 				C20000000000000000000001 /* AppHaptics.swift */,
 				E20000000000000000000001 /* DesignTokens.swift */,
+				E20000000000000000000005 /* GlassMaterial.swift */,
 			);
 			path = DesignSystem;
 			sourceTree = "<group>";
@@ -676,6 +679,7 @@
 				E10000000000000000000002 /* BrandMarks.swift in Sources */,
 				E10000000000000000000003 /* ViewPlatformExtensions.swift in Sources */,
 				E10000000000000000000004 /* Clipboard.swift in Sources */,
+				E10000000000000000000005 /* GlassMaterial.swift in Sources */,
 				F10000000000000000000001 /* ConversationListView.swift in Sources */,
 				F10000000000000000000002 /* SharedConversationSheet.swift in Sources */,
 				F10000000000000000000003 /* EmptyChatView.swift in Sources */,
