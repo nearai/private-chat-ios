@@ -10,7 +10,28 @@ struct MarkdownMessageText: View {
     }
 
     private var blocks: [MarkdownBlock] {
-        MarkdownBlock.parse(Self.normalizedMarkdown(text, sources: sources))
+        Self.cachedBlocks(for: text, sources: sources)
+    }
+
+    private static let blockCache: NSCache<NSString, MarkdownBlockCacheBox> = {
+        let cache = NSCache<NSString, MarkdownBlockCacheBox>()
+        cache.countLimit = 240
+        return cache
+    }()
+
+    private static func cachedBlocks(for text: String, sources: [WebSearchSource]) -> [MarkdownBlock] {
+        let key = cacheKey(for: text, sources: sources)
+        if let cached = blockCache.object(forKey: key) {
+            return cached.blocks
+        }
+        let blocks = MarkdownBlock.parse(normalizedMarkdown(text, sources: sources))
+        blockCache.setObject(MarkdownBlockCacheBox(blocks: blocks), forKey: key)
+        return blocks
+    }
+
+    private static func cacheKey(for text: String, sources: [WebSearchSource]) -> NSString {
+        let sourceKey = sources.compactMap { $0.safeURL?.absoluteString }.joined(separator: "|")
+        return "\(sourceKey)\n\(text)" as NSString
     }
 
     private static func normalizedMarkdown(_ text: String, sources: [WebSearchSource]) -> String {
@@ -102,6 +123,14 @@ struct MarkdownMessageText: View {
             }
         }
         .textSelection(.enabled)
+    }
+}
+
+private final class MarkdownBlockCacheBox {
+    let blocks: [MarkdownBlock]
+
+    init(blocks: [MarkdownBlock]) {
+        self.blocks = blocks
     }
 }
 
@@ -436,6 +465,20 @@ private struct InlineMarkdownText: View {
     let text: String
 
     private var attributedText: AttributedString {
+        Self.cachedAttributedText(for: text)
+    }
+
+    private static let attributedCache: NSCache<NSString, InlineAttributedCacheBox> = {
+        let cache = NSCache<NSString, InlineAttributedCacheBox>()
+        cache.countLimit = 600
+        return cache
+    }()
+
+    private static func cachedAttributedText(for text: String) -> AttributedString {
+        let key = text as NSString
+        if let cached = attributedCache.object(forKey: key) {
+            return cached.attributedText
+        }
         var attributed = (try? AttributedString(
             markdown: text,
             options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
@@ -444,6 +487,7 @@ private struct InlineMarkdownText: View {
             guard let url = run.link, !Self.isSafeInlineURL(url) else { continue }
             attributed[run.range].link = nil
         }
+        attributedCache.setObject(InlineAttributedCacheBox(attributedText: attributed), forKey: key)
         return attributed
     }
 
@@ -458,6 +502,14 @@ private struct InlineMarkdownText: View {
 
     var body: some View {
         Text(attributedText)
+    }
+}
+
+private final class InlineAttributedCacheBox {
+    let attributedText: AttributedString
+
+    init(attributedText: AttributedString) {
+        self.attributedText = attributedText
     }
 }
 

@@ -43,7 +43,11 @@ struct MessageBubble: View {
                                 .foregroundStyle(.secondary)
                         }
                     } else if message.role == .assistant {
-                        MarkdownMessageText(text: message.text.isEmpty ? " " : message.text, sources: message.sources)
+                        if message.isStreaming {
+                            StreamingMessageText(message: message)
+                        } else {
+                            MarkdownMessageText(text: message.text.isEmpty ? " " : message.text, sources: message.sources)
+                        }
                     } else {
                         Text(message.text.isEmpty ? " " : message.text)
                             .textSelection(.enabled)
@@ -248,6 +252,41 @@ struct MessageBubble: View {
                 symbolName: "terminal"
             )
         }
+    }
+}
+
+struct StreamingMessageText: View {
+    let message: ChatMessage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(message.streamingStatusText)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Text("\(message.text.count) chars")
+                    .font(.caption2.monospacedDigit().weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(Self.streamingPreview(from: message.text))
+                .lineSpacing(2)
+                .lineLimit(12)
+                .textSelection(.enabled)
+        }
+    }
+
+    private static func streamingPreview(from text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return " " }
+        let lines = trimmed
+            .components(separatedBy: .newlines)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !lines.isEmpty else { return trimmed }
+        return lines.suffix(12).joined(separator: "\n")
     }
 }
 

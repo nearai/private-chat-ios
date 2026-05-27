@@ -144,7 +144,7 @@ final class ChatStore: ObservableObject {
     private var lastBootstrappedAccountID: String?
     private var accountBackgroundRefreshTask: Task<Void, Never>?
     private var pendingTextDeltaByMessageID: [String: String] = [:]
-    private var pendingTextDeltaFlushTasks: [String: Task<Void, Never>] = [:]
+    private var pendingTextDeltaFlushTask: Task<Void, Never>?
     private struct PersistedDraftState: Codable {
         var text: String
         var attachments: [ChatAttachment]
@@ -4811,36 +4811,64 @@ final class ChatStore: ObservableObject {
     private func appendBufferedTextDelta(_ delta: String, to messageID: String) {
         guard !delta.isEmpty else { return }
         pendingTextDeltaByMessageID[messageID, default: ""] += delta
-        guard pendingTextDeltaFlushTasks[messageID] == nil else { return }
-        let flushDelay = textDeltaFlushNanoseconds(for: messageID)
-        pendingTextDeltaFlushTasks[messageID] = Task { @MainActor [weak self] in
+        guard pendingTextDeltaFlushTask == nil else { return }
+        let flushDelay = pendingTextDeltaFlushNanoseconds()
+        pendingTextDeltaFlushTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: flushDelay)
-            self?.flushPendingTextDelta(for: messageID)
+            guard !Task.isCancelled else { return }
+            self?.flushPendingTextDeltas()
         }
     }
 
-    private func textDeltaFlushNanoseconds(for messageID: String) -> UInt64 {
-        guard let message = messages.first(where: { $0.id == messageID }),
-              message.councilBatchID != nil else {
+    private func pendingTextDeltaFlushNanoseconds() -> UInt64 {
+        let pendingIDs = Set(pendingTextDeltaByMessageID.keys)
+        guard !pendingIDs.isEmpty,
+              pendingIDs.allSatisfy({ messageID in
+                  messages.first(where: { $0.id == messageID })?.councilBatchID != nil
+              }) else {
             return Self.streamDeltaFlushNanoseconds
         }
         return MessageStreamService.councilTextDeltaFlushNanoseconds
     }
 
     private func flushPendingTextDelta(for messageID: String) {
-        pendingTextDeltaFlushTasks[messageID]?.cancel()
-        pendingTextDeltaFlushTasks[messageID] = nil
         guard let delta = pendingTextDeltaByMessageID.removeValue(forKey: messageID),
               !delta.isEmpty,
               let index = messages.firstIndex(where: { $0.id == messageID }) else {
             return
         }
-        messages[index].text += delta
+        var updatedMessages = messages
+        updatedMessages[index].text += delta
+        messages = updatedMessages
+        if pendingTextDeltaByMessageID.isEmpty {
+            pendingTextDeltaFlushTask?.cancel()
+            pendingTextDeltaFlushTask = nil
+        }
+    }
+
+    private func flushPendingTextDeltas() {
+        pendingTextDeltaFlushTask = nil
+        let pendingDeltas = pendingTextDeltaByMessageID
+        pendingTextDeltaByMessageID.removeAll()
+        guard !pendingDeltas.isEmpty else { return }
+
+        var updatedMessages = messages
+        var didApplyDelta = false
+        for (messageID, delta) in pendingDeltas where !delta.isEmpty {
+            guard let index = updatedMessages.firstIndex(where: { $0.id == messageID }) else {
+                continue
+            }
+            updatedMessages[index].text += delta
+            didApplyDelta = true
+        }
+        if didApplyDelta {
+            messages = updatedMessages
+        }
     }
 
     private func cancelPendingTextDeltaFlushes() {
-        pendingTextDeltaFlushTasks.values.forEach { $0.cancel() }
-        pendingTextDeltaFlushTasks.removeAll()
+        pendingTextDeltaFlushTask?.cancel()
+        pendingTextDeltaFlushTask = nil
         pendingTextDeltaByMessageID.removeAll()
     }
 
