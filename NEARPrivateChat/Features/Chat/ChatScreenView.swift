@@ -4,6 +4,11 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     @EnvironmentObject private var chatStore: ChatStore
     @State private var lastAutoScrollNanoseconds: UInt64 = 0
+    @State private var autoScrollPauseUntilNanoseconds: UInt64 = 0
+    @State private var streamAutoScrollSuppressed = false
+
+    private static let streamingAutoScrollIntervalNanoseconds: UInt64 = 300_000_000
+    private static let dragAutoScrollPauseNanoseconds: UInt64 = 1_500_000_000
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,27 +44,41 @@ struct ChatView: View {
                     .padding(.horizontal, 18)
                     .padding(.vertical, 18)
                 }
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 1)
+                        .onChanged { _ in
+                            noteUserScrollInteraction()
+                        }
+                        .onEnded { _ in
+                            noteUserScrollInteraction()
+                        }
+                )
+                .scrollDismissesKeyboard(.interactively)
                 .background(Color.appBackground)
                 .task(id: chatStore.selectedConversation?.id) {
-                    guard let last = chatStore.messages.last else { return }
+                    resetAutoScrollState()
+                    guard let targetID = autoScrollSignature.targetID else { return }
                     try? await Task.sleep(nanoseconds: 250_000_000)
                     await MainActor.run {
-                        proxy.scrollTo(last.id, anchor: .bottom)
+                        proxy.scrollTo(targetID, anchor: .bottom)
                     }
                 }
-                .onChange(of: chatStore.messages) { _, messages in
-                    guard let last = messages.last else { return }
-                    let now = DispatchTime.now().uptimeNanoseconds
-                    let minimumInterval: UInt64 = chatStore.isStreaming ? 250_000_000 : 0
-                    guard minimumInterval == 0 || now - lastAutoScrollNanoseconds >= minimumInterval else {
-                        return
+                .onChange(of: chatStore.isStreaming) { _, isStreaming in
+                    if isStreaming {
+                        streamAutoScrollSuppressed = false
+                        autoScrollPauseUntilNanoseconds = 0
                     }
+                }
+                .onChange(of: autoScrollSignature) { _, signature in
+                    guard let targetID = signature.targetID else { return }
+                    let now = DispatchTime.now().uptimeNanoseconds
+                    guard shouldAutoScroll(now: now, isStreaming: signature.isStreaming) else { return }
                     lastAutoScrollNanoseconds = now
-                    if chatStore.isStreaming {
-                        proxy.scrollTo(last.id, anchor: .bottom)
+                    if signature.isStreaming {
+                        proxy.scrollTo(targetID, anchor: .bottom)
                     } else {
                         withAnimation(.easeOut(duration: 0.2)) {
-                            proxy.scrollTo(last.id, anchor: .bottom)
+                            proxy.scrollTo(targetID, anchor: .bottom)
                         }
                     }
                 }
@@ -74,6 +93,50 @@ struct ChatView: View {
         }
         .background(Color.appBackground)
     }
+
+    private var autoScrollSignature: ChatAutoScrollSignature {
+        let displayItems = MessageTimelineStore.displayItems(from: chatStore.messages)
+        let lastMessage = chatStore.messages.last
+        return ChatAutoScrollSignature(
+            targetID: displayItems.last?.id,
+            messageCount: chatStore.messages.count,
+            lastTextLength: lastMessage?.text.count ?? 0,
+            lastStatus: lastMessage?.status,
+            isStreaming: chatStore.isStreaming
+        )
+    }
+
+    private func noteUserScrollInteraction() {
+        let now = DispatchTime.now().uptimeNanoseconds
+        let pauseUntil = now + Self.dragAutoScrollPauseNanoseconds
+        if pauseUntil > autoScrollPauseUntilNanoseconds + 100_000_000 {
+            autoScrollPauseUntilNanoseconds = pauseUntil
+        }
+        if chatStore.isStreaming, !streamAutoScrollSuppressed {
+            streamAutoScrollSuppressed = true
+        }
+    }
+
+    private func resetAutoScrollState() {
+        lastAutoScrollNanoseconds = 0
+        autoScrollPauseUntilNanoseconds = 0
+        streamAutoScrollSuppressed = false
+    }
+
+    private func shouldAutoScroll(now: UInt64, isStreaming: Bool) -> Bool {
+        guard now >= autoScrollPauseUntilNanoseconds else { return false }
+        guard !(isStreaming && streamAutoScrollSuppressed) else { return false }
+        let minimumInterval = isStreaming ? Self.streamingAutoScrollIntervalNanoseconds : 0
+        return minimumInterval == 0 || now - lastAutoScrollNanoseconds >= minimumInterval
+    }
+}
+
+private struct ChatAutoScrollSignature: Equatable {
+    let targetID: String?
+    let messageCount: Int
+    let lastTextLength: Int
+    let lastStatus: String?
+    let isStreaming: Bool
 }
 
 private struct CouncilResponseGroup: View {

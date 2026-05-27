@@ -201,7 +201,7 @@ final class ChatStore: ObservableObject {
     nonisolated private static let maxPDFExtractionSeconds: TimeInterval = 5
     private static let maxPromptAttachments = 5
     private static let maxProjectAttachments = 12
-    private static let streamDeltaFlushNanoseconds: UInt64 = 50_000_000
+    private static let streamDeltaFlushNanoseconds: UInt64 = MessageStreamService.textDeltaFlushNanoseconds
     private static let largePasteThresholdBytes = 8 * 1024
     private static let largePasteThresholdCharacters = 5_000
     private static let staleRunningMessageInterval: TimeInterval = 120
