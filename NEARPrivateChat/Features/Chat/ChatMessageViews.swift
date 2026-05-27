@@ -12,9 +12,6 @@ struct MessageBubble: View {
         HStack(alignment: .top, spacing: 12) {
             if message.role == .user {
                 Spacer(minLength: 36)
-            } else {
-                AssistantAvatar()
-                    .padding(.top, 1)
             }
 
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 8) {
@@ -33,6 +30,10 @@ struct MessageBubble: View {
                             .padding(.vertical, 3)
                             .background((badge == "Failed" ? Color.red.opacity(0.08) : Color.brandBlue.opacity(0.08)), in: Capsule())
                     }
+                }
+
+                if message.role == .assistant && !message.sources.isEmpty {
+                    SearchContextStrip(query: message.searchQuery, sources: message.sources)
                 }
 
                 Group {
@@ -57,7 +58,7 @@ struct MessageBubble: View {
                 .foregroundStyle(message.role == .user ? .white : .primary)
                 .padding(.horizontal, message.role == .user ? 14 : 0)
                 .padding(.vertical, message.role == .user ? 11 : 0)
-                .background(message.role == .user ? Color.brandBlue : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(message.role == .user ? Color.actionPrimary : Color.clear, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .contextMenu {
                     Button {
                         Clipboard.copy(message.text)
@@ -141,10 +142,6 @@ struct MessageBubble: View {
                     Label("Failed", systemImage: "exclamationmark.triangle")
                         .font(.caption)
                         .foregroundStyle(.red)
-                }
-
-                if message.role == .assistant && !message.sources.isEmpty {
-                    SearchContextStrip(query: message.searchQuery, sources: message.sources)
                 }
 
                 if let answerProofCapsule {

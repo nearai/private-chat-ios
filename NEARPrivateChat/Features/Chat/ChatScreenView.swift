@@ -611,10 +611,6 @@ private struct ChatToolbar: View {
 
             modelSelectorButton(maxWidth: 142)
 
-            if chatStore.selectedConversation != nil {
-                shareButton
-            }
-
             moreMenuButton
         }
     }
@@ -782,14 +778,14 @@ private struct ChatToolbar: View {
                     .font(.caption2.weight(.bold))
                     .opacity(0.68)
             }
-            .foregroundStyle(Color.brandBlue)
+            .foregroundStyle(Color.actionPrimary)
             .padding(.horizontal, 10)
             .frame(height: 34)
             .frame(maxWidth: maxWidth)
-            .background(Color.brandBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(Color.actionTint, in: Capsule())
             .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.brandBlue.opacity(0.10), lineWidth: 1)
+                Capsule()
+                    .stroke(Color.actionPrimary.opacity(0.16), lineWidth: 1)
             }
         }
         .accessibilityLabel(modelSelectorAccessibilityLabel)

@@ -762,6 +762,7 @@ struct SourcesDetailView: View {
                 }
             }
         }
+        .platformMediumDetent()
     }
 }
 
