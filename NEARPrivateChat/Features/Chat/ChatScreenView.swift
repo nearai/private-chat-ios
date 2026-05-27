@@ -11,6 +11,13 @@ struct ChatView: View {
     private static let dragAutoScrollPauseNanoseconds: UInt64 = 1_500_000_000
 
     var body: some View {
+        let displayItems = MessageTimelineStore.displayItems(from: chatStore.messages)
+        let scrollSignature = ChatAutoScrollSignature(
+            displayItems: displayItems,
+            messages: chatStore.messages,
+            isStreaming: chatStore.isStreaming
+        )
+
         VStack(spacing: 0) {
             ChatToolbar()
                 .padding(.horizontal, 16)
@@ -29,13 +36,13 @@ struct ChatView: View {
                                 .padding(.top, 54)
                                 .padding(.bottom, 22)
                         } else {
-                            ForEach(MessageTimelineStore.displayItems(from: chatStore.messages)) { item in
+                            ForEach(displayItems) { item in
                                 switch item {
                                 case let .message(message):
-                                    MessageBubble(message: message)
+                                    MessageBubble(message: message, chatStore: chatStore)
                                         .id(item.id)
                                 case let .council(batchID: _, messages: messages):
-                                    CouncilResponseGroup(messages: messages)
+                                    CouncilResponseGroup(messages: messages, chatStore: chatStore)
                                         .id(item.id)
                                 }
                             }
@@ -57,7 +64,7 @@ struct ChatView: View {
                 .background(Color.appBackground)
                 .task(id: chatStore.selectedConversation?.id) {
                     resetAutoScrollState()
-                    guard let targetID = autoScrollSignature.targetID else { return }
+                    guard let targetID = scrollSignature.targetID else { return }
                     try? await Task.sleep(nanoseconds: 250_000_000)
                     await MainActor.run {
                         proxy.scrollTo(targetID, anchor: .bottom)
@@ -69,7 +76,7 @@ struct ChatView: View {
                         autoScrollPauseUntilNanoseconds = 0
                     }
                 }
-                .onChange(of: autoScrollSignature) { _, signature in
+                .onChange(of: scrollSignature) { _, signature in
                     guard let targetID = signature.targetID else { return }
                     let now = DispatchTime.now().uptimeNanoseconds
                     guard shouldAutoScroll(now: now, isStreaming: signature.isStreaming) else { return }
@@ -92,18 +99,6 @@ struct ChatView: View {
                 .background(Color.appPanelBackground)
         }
         .background(Color.appBackground)
-    }
-
-    private var autoScrollSignature: ChatAutoScrollSignature {
-        let displayItems = MessageTimelineStore.displayItems(from: chatStore.messages)
-        let lastMessage = chatStore.messages.last
-        return ChatAutoScrollSignature(
-            targetID: displayItems.last?.id,
-            messageCount: chatStore.messages.count,
-            lastTextLength: lastMessage?.text.count ?? 0,
-            lastStatus: lastMessage?.status,
-            isStreaming: chatStore.isStreaming
-        )
     }
 
     private func noteUserScrollInteraction() {
@@ -137,11 +132,20 @@ private struct ChatAutoScrollSignature: Equatable {
     let lastTextLength: Int
     let lastStatus: String?
     let isStreaming: Bool
+
+    init(displayItems: [ChatDisplayItem], messages: [ChatMessage], isStreaming: Bool) {
+        let lastMessage = messages.last
+        self.targetID = displayItems.last?.id
+        self.messageCount = messages.count
+        self.lastTextLength = lastMessage?.text.count ?? 0
+        self.lastStatus = lastMessage?.status
+        self.isStreaming = isStreaming
+    }
 }
 
 private struct CouncilResponseGroup: View {
-    @EnvironmentObject private var chatStore: ChatStore
     let messages: [ChatMessage]
+    let chatStore: ChatStore
     @State private var selectedMessageID: String?
 
     private var selectedMessage: ChatMessage? {
@@ -189,22 +193,16 @@ private struct CouncilResponseGroup: View {
                 }
             }
 
-            TimelineView(.periodic(from: Date(), by: 1)) { timeline in
-                VStack(spacing: 6) {
-                    ForEach(messages) { message in
-                        CouncilModelProgressRow(
-                            message: message,
-                            now: timeline.date,
-                            isSelected: message.id == selectedMessage?.id
-                        ) {
-                            selectedMessageID = message.id
-                        }
-                    }
+            if hasRunningModels {
+                TimelineView(.periodic(from: Date(), by: 1)) { timeline in
+                    progressRows(now: timeline.date)
                 }
+            } else {
+                progressRows(now: Date())
             }
 
             if let selectedMessage {
-                CouncilSelectedMessageView(message: selectedMessage)
+                CouncilSelectedMessageView(message: selectedMessage, chatStore: chatStore)
             }
         }
         .padding(12)
@@ -221,6 +219,21 @@ private struct CouncilResponseGroup: View {
                   messages.contains(where: { $0.id == selectedMessageID }) else {
                 self.selectedMessageID = messages.first?.id
                 return
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func progressRows(now: Date) -> some View {
+        VStack(spacing: 6) {
+            ForEach(messages) { message in
+                CouncilModelProgressRow(
+                    message: message,
+                    now: now,
+                    isSelected: message.id == selectedMessage?.id
+                ) {
+                    selectedMessageID = message.id
+                }
             }
         }
     }
@@ -264,6 +277,7 @@ private struct CouncilResponseGroup: View {
 
 private struct CouncilSelectedMessageView: View {
     let message: ChatMessage
+    let chatStore: ChatStore
 
     var body: some View {
         if message.isStreaming {
@@ -272,7 +286,7 @@ private struct CouncilSelectedMessageView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.appBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         } else {
-            MessageBubble(message: message)
+            MessageBubble(message: message, chatStore: chatStore)
         }
     }
 }

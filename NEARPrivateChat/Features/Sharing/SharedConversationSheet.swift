@@ -156,7 +156,7 @@ private struct SharedConversationPreview: View {
                             .padding(.top, 48)
                     } else {
                         ForEach(snapshot.messages) { message in
-                            MessageBubble(message: message)
+                            MessageBubble(message: message, chatStore: chatStore)
                                 .id(message.id)
                         }
                     }

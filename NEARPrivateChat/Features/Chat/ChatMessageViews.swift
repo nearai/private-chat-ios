@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct MessageBubble: View {
-    @EnvironmentObject private var chatStore: ChatStore
     let message: ChatMessage
+    let chatStore: ChatStore
     @State private var showingArtifact = false
     @State private var showingSecurity = false
     @State private var showingSources = false
