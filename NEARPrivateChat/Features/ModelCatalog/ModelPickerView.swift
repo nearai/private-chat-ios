@@ -53,6 +53,7 @@ private enum ModelCapabilityFilter: String, CaseIterable, Identifiable {
 struct ModelPickerView: View {
     @EnvironmentObject private var chatStore: ChatStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @State private var searchText = ""
     @State private var selectedTab: ModelPickerTab = .models
     @State private var showingCouncilCustomizer = false
@@ -101,6 +102,45 @@ struct ModelPickerView: View {
         Set(unpinned(featuredModels).map(\.id))
     }
 
+    private var defaultPrivateModel: ModelOption? {
+        let allModels = filtered(chatStore.pickerModels)
+        return allModels.first(where: { isDefaultPrivateModel($0) }) ??
+            allModels.first(where: { $0.displayName.localizedCaseInsensitiveContains("GLM 5.1") }) ??
+            allModels.first(where: { $0.isPrivateVerifiableChatModel })
+    }
+
+    private var reasoningChoices: [ModelOption] {
+        let defaultID = defaultPrivateModel?.id
+        let choices = filtered(chatStore.pickerModels).filter { model in
+            model.id != defaultID &&
+                model.isRecommendedReasoningModel &&
+                !model.isNearCloudModel &&
+                !model.isIronclawModel &&
+                !model.isLowerPriorityModel
+        }
+        return Array(choices.prefix(2))
+    }
+
+    private var searchResults: [ModelOption] {
+        filtered(chatStore.pickerModels)
+    }
+
+    private var cloudPreviewModels: [ModelOption] {
+        Array(cloudModels.prefix(4))
+    }
+
+    private var frontierCloudModels: [ModelOption] {
+        let frontier = cloudModels.filter { model in
+            model.isEliteModel ||
+                model.displayName.localizedCaseInsensitiveContains("opus") ||
+                model.displayName.localizedCaseInsensitiveContains("gpt") ||
+                model.displayName.localizedCaseInsensitiveContains("gemini") ||
+                model.displayName.localizedCaseInsensitiveContains("qwen") ||
+                model.displayName.localizedCaseInsensitiveContains("kimi")
+        }
+        return Array((frontier.isEmpty ? cloudModels : frontier).prefix(5))
+    }
+
     private var isSearchingModels: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -128,100 +168,27 @@ struct ModelPickerView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
                     Picker("Model picker mode", selection: $selectedTab) {
                         ForEach(ModelPickerTab.allCases) { tab in
                             Text(tab.rawValue).tag(tab)
                         }
                     }
                     .pickerStyle(.segmented)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 14, bottom: 8, trailing: 14))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                }
-                if selectedTab == .models {
-                    if !isSearchingModels {
-                        Section {
-                            ModelPickerSummary(
-                                selectedModelName: chatStore.selectedModelDisplayName,
-                                selectedModelID: chatStore.selectedModel,
-                                providerName: selectedSingleModelProviderName,
-                                modelCount: chatStore.pickerModels.count,
-                                councilModelNames: [],
-                                webSearchEnabled: chatStore.effectiveWebSearchEnabled,
-                                appWebGroundingEnabled: chatStore.effectiveAppWebGroundingEnabled,
-                                planName: chatStore.currentBillingPlanName,
-                                hiddenPlanLockedModelCount: chatStore.hiddenPlanLockedModelCount,
-                                ironclawRemoteWorkstationAvailable: chatStore.ironclawRemoteWorkstationAvailable,
-                                ironclawTokenConfigured: chatStore.ironclawTokenConfigured
-                            )
-                            .listRowInsets(EdgeInsets(top: 4, leading: 14, bottom: 8, trailing: 14))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                        }
-                        Section {
-                            ReasoningEffortPickerCard(
-                                selectedEffort: chatStore.advancedModelParams.reasoningEffort,
-                                appliesToCurrentRoute: chatStore.selectedRouteUsesNearCloud || chatStore.activeCouncilHasNearCloudRoutes,
-                                onSelect: { effort in
-                                    chatStore.setReasoningEffort(effort)
-                                }
-                            )
-                            .listRowInsets(EdgeInsets(top: 0, leading: 14, bottom: 8, trailing: 14))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                        }
-                        Section {
-                            ModelCapabilityFilterBar(activeFilters: $activeFilters)
-                                .listRowInsets(EdgeInsets(top: 0, leading: 14, bottom: 8, trailing: 14))
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(Color.clear)
-                        }
-                    }
-                    modelSection("Pinned", models: pinnedModels, showsCouncilButton: false)
-                    modelSection("Recommended", models: unpinned(featuredModels), showsCouncilButton: false)
-                    modelSection("Open / Reasoning", models: secondaryModels(openWeightModels), showsCouncilButton: false)
-                    modelSection("Private / Verifiable", models: secondaryModels(privateModels), showsCouncilButton: false)
-                    modelSection("Frontier", models: secondaryModels(eliteModels), showsCouncilButton: false)
-                    modelSection("NEAR Cloud", models: secondaryModels(cloudModels), showsCouncilButton: false)
-                    modelSection("General", models: secondaryModels(standardModels), showsCouncilButton: false)
-                } else {
-                    if !isSearchingModels {
-                        Section {
-                            CouncilPickerCard(
-                                models: chatStore.activeCouncilModels,
-                                defaultModels: chatStore.defaultCouncilModels,
-                                presets: chatStore.councilPresets,
-                                maxModels: 3,
-                                isCustomizing: $showingCouncilCustomizer,
-                                onUseDefault: {
-                                    chatStore.useDefaultCouncilLineup()
-                                    dismiss()
-                                },
-                                onUsePreset: { presetID in
-                                    chatStore.useCouncilPreset(presetID)
-                                },
-                                onClear: {
-                                    chatStore.clearCouncilMode()
-                                },
-                                onRemoveModel: { modelID in
-                                    chatStore.toggleCouncilModel(modelID)
-                                }
-                            )
-                            .listRowInsets(EdgeInsets(top: 4, leading: 14, bottom: 8, trailing: 14))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                        }
-                    }
-                    if showingCouncilCustomizer || isSearchingModels {
-                        modelSection("Choose Council Models", models: councilCandidateModels, showsCouncilButton: true, dismissOnSelect: false)
+                    .padding(.horizontal, 16)
+
+                    if selectedTab == .models {
+                        modelsTab
+                    } else {
+                        councilTab
                     }
                 }
+                .padding(.top, 10)
+                .padding(.bottom, 28)
             }
-            .scrollContentBackground(.hidden)
             .background(Color.appBackground)
-            .navigationTitle("Model")
+            .navigationTitle(selectedTab == .models ? "Model" : "Council")
             .platformInlineNavigationTitle()
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: Text(modelSearchPrompt))
             .toolbar {
@@ -238,6 +205,135 @@ struct ModelPickerView: View {
             }
         }
         .platformMediumDetent()
+    }
+
+    @ViewBuilder
+    private var modelsTab: some View {
+        if isSearchingModels || !activeFilters.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                ModelCapabilityFilterBar(activeFilters: $activeFilters)
+                    .padding(.horizontal, 16)
+                V2ModelSection(title: "Matching Models") {
+                    ForEach(searchResults) { model in
+                        V2ModelRow(
+                            title: model.displayName,
+                            subtitle: modelRowSubtitle(model),
+                            symbolName: modelRowSymbol(model),
+                            tint: modelRowTint(model),
+                            badge: modelBadge(model),
+                            isSelected: model.id == chatStore.selectedModel,
+                            isEnabled: true,
+                            action: { selectModelAndDismiss(model) }
+                        )
+                        .dividerIfNeeded(model.id != searchResults.last?.id)
+                    }
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 22) {
+                V2ModelSection(title: "Default") {
+                    if let model = defaultPrivateModel {
+                        V2ModelRow(
+                            title: "GLM 5.1",
+                            subtitle: "\(model.id) · Strong default for private chat",
+                            symbolName: "cpu",
+                            tint: Color.actionPrimary,
+                            badge: "Verified",
+                            isSelected: model.id == chatStore.selectedModel && !chatStore.isCouncilModeEnabled,
+                            isEnabled: true,
+                            action: { selectModelAndDismiss(model) }
+                        )
+                    }
+                }
+
+                V2ModelSection(title: "Reasoning") {
+                    ForEach(Array(reasoningChoices.enumerated()), id: \.element.id) { index, model in
+                        V2ModelRow(
+                            title: index == 0 ? "Expert" : "Heavy",
+                            subtitle: "\(model.displayName) · \(index == 0 ? "Multi-step reasoning, balanced" : "Deeper reasoning, slower")",
+                            symbolName: "brain.head.profile",
+                            tint: Color.textSecondary,
+                            badge: modelBadge(model),
+                            isSelected: model.id == chatStore.selectedModel && !chatStore.isCouncilModeEnabled,
+                            isEnabled: true,
+                            action: { selectModelAndDismiss(model) }
+                        )
+                        .dividerIfNeeded(index != reasoningChoices.count - 1)
+                    }
+                    ReasoningEffortInlineControl(
+                        selectedEffort: chatStore.advancedModelParams.reasoningEffort,
+                        onSelect: { chatStore.setReasoningEffort($0) }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .dividerIfNeeded(false)
+                }
+
+                NearCloudGuidedCard(
+                    isConnected: chatStore.nearCloudKeyConfigured,
+                    isConnecting: chatStore.isConnectingNearCloudAccount,
+                    modelCount: cloudPreviewModels.count,
+                    connectAction: connectNearCloudAccount,
+                    openCloudAction: openNearCloudSignup
+                )
+
+                if chatStore.nearCloudKeyConfigured {
+                    V2ModelSection(title: "Frontier Via Cloud") {
+                        ForEach(frontierCloudModels) { model in
+                            V2ModelRow(
+                                title: model.displayName,
+                                subtitle: modelRowSubtitle(model),
+                                symbolName: "cloud.fill",
+                                tint: Color.textSecondary,
+                                badge: "Privacy proxy",
+                                isSelected: model.id == chatStore.selectedModel && !chatStore.isCouncilModeEnabled,
+                                isEnabled: true,
+                                action: { selectModelAndDismiss(model) }
+                            )
+                            .dividerIfNeeded(model.id != frontierCloudModels.last?.id)
+                        }
+                    }
+                } else {
+                    FrontierLockedCard()
+                }
+            }
+        }
+    }
+
+    private var councilTab: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            CouncilLineupCard(
+                activeModels: chatStore.activeCouncilModels,
+                defaultModels: chatStore.defaultCouncilModels,
+                useDefaultAction: { chatStore.useDefaultCouncilLineup() },
+                clearAction: { chatStore.clearCouncilMode() }
+            )
+
+            CouncilPresetSection(
+                presets: chatStore.councilPresets,
+                usePreset: { chatStore.useCouncilPreset($0) },
+                customizeAction: { showingCouncilCustomizer.toggle() },
+                isCustomizing: showingCouncilCustomizer
+            )
+
+            if showingCouncilCustomizer || isSearchingModels {
+                V2ModelSection(title: "Choose Models") {
+                    ForEach(councilCandidateModels) { model in
+                        V2ModelRow(
+                            title: model.displayName,
+                            subtitle: modelRowSubtitle(model),
+                            symbolName: modelRowSymbol(model),
+                            tint: modelRowTint(model),
+                            badge: councilBadge(for: model),
+                            isSelected: chatStore.councilIndex(for: model.id) != nil,
+                            isEnabled: chatStore.canUseInCouncil(model.id),
+                            action: { chatStore.toggleCouncilModel(model.id) }
+                        )
+                        .dividerIfNeeded(model.id != councilCandidateModels.last?.id)
+                    }
+                }
+            }
+        }
     }
 
     private var modelSearchPrompt: String {
@@ -274,6 +370,80 @@ struct ModelPickerView: View {
         return unpinned(models).filter { !primaryIDs.contains($0.id) }
     }
 
+    private func isDefaultPrivateModel(_ model: ModelOption) -> Bool {
+        model.id == "zai-org/GLM-5.1-FP8" ||
+            model.id == "zai-org/GLM-latest" ||
+            model.displayName.localizedCaseInsensitiveContains("GLM 5.1")
+    }
+
+    private func modelRowSubtitle(_ model: ModelOption) -> String {
+        if model.isNearCloudModel {
+            return model.metadata?.modelDescription ?? "Runs through NEAR Cloud privacy proxy."
+        }
+        if model.isPrivateVerifiableChatModel {
+            return model.metadata?.modelDescription ?? "Private route with verification coverage when proof is available."
+        }
+        return model.metadata?.modelDescription ?? model.id
+    }
+
+    private func modelRowSymbol(_ model: ModelOption) -> String {
+        if model.isNearCloudModel { return "cloud.fill" }
+        if model.isRecommendedReasoningModel { return "brain.head.profile" }
+        if model.isOpenWeightCandidate { return "shippingbox" }
+        if model.isPrivateVerifiableChatModel { return "checkmark.shield.fill" }
+        return "cpu"
+    }
+
+    private func modelRowTint(_ model: ModelOption) -> Color {
+        if model.isPrivateVerifiableChatModel || isDefaultPrivateModel(model) {
+            return Color.actionPrimary
+        }
+        return Color.textSecondary
+    }
+
+    private func modelBadge(_ model: ModelOption) -> String? {
+        if model.isNearCloudModel {
+            return chatStore.nearCloudKeyConfigured ? "Cloud" : "Connect"
+        }
+        if model.isPrivateVerifiableChatModel {
+            switch chatStore.currentAttestationStatus.coverage(for: model.id) {
+            case .covered:
+                return "Verified"
+            case .stale:
+                return "Stale"
+            default:
+                return "Private"
+            }
+        }
+        if model.isRecommendedReasoningModel {
+            return "Reasoning"
+        }
+        return nil
+    }
+
+    private func councilBadge(for model: ModelOption) -> String? {
+        if let index = chatStore.councilIndex(for: model.id) {
+            return "#\(index)"
+        }
+        return modelBadge(model)
+    }
+
+    private func selectModelAndDismiss(_ model: ModelOption) {
+        chatStore.selectModel(model.id)
+        dismiss()
+    }
+
+    private func connectNearCloudAccount() {
+        Task {
+            _ = await chatStore.connectNearCloudAccount()
+        }
+    }
+
+    private func openNearCloudSignup() {
+        guard let url = URL(string: "https://cloud.near.ai") else { return }
+        openURL(url)
+    }
+
     @ViewBuilder
     private func modelSection(_ title: String, models: [ModelOption], showsCouncilButton: Bool, dismissOnSelect: Bool = true) -> some View {
         if !models.isEmpty {
@@ -305,6 +475,381 @@ struct ModelPickerView: View {
                     .listRowBackground(Color.clear)
                 }
             }
+        }
+    }
+}
+
+private struct V2ModelSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title.uppercased())
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.textSecondary)
+                .tracking(0.5)
+                .padding(.horizontal, 16)
+
+            VStack(spacing: 0) {
+                content
+            }
+            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.appBorder, lineWidth: 0.5)
+            }
+            .padding(.horizontal, 16)
+        }
+    }
+}
+
+private struct V2ModelRow: View {
+    let title: String
+    let subtitle: String
+    let symbolName: String
+    let tint: Color
+    let badge: String?
+    let isSelected: Bool
+    let isEnabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: symbolName)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(isEnabled ? tint : Color.textTertiary)
+                    .frame(width: 24, height: 24)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.body)
+                        .foregroundStyle(isEnabled ? Color.primary : Color.textSecondary)
+                        .lineLimit(1)
+
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 0)
+
+                if let badge {
+                    Text(badge)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(isSelected ? Color.white : tint)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .frame(height: 26)
+                        .background(isSelected ? tint : tint.opacity(0.10), in: Capsule())
+                }
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(Color.actionPrimary)
+                }
+            }
+            .frame(minHeight: 60)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(isSelected ? Color.actionTint : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.48)
+    }
+}
+
+private struct DividerIfNeeded: ViewModifier {
+    let show: Bool
+
+    func body(content: Content) -> some View {
+        VStack(spacing: 0) {
+            content
+            if show {
+                Rectangle()
+                    .fill(Color.appHairline)
+                    .frame(height: 0.5)
+                    .padding(.leading, 54)
+            }
+        }
+    }
+}
+
+private extension View {
+    func dividerIfNeeded(_ show: Bool) -> some View {
+        modifier(DividerIfNeeded(show: show))
+    }
+}
+
+private struct ReasoningEffortInlineControl: View {
+    let selectedEffort: ModelReasoningEffort
+    let onSelect: (ModelReasoningEffort) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Default reasoning effort")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.textSecondary)
+
+            HStack(spacing: 6) {
+                ForEach(ModelReasoningEffort.allCases) { effort in
+                    Button {
+                        onSelect(effort)
+                    } label: {
+                        Text(effort.title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(effort == selectedEffort ? Color.white : Color.textSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 32)
+                            .background(effort == selectedEffort ? Color.actionPrimary : Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint(effort.detail)
+                }
+            }
+        }
+    }
+}
+
+private struct NearCloudGuidedCard: View {
+    let isConnected: Bool
+    let isConnecting: Bool
+    let modelCount: Int
+    let connectAction: () -> Void
+    let openCloudAction: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: isConnected ? "cloud.fill" : "cloud")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Color.actionPrimary)
+                    .frame(width: 34, height: 34)
+                    .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("NEAR Cloud")
+                        .font(.headline)
+                    Text(isConnected ? "\(max(modelCount, 1)) Cloud models ready. Use Frontier below when you want a SOTA override." : "Connect your NEAR account to unlock Qwen Max, Claude Opus, GPT, Gemini, and more.")
+                        .font(.footnote)
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button(action: connectAction) {
+                    Label(isConnecting ? "Connecting" : (isConnected ? "Refresh Cloud" : "Connect Account"), systemImage: isConnected ? "arrow.clockwise" : "person.crop.circle.badge.plus")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 42)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.actionPrimary)
+                .disabled(isConnecting)
+
+                Button(action: openCloudAction) {
+                    Image(systemName: "arrow.up.right")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 44, height: 42)
+                }
+                .buttonStyle(.bordered)
+                .tint(Color.actionPrimary)
+                .accessibilityLabel("Open NEAR Cloud")
+            }
+        }
+        .padding(16)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 0.5)
+        }
+        .padding(.horizontal, 16)
+    }
+}
+
+private struct FrontierLockedCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("FRONTIER VIA CLOUD")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.textSecondary)
+                .tracking(0.5)
+            Text("Connect NEAR Cloud to use Claude Opus, Qwen Max, GPT, Gemini, and Kimi routes.")
+                .font(.footnote)
+                .foregroundStyle(Color.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.appHairline, lineWidth: 0.5)
+                }
+        }
+        .padding(.horizontal, 16)
+    }
+}
+
+private struct CouncilLineupCard: View {
+    let activeModels: [ModelOption]
+    let defaultModels: [ModelOption]
+    let useDefaultAction: () -> Void
+    let clearAction: () -> Void
+
+    private var displayModels: [ModelOption] {
+        activeModels.count > 1 ? activeModels : defaultModels
+    }
+
+    private var isActive: Bool {
+        activeModels.count > 1
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "person.3.fill")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(Color.actionPrimary)
+                    .frame(width: 34, height: 34)
+                    .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(isActive ? "Council active" : "Recommended Council")
+                        .font(.headline)
+                    Text("Several models answer the same prompt; the synthesis keeps agreement and disagreement visible.")
+                        .font(.footnote)
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(displayModels.prefix(4).enumerated()), id: \.element.id) { index, model in
+                    HStack(spacing: 10) {
+                        Text("\(index + 1)")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color.actionPrimary)
+                            .frame(width: 24, height: 24)
+                            .background(Color.actionTint, in: Circle())
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(model.displayName)
+                                .font(.footnote.weight(.semibold))
+                            Text(index == 0 ? "Verification-first answer" : "Independent comparison")
+                                .font(.caption2)
+                                .foregroundStyle(Color.textSecondary)
+                        }
+                        Spacer()
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button(action: useDefaultAction) {
+                    Label(isActive ? "Reset Lineup" : "Use Council", systemImage: "sparkles")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 42)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.actionPrimary)
+
+                if isActive {
+                    Button(action: clearAction) {
+                        Label("Single", systemImage: "1.circle")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity, minHeight: 42)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(Color.actionPrimary)
+                }
+            }
+        }
+        .padding(16)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 0.5)
+        }
+        .padding(.horizontal, 16)
+    }
+}
+
+private struct CouncilPresetSection: View {
+    let presets: [CouncilPresetOption]
+    let usePreset: (String) -> Void
+    let customizeAction: () -> Void
+    let isCustomizing: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("PRESETS")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.textSecondary)
+                .tracking(0.5)
+                .padding(.horizontal, 16)
+
+            VStack(spacing: 0) {
+                ForEach(presets) { preset in
+                    Button {
+                        usePreset(preset.id)
+                    } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: preset.symbolName)
+                                .font(.system(size: 19, weight: .semibold))
+                                .foregroundStyle(preset.isAvailable ? Color.actionPrimary : Color.textTertiary)
+                                .frame(width: 24)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(preset.title)
+                                    .font(.body)
+                                    .foregroundStyle(Color.primary)
+                                Text(preset.isAvailable ? preset.subtitle : "Needs available models")
+                                    .font(.footnote)
+                                    .foregroundStyle(Color.textSecondary)
+                                    .lineLimit(2)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.textTertiary)
+                        }
+                        .frame(minHeight: 60)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!preset.isAvailable)
+                    .dividerIfNeeded(preset.id != presets.last?.id)
+                }
+
+                Button(action: customizeAction) {
+                    HStack(spacing: 14) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(Color.actionPrimary)
+                            .frame(width: 24)
+                        Text(isCustomizing ? "Hide custom models" : "Custom")
+                            .font(.body)
+                            .foregroundStyle(Color.primary)
+                        Spacer()
+                    }
+                    .frame(minHeight: 60)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
+            }
+            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.appBorder, lineWidth: 0.5)
+            }
+            .padding(.horizontal, 16)
         }
     }
 }
