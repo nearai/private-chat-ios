@@ -8549,7 +8549,7 @@ final class ChatStore: ObservableObject {
             sourceMode = .web
             webSearchEnabled = true
             draft = ""
-        case .chat, .councilOutput, .cloudModels, .council, .project, .share:
+        case .chat, .councilOutput, .cloudModels, .council, .councilRoom, .project, .share:
             selectedConversation = data.primaryConversation
             messages = data.messages
             draft = ""

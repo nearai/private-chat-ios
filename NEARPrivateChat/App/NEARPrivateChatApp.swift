@@ -50,6 +50,7 @@ enum DemoCaptureScreen: String, CaseIterable {
     case glmResult
     case chat
     case widgets
+    case councilRoom
     case councilOutput
     case verification
     case models

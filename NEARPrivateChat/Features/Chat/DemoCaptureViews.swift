@@ -82,7 +82,7 @@ struct DemoCaptureRootView: View {
             return 4_000_000_000
         case .models:
             return 4_000_000_000
-        case .council:
+        case .council, .councilRoom:
             return 6_000_000_000
         case .composer:
             return 5_500_000_000
@@ -98,6 +98,21 @@ struct DemoCaptureRootView: View {
             return 6_000_000_000
         }
     }
+}
+
+private func demoCouncilRoomModel() -> CouncilRoomModel {
+    let now = Date()
+    let batch = "demo-council"
+    func message(_ id: String, _ model: String, _ text: String) -> ChatMessage {
+        ChatMessage(id: id, role: .assistant, text: text, model: model, createdAt: now, status: "completed", responseID: "\(id)-r", councilBatchID: batch, isStreaming: false)
+    }
+    let messages = [
+        message("c-glm", "glm-5.1", "I concur. The architecture is sound and the streaming path is stable in main, so shipping is reasonable."),
+        message("c-claude", "claude-opus-4-7", "Yes, with caveats. The latency budget on the streaming side is the one risk. If we cap concurrent models at 3 we hold the SLA at p95 < 1.4s."),
+        message("c-gemini", "gemini-2.5-pro", "I disagree. Per-message proof for cross-model consensus is not landed in main; however, shipping without it means the verification footer is silently wrong on Council answers."),
+        message("c-syn", "llm-council/synthesis", "Synthesis: the council broadly supports shipping Council v2.\n\nAgreement: two of three models back shipping; the architecture and streaming path are considered stable.\n\nDisagreement: one model flags that per-message cross-model proof is not yet in main.\n\nRecommended next step: ship behind a flag, land the proof path, then enable by default.")
+    ]
+    return CouncilRoomModel.from(councilMessages: messages)
 }
 
 private struct DemoCaptureScreenHost: View {
@@ -139,6 +154,12 @@ private struct DemoCaptureScreenHost: View {
                 DemoNearCloudModelsView()
             case .council:
                 DemoCouncilLineupView()
+            case .councilRoom:
+                CouncilRoomView(
+                    model: demoCouncilRoomModel(),
+                    onSend: { _, _ in },
+                    onSynthesize: {}
+                )
             case .project:
                 ProjectFilesView()
             case .share:
