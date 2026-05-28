@@ -1383,7 +1383,9 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertTrue(profile.wantsWeb)
         XCTAssertTrue(profile.wantsCouncil)
         XCTAssertEqual(profile.experienceMode, .power)
-        XCTAssertEqual(profile.firstRunDraft, UserSetupStarterPreset.researchBrief.prompt)
+        // The staged first-run draft comes from the use-case starter; the point
+        // is the sample prompt never leaks into the persisted goalText (above).
+        XCTAssertEqual(profile.firstRunDraft, UserSetupUseCase.research.starterPrompt)
     }
 
     func testUserSetupCompleteFirstRunQuickStartPersistsPresetDefaults() throws {
