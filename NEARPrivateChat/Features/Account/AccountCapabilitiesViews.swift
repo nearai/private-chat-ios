@@ -343,7 +343,7 @@ struct AccountSettingsView: View {
                 Button {
                     showingCapabilities = true
                 } label: {
-                    powerToolSubRow(icon: "cpu", title: "NEAR Cloud (advanced)", subtitle: nil)
+                    powerToolSubRow(icon: "cpu", title: "NEAR AI Cloud (advanced)", subtitle: nil)
                         .foregroundStyle(.primary)
                 }
 
@@ -485,7 +485,7 @@ struct AccountSettingsView: View {
         #endif
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            chatStore.bannerMessage = "Clipboard does not contain a NEAR Cloud key."
+            chatStore.bannerMessage = "Clipboard does not contain a NEAR AI Cloud key."
             return
         }
         nearCloudAPIKey = trimmed
@@ -706,7 +706,7 @@ private struct DefaultModelDetailView: View {
             return "Shipped default · verified private route"
         }
         if option.isNearCloudModel {
-            return "Routed via NEAR Cloud privacy proxy"
+            return "Routed via NEAR AI Cloud privacy proxy"
         }
         if option.isVerifiable {
             return "Private · verifiable"
@@ -853,7 +853,7 @@ private struct PowerToolAPIKeysView: View {
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
             } header: {
-                Text("NEAR Cloud")
+                Text("NEAR AI Cloud")
             }
 
             Section("Manual key") {
@@ -1234,10 +1234,10 @@ struct CapabilitiesView: View {
         if chatStore.nearCloudKeyConfigured {
             let plan = chatStore.billingSnapshot?.activeSubscription?.plan ?? "Cloud connected"
             return chatStore.selectedRouteUsesNearCloud
-                ? "Current route uses \(chatStore.selectedModelDisplayName) through NEAR Cloud. \(plan)."
+                ? "Current route uses \(chatStore.selectedModelDisplayName) through NEAR AI Cloud. \(plan)."
                 : "Cloud unlocks premium external model rows in the picker. \(plan)."
         }
-        return "Connect NEAR Cloud before sending with locked Cloud routes or mixed Cloud councils."
+        return "Connect NEAR AI Cloud before sending with locked Cloud routes or mixed Cloud councils."
     }
 
     private var agentStatus: String {

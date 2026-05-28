@@ -126,32 +126,32 @@ struct ModelCatalogStore {
             nearCloudFallbackModel(
                 cloudModelID: "anthropic/claude-opus-4-7",
                 displayName: "Claude Opus 4.7",
-                description: "Runs Claude Opus 4.7 through NEAR Cloud with privacy proxy routing."
+                description: "Runs Claude Opus 4.7 through NEAR AI Cloud with privacy proxy routing."
             ),
             nearCloudFallbackModel(
                 cloudModelID: "openai/gpt-5.5",
                 displayName: "GPT-5.5",
-                description: "Runs GPT-5.5 through NEAR Cloud with privacy proxy routing."
+                description: "Runs GPT-5.5 through NEAR AI Cloud with privacy proxy routing."
             ),
             nearCloudFallbackModel(
                 cloudModelID: "qwen/qwen3.7-max",
                 displayName: "Qwen3.7 Max",
-                description: "Runs Qwen3.7 Max through NEAR Cloud with privacy proxy routing."
+                description: "Runs Qwen3.7 Max through NEAR AI Cloud with privacy proxy routing."
             ),
             nearCloudFallbackModel(
                 cloudModelID: "moonshotai/kimi-k2.6",
                 displayName: "Kimi K2.6",
-                description: "Runs Kimi K2.6 through NEAR Cloud with privacy proxy routing."
+                description: "Runs Kimi K2.6 through NEAR AI Cloud with privacy proxy routing."
             ),
             nearCloudFallbackModel(
                 cloudModelID: "google/gemini-3.5-flash",
                 displayName: "Gemini 3.5 Flash",
-                description: "Runs Gemini 3.5 Flash through NEAR Cloud with privacy proxy routing."
+                description: "Runs Gemini 3.5 Flash through NEAR AI Cloud with privacy proxy routing."
             ),
             nearCloudFallbackModel(
                 cloudModelID: "openai/gpt-oss-120b",
                 displayName: "GPT OSS 120B",
-                description: "Runs GPT OSS 120B through NEAR Cloud with privacy proxy routing."
+                description: "Runs GPT OSS 120B through NEAR AI Cloud with privacy proxy routing."
             )
         ]
     }
@@ -181,11 +181,11 @@ struct ModelCatalogStore {
             guard !normalizedID.isEmpty, seen.insert(normalizedID.lowercased()).inserted else {
                 return nil
             }
-            let aliases = uniqueStrings(["NEAR Cloud", "privacy proxy", "unverified", normalizedID, model.displayName] + (model.metadata?.aliases ?? []))
+            let aliases = uniqueStrings(["NEAR AI Cloud", "privacy proxy", "unverified", normalizedID, model.displayName] + (model.metadata?.aliases ?? []))
             let description = model.metadata?.modelDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
             let routeDescription = description?.isEmpty == false
-                ? "\(description!) Runs through NEAR Cloud with privacy proxy routing."
-                : "Runs \(model.displayName) through NEAR Cloud with privacy proxy routing."
+                ? "\(description!) Runs through NEAR AI Cloud with privacy proxy routing."
+                : "Runs \(model.displayName) through NEAR AI Cloud with privacy proxy routing."
             return ModelOption(
                 modelID: nearCloudRouteModelID(for: normalizedID),
                 publicModel: model.publicModel,
@@ -237,7 +237,7 @@ struct ModelCatalogStore {
                 modelDisplayName: displayName,
                 modelDescription: description,
                 modelIcon: nil,
-                aliases: ["NEAR Cloud", cloudModelID, displayName, "privacy proxy", "unverified"]
+                aliases: ["NEAR AI Cloud", cloudModelID, displayName, "privacy proxy", "unverified"]
             )
         )
     }

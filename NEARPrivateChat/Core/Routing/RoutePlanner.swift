@@ -63,8 +63,8 @@ struct RoutePlanner {
         if modelIDs.contains(where: { routeKind(forModelID: $0) == .nearCloud }), !nearCloudKeyConfigured {
             return ChatRouteReadinessIssue(
                 route: .nearCloud,
-                title: "Connect NEAR Cloud",
-                message: "Connect NEAR Cloud in Account before sending with this route. Your draft and attachments were kept.",
+                title: "Connect NEAR AI Cloud",
+                message: "Connect NEAR AI Cloud in Account before sending with this route. Your draft and attachments were kept.",
                 recoveryAction: .addNearCloudKey,
                 recoveryTitle: "Add Key"
             )

@@ -778,7 +778,7 @@ private struct DemoNearCloudModelsView: View {
                                 .foregroundStyle(.secondary)
                                 .textCase(.uppercase)
                             Label("Uses the same project files, saved links, and web context when the prompt needs them.", systemImage: "folder.badge.gearshape")
-                            Label("Cloud models run through the NEAR Cloud privacy proxy, separate from the fully private GLM route.", systemImage: "lock.rotation")
+                            Label("Cloud models run through the NEAR AI Cloud privacy proxy, separate from the fully private GLM route.", systemImage: "lock.rotation")
                             Label("GLM 5.1 stays the default verified private model; Cloud is an explicit SOTA override.", systemImage: "checkmark.shield")
                         }
                         .font(.footnote.weight(.semibold))
@@ -791,7 +791,7 @@ private struct DemoNearCloudModelsView: View {
                     .padding(.vertical, 18)
                 }
                 .background(Color.appBackground)
-                .navigationTitle("NEAR Cloud")
+                .navigationTitle("NEAR AI Cloud")
                 .platformInlineNavigationTitle()
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -954,7 +954,7 @@ private struct DemoCloudModelRow: View {
                         .frame(height: 20)
                         .background(Color.appSecondaryBackground, in: Capsule())
                 }
-                Text(model.metadata?.modelDescription ?? "Runs through NEAR Cloud with privacy proxy routing.")
+                Text(model.metadata?.modelDescription ?? "Runs through NEAR AI Cloud with privacy proxy routing.")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1128,8 +1128,8 @@ private struct DemoAgentTimelineStep: View {
 private struct DemoCouncilLineupView: View {
     private let models = [
         ("GLM 5.1", "Private model answer", "NEAR Private · verified", "checkmark.shield.fill"),
-        ("Qwen Max", "Independent model answer", "NEAR Cloud · privacy proxy", "list.bullet.rectangle"),
-        ("Claude Opus 4.7", "Independent model answer", "NEAR Cloud · privacy proxy", "sparkles")
+        ("Qwen Max", "Independent model answer", "NEAR AI Cloud · privacy proxy", "list.bullet.rectangle"),
+        ("Claude Opus 4.7", "Independent model answer", "NEAR AI Cloud · privacy proxy", "sparkles")
     ]
 
     var body: some View {

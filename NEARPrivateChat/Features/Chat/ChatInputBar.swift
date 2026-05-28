@@ -308,7 +308,7 @@ struct InputBar: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Model \(chatStore.selectedModelDisplayName)")
-                .accessibilityHint("Choose GLM, NEAR Cloud, or another model for the next message.")
+                .accessibilityHint("Choose GLM, NEAR AI Cloud, or another model for the next message.")
 
                 Button {
                     openModelPicker(openingCouncil: true)

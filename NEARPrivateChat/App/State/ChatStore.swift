@@ -631,7 +631,7 @@ final class ChatStore: ObservableObject {
             return "Private + Cloud"
         }
         if activeCouncilHasNearCloudRoutes {
-            return "NEAR Cloud Council"
+            return "NEAR AI Cloud Council"
         }
         return "Private Council"
     }
@@ -669,7 +669,7 @@ final class ChatStore: ObservableObject {
             councilPreset(
                 id: "cloud-frontier",
                 title: "Cloud Frontier",
-                subtitle: "Opus, GPT, Qwen, Kimi, and Gemini via NEAR Cloud.",
+                subtitle: "Opus, GPT, Qwen, Kimi, and Gemini via NEAR AI Cloud.",
                 symbolName: "cloud.fill",
                 candidateGroups: [
                     ["near-cloud/anthropic/claude-opus-4-7", "anthropic/claude-opus-4-7"],
@@ -742,7 +742,7 @@ final class ChatStore: ObservableObject {
             return "IronClaw"
         }
         if selectedModelOption?.isNearCloudModel == true {
-            return "NEAR Cloud"
+            return "NEAR AI Cloud"
         }
         return "NEAR Private"
     }
@@ -754,7 +754,7 @@ final class ChatStore: ObservableObject {
     var signedTranscriptExportContext: SignedTranscriptExportContext {
         let semantics = sourceRoutingSemantics
         let provider = switch selectedProviderDisplayName {
-        case "NEAR Cloud":
+        case "NEAR AI Cloud":
             "near-cloud"
         case "IronClaw":
             selectedModelOption?.isIronclawMobileRuntime == true ? "ironclaw-mobile" : "ironclaw-hosted"
@@ -864,7 +864,7 @@ final class ChatStore: ObservableObject {
         }
         if isCouncilModeEnabled {
             return activeCouncilHasNearCloudRoutes
-                ? "Council includes NEAR Cloud models. Cloud legs use privacy proxy routing; all-private Council lineups can fetch verification proof."
+                ? "Council includes NEAR AI Cloud models. Cloud legs use privacy proxy routing; all-private Council lineups can fetch verification proof."
                 : "Council is using NEAR Private models. Open Verification when you need a signed private-route report."
         }
         if selectedModelOption?.isIronclawMobileRuntime == true {
@@ -874,7 +874,7 @@ final class ChatStore: ObservableObject {
             return nil
         }
         if selectedModelOption?.isNearCloudModel == true {
-            return "\(selectedModelDisplayName) runs through NEAR Cloud with privacy proxy routing. The app can attach web results, project notes, saved links, and extracted context when the prompt needs them."
+            return "\(selectedModelDisplayName) runs through NEAR AI Cloud with privacy proxy routing. The app can attach web results, project notes, saved links, and extracted context when the prompt needs them."
         }
         return nil
     }
@@ -890,11 +890,11 @@ final class ChatStore: ObservableObject {
         }
         if isCouncilModeEnabled {
             return activeCouncilHasNearCloudRoutes
-                ? "Ask a Council of NEAR Private and NEAR Cloud models to compare answers and synthesize the strongest response."
+                ? "Ask a Council of NEAR Private and NEAR AI Cloud models to compare answers and synthesize the strongest response."
                 : "Ask a Council of NEAR Private models to compare answers and synthesize the strongest response."
         }
         if selectedModelOption?.isNearCloudModel == true {
-            return "Use \(selectedModelDisplayName) through NEAR Cloud with app-supplied web, project notes, saved links, and extracted context when useful."
+            return "Use \(selectedModelDisplayName) through NEAR AI Cloud with app-supplied web, project notes, saved links, and extracted context when useful."
         }
         if researchModeEnabled && !selectedRouteUsesNearCloud {
             return "Ask with \(selectedModelDisplayName), web search, files, and project context."
@@ -925,8 +925,8 @@ final class ChatStore: ObservableObject {
         switch selectedProviderDisplayName {
         case "IronClaw":
             return selectedModelOption?.isIronclawMobileRuntime == true ? "Ask IronClaw Mobile or the workstation" : "Ask the hosted IronClaw workstation"
-        case "NEAR Cloud":
-            return nearCloudKeyConfigured ? "Ask \(selectedModelDisplayName)" : "Connect NEAR Cloud"
+        case "NEAR AI Cloud":
+            return nearCloudKeyConfigured ? "Ask \(selectedModelDisplayName)" : "Connect NEAR AI Cloud"
         default:
             switch sourceMode {
             case .auto:
@@ -1050,7 +1050,7 @@ final class ChatStore: ObservableObject {
 
     func toggleCouncilModel(_ modelID: String) {
         guard let model = chatModels.first(where: { $0.id == modelID }), isCouncilEligible(model) else {
-            showBanner("Council mode supports available NEAR Private and NEAR Cloud chat models.")
+            showBanner("Council mode supports available NEAR Private and NEAR AI Cloud chat models.")
             return
         }
 
@@ -1142,7 +1142,7 @@ final class ChatStore: ObservableObject {
                 switchToPrivateFallbackModel()
             }
         case .addNearCloudKey:
-            showBanner("Connect NEAR Cloud in Account, then send again.")
+            showBanner("Connect NEAR AI Cloud in Account, then send again.")
         case .configureIronClawEndpoint:
             showBanner("Configure the hosted IronClaw endpoint in Account, then send again.")
         }
@@ -1602,7 +1602,7 @@ final class ChatStore: ObservableObject {
         clearAttestationState()
         councilModelIDs = isCouncilEligible(model) ? [modelID] : []
         if model.isNearCloudModel, !nearCloudKeyConfigured {
-            showBanner("Using \(model.displayName). Connect NEAR Cloud in Account before sending.")
+            showBanner("Using \(model.displayName). Connect NEAR AI Cloud in Account before sending.")
         } else {
             showBanner("Using \(modelDisplayName(for: modelID)).")
         }
@@ -1707,7 +1707,7 @@ final class ChatStore: ObservableObject {
     func saveNearCloudAPIKey(_ apiKey: String) {
         let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else {
-            showBanner("Paste a NEAR Cloud key first.")
+            showBanner("Paste a NEAR AI Cloud key first.")
             return
         }
 
@@ -1715,7 +1715,7 @@ final class ChatStore: ObservableObject {
             try KeychainStore.save(trimmedKey, account: scopedKeychainAccount(Self.nearCloudAPIKeychainAccount))
             nearCloudKeyConfigured = true
             routeReadinessIssue = nil
-            showBanner("NEAR Cloud key saved.")
+            showBanner("NEAR AI Cloud key saved.")
         } catch {
             showBanner(error.localizedDescription)
         }
@@ -1741,7 +1741,7 @@ final class ChatStore: ObservableObject {
             routeReadinessIssue = nil
             let routeModels = Self.nearCloudRouteModels(from: fetchedCloud)
             nearCloudModels = routeModels.isEmpty ? Self.fallbackNearCloudModels() : routeModels
-            showBanner("NEAR Cloud connected. \(nearCloudModels.count) models ready.")
+            showBanner("NEAR AI Cloud connected. \(nearCloudModels.count) models ready.")
             return true
         } catch APIError.status(let code, _) where code == 404 || code == 405 {
             showBanner("Cloud auto-connect is not available yet. Open Cloud, create a key, then paste it here.")
@@ -1755,7 +1755,7 @@ final class ChatStore: ObservableObject {
     func connectNearCloudAPIKey(_ apiKey: String) async -> Bool {
         let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else {
-            showBanner("Paste a NEAR Cloud key first.")
+            showBanner("Paste a NEAR AI Cloud key first.")
             return false
         }
 
@@ -1769,10 +1769,10 @@ final class ChatStore: ObservableObject {
             routeReadinessIssue = nil
             let routeModels = Self.nearCloudRouteModels(from: fetchedCloud)
             nearCloudModels = routeModels.isEmpty ? Self.fallbackNearCloudModels() : routeModels
-            showBanner("NEAR Cloud connected. \(nearCloudModels.count) models ready.")
+            showBanner("NEAR AI Cloud connected. \(nearCloudModels.count) models ready.")
             return true
         } catch {
-            showBanner("NEAR Cloud key was not saved: \(Self.displayFailureMessage(error.localizedDescription))")
+            showBanner("NEAR AI Cloud key was not saved: \(Self.displayFailureMessage(error.localizedDescription))")
             return false
         }
     }
@@ -1784,7 +1784,7 @@ final class ChatStore: ObservableObject {
             selectedModel = Self.defaultModelID
         }
         routeReadinessIssue = nil
-        showBanner("NEAR Cloud disconnected.")
+        showBanner("NEAR AI Cloud disconnected.")
     }
 
     func testIronclawConnection() async {
@@ -1858,7 +1858,7 @@ final class ChatStore: ObservableObject {
             AppDiagnosticCheck(title: "Web grounding", detail: "Searching a live AI-news query.", state: .running),
             AppDiagnosticCheck(title: "IronClaw bridge", detail: "Checking hosted endpoint and bearer token.", state: .running),
             AppDiagnosticCheck(title: "IronClaw workstation", detail: "Verifying hosted shell/git tools.", state: .running),
-            AppDiagnosticCheck(title: "NEAR Cloud", detail: nearCloudKeyConfigured ? "Connected." : "Not connected.", state: nearCloudKeyConfigured ? .passed : .warning)
+            AppDiagnosticCheck(title: "NEAR AI Cloud", detail: nearCloudKeyConfigured ? "Connected." : "Not connected.", state: nearCloudKeyConfigured ? .passed : .warning)
         ]
         defer {
             isRunningDiagnostics = false
@@ -3190,7 +3190,7 @@ final class ChatStore: ObservableObject {
 
     func refreshAttestationReport() async {
         if isCouncilModeEnabled, activeCouncilHasExternalRoutes {
-            showBanner("Verification proof is available for all-private Council lineups. Remove NEAR Cloud models to fetch proof.")
+            showBanner("Verification proof is available for all-private Council lineups. Remove NEAR AI Cloud models to fetch proof.")
             return
         }
         guard selectedRouteKind == .nearPrivate else {
@@ -4394,10 +4394,10 @@ final class ChatStore: ObservableObject {
     ) async throws {
         guard let apiKey = loadNearCloudAPIKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
               !apiKey.isEmpty else {
-            throw APIError.status(401, "Connect NEAR Cloud in Account to use \(modelDisplayName(for: modelID)).")
+            throw APIError.status(401, "Connect NEAR AI Cloud in Account to use \(modelDisplayName(for: modelID)).")
         }
         guard let cloudModelID = nearCloudUnderlyingModelID(for: modelID) else {
-            throw APIError.status(400, "That NEAR Cloud model route is not valid.")
+            throw APIError.status(400, "That NEAR AI Cloud model route is not valid.")
         }
 
         await apply(streamEvent: .reasoningStarted, conversationID: conversationID, assistantMessageID: assistantMessageID)
@@ -7985,7 +7985,7 @@ final class ChatStore: ObservableObject {
         let base: String
         if hasWebContext {
             base = """
-            You are \(modelDisplayName) running through NEAR Cloud inside an iOS chat app.
+            You are \(modelDisplayName) running through NEAR AI Cloud inside an iOS chat app.
             Do not emit tool-call markup, XML tool tags, JSON tool calls, or fake function calls.
             The iOS app has already performed web search and included live web context in the user message. Use that context directly, cite source titles or domains, and never claim that you cannot browse.
             Use any project instructions, saved links, notes, attachment summaries, or extracted text included by the app.
@@ -7993,7 +7993,7 @@ final class ChatStore: ObservableObject {
             """
         } else {
             base = """
-            You are \(modelDisplayName) running through NEAR Cloud inside an iOS chat app.
+            You are \(modelDisplayName) running through NEAR AI Cloud inside an iOS chat app.
             Do not emit tool-call markup, XML tool tags, JSON tool calls, or fake function calls.
             Use any project instructions, saved links, notes, attachment summaries, or extracted text included by the app. If no live web context was supplied and current facts are essential, say what context is missing and answer from what is available.
             Format answers cleanly with concise headings and bullets when useful.
@@ -8020,7 +8020,7 @@ final class ChatStore: ObservableObject {
             (lowercased.contains("\"call\"") && lowercased.contains("web_search"))
 
         guard looksLikeToolCall else { return trimmed }
-        return "The NEAR Cloud model emitted tool-call markup instead of a normal answer. The iOS app handles web and project context before the model call; ask again and the route will use supplied context directly."
+        return "The NEAR AI Cloud model emitted tool-call markup instead of a normal answer. The iOS app handles web and project context before the model call; ask again and the route will use supplied context directly."
     }
 
     private static func ironclawToolResultMarkdown(_ results: [IronclawMobileToolResult]) -> String {

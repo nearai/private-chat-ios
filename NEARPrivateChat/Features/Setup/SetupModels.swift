@@ -905,7 +905,7 @@ enum CapabilityNextStepPlanner {
         switch routeBlock {
         case .nearCloudKeyRequired:
             return CapabilityNextStep(
-                title: "Connect NEAR Cloud",
+                title: "Connect NEAR AI Cloud",
                 detail: "This route is blocked until NEAR AI Cloud is connected. Private chat still works right now.",
                 actionTitle: "Connect Cloud",
                 kind: .openCloud

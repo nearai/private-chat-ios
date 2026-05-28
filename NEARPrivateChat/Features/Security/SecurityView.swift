@@ -62,7 +62,7 @@ struct SecurityView: View {
             return ProofCapsuleViewModel(
                 state: .proxied,
                 title: "Privacy proxy",
-                detail: "NEAR Cloud can use app-supplied web and project context, but this route does not carry NEAR Private verification.",
+                detail: "NEAR AI Cloud can use app-supplied web and project context, but this route does not carry NEAR Private verification.",
                 badge: "Privacy proxy",
                 symbolName: "eye.slash"
             )
@@ -581,7 +581,7 @@ struct SecurityView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Privacy proxy route")
                         .font(.headline)
-                    Text("NEAR Cloud can use app-supplied web and project context, but this route does not carry NEAR Private verification.")
+                    Text("NEAR AI Cloud can use app-supplied web and project context, but this route does not carry NEAR Private verification.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -592,7 +592,7 @@ struct SecurityView: View {
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("NEAR Cloud privacy proxy route, unverified")
+        .accessibilityLabel("NEAR AI Cloud privacy proxy route, unverified")
     }
 
     private var canFetchAttestation: Bool {
@@ -614,7 +614,7 @@ struct SecurityView: View {
 
     private var fetchAttestationDisabledText: String {
         if chatStore.isCouncilModeEnabled, chatStore.activeCouncilHasExternalRoutes {
-            return "Verification proof is available for all-private Council lineups. Remove NEAR Cloud models to fetch proof."
+            return "Verification proof is available for all-private Council lineups. Remove NEAR AI Cloud models to fetch proof."
         }
         return "Switch to a NEAR Private model to fetch verification proof."
     }
@@ -666,7 +666,7 @@ struct SecurityView: View {
             return "NEAR Private chat gateway"
         }
         if snapshot.cloudGatewayAddress != nil {
-            return "NEAR Cloud gateway"
+            return "NEAR AI Cloud gateway"
         }
         return routeSummary
     }
@@ -689,7 +689,7 @@ struct SecurityView: View {
         case .nearPrivate:
             return "NEAR Private"
         case .nearCloud:
-            return "NEAR Cloud"
+            return "NEAR AI Cloud"
         case .ironclawMobile:
             return "IronClaw Mobile"
         case .ironclawHosted:

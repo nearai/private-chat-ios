@@ -450,7 +450,7 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             badges.append("Agent")
             badges.append("Hosted")
         } else if isNearCloudModel {
-            badges.append("NEAR Cloud")
+            badges.append("NEAR AI Cloud")
             badges.append("Not attested")
         }
         if isRecommendedReasoningModel {

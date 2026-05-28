@@ -400,7 +400,7 @@ struct AttestationEducation: Codable, Equatable, Sendable {
             ),
             AttestationEducationSection(
                 title: "Different routes",
-                body: "External, NEAR Cloud, and IronClaw routes may show different states because they are not necessarily covered by the same hardware-rooted proof."
+                body: "External, NEAR AI Cloud, and IronClaw routes may show different states because they are not necessarily covered by the same hardware-rooted proof."
             )
         ]
     )

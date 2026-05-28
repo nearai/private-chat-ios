@@ -145,14 +145,14 @@ struct ModelPickerView: View {
             }
 
             // NEAR CLOUD
-            ModelSpecSection(title: "NEAR Cloud") {
+            ModelSpecSection(title: "NEAR AI Cloud") {
                 ModelSpecRow(
                     symbolName: chatStore.nearCloudKeyConfigured ? "cloud.fill" : "cloud",
                     symbolColor: Color.textSecondary,
-                    title: chatStore.nearCloudKeyConfigured ? "NEAR Cloud connected" : "Connect NEAR Cloud",
+                    title: chatStore.nearCloudKeyConfigured ? "NEAR AI Cloud connected" : "Connect NEAR AI Cloud",
                     subtitle: chatStore.nearCloudKeyConfigured
-                        ? "Refresh cloud catalog or open account"
-                        : "Use Claude, GPT, and Gemini via your cloud key",
+                        ? "Refresh NEAR AI Cloud catalog or open account"
+                        : "Use Claude, GPT, and Gemini via your NEAR AI Cloud key",
                     trailing: .chevron,
                     isSelected: false,
                     showsDivider: false,
@@ -184,7 +184,7 @@ struct ModelPickerView: View {
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(Color.textSecondary)
                         .padding(.horizontal, 16)
-                    Text("Connect NEAR Cloud to use Claude Opus 4.5, GPT-5.5, Gemini 3 Pro.")
+                    Text("Connect NEAR AI Cloud to use Claude Opus 4.5, GPT-5.5, Gemini 3 Pro.")
                         .font(.subheadline)
                         .foregroundStyle(Color.textTertiary)
                         .multilineTextAlignment(.center)
@@ -319,7 +319,7 @@ struct ModelPickerView: View {
         if name.contains("gemini") { return "Google · multimodal" }
         if name.contains("qwen") { return "Alibaba · multilingual" }
         if name.contains("kimi") { return "Moonshot · long-context" }
-        return model.metadata?.modelDescription ?? "Frontier model via NEAR Cloud"
+        return model.metadata?.modelDescription ?? "Frontier model via NEAR AI Cloud"
     }
 
     private func selectModelAndDismiss(_ model: ModelOption) {
@@ -328,12 +328,16 @@ struct ModelPickerView: View {
     }
 
     private func connectOrOpenNearCloud() {
+        // Always open the NEAR AI Cloud web page. Previously the
+        // unconnected path called `connectNearCloudAccount()` (an
+        // authenticated API request) which silently failed when the
+        // session token couldn't reach the server — leaving the user
+        // tapping with no visible result. Opening the web flow gives
+        // them a concrete path to manage their cloud key in every
+        // state.
+        openNearCloudSignup()
         if chatStore.nearCloudKeyConfigured {
-            openNearCloudSignup()
-        } else {
-            Task {
-                _ = await chatStore.connectNearCloudAccount()
-            }
+            Task { _ = await chatStore.connectNearCloudAccount() }
         }
     }
 

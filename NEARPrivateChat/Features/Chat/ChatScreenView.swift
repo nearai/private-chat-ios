@@ -702,7 +702,7 @@ private struct ChatToolbar: View {
                 )
             } else {
                 MetadataPill(
-                    title: chatStore.selectedRouteUsesNearCloud ? "NEAR Cloud" : "Private",
+                    title: chatStore.selectedRouteUsesNearCloud ? "NEAR AI Cloud" : "Private",
                     symbolName: chatStore.selectedRouteUsesNearCloud ? "cloud" : "lock.shield",
                     isPrimary: true
                 )
