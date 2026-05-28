@@ -812,16 +812,25 @@ let promptText = text.isEmpty && !attachments.isEmpty
         request.setValue("1000", forHTTPHeaderField: "ngrok-skip-browser-warning")
         if authenticated {
             guard let authToken, !authToken.isEmpty else { throw APIError.unauthenticated }
+            let trimmedToken = authToken.trimmingCharacters(in: .whitespacesAndNewlines)
             // NEAR backend uses cookie-based session auth — the live cookie
             // header is `nearai-prod_crabshack_session=<hex>`. OAuth-issued
             // JWTs go through `Authorization: Bearer …`. Send both so
             // whichever the endpoint validates wins; the unused one is
-            // ignored.
+            // ignored. Also send browser-like Origin/Referer/UA headers
+            // because the backend may reject non-browser requests outright
+            // (SameSite=Lax cookies often get this treatment).
             request.setValue(
-                "nearai-prod_crabshack_session=\(authToken)",
+                "nearai-prod_crabshack_session=\(trimmedToken)",
                 forHTTPHeaderField: "Cookie"
             )
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+            request.setValue("Bearer \(trimmedToken)", forHTTPHeaderField: "Authorization")
+            request.setValue("https://private.near.ai", forHTTPHeaderField: "Origin")
+            request.setValue("https://private.near.ai/", forHTTPHeaderField: "Referer")
+            request.setValue(
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+                forHTTPHeaderField: "User-Agent"
+            )
         }
         request.httpBody = body
         return request
@@ -832,8 +841,20 @@ let promptText = text.isEmpty && !attachments.isEmpty
         guard let http = response as? HTTPURLResponse else {
             throw APIError.emptyResponse
         }
+        #if DEBUG
+        // Diagnostic — surface the exact HTTP status + body the server
+        // returned. Visible in Xcode console when iterating on the
+        // auth/cookie scheme.
+        if !(200..<300).contains(http.statusCode) {
+            let rawBody = String(data: data.prefix(400), encoding: .utf8) ?? "<binary>"
+            let path = request.url?.path ?? "<unknown>"
+            print("[NEAR API] \(request.httpMethod ?? "GET") \(path) → HTTP \(http.statusCode)\n  body: \(rawBody)\n  headers: \(http.allHeaderFields)")
+        }
+        #endif
         guard (200..<300).contains(http.statusCode) else {
-            throw APIError.status(http.statusCode, decodeErrorMessage(from: data))
+            let detail = decodeErrorMessage(from: data)
+            let suffix = detail.isEmpty ? "" : " — \(detail)"
+            throw APIError.status(http.statusCode, "HTTP \(http.statusCode)\(suffix)")
         }
         if T.self == EmptyResponse.self, data.isEmpty {
             guard let emptyResponse = EmptyResponse() as? T else {
