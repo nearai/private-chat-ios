@@ -34,7 +34,13 @@ extension ChatMessage {
         if model == "near-cloud/anthropic/claude-opus-4-7" {
             return "Claude Opus 4.7"
         }
-        return model?.split(separator: "/").last.map(String.init) ?? "Assistant"
+        // Strip the org prefix and precision suffix so message headers
+        // show "GLM 5.1" instead of "zai-org/GLM-5.1-FP8" or the raw
+        // trailing segment "GLM-5.1-FP8".
+        if let modelID = model {
+            return ModelOption.humanize(modelID: modelID)
+        }
+        return "Assistant"
     }
 
     var streamingStatusText: String {

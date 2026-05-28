@@ -1381,16 +1381,10 @@ final class PrivateChatAPI {
             await onEvent(.titleUpdated(title))
         }
 
-        // Canned reply. Chunked to mimic a real streaming response.
-        let reply = """
-        This is a simulator stub response from \(humanizedModelName(model)). The real backend is not reachable from this build, so the iOS app is rendering a canned reply so you can walk every chat-thread surface.
-
-        Useful things to try while on this stub:
-          • Open the verification sheet from the "..." menu.
-          • Switch models from the composer chip row.
-          • Try the source carousel and citation pills (added when the real API attaches sources).
-          • Send another message — the stub will reply again.
-        """
+        // Canned assistant-voice reply for the simulator stub. Worded
+        // as a normal response — no "this is a stub" meta commentary
+        // visible to the user.
+        let reply = Self.simulatorStubAssistantReply(for: userText)
 
         // Stream as token-sized chunks so SSE event handlers actually move.
         for chunk in chunked(reply, every: 6) {
@@ -1409,6 +1403,40 @@ final class PrivateChatAPI {
             return modelID
         }
         return trailing
+    }
+
+    /// Builds an assistant-voice reply for the simulator stub that reads
+    /// like a real model response. Picks one of three short bodies based
+    /// on a hash of the user's prompt so successive sends don't return
+    /// the identical reply.
+    static func simulatorStubAssistantReply(for userText: String) -> String {
+        let prompts: [String] = [
+            """
+            Here's the short version: I'm running locally on your simulator without a live backend connection, so I'm answering from a small offline pool while the chat surface, verification flow, and source rendering get exercised end-to-end.
+
+            If you send a follow-up, I'll respond again. Open the verification sheet from the "..." menu to see the proof state, or switch models from the chip row below.
+            """,
+            """
+            Good question. I can outline the trade-offs at a high level: speed, privacy boundary, and whether the route can carry a fresh proof are usually the three axes worth comparing. Tell me which of those matters most for what you're working on and I'll go deeper.
+
+            (You're on the offline simulator session — the surrounding UI is fully wired even though I'm replying from a local pool.)
+            """,
+            """
+            Let's break it into three steps:
+
+            1. Clarify what you actually need — outcome, deadline, audience.
+            2. Pick the minimum tools that can ship it.
+            3. Cut anything that doesn't move step 1 forward.
+
+            Send a follow-up if you want me to apply this to a concrete project.
+            """
+        ]
+        var hash = 5381
+        for byte in userText.utf8 {
+            hash = ((hash << 5) &+ hash) &+ Int(byte)
+        }
+        let index = abs(hash) % prompts.count
+        return prompts[index]
     }
 
     private func chunked(_ text: String, every count: Int) -> [String] {
