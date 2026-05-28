@@ -192,6 +192,17 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
         }
     }
 
+    var quickStartDetail: String {
+        switch self {
+        case .privateQuestion:
+            return "Open a private draft with a simple route."
+        case .researchBrief:
+            return "Start a cited brief with web-ready defaults."
+        case .agentMission:
+            return "Launch a phone-safe agent planning draft."
+        }
+    }
+
     var prompt: String {
         switch self {
         case .privateQuestion: "Help me think through a private question."
@@ -233,6 +244,19 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
 
     var wantsWeb: Bool {
         self == .researchBrief
+    }
+
+    var quickStartProfile: UserSetupProfile {
+        UserSetupProfile(
+            useCase: useCase,
+            contextStyle: contextStyle,
+            wantsWeb: wantsWeb,
+            wantsIronclaw: wantsIronclaw,
+            wantsCouncil: wantsCouncil,
+            useCases: [useCase],
+            goalText: "",
+            experienceMode: wantsIronclaw || wantsCouncil ? .power : .beginner
+        )
     }
 }
 
@@ -1124,6 +1148,16 @@ enum UserSetupStorage {
         defaults: UserDefaults = .standard
     ) -> UserSetupProfile {
         let profile = UserSetupProfile.defaults
+        saveWithoutPendingLaunchCard(profile, for: accountID, defaults: defaults)
+        return profile
+    }
+
+    static func completeFirstRunQuickStart(
+        for accountID: String,
+        preset: UserSetupStarterPreset,
+        defaults: UserDefaults = .standard
+    ) -> UserSetupProfile {
+        let profile = preset.quickStartProfile
         saveWithoutPendingLaunchCard(profile, for: accountID, defaults: defaults)
         return profile
     }

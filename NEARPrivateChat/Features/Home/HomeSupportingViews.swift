@@ -153,6 +153,7 @@ struct SetupLaunchCard: View {
 struct FirstRunSetupHomeCard: View {
     let onStartSetup: () -> Void
     let onStartPrivateChat: () -> Void
+    let onQuickStart: (UserSetupStarterPreset) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -195,6 +196,20 @@ struct FirstRunSetupHomeCard: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            VStack(alignment: .leading, spacing: 8) {
+                Text("One-tap starts")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.textSecondary)
+
+                VStack(spacing: 8) {
+                    ForEach(UserSetupStarterPreset.allCases) { preset in
+                        FirstRunQuickStartButton(preset: preset) {
+                            onQuickStart(preset)
+                        }
+                    }
+                }
+            }
+
             HStack(spacing: 10) {
                 Button(action: onStartSetup) {
                     Label("Start setup", systemImage: "arrow.right")
@@ -222,6 +237,45 @@ struct FirstRunSetupHomeCard: View {
                 .stroke(Color.brandBlue.opacity(0.10), lineWidth: 1)
         }
         .shadow(color: Color.brandBlue.opacity(0.05), radius: 12, y: 6)
+    }
+}
+
+private struct FirstRunQuickStartButton: View {
+    let preset: UserSetupStarterPreset
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: preset.symbolName)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Color.brandBlue)
+                    .frame(width: 34, height: 34)
+                    .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(preset.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(preset.quickStartDetail)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "arrow.up.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.textSecondary)
+                    .padding(.top, 4)
+            }
+            .padding(12)
+            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Quick start \(preset.title)")
+        .accessibilityHint("Applies that setup and opens a starter draft without sending.")
     }
 }
 
