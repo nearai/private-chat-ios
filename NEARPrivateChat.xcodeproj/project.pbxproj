@@ -73,6 +73,8 @@
 		F10000000000000000000009 /* ChatModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000009 /* ChatModels.swift */; };
 		F1000000000000000000B001 /* BriefingFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000B001 /* BriefingFeature.swift */; };
 		F1000000000000000000B002 /* CouncilRoomFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000B002 /* CouncilRoomFeature.swift */; };
+		F1000000000000000000B003 /* ThreadedFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000B003 /* ThreadedFeature.swift */; };
+		F1000000000000000000B004 /* LiveDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000B004 /* LiveDataService.swift */; };
 		F1000000000000000000000A /* SetupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000000A /* SetupModels.swift */; };
 		F1000000000000000000000B /* APIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000000B /* APIModels.swift */; };
 		F1000000000000000000000C /* FileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000000C /* FileModels.swift */; };
@@ -164,6 +166,8 @@
 		F20000000000000000000009 /* ChatModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatModels.swift; sourceTree = "<group>"; };
 		F2000000000000000000B001 /* BriefingFeature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingFeature.swift; sourceTree = "<group>"; };
 		F2000000000000000000B002 /* CouncilRoomFeature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilRoomFeature.swift; sourceTree = "<group>"; };
+		F2000000000000000000B003 /* ThreadedFeature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadedFeature.swift; sourceTree = "<group>"; };
+		F2000000000000000000B004 /* LiveDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDataService.swift; sourceTree = "<group>"; };
 		F2000000000000000000000A /* SetupModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupModels.swift; sourceTree = "<group>"; };
 		F2000000000000000000000B /* APIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModels.swift; sourceTree = "<group>"; };
 		F2000000000000000000000C /* FileModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileModels.swift; sourceTree = "<group>"; };
@@ -402,6 +406,8 @@
 				F20000000000000000000009 /* ChatModels.swift */,
 				F2000000000000000000B001 /* BriefingFeature.swift */,
 				F2000000000000000000B002 /* CouncilRoomFeature.swift */,
+				F2000000000000000000B003 /* ThreadedFeature.swift */,
+				F2000000000000000000B004 /* LiveDataService.swift */,
 				C20000000000000000000010 /* ComposerState.swift */,
 				C20000000000000000000012 /* ChatSessionStores.swift */,
 				C2000000000000000000000F /* MessageTimelineStore.swift */,
@@ -693,6 +699,8 @@
 				F10000000000000000000009 /* ChatModels.swift in Sources */,
 				F1000000000000000000B001 /* BriefingFeature.swift in Sources */,
 				F1000000000000000000B002 /* CouncilRoomFeature.swift in Sources */,
+				F1000000000000000000B003 /* ThreadedFeature.swift in Sources */,
+				F1000000000000000000B004 /* LiveDataService.swift in Sources */,
 				F1000000000000000000000A /* SetupModels.swift in Sources */,
 				F1000000000000000000000B /* APIModels.swift in Sources */,
 				F1000000000000000000000C /* FileModels.swift in Sources */,
