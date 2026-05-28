@@ -25,15 +25,26 @@ struct EmptyChatView: View {
                 .foregroundStyle(Color.textTertiary)
 
             if !emptyPromptSuggestions.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(emptyPromptSuggestions) { suggestion in
-                            suggestionChip(suggestion)
+                // Center the chip row when the chips fit the viewport; allow
+                // horizontal scroll when they overflow. `frame(minWidth: ...)`
+                // on the inner HStack stretches it to the available width so
+                // the contents end up centered (Spacers at both ends),
+                // while the ScrollView still lets the user pan if it overflows.
+                GeometryReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            Spacer(minLength: 0)
+                            ForEach(emptyPromptSuggestions) { suggestion in
+                                suggestionChip(suggestion)
+                            }
+                            Spacer(minLength: 0)
                         }
+                        .padding(.horizontal, 24)
+                        .frame(minWidth: proxy.size.width)
                     }
-                    .padding(.horizontal, 24)
+                    .scrollClipDisabled()
                 }
-                .scrollClipDisabled()
+                .frame(height: 32)
                 .padding(.top, 12)
             }
         }

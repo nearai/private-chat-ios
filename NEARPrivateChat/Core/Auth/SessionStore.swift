@@ -126,16 +126,6 @@ final class SessionStore: NSObject, ObservableObject {
         if !force, profile != nil {
             return
         }
-        #if targetEnvironment(simulator) && DEBUG
-        // The simulator stub session has a fake bearer token. Skipping
-        // the profile refresh prevents the API's 401 response from
-        // bubbling up as an "Invalid or expired authentication token"
-        // banner that pollutes visual QA. The stub profile is already
-        // populated by `authenticate(with:)`.
-        if session?.sessionID == "simulator-debug-session" {
-            return
-        }
-        #endif
         guard !isRefreshingProfile else { return }
         isRefreshingProfile = true
         defer { isRefreshingProfile = false }
@@ -181,34 +171,6 @@ final class SessionStore: NSObject, ObservableObject {
         isAuthenticating = true
         defer { isAuthenticating = false }
 
-        #if targetEnvironment(simulator) && DEBUG
-        // Simulator builds don't have a working OAuth callback flow — the
-        // `nearprivatechat://` redirect from the NEAR auth backend can't
-        // round-trip through ASWebAuthenticationSession in many test
-        // environments. Short-circuit with a stub session so the rest of
-        // the app is reachable for visual QA. This branch is compiled
-        // out of release builds.
-        let stubSession = AuthSession(
-            token: "simulator-debug-token-\(provider.rawValue)",
-            sessionID: "simulator-debug-session",
-            expiresAt: nil,
-            isNewUser: false
-        )
-        save(stubSession)
-        profile = UserProfile(
-            user: UserProfile.User(
-                id: "simulator.\(provider.rawValue).near",
-                email: "simulator@near.ai",
-                name: "Simulator User",
-                avatarURL: nil
-            ),
-            linkedAccounts: [
-                UserProfile.LinkedAccount(provider: provider.rawValue, linkedAt: "2026-05-27T00:00:00Z")
-            ]
-        )
-        showBanner("Signed in (simulator stub).")
-        return
-        #else
         do {
             let pendingRequest = createPendingAuthRequest(provider: provider)
             let url = try api.authURL(
@@ -231,7 +193,6 @@ final class SessionStore: NSObject, ObservableObject {
             clearPendingAuthState()
             showBanner(error.localizedDescription)
         }
-        #endif
     }
 
     private func createPendingAuthRequest(provider: OAuthProvider) -> PendingAuthRequest {
@@ -394,18 +355,6 @@ final class SessionStore: NSObject, ObservableObject {
     }
 
     private func showBanner(_ message: String) {
-        #if targetEnvironment(simulator) && DEBUG
-        // Suppress API-auth failure banners from the simulator stub
-        // session so they don't pollute visual QA. Production unchanged.
-        let suppressed = ["Invalid or expired authentication token",
-                          "Session not found",
-                          "Unauthorized",
-                          "401 Unauthorized",
-                          "403 Forbidden"]
-        if suppressed.contains(where: { message.localizedCaseInsensitiveContains($0) }) {
-            return
-        }
-        #endif
         bannerMessage = message
         Task {
             try? await Task.sleep(nanoseconds: 3_000_000_000)

@@ -181,13 +181,7 @@ final class PrivateChatAPI {
     }
 
     func fetchUserSettings() async throws -> UserSettingsResponse {
-        #if targetEnvironment(simulator) && DEBUG
-        if authToken?.hasPrefix("simulator-debug-token-") == true {
-            let stubJSON = "{}".data(using: .utf8) ?? Data()
-            return try JSONDecoder().decode(UserSettingsResponse.self, from: stubJSON)
-        }
-        #endif
-        return try await request("/v1/users/me/settings", method: "GET", authenticated: true)
+        try await request("/v1/users/me/settings", method: "GET", authenticated: true)
     }
 
     func updateUserSettings(
@@ -217,43 +211,22 @@ final class PrivateChatAPI {
     }
 
     func fetchSubscriptions(includeInactive: Bool = false) async throws -> [SubscriptionInfo] {
-        #if targetEnvironment(simulator) && DEBUG
-        if authToken?.hasPrefix("simulator-debug-token-") == true {
-            return []
-        }
-        #endif
-        let suffix = includeInactive ? "?include_inactive=true" : ""
+let suffix = includeInactive ? "?include_inactive=true" : ""
         let response: SubscriptionsResponse = try await request("/v1/subscriptions\(suffix)", method: "GET", authenticated: true)
         return response.subscriptions
     }
 
     func fetchModels() async throws -> [ModelOption] {
-        #if targetEnvironment(simulator) && DEBUG
-        if authToken?.hasPrefix("simulator-debug-token-") == true {
-            return Self.simulatorStubModels
-        }
-        #endif
-        let response: ModelListResponse = try await request("/v1/model/list", method: "GET", authenticated: true)
+let response: ModelListResponse = try await request("/v1/model/list", method: "GET", authenticated: true)
         return response.models
     }
 
     func connectNearCloudAccount() async throws -> NearCloudConnectResponse {
-        #if targetEnvironment(simulator) && DEBUG
-        if authToken?.hasPrefix("simulator-debug-token-") == true {
-            let stubJSON = #"{"apiKey":"sim-cloud-key","models":[]}"#.data(using: .utf8) ?? Data()
-            return try JSONDecoder().decode(NearCloudConnectResponse.self, from: stubJSON)
-        }
-        #endif
         return try await request("/v1/near-cloud/connect", method: "POST", body: NearCloudConnectPayload(), authenticated: true)
     }
 
     func fetchNearCloudModels(apiKey: String? = nil) async throws -> [ModelOption] {
-        #if targetEnvironment(simulator) && DEBUG
-        if authToken?.hasPrefix("simulator-debug-token-") == true || apiKey?.hasPrefix("sim-cloud-key-") == true {
-            return Self.simulatorStubCloudModels
-        }
-        #endif
-        guard let url = URL(string: "https://cloud-api.near.ai/v1/model/list") else {
+guard let url = URL(string: "https://cloud-api.near.ai/v1/model/list") else {
             throw APIError.invalidURL
         }
         var request = URLRequest(url: url)
@@ -268,43 +241,23 @@ final class PrivateChatAPI {
     }
 
     func fetchConversations() async throws -> [ConversationSummary] {
-        #if targetEnvironment(simulator) && DEBUG
-        if authToken?.hasPrefix("simulator-debug-token-") == true {
-            return []
-        }
-        #endif
         return try await request("/v1/conversations", method: "GET", authenticated: true)
     }
 
     func createConversation(title: String) async throws -> ConversationSummary {
-        #if targetEnvironment(simulator) && DEBUG
-        if authToken?.hasPrefix("simulator-debug-token-") == true {
-            return Self.makeStubConversation(title: title)
-        }
-        #endif
-        let payload = ConversationCreatePayload(metadata: ["title": title])
+let payload = ConversationCreatePayload(metadata: ["title": title])
         return try await request("/v1/conversations", method: "POST", body: payload, authenticated: true)
     }
 
     func createConversation(title: String, metadata: [String: String]) async throws -> ConversationSummary {
-        #if targetEnvironment(simulator) && DEBUG
-        if authToken?.hasPrefix("simulator-debug-token-") == true {
-            return Self.makeStubConversation(title: title)
-        }
-        #endif
-        var payloadMetadata = metadata
+var payloadMetadata = metadata
         payloadMetadata["title"] = title
         let payload = ConversationCreatePayload(metadata: payloadMetadata)
         return try await request("/v1/conversations", method: "POST", body: payload, authenticated: true)
     }
 
     func addItemsToConversation(_ conversationID: String, items: [ConversationImportItem]) async throws {
-        #if targetEnvironment(simulator) && DEBUG
-        if authToken?.hasPrefix("simulator-debug-token-") == true {
-            return
-        }
-        #endif
-        let payload = ConversationItemsCreatePayload(items: items)
+let payload = ConversationItemsCreatePayload(items: items)
         let bodyData = try encoder.encode(payload)
         let request = try makeRequest(
             path: Self.conversationPath(conversationID, suffix: ["items"]),
@@ -316,12 +269,7 @@ final class PrivateChatAPI {
     }
 
     func updateConversationTitle(_ conversationID: String, title: String) async throws {
-        #if targetEnvironment(simulator) && DEBUG
-        if authToken?.hasPrefix("simulator-debug-token-") == true {
-            return
-        }
-        #endif
-        let payload = ConversationCreatePayload(metadata: ["title": title])
+let payload = ConversationCreatePayload(metadata: ["title": title])
         let _: ConversationSummary = try await request(
             Self.conversationPath(conversationID),
             method: "POST",
@@ -331,14 +279,6 @@ final class PrivateChatAPI {
     }
 
     func fetchConversationItems(_ conversationID: String) async throws -> ConversationItemsResponse {
-        #if targetEnvironment(simulator) && DEBUG
-        if authToken?.hasPrefix("simulator-debug-token-") == true {
-            let json = "{\"items\":[],\"hasMore\":false}".data(using: .utf8) ?? Data()
-            if let decoded = try? JSONDecoder().decode(ConversationItemsResponse.self, from: json) {
-                return decoded
-            }
-        }
-        #endif
         return try await request(Self.conversationPath(conversationID, suffix: ["items"]), method: "GET", authenticated: true)
     }
 
@@ -512,11 +452,6 @@ final class PrivateChatAPI {
     }
 
     func fetchSharedWithMe() async throws -> [SharedConversationInfo] {
-        #if targetEnvironment(simulator) && DEBUG
-        if authToken?.hasPrefix("simulator-debug-token-") == true {
-            return []
-        }
-        #endif
         return try await request("/v1/shared-with-me", method: "GET", authenticated: true)
     }
 
@@ -682,22 +617,7 @@ final class PrivateChatAPI {
         visibleOutputTimeout: TimeInterval? = nil,
         onEvent: @escaping (ResponseStreamEvent) async -> Void
     ) async throws {
-        #if targetEnvironment(simulator) && DEBUG
-        // Simulator stub session can't reach the chat-completion endpoint.
-        // Emit a canned streaming response so visual QA can walk the full
-        // chat flow without a real backend. Production builds bypass this
-        // branch entirely.
-        if authToken?.hasPrefix("simulator-debug-token-") == true {
-            try await emitSimulatorStubResponse(
-                model: model,
-                userText: text,
-                conversationID: conversationID,
-                onEvent: onEvent
-            )
-            return
-        }
-        #endif
-        let promptText = text.isEmpty && !attachments.isEmpty
+let promptText = text.isEmpty && !attachments.isEmpty
             ? "Review the attached file context. Lead with the most useful summary, then call out decisions, risks, and next actions."
             : text
         let content = [ResponseContent(type: "input_text", text: promptText, fileID: nil)] +
@@ -824,7 +744,6 @@ final class PrivateChatAPI {
         body: B,
         authenticated: Bool
     ) async throws -> T {
-        try shortCircuitIfSimulatorStub(authenticated: authenticated)
         let bodyData = try encoder.encode(body)
         let request = try makeRequest(path: path, method: method, body: bodyData, authenticated: authenticated)
         return try await perform(request)
@@ -835,21 +754,8 @@ final class PrivateChatAPI {
         method: String,
         authenticated: Bool
     ) async throws -> T {
-        try shortCircuitIfSimulatorStub(authenticated: authenticated)
         let request = try makeRequest(path: path, method: method, body: nil, authenticated: authenticated)
         return try await perform(request)
-    }
-
-    /// In simulator-DEBUG builds, ANY authenticated request that wasn't
-    /// individually stubbed throws CancellationError instead of hitting
-    /// the real backend with the bogus stub bearer token. Callers that
-    /// just want to fire-and-forget the call (`try? await`, banner-only
-    /// paths) get a silent no-op. Production never sees this branch.
-    private func shortCircuitIfSimulatorStub(authenticated: Bool) throws {
-        #if targetEnvironment(simulator) && DEBUG
-        guard authenticated, authToken?.hasPrefix("simulator-debug-token-") == true else { return }
-        throw CancellationError()
-        #endif
     }
 
     private func readableRequest<T: Decodable>(_ path: String) async throws -> T {
@@ -1271,196 +1177,6 @@ final class PrivateChatAPI {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? "Attachment" : String(cleaned.prefix(160))
     }
-
-    #if targetEnvironment(simulator) && DEBUG
-    /// Stub model catalog returned to the simulator stub session so the
-    /// model picker, council picker and Account screens have real models
-    /// to render. Real backend never sees this branch.
-    static let simulatorStubModels: [ModelOption] = [
-        PrivateChatAPI.makeStubModel(id: "zai-org/GLM-5.1-FP8",
-                           displayName: "GLM 5.1",
-                           description: "Default private route with verification.",
-                           verifiable: true),
-        PrivateChatAPI.makeStubModel(id: "openai/gpt-5.2",
-                           displayName: "GPT 5.2",
-                           description: "OpenAI reasoning model.",
-                           verifiable: true),
-        PrivateChatAPI.makeStubModel(id: "qwen/qwen3.5-122b-a10b",
-                           displayName: "Qwen 3.5 122B",
-                           description: "Deeper reasoning, slower.",
-                           verifiable: true),
-        PrivateChatAPI.makeStubModel(id: "moonshotai/kimi-k2",
-                           displayName: "Kimi K2",
-                           description: "Long-context private chat.",
-                           verifiable: true)
-    ]
-
-    static let simulatorStubCloudModels: [ModelOption] = [
-        PrivateChatAPI.makeStubModel(id: "near-cloud/anthropic/claude-opus-4-7",
-                           displayName: "Claude Opus 4.7",
-                           description: "Anthropic via NEAR AI Cloud.",
-                           verifiable: false),
-        PrivateChatAPI.makeStubModel(id: "near-cloud/openai/gpt-5.5",
-                           displayName: "GPT 5.5",
-                           description: "OpenAI via NEAR AI Cloud.",
-                           verifiable: false),
-        PrivateChatAPI.makeStubModel(id: "near-cloud/qwen3.7-max",
-                           displayName: "Qwen 3.7 Max",
-                           description: "Frontier model via NEAR AI Cloud.",
-                           verifiable: false),
-        PrivateChatAPI.makeStubModel(id: "near-cloud/google/gemini-3-pro",
-                           displayName: "Gemini 3 Pro",
-                           description: "Google via NEAR AI Cloud.",
-                           verifiable: false)
-    ]
-
-    /// Decode a stub ConversationSummary so the simulator can create
-    /// conversations without hitting the real `/v1/conversations` endpoint.
-    static func makeStubConversation(title: String) -> ConversationSummary {
-        let escapedTitle = title.replacingOccurrences(of: "\"", with: "\\\"")
-        let createdAt = Date().timeIntervalSince1970
-        let json = """
-        {"id":"sim-conv-\(UUID().uuidString.prefix(8))","created_at":\(createdAt),"metadata":{"title":"\(escapedTitle)"}}
-        """
-        let data = json.data(using: .utf8) ?? Data()
-        if let conversation = try? JSONDecoder().decode(ConversationSummary.self, from: data) {
-            return conversation
-        }
-        // Fallback if decoding ever fails — keep the chat flow alive.
-        let fallback = """
-        {"id":"sim-conv-fallback","metadata":{"title":"New chat"}}
-        """
-        return (try? JSONDecoder().decode(ConversationSummary.self, from: Data(fallback.utf8)))!
-    }
-
-    private static func makeStubModel(
-        id: String,
-        displayName: String,
-        description: String,
-        verifiable: Bool
-    ) -> ModelOption {
-        ModelOption(
-            modelID: id,
-            publicModel: !verifiable,
-            metadata: ModelOption.Metadata(
-                verifiable: verifiable,
-                contextLength: 131_072,
-                modelDisplayName: displayName,
-                modelDescription: description,
-                modelIcon: nil,
-                aliases: [displayName]
-            )
-        )
-    }
-
-    /// Stubs the chat-completion stream when running on a simulator
-    /// session token. Emits `created → titleUpdated → textDelta* → itemDone
-    /// → completed` over ~1.2s so the UI exercises every code path in the
-    /// normal happy flow.
-    fileprivate func emitSimulatorStubResponse(
-        model: String,
-        userText: String,
-        conversationID: String,
-        onEvent: @escaping (ResponseStreamEvent) async -> Void
-    ) async throws {
-        let responseID = "sim-resp-\(UUID().uuidString.prefix(8))"
-        await onEvent(.created(responseID: responseID))
-
-        // Hold the empty-streaming state briefly so the typing dots are
-        // visible before any text arrives.
-        await onEvent(.reasoningStarted)
-        try? await Task.sleep(nanoseconds: 450_000_000)
-
-        // Title derived from the first ~6 words of the prompt.
-        let title = userText
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(whereSeparator: { $0.isWhitespace || $0.isNewline })
-            .prefix(6)
-            .joined(separator: " ")
-        if !title.isEmpty {
-            await onEvent(.titleUpdated(title))
-        }
-
-        // Canned assistant-voice reply for the simulator stub. Worded
-        // as a normal response — no "this is a stub" meta commentary
-        // visible to the user.
-        let reply = Self.simulatorStubAssistantReply(for: userText)
-
-        // Stream as token-sized chunks so SSE event handlers actually move.
-        for chunk in chunked(reply, every: 6) {
-            try Task.checkCancellation()
-            await onEvent(.textDelta(chunk))
-            try? await Task.sleep(nanoseconds: 35_000_000)
-        }
-
-        await onEvent(.itemDone(text: reply))
-        await onEvent(.completed(responseID: responseID))
-        _ = conversationID  // kept for symmetry with the real API
-    }
-
-    private func humanizedModelName(_ modelID: String) -> String {
-        guard let trailing = modelID.split(separator: "/").last.map(String.init), !trailing.isEmpty else {
-            return modelID
-        }
-        return trailing
-    }
-
-    /// Returns a short, generic assistant-voice reply for the simulator
-    /// stub. Replies read as if a real model is answering — no
-    /// references to stubs, simulators, offline mode, or the UI itself.
-    /// One of four bodies is selected by a hash of the user's prompt
-    /// so consecutive sends don't surface the same text.
-    static func simulatorStubAssistantReply(for userText: String) -> String {
-        let prompts: [String] = [
-            """
-            Short answer: it depends on what you're optimizing for. Speed, accuracy, and cost usually pull in different directions, so the right move is to name the constraint you can't move on first.
-
-            Tell me which of those is the hard one and I'll go deeper on the trade-off.
-            """,
-            """
-            Let's break it into three steps:
-
-            1. Define the outcome you actually need — who it's for, what done looks like, by when.
-            2. Pick the smallest set of moving parts that can deliver it.
-            3. Cut anything that doesn't move step 1 forward.
-
-            Send a follow-up with a specific project and I'll apply this to it.
-            """,
-            """
-            A few angles to consider:
-
-            • The strongest version of this question is usually about underlying mechanism, not surface comparison.
-            • The framing you choose changes which evidence counts.
-            • Constraints (time, scope, audience) decide more than people expect.
-
-            Want me to push on any one of those?
-            """,
-            """
-            Here's how I'd frame it: the interesting question isn't whether the answer is yes or no, but what would have to be true for each to win. List those conditions, then weigh which set is more likely in your situation.
-
-            If you give me the specifics, I'll walk through both sides.
-            """
-        ]
-        var hash = 5381
-        for byte in userText.utf8 {
-            hash = ((hash << 5) &+ hash) &+ Int(byte)
-        }
-        let index = abs(hash) % prompts.count
-        return prompts[index]
-    }
-
-    private func chunked(_ text: String, every count: Int) -> [String] {
-        guard count > 0 else { return [text] }
-        var chunks: [String] = []
-        var index = text.startIndex
-        while index < text.endIndex {
-            let next = text.index(index, offsetBy: count, limitedBy: text.endIndex) ?? text.endIndex
-            chunks.append(String(text[index..<next]))
-            index = next
-        }
-        return chunks
-    }
-    #endif
 }
 
 private struct EmptyResponse: Decodable {}
