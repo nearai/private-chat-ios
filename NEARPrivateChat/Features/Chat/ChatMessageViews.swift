@@ -6,6 +6,7 @@ struct MessageBubble: View {
     @State private var showingArtifact = false
     @State private var showingSecurity = false
     @State private var showingSources = false
+    @State private var tappedSource: SourceSheetPresentation?
     @State private var editingUserMessage: ChatMessage?
 
     var body: some View {
@@ -35,8 +36,11 @@ struct MessageBubble: View {
                 }
 
                 if message.role == .assistant && !message.sources.isEmpty {
-                    SourceCarousel(sources: message.sources) {
-                        showingSources = true
+                    SourceCarousel(sources: message.sources) { tappedIndex in
+                        tappedSource = SourceSheetPresentation(
+                            index: tappedIndex,
+                            source: message.sources[tappedIndex]
+                        )
                     }
                 }
 
@@ -180,6 +184,9 @@ struct MessageBubble: View {
         }
         .sheet(isPresented: $showingSources) {
             SourcesDetailView(query: message.searchQuery, sources: message.sources)
+        }
+        .sheet(item: $tappedSource) { presentation in
+            SourceSheet(index: presentation.index + 1, source: presentation.source)
         }
         .sheet(item: $editingUserMessage) { userMessage in
             EditUserMessageView(message: userMessage)
@@ -877,14 +884,14 @@ private struct MessageAttachmentStrip: View {
 /// circular badge (white on action), 2-line 15pt SemiBold title, 13pt domain.
 struct SourceCarousel: View {
     let sources: [WebSearchSource]
-    let onViewAll: () -> Void
+    let onSelect: (Int) -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 10) {
                 ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
                     SourceCard(index: index + 1, source: source)
-                        .onTapGesture { onViewAll() }
+                        .onTapGesture { onSelect(index) }
                 }
             }
             .padding(.trailing, 24)
@@ -1090,5 +1097,153 @@ extension View {
     @ViewBuilder
     func `if`<Transform: View>(_ condition: Bool, transform: (Self) -> Transform) -> some View {
         if condition { transform(self) } else { self }
+    }
+}
+
+// MARK: - Claude Design Source Sheet (per-source half-sheet)
+
+/// Identifies which carousel card was tapped so SwiftUI can drive an
+/// `item:`-style sheet without losing identity between presentations.
+struct SourceSheetPresentation: Identifiable {
+    let index: Int
+    let source: WebSearchSource
+
+    var id: String { "\(index)-\(source.id)" }
+}
+
+/// Per-source half-sheet. Spec: partial detent over the chat thread, glass
+/// chrome (sheet container) with solid content inside. Header is the
+/// favicon + domain; body is title (17/22 SemiBold), author/date row (13/18
+/// text-2), and a snippet block (15/22, surface-2 background) with the
+/// cited span highlighted in --proof-stale yellow when we have one. No
+/// "Verified" badge — verification is per-message, not per-source.
+struct SourceSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+
+    let index: Int
+    let source: WebSearchSource
+
+    var body: some View {
+        VStack(spacing: 0) {
+            headerRow
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(source.displayTitle)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let metaLine, !metaLine.isEmpty {
+                        Text(metaLine)
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.textSecondary)
+                    }
+
+                    if let snippet = source.snippetFallback {
+                        Text(snippet)
+                            .font(.system(size: 15))
+                            .foregroundStyle(.primary)
+                            .lineSpacing(7)
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                .padding(.bottom, 16)
+            }
+
+            actionStack
+        }
+        .background(Color.appPanelBackground)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var headerRow: some View {
+        HStack(spacing: 8) {
+            FaviconBadge(source: source)
+            Text(source.host)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.textSecondary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close")
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 4)
+        .frame(height: 44)
+        .padding(.top, 8)
+    }
+
+    @ViewBuilder
+    private var actionStack: some View {
+        VStack(spacing: 4) {
+            Button {
+                if let url = source.safeURL { openURL(url) }
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Open in Safari")
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(source.safeURL == nil)
+
+            Button {
+                if let url = source.safeURL { Clipboard.copy(url.absoluteString) }
+            } label: {
+                Text("Copy link")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.actionPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+            }
+            .buttonStyle(.plain)
+            .disabled(source.safeURL == nil)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 20)
+    }
+
+    private var metaLine: String? {
+        var parts: [String] = []
+        if let published = source.publishedAt?.trimmingCharacters(in: .whitespacesAndNewlines), !published.isEmpty {
+            parts.append(published)
+        }
+        if parts.isEmpty { return nil }
+        return parts.joined(separator: " · ")
+    }
+}
+
+private extension WebSearchSource {
+    /// The web-grounding API returns title + url + publishedAt. There is no
+    /// snippet field today, so the sheet omits the snippet block rather
+    /// than fabricating one. Hook returns nil; flip to real snippet text
+    /// when the underlying type carries it.
+    var snippetFallback: String? {
+        nil
     }
 }
