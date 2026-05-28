@@ -584,57 +584,13 @@ private struct ChatToolbar: View {
     }
 
     private var compactToolbar: some View {
-        // v2 per chat-view.jsx ThreadTopBar: a centered model chip pill
-        // sits below the navigation bar when there are messages. The
-        // "..." menu lives in the nav bar trailing toolbar item (added
-        // via `.toolbar` in `body`). No status row here.
-        Group {
-            if shouldShowCenteredModelChip {
-                centeredModelChip
-            } else {
-                Color.clear.frame(height: 0)
-            }
-        }
-    }
-
-    private var shouldShowCenteredModelChip: Bool {
-        !transcriptStore.messages.isEmpty
-    }
-
-    private var centeredModelChip: some View {
-        HStack {
-            Spacer(minLength: 0)
-            Button {
-                AppHaptics.selection()
-                showingModels = true
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: composerModelSymbolName)
-                        .font(.footnote.weight(.semibold))
-                    Text(chatStore.selectedModelDisplayName)
-                        .font(.footnote.weight(.medium))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(Color.actionPress)
-                .padding(.horizontal, 8)
-                .frame(height: 22)
-                .background(Color.actionTint, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Model \(chatStore.selectedModelDisplayName)")
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 4)
-    }
-
-    private var composerModelSymbolName: String {
-        if chatStore.selectedModelOption?.isIronclawModel == true {
-            return "terminal"
-        }
-        if chatStore.selectedRouteUsesNearCloud {
-            return "cloud"
-        }
-        return "cpu"
+        // v2: the model picker lives ONLY in the composer chip row at
+        // the bottom. The chat-view.jsx spec includes a centered
+        // model chip below the nav bar, but in this app the composer
+        // chips render at all times, so a second top-of-thread chip
+        // reads as redundant. Nothing rendered here — the "..." menu
+        // is mounted into the nav bar via `.toolbar` in body.
+        Color.clear.frame(height: 0)
     }
 
     private var shouldShowCompactStatusText: Bool {
