@@ -374,7 +374,7 @@ struct TodaySection: View {
             } else {
                 let liveBriefings = store.briefings.filter { $0.latestResult != nil }
                 if !liveBriefings.isEmpty {
-                    labeledSection("Live")
+                    labeledSection("Live", count: "\(liveBriefings.count) active")
                     LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
                         ForEach(liveBriefings) { briefing in
                             BriefingTile(briefing: briefing) {
@@ -384,7 +384,7 @@ struct TodaySection: View {
                     }
                 }
 
-                labeledSection("Scheduled")
+                labeledSection("Scheduled", count: "\(store.briefings.count) upcoming")
                     .padding(.top, liveBriefings.isEmpty ? 0 : 2)
                 VStack(spacing: 0) {
                     ForEach(store.briefings) { briefing in
@@ -431,11 +431,19 @@ struct TodaySection: View {
         }
     }
 
-    private func labeledSection(_ title: String) -> some View {
-        Text(title)
-            .font(.caption.weight(.semibold))
-            .textCase(.uppercase)
-            .foregroundStyle(Color.textSecondary)
+    private func labeledSection(_ title: String, count: String? = nil) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .textCase(.uppercase)
+                .foregroundStyle(Color.textSecondary)
+            Spacer(minLength: 8)
+            if let count {
+                Text(count)
+                    .font(.caption2)
+                    .foregroundStyle(Color.textTertiary)
+            }
+        }
     }
 }
 
