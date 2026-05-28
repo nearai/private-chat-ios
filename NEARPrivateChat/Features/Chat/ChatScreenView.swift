@@ -156,6 +156,7 @@ private struct CouncilResponseGroup: View {
     let messages: [ChatMessage]
     let chatStore: ChatStore
     @State private var selectedMessageID: String?
+    @State private var showingRoom = false
 
     private var selectedMessage: ChatMessage? {
         let currentID = selectedMessageID ?? preferredMessage?.id
@@ -200,6 +201,20 @@ private struct CouncilResponseGroup: View {
                     .background((canStopWaiting ? Color.brandBlue : Color.secondary).opacity(0.09), in: Capsule())
                     .accessibilityHint(canStopWaiting ? "Synthesize from completed Council answers now" : "Cancel the Council run")
                 }
+
+                if messages.contains(where: \.hasUsableCouncilAnswer) {
+                    Button { showingRoom = true } label: {
+                        Label("Room", systemImage: "person.3.fill")
+                            .font(.caption2.weight(.bold))
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.brandBlue)
+                    .padding(.horizontal, 9)
+                    .frame(height: 28)
+                    .background(Color.brandBlue.opacity(0.09), in: Capsule())
+                    .accessibilityHint("Open the Council room view")
+                }
             }
 
             if hasRunningModels {
@@ -233,6 +248,19 @@ private struct CouncilResponseGroup: View {
                 self.selectedMessageID = messages.first?.id
                 return
             }
+        }
+        .sheet(isPresented: $showingRoom) {
+            CouncilRoomView(
+                model: CouncilRoomModel.from(councilMessages: messages),
+                onSend: { text, _ in
+                    chatStore.composeWidgetFollowUp(text)
+                    showingRoom = false
+                },
+                onSynthesize: {
+                    chatStore.stopWaitingForCouncil(batchID: batchID)
+                    showingRoom = false
+                }
+            )
         }
     }
 

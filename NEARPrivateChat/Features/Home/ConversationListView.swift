@@ -3,6 +3,7 @@ import SwiftUI
 struct ConversationListView: View {
     @EnvironmentObject private var chatStore: ChatStore
     @EnvironmentObject private var sessionStore: SessionStore
+    @EnvironmentObject private var briefingStore: BriefingStore
     @State private var searchText = ""
     @State private var selectedHomeFilter: HomeFilter = .all
     @State private var showingNewProject = false
@@ -11,6 +12,8 @@ struct ConversationListView: View {
     @State private var showingSecurity = false
     @State private var isSearchVisible = false
     @State private var editingProject: ChatProject?
+    @State private var showingNewBriefing = false
+    @State private var openedBriefing: Briefing?
     let onOpenChat: () -> Void
     let onStartNewChat: () -> Void
     let onRunSetupAgain: () -> Void
@@ -249,6 +252,16 @@ struct ConversationListView: View {
 
             ScrollView {
                 LazyVStack(spacing: 14) {
+                    if selectedHomeFilter == .all, searchQuery.isEmpty, !briefingStore.briefings.isEmpty {
+                        TodaySection(
+                            store: briefingStore,
+                            onOpenBriefing: { openedBriefing = $0 },
+                            onNewBriefing: { showingNewBriefing = true }
+                        )
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                    }
+
                     if let pendingSetupLaunchCard, selectedHomeFilter == .all, searchQuery.isEmpty {
                         SetupLaunchCard(
                             plan: pendingSetupLaunchCard.plan,
@@ -373,6 +386,16 @@ struct ConversationListView: View {
         .sheet(isPresented: $showingSecurity) {
             SecurityView()
                 .environmentObject(chatStore)
+        }
+        .sheet(isPresented: $showingNewBriefing) {
+            BriefingEditorSheet(
+                briefing: nil,
+                onSave: { briefingStore.add($0) },
+                onDelete: { briefingStore.remove($0) }
+            )
+        }
+        .sheet(item: $openedBriefing) { briefing in
+            BriefingDetailView(store: briefingStore, briefing: briefing)
         }
         .navigationDestination(for: SharedConversationInfo.self) { item in
             SharedWithMePreviewView(item: item)

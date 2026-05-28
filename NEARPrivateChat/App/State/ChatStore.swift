@@ -3473,6 +3473,43 @@ final class ChatStore: ObservableObject {
         AppHaptics.selection()
     }
 
+    /// Runs a briefing prompt headlessly in a throwaway conversation and returns
+    /// the structured widget the model produced (falling back to a generic text
+    /// widget). Used by the BriefingStore runner; returns nil on any failure.
+    func runBriefing(_ briefing: Briefing) async -> MessageWidget? {
+        final class TextSink: @unchecked Sendable { var text = "" }
+        let sink = TextSink()
+        do {
+            let conversation = try await api.createConversation(title: briefing.title)
+            try await api.streamResponse(
+                model: Self.defaultModelID,
+                text: briefing.prompt,
+                attachments: [],
+                conversationID: conversation.id,
+                previousResponseID: nil,
+                webSearchEnabled: true,
+                systemPrompt: activeSystemPrompt(),
+                onEvent: { event in
+                    switch event {
+                    case let .textDelta(delta):
+                        sink.text += delta
+                    case let .itemDone(text):
+                        if sink.text.isEmpty, let text { sink.text = text }
+                    default:
+                        break
+                    }
+                }
+            )
+        } catch {
+            return nil
+        }
+        let extraction = MessageWidget.extract(from: sink.text)
+        if let widget = extraction.widget { return widget }
+        let summary = extraction.cleanedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !summary.isEmpty else { return nil }
+        return MessageWidget(kind: .generic, title: briefing.title, time: "just now", note: String(summary.prefix(600)))
+    }
+
     func sendDraft() {
         let text = Self.normalizedDraftInput(draft).trimmingCharacters(in: .whitespacesAndNewlines)
         let promptAttachments = pendingAttachments
@@ -8503,12 +8540,40 @@ final class ChatStore: ObservableObject {
             councilModelIDs = []
             selectedProjectID = nil
             draft = ""
+        case .widgets:
+            selectedConversation = data.glmConversation
+            messages = Self.demoWidgetMessages(now: Date())
+            selectedModel = Self.defaultModelID
+            councilModelIDs = []
+            selectedProjectID = nil
+            sourceMode = .web
+            webSearchEnabled = true
+            draft = ""
         case .chat, .councilOutput, .cloudModels, .council, .project, .share:
             selectedConversation = data.primaryConversation
             messages = data.messages
             draft = ""
         }
     }
+
+    #if DEBUG
+    static func demoWidgetMessages(now: Date) -> [ChatMessage] {
+        func user(_ id: String, _ text: String, _ offset: TimeInterval) -> ChatMessage {
+            ChatMessage(id: id, role: .user, text: text, model: nil, createdAt: now.addingTimeInterval(offset), status: "completed", responseID: nil, isStreaming: false)
+        }
+        func assistant(_ id: String, _ text: String, _ offset: TimeInterval, widget: MessageWidget) -> ChatMessage {
+            ChatMessage(id: id, role: .assistant, text: text, model: Self.defaultModelID, createdAt: now.addingTimeInterval(offset), status: "completed", responseID: "\(id)-r", isStreaming: false, widget: widget)
+        }
+        return [
+            user("dw-u1", "What's in today's news?", -600),
+            assistant("dw-a1", "Three stories leading today, weighted to what you track.", -595, widget: .demoNewsBrief),
+            user("dw-u2", "How's ETH doing right now?", -420),
+            assistant("dw-a2", "ETH slipped below your $3,180 threshold in the last hour.", -415, widget: .demoChart),
+            user("dw-u3", "Compare SEV-SNP and TDX for our TEE.", -300),
+            assistant("dw-a3", "Both give you memory encryption and attestation; they differ on isolation and live migration.", -295, widget: .demoComparison)
+        ]
+    }
+    #endif
 
     private static func demoShareInfo(for conversation: ConversationSummary) -> ConversationSharesListResponse {
         ConversationSharesListResponse(

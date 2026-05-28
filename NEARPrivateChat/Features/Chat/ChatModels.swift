@@ -741,3 +741,105 @@ extension MessageWidget {
         return text
     }
 }
+
+#if DEBUG
+extension MessageWidget {
+    static var demoChart: MessageWidget {
+        MessageWidget(
+            kind: .chart,
+            title: "ETH watcher · threshold alert",
+            freshness: .fresh,
+            time: "1h ago",
+            followUp: "Why is it dropping?",
+            chart: WidgetChart(
+                label: "ETH / USD",
+                value: "$3,124",
+                delta: "−$74.20 (−2.3%)",
+                trend: .down,
+                points: [3210, 3198, 3205, 3180, 3192, 3164, 3150, 3158, 3132, 3124],
+                caption: "Threshold $3,180 broken at 9:47am",
+                timeframe: "past 1h"
+            )
+        )
+    }
+
+    static var demoMetric: MessageWidget {
+        MessageWidget(
+            kind: .metric,
+            title: "Portfolio",
+            freshness: .fresh,
+            time: "just now",
+            followUp: "What changed today?",
+            metric: WidgetMetric(
+                label: "Total value",
+                value: "$48,210",
+                delta: "+1.8% today",
+                trend: .up,
+                caption: "3 positions · last synced 2m ago"
+            )
+        )
+    }
+
+    static var demoComparison: MessageWidget {
+        MessageWidget(
+            kind: .comparison,
+            title: "Comparison · TEE hardware",
+            freshness: .stale,
+            time: "from yesterday's chat",
+            followUp: "Which should we ship on?",
+            comparison: WidgetComparison(
+                subtitle: "SEV-SNP vs TDX",
+                columns: ["SEV-SNP", "TDX"],
+                rows: [
+                    WidgetComparisonRow(label: "Memory encryption", cells: [
+                        WidgetComparisonCell(text: "AES-128 XEX", tone: .good),
+                        WidgetComparisonCell(text: "AES-128 XTS", tone: .good)
+                    ]),
+                    WidgetComparisonRow(label: "Attestation", cells: [
+                        WidgetComparisonCell(text: "VCEK + report", tone: .neutral),
+                        WidgetComparisonCell(text: "Quote + TDREPORT", tone: .neutral)
+                    ]),
+                    WidgetComparisonRow(label: "VM isolation", cells: [
+                        WidgetComparisonCell(text: "RMP-based", tone: .neutral),
+                        WidgetComparisonCell(text: "Stage-2 paging", tone: .neutral)
+                    ]),
+                    WidgetComparisonRow(label: "Live migration", cells: [
+                        WidgetComparisonCell(text: "preview", tone: .warn),
+                        WidgetComparisonCell(text: "—", tone: .off)
+                    ])
+                ]
+            )
+        )
+    }
+
+    static var demoNewsBrief: MessageWidget {
+        MessageWidget(
+            kind: .newsBrief,
+            title: "Daily news brief",
+            freshness: .fresh,
+            time: "8:02am",
+            followUp: "Drill into the ceasefire story…",
+            newsBrief: WidgetNewsBrief(
+                heading: "Today · 3 stories",
+                stories: [
+                    WidgetNewsStory(title: "US–Iran ceasefire under strain", tag: "Conflict", sources: [
+                        WidgetNewsSource(label: "W", color: "#ff7e1c", domain: "wsj.com"),
+                        WidgetNewsSource(label: "A", color: "#000000", domain: "apnews.com")
+                    ]),
+                    WidgetNewsStory(title: "Israel strikes Beirut as Lebanon conflict escalates", tag: "Conflict", sources: [
+                        WidgetNewsSource(label: "B", color: "#CC0000", domain: "bbc.com")
+                    ]),
+                    WidgetNewsStory(title: "Oil down on talks of reopening Hormuz", tag: "Markets", sources: [
+                        WidgetNewsSource(label: "R", color: "#FF6B35", domain: "reuters.com"),
+                        WidgetNewsSource(label: "B", color: "#000000", domain: "bloomberg.com")
+                    ])
+                ]
+            )
+        )
+    }
+
+    static var demoAll: [MessageWidget] {
+        [demoNewsBrief, demoChart, demoComparison, demoMetric]
+    }
+}
+#endif

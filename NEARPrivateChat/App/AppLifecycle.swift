@@ -3,11 +3,13 @@ import SwiftUI
 struct AppLifecycleModifier: ViewModifier {
     @ObservedObject private var sessionStore: SessionStore
     @ObservedObject private var chatStore: ChatStore
+    @ObservedObject private var briefingStore: BriefingStore
     @ObservedObject private var router: AppRouter
 
-    init(sessionStore: SessionStore, chatStore: ChatStore, router: AppRouter) {
+    init(sessionStore: SessionStore, chatStore: ChatStore, briefingStore: BriefingStore, router: AppRouter) {
         self.sessionStore = sessionStore
         self.chatStore = chatStore
+        self.briefingStore = briefingStore
         self.router = router
     }
 
@@ -22,6 +24,10 @@ struct AppLifecycleModifier: ViewModifier {
                 await prepareAuthenticatedChatState()
                 chatStore.updateCurrentUser(profile: sessionStore.profile)
                 router.resetForAccountSwitch(sessionStore.setupAccountID)
+                #if DEBUG
+                if DemoCapture.isEnabled { return }
+                #endif
+                await briefingStore.runDue()
             }
             .onChange(of: sessionStore.session?.token) { _, token in
                 Task {

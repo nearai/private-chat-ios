@@ -2841,3 +2841,79 @@ final class PrivateChatCoreTests: XCTestCase {
         return []
     }
 }
+
+// MARK: - Generative widget parsing
+
+extension PrivateChatCoreTests {
+    func testWidgetExtractParsesChartBlockAndStripsIt() throws {
+        let text = """
+        ETH is down on the day.
+
+        ```near-widget
+        {"kind":"chart","title":"ETH watcher","follow_up":"Why?","chart":{"label":"ETH / USD","value":"$3,124","delta":"-2.3%","trend":"down","points":[3200,3180,3150,3124]}}
+        ```
+        """
+        let result = MessageWidget.extract(from: text)
+        let widget = try XCTUnwrap(result.widget)
+        XCTAssertEqual(widget.kind, .chart)
+        XCTAssertEqual(widget.chart?.value, "$3,124")
+        XCTAssertEqual(widget.chart?.trend, .down)
+        XCTAssertEqual(widget.chart?.points.count, 4)
+        XCTAssertEqual(widget.followUp, "Why?")
+        XCTAssertEqual(result.cleanedText, "ETH is down on the day.")
+        XCTAssertFalse(result.cleanedText.contains("near-widget"))
+    }
+
+    func testWidgetExtractReturnsNilWhenNoFence() {
+        let text = "Just a normal answer with no widget."
+        let result = MessageWidget.extract(from: text)
+        XCTAssertNil(result.widget)
+        XCTAssertEqual(result.cleanedText, text)
+    }
+
+    func testWidgetExtractComparisonAcceptsBareStringCells() throws {
+        let text = """
+        Here is the comparison.
+
+        ```near-widget
+        {"kind":"comparison","comparison":{"subtitle":"A vs B","columns":["A","B"],"rows":[{"label":"Speed","cells":["fast","slow"]}]}}
+        ```
+        """
+        let widget = try XCTUnwrap(MessageWidget.extract(from: text).widget)
+        XCTAssertEqual(widget.kind, .comparison)
+        XCTAssertEqual(widget.comparison?.columns, ["A", "B"])
+        XCTAssertEqual(widget.comparison?.rows.first?.cells.first?.text, "fast")
+    }
+
+    func testWidgetExtractMalformedJSONLeavesTextIntact() {
+        let text = """
+        Answer.
+
+        ```near-widget
+        {not valid json
+        ```
+        """
+        let result = MessageWidget.extract(from: text)
+        XCTAssertNil(result.widget)
+        XCTAssertEqual(result.cleanedText, text)
+    }
+
+    func testWidgetStrippedStreamingPreviewHidesUnclosedFence() {
+        let text = "Partial answer text.\n\n```near-widget\n{\"kind\":\"chart\","
+        let preview = MessageWidget.strippedStreamingPreview(text)
+        XCTAssertEqual(preview, "Partial answer text.")
+        XCTAssertFalse(preview.contains("near-widget"))
+    }
+
+    func testWidgetExtractIgnoresBlockWithNoRenderableBody() {
+        let text = """
+        Hello.
+
+        ```near-widget
+        {"kind":"chart"}
+        ```
+        """
+        let result = MessageWidget.extract(from: text)
+        XCTAssertNil(result.widget)
+    }
+}

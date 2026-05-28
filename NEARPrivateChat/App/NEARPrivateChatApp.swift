@@ -49,6 +49,7 @@ enum DemoCaptureScreen: String, CaseIterable {
     case fileAttach
     case glmResult
     case chat
+    case widgets
     case councilOutput
     case verification
     case models
@@ -104,6 +105,7 @@ struct NEARPrivateChatApp: App {
     private let environment: AppEnvironment
     @StateObject private var sessionStore: SessionStore
     @StateObject private var chatStore: ChatStore
+    @StateObject private var briefingStore: BriefingStore
     @StateObject private var appRouter = AppRouter()
 
     init() {
@@ -111,6 +113,7 @@ struct NEARPrivateChatApp: App {
         self.environment = environment
         _sessionStore = StateObject(wrappedValue: environment.sessionStore)
         _chatStore = StateObject(wrappedValue: environment.chatStore)
+        _briefingStore = StateObject(wrappedValue: environment.briefingStore)
     }
 
     var body: some Scene {
@@ -118,8 +121,9 @@ struct NEARPrivateChatApp: App {
             RootView()
                 .environmentObject(sessionStore)
                 .environmentObject(chatStore)
+                .environmentObject(briefingStore)
                 .environmentObject(appRouter)
-                .modifier(AppLifecycleModifier(sessionStore: sessionStore, chatStore: chatStore, router: appRouter))
+                .modifier(AppLifecycleModifier(sessionStore: sessionStore, chatStore: chatStore, briefingStore: briefingStore, router: appRouter))
         }
     }
 }

@@ -72,7 +72,7 @@ struct DemoCaptureRootView: View {
             return 9_000_000_000
         case .glmResult:
             return 14_000_000_000
-        case .chat:
+        case .chat, .widgets:
             return 3_500_000_000
         case .councilOutput:
             return 12_000_000_000
@@ -119,7 +119,7 @@ private struct DemoCaptureScreenHost: View {
                 DemoGLMAnswerView()
             case .councilOutput:
                 DemoCouncilComparisonView()
-            case .chat, .composer:
+            case .chat, .composer, .widgets:
                 NavigationStack {
                     ChatView()
                         .navigationTitle(chatStore.selectedConversationTitle)
