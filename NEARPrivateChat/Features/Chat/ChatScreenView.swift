@@ -32,12 +32,7 @@ private struct ChatTranscriptView: View {
 
         VStack(spacing: 0) {
             ChatToolbar(transcriptStore: transcriptStore)
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 8)
-                .background(Color.appPanelBackground)
-            Divider()
-                .opacity(0.55)
+                .background(Color.appBackground)
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -508,6 +503,14 @@ private struct ChatToolbar: View {
     var body: some View {
         compactToolbar
         .buttonStyle(.borderless)
+        .toolbar {
+            // Spec (chat-view.jsx ThreadTopBar): "..." menu sits in the
+            // top-right of the nav bar. All the sheet bindings stay on
+            // this view so the menu's actions still resolve correctly.
+            ToolbarItem(placement: .topBarTrailing) {
+                moreMenuButton
+            }
+        }
         .sheet(isPresented: $showingShare) {
             if let conversation = chatStore.selectedConversation {
                 ShareConversationView(conversation: conversation)
@@ -581,25 +584,57 @@ private struct ChatToolbar: View {
     }
 
     private var compactToolbar: some View {
-        // v2: per Claude Design composer/thread specs, the model picker
-        // lives only in the composer chip row at the bottom. The top
-        // in-body toolbar keeps just the status text (when there are
-        // messages) and the "..." more menu — duplicate model selector
-        // removed.
-        HStack(alignment: .center, spacing: 10) {
-            if shouldShowCompactStatusText {
-                Text(compactStatusText)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        // v2 per chat-view.jsx ThreadTopBar: a centered model chip pill
+        // sits below the navigation bar when there are messages. The
+        // "..." menu lives in the nav bar trailing toolbar item (added
+        // via `.toolbar` in `body`). No status row here.
+        Group {
+            if shouldShowCenteredModelChip {
+                centeredModelChip
             } else {
-                Spacer(minLength: 0)
+                Color.clear.frame(height: 0)
             }
-
-            moreMenuButton
         }
+    }
+
+    private var shouldShowCenteredModelChip: Bool {
+        !transcriptStore.messages.isEmpty
+    }
+
+    private var centeredModelChip: some View {
+        HStack {
+            Spacer(minLength: 0)
+            Button {
+                AppHaptics.selection()
+                showingModels = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: composerModelSymbolName)
+                        .font(.footnote.weight(.semibold))
+                    Text(chatStore.selectedModelDisplayName)
+                        .font(.footnote.weight(.medium))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(Color.actionPress)
+                .padding(.horizontal, 8)
+                .frame(height: 22)
+                .background(Color.actionTint, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Model \(chatStore.selectedModelDisplayName)")
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var composerModelSymbolName: String {
+        if chatStore.selectedModelOption?.isIronclawModel == true {
+            return "terminal"
+        }
+        if chatStore.selectedRouteUsesNearCloud {
+            return "cloud"
+        }
+        return "cpu"
     }
 
     private var shouldShowCompactStatusText: Bool {
