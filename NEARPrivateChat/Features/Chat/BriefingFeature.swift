@@ -10,6 +10,7 @@
 
 import Foundation
 import SwiftUI
+import UserNotifications
 
 struct Briefing: Codable, Hashable, Identifiable {
     var id: UUID
@@ -252,6 +253,7 @@ final class BriefingStore: ObservableObject {
         briefings.append(briefing)
         briefings.sort(by: briefingSort)
         save()
+        Self.requestNotificationAuthorizationIfNeeded()
     }
 
     func update(_ briefing: Briefing) {
@@ -286,6 +288,29 @@ final class BriefingStore: ObservableObject {
         briefings[index].latestResult = result
         briefings[index].lastRunAt = Date()
         save()
+        Self.postBriefingReadyNotification(title: briefings[index].title)
+    }
+
+    /// Requested contextually when the user creates their first briefing.
+    nonisolated static func requestNotificationAuthorizationIfNeeded() {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .notDetermined else { return }
+            center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        }
+    }
+
+    /// Posts when a briefing produces a fresh result. iOS suppresses foreground
+    /// banners by default, so app-open runs don't spam; background runs surface.
+    nonisolated static func postBriefingReadyNotification(title: String) {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = "Your briefing is ready."
+            center.add(UNNotificationRequest(identifier: "briefing-\(UUID().uuidString)", content: content, trigger: nil))
+        }
     }
 
     func runDue(now: Date = Date()) async {
