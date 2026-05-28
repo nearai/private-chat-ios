@@ -1186,94 +1186,31 @@ private enum BriefingSamples {
     @MainActor
     static let store = BriefingStore(briefings: sampleBriefings)
 
+    // Live briefings — no canned results. They fetch real data through the
+    // actual runner (LiveDataService) on runDue, so the demo exercises the real
+    // product flow rather than fake widgets.
     static let sampleBriefings: [Briefing] = [
         Briefing(
             title: "Daily news brief",
-            prompt: "Give me a concise private daily news brief.",
+            prompt: "Today's top news",
             schedule: .weekdays(hour: 8, minute: 0),
-            createdAt: Date().addingTimeInterval(-86_400 * 5),
-            lastRunAt: Date().addingTimeInterval(-2_100),
-            latestResult: MessageWidget(
-                kind: .newsBrief,
-                title: "Daily news brief",
-                freshness: .fresh,
-                time: "8:02am",
-                followUp: "Open the lead story",
-                newsBrief: WidgetNewsBrief(
-                    heading: "Today · 3 stories",
-                    stories: [
-                        WidgetNewsStory(
-                            title: "Markets steady as chip guidance offsets rate worries",
-                            tag: "Markets",
-                            sources: [
-                                WidgetNewsSource(label: "R", color: nil, domain: "reuters.com"),
-                                WidgetNewsSource(label: "B", color: nil, domain: "bloomberg.com")
-                            ],
-                            url: nil
-                        ),
-                        WidgetNewsStory(
-                            title: "New private AI deployment rules move through committee",
-                            tag: "Policy",
-                            sources: [WidgetNewsSource(label: "A", color: nil, domain: "apnews.com")],
-                            url: nil
-                        ),
-                        WidgetNewsStory(
-                            title: "Energy grid battery installs reach a quarterly high",
-                            tag: "Energy",
-                            sources: [
-                                WidgetNewsSource(label: "F", color: nil, domain: "ft.com"),
-                                WidgetNewsSource(label: "V", color: nil, domain: "verge.com"),
-                                WidgetNewsSource(label: "N", color: nil, domain: "nature.com")
-                            ],
-                            url: nil
-                        )
-                    ]
-                )
-            )
+            createdAt: Date().addingTimeInterval(-86_400 * 3),
+            kind: .dailyNews
         ),
         Briefing(
-            title: "Weekly market summary",
-            prompt: "Summarize the week in public markets with key risk signals.",
-            schedule: .weekly(weekday: 2, hour: 7, minute: 0),
-            createdAt: Date().addingTimeInterval(-86_400 * 14),
-            lastRunAt: Date().addingTimeInterval(-7_200),
-            latestResult: MessageWidget(
-                kind: .metric,
-                title: "Weekly market summary",
-                freshness: .fresh,
-                time: "7:03am",
-                followUp: "Explain the move",
-                metric: WidgetMetric(
-                    label: "S&P 500 weekly move",
-                    value: "+1.8%",
-                    delta: "+0.6% vs prior week",
-                    trend: .up,
-                    caption: "Breadth improved across 8 of 11 sectors."
-                )
-            )
+            title: "ETH price watcher",
+            prompt: "What is the ETH price?",
+            schedule: .daily(hour: 9, minute: 0),
+            createdAt: Date().addingTimeInterval(-86_400 * 2),
+            kind: .ethPrice
         ),
         Briefing(
-            title: "Crypto liquidity watch",
-            prompt: "Check BTC and ETH liquidity, volatility, and risk levels.",
-            schedule: .daily(hour: 21, minute: 0),
-            isPaused: true,
-            createdAt: Date().addingTimeInterval(-86_400 * 20),
-            lastRunAt: Date().addingTimeInterval(-86_400 * 2),
-            latestResult: MessageWidget(
-                kind: .chart,
-                title: "Crypto liquidity watch",
-                freshness: .stale,
-                time: "9:01pm",
-                chart: WidgetChart(
-                    label: "BTC / USD",
-                    value: "$68,420",
-                    delta: "-1.2%",
-                    trend: .down,
-                    points: [52, 55, 54, 59, 57, 56, 53],
-                    caption: "Spot depth thinned after the US close.",
-                    timeframe: "past 24h"
-                )
-            )
+            title: "My NEAR account",
+            prompt: "How is my NEAR account doing?",
+            schedule: .daily(hour: 8, minute: 0),
+            createdAt: Date().addingTimeInterval(-86_400),
+            kind: .nearAccount,
+            accountID: "root.near"
         )
     ]
 

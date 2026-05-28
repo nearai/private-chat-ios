@@ -24,10 +24,10 @@ struct AppLifecycleModifier: ViewModifier {
                 await prepareAuthenticatedChatState()
                 chatStore.updateCurrentUser(profile: sessionStore.profile)
                 router.resetForAccountSwitch(sessionStore.setupAccountID)
+                await briefingStore.runDue()
                 #if DEBUG
                 if DemoCapture.isEnabled { return }
                 #endif
-                await briefingStore.runDue()
                 NEARPrivateChatApp.scheduleBriefingRefresh()
             }
             .onChange(of: sessionStore.session?.token) { _, token in

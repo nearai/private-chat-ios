@@ -43,6 +43,7 @@ struct BriefingDelivery: Identifiable, Hashable {
     var replyCount: Int = 0
     var unread: Bool = false
     var collapsed: Bool = false
+    var widget: MessageWidget? = nil
     var thread: DeliveryThread? = nil
 }
 
@@ -282,7 +283,12 @@ private struct BotDeliveryRow: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.primary)
 
-                if let headline = delivery.headline {
+                if let widget = delivery.widget {
+                    // A live briefing (price/account/news) renders its real
+                    // widget card here, not just a text summary.
+                    MessageWidgetCard(widget: widget)
+                        .padding(.top, 4)
+                } else if let headline = delivery.headline {
                     Text(headline)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.primary)
@@ -469,7 +475,8 @@ extension ThreadedBriefingView {
                 time: briefing.lastRunAt == nil ? "—" : timeFormatter.string(from: runDate).lowercased(),
                 title: "\(formatter.string(from: runDate)) · briefing",
                 body: body,
-                unread: briefing.lastRunAt != nil
+                unread: briefing.lastRunAt != nil,
+                widget: briefing.latestResult
             )
         ]
     }
