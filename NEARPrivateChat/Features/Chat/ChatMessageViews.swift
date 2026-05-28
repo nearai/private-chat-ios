@@ -59,7 +59,7 @@ struct MessageBubble: View {
                         }
                     } else {
                         Text(message.text.isEmpty ? " " : message.text)
-                            .font(.system(size: 17, weight: .regular))
+                            .font(.body)
                             .lineSpacing(7)
                             .textSelection(.enabled)
                     }
@@ -871,7 +871,7 @@ private struct MessageAttachmentStrip: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
-                .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
+                .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
         }
     }
@@ -911,14 +911,16 @@ private struct SourceCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 FaviconBadge(source: source)
                 Text(source.displayTitle)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .padding(.top, 2)
                 Spacer(minLength: 0)
                 Text(source.host)
-                    .font(.system(size: 13, weight: .regular))
+                    .font(.footnote)
+                    .fontWeight(.regular)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
             }
@@ -931,7 +933,8 @@ private struct SourceCard: View {
             }
 
             Text("\(index)")
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .font(.system(.caption2, design: .monospaced))
+                .fontWeight(.semibold)
                 .monospacedDigit()
                 .foregroundStyle(.white)
                 .frame(width: 18, height: 18)
@@ -977,7 +980,8 @@ private struct FaviconBadge: View {
 
     private var fallback: some View {
         Text(source.sourceInitials.prefix(1))
-            .font(.system(size: 12, weight: .heavy))
+            .font(.caption)
+            .fontWeight(.heavy)
             .foregroundStyle(Color.textSecondary)
     }
 }
@@ -1006,7 +1010,7 @@ struct VerifiedFooterButton: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(footerTint)
                 Text(footerText)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.footnote)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -1131,7 +1135,7 @@ struct SourceSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(source.displayTitle)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.headline)
                         .foregroundStyle(.primary)
                         .lineLimit(3)
                         .multilineTextAlignment(.leading)
@@ -1139,13 +1143,14 @@ struct SourceSheet: View {
 
                     if let metaLine, !metaLine.isEmpty {
                         Text(metaLine)
-                            .font(.system(size: 13))
+                            .font(.footnote)
+                            .fontWeight(.regular)
                             .foregroundStyle(Color.textSecondary)
                     }
 
                     if let snippet = source.snippetFallback {
                         Text(snippet)
-                            .font(.system(size: 15))
+                            .font(.subheadline)
                             .foregroundStyle(.primary)
                             .lineSpacing(7)
                             .padding(14)
@@ -1169,7 +1174,8 @@ struct SourceSheet: View {
         HStack(spacing: 8) {
             FaviconBadge(source: source)
             Text(source.host)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.subheadline)
+                .fontWeight(.semibold)
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(1)
             Spacer(minLength: 0)
@@ -1202,7 +1208,7 @@ struct SourceSheet: View {
                     Image(systemName: "arrow.up.right")
                         .font(.system(size: 13, weight: .semibold))
                 }
-                .font(.system(size: 17, weight: .semibold))
+                .font(.headline)
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
@@ -1215,7 +1221,7 @@ struct SourceSheet: View {
                 if let url = source.safeURL { Clipboard.copy(url.absoluteString) }
             } label: {
                 Text("Copy link")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.headline)
                     .foregroundStyle(Color.actionPrimary)
                     .frame(maxWidth: .infinity)
                     .frame(height: 50)

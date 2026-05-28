@@ -506,7 +506,8 @@ struct ClaudeHomeTopBar: View {
         HStack(spacing: 0) {
             Button(action: onAccount) {
                 Text(avatarLetter)
-                    .font(.system(size: 13, weight: .semibold, design: .default))
+                    .font(.footnote)
+                    .fontWeight(.semibold)
                     .foregroundStyle(Color.actionPrimary)
                     .frame(width: 32, height: 32)
                     .background(Color.actionFill, in: Circle())
@@ -520,7 +521,7 @@ struct ClaudeHomeTopBar: View {
             HStack(spacing: 0) {
                 Button(action: onSearch) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 22, weight: .regular, design: .default))
+                        .font(.system(size: 22, weight: .regular))
                         .foregroundStyle(isSearchVisible ? Color.actionPrimary : Color.textSecondary)
                         .frame(width: 44, height: 44)
                 }
@@ -529,7 +530,7 @@ struct ClaudeHomeTopBar: View {
 
                 Button(action: onNewChat) {
                     Image(systemName: "square.and.pencil")
-                        .font(.system(size: 22, weight: .regular, design: .default))
+                        .font(.system(size: 22, weight: .regular))
                         .foregroundStyle(Color.textSecondary)
                         .frame(width: 44, height: 44)
                 }
@@ -539,11 +540,9 @@ struct ClaudeHomeTopBar: View {
         }
         .overlay {
             Text("Chats")
-                .font(.system(size: 17, weight: .semibold, design: .default))
-                .kerning(-0.2)
+                .font(.headline)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
-                .frame(height: 22)
         }
         .frame(height: 44)
         .padding(.horizontal, 12)
@@ -565,8 +564,7 @@ struct ClaudeThreadRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(conversation.title)
-                        .font(.system(size: 17, weight: .regular, design: .default))
-                        .kerning(-0.2)
+                        .font(.body)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -574,15 +572,14 @@ struct ClaudeThreadRow: View {
                     Spacer(minLength: 0)
 
                     Text(timestampText)
-                        .font(.system(size: 11, weight: .regular, design: .default))
-                        .kerning(0.1)
+                        .font(.caption2)
                         .foregroundStyle(Color.textTertiary)
                         .lineLimit(1)
                 }
 
                 Text(preview)
-                    .font(.system(size: 13, weight: .regular, design: .default))
-                    .kerning(-0.05)
+                    .font(.footnote)
+                    .fontWeight(.regular)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -641,8 +638,7 @@ struct ClaudeHomeEmptyState: View {
                         .accessibilityHidden(true)
 
                     Text(title)
-                        .font(.system(size: 15, weight: .regular, design: .default))
-                        .kerning(-0.1)
+                        .font(.subheadline)
                         .foregroundStyle(Color.textSecondary)
                         .multilineTextAlignment(.center)
                         .lineSpacing(5) // 20pt line height on 15pt font ≈ +5pt spacing
@@ -655,8 +651,7 @@ struct ClaudeHomeEmptyState: View {
                 if showsAction {
                     Button(action: action) {
                         Text("Start a new chat")
-                            .font(.system(size: 17, weight: .semibold, design: .default))
-                            .kerning(-0.2)
+                            .font(.headline)
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 52)

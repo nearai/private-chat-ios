@@ -237,7 +237,7 @@ struct ProjectFilesView: View {
             VStack(spacing: 20) {
                 NearMark(size: 56)
                 Text("Add a file or paste instructions to get started.")
-                    .font(.system(size: 15, weight: .regular))
+                    .font(.subheadline)
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 280)
@@ -246,7 +246,7 @@ struct ProjectFilesView: View {
                     showingFileImporter = true
                 } label: {
                     Label("Add a file", systemImage: "plus")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.headline)
                         .foregroundStyle(Color.white)
                         .padding(.horizontal, 22)
                         .frame(height: 50)
@@ -329,7 +329,6 @@ private struct ProjectSectionLabel: View {
         Text(text.uppercased())
             .font(.caption.weight(.semibold))
             .foregroundStyle(Color.textSecondary)
-            .tracking(0.4)
     }
 }
 
@@ -355,13 +354,14 @@ private struct ProjectFilePill: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.footnote)
                         .foregroundStyle(Color.primary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(subtitle)
-                        .font(.system(size: 11, weight: .regular))
+                        .font(.caption2)
+                        .fontWeight(.regular)
                         .foregroundStyle(Color.textTertiary)
                         .lineLimit(1)
                 }
@@ -419,9 +419,9 @@ private struct ProjectInstructionsCard: View {
                         + Text(" ")
                         + Text("Edit")
                             .foregroundStyle(Color.actionPrimary)
-                            .font(.system(size: 15, weight: .medium))
+                            .font(.subheadline.weight(.medium))
                     )
-                    .font(.system(size: 15, weight: .regular))
+                    .font(.subheadline)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -456,14 +456,15 @@ private struct ProjectChatRow: View {
             ZStack(alignment: .bottom) {
                 HStack(alignment: .center, spacing: 12) {
                     Text(conversation.title)
-                        .font(.system(size: 17, weight: .regular))
+                        .font(.body)
                         .foregroundStyle(Color.primary)
                         .lineLimit(1)
 
                     Spacer(minLength: 8)
 
                     Text(relativeTimeText)
-                        .font(.system(size: 13, weight: .regular))
+                        .font(.footnote)
+                        .fontWeight(.regular)
                         .foregroundStyle(Color.textTertiary)
                         .lineLimit(1)
 

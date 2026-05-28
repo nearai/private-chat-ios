@@ -119,7 +119,7 @@ struct InputBar: View {
                     "",
                     text: draftBinding,
                     prompt: Text(composerPlaceholder)
-                        .font(.system(size: 17, weight: .regular))
+                        .font(.body)
                         .foregroundColor(Color.textTertiary),
                     axis: .vertical
                 )
@@ -128,8 +128,7 @@ struct InputBar: View {
                     .autocorrectionDisabled()
                     .lineLimit(1...6)
                     .focused($isFocused)
-                    .font(.system(size: 17, weight: .regular))
-                    .tracking(-0.2)
+                    .font(.body)
                     .foregroundStyle(Color.textPrimary)
                     .onSubmit {
                         chatStore.sendDraft()
@@ -623,8 +622,8 @@ struct ComposerRouteChip: View {
             Image(systemName: symbolName)
                 .font(.system(size: 13, weight: .semibold))
             Text(title)
-                .font(.system(size: 13, weight: .medium))
-                .tracking(-0.1)
+                .font(.footnote)
+                .fontWeight(.medium)
                 .lineLimit(1)
             if showsChevron {
                 Image(systemName: "chevron.down")
@@ -823,7 +822,7 @@ private struct AttachmentStrip: View {
                     }
                     .padding(.horizontal, 8)
                     .frame(height: 56)
-                    .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
+                    .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
             }
         }

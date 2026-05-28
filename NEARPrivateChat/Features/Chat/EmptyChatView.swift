@@ -20,8 +20,7 @@ struct EmptyChatView: View {
             NearAppIconMark(size: 56)
 
             Text("Ask privately.")
-                .font(.system(size: 17, weight: .regular))
-                .tracking(-0.2)
+                .font(.body)
                 .lineSpacing(24 - 17)
                 .foregroundStyle(Color.textTertiary)
 

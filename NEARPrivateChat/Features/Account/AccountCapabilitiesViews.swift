@@ -128,16 +128,19 @@ struct AccountSettingsView: View {
                     .frame(width: 32, height: 32)
                     .overlay {
                         Text(String(sessionStore.displayName.prefix(1)).uppercased())
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
                             .foregroundStyle(Color.actionPrimary)
                     }
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(sessionStore.displayName)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
                         .lineLimit(1)
                     Text(sessionStore.profile?.user.email ?? "Signed in")
-                        .font(.system(size: 13))
+                        .font(.footnote)
+                        .fontWeight(.regular)
                         .foregroundStyle(Color.textSecondary)
                         .lineLimit(1)
                 }
@@ -352,12 +355,13 @@ struct AccountSettingsView: View {
                 }
             } label: {
                 Label("Power Tools", systemImage: "wrench.and.screwdriver")
-                    .font(.system(size: 17))
+                    .font(.body)
                     .foregroundStyle(.primary)
             }
         } footer: {
             Text("Advanced controls. Open only when a route or integration asks for it.")
-                .font(.system(size: 13))
+                .font(.footnote)
+                .fontWeight(.regular)
                 .foregroundStyle(Color.textSecondary)
         }
     }
@@ -370,11 +374,12 @@ struct AccountSettingsView: View {
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.system(size: 17))
+                    .font(.body)
                     .foregroundStyle(.primary)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: 13))
+                        .font(.footnote)
+                        .fontWeight(.regular)
                         .foregroundStyle(Color.textSecondary)
                 }
             }
@@ -390,7 +395,7 @@ struct AccountSettingsView: View {
                 Text("Version").foregroundStyle(.primary)
                 Spacer()
                 Text(appVersion)
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(.system(.footnote, design: .monospaced))
                     .foregroundStyle(Color.textTertiary)
             }
             Button {
@@ -414,7 +419,7 @@ struct AccountSettingsView: View {
     private var footerSection: some View {
         Section {
             Text("https://private.near.ai")
-                .font(.system(size: 13, design: .monospaced))
+                .font(.system(.footnote, design: .monospaced))
                 .foregroundStyle(Color.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .listRowBackground(Color.clear)
@@ -652,7 +657,7 @@ private struct DefaultModelDetailView: View {
             Section {
                 if candidates.isEmpty {
                     Text("Loading model catalog…")
-                        .font(.system(size: 15, weight: .regular))
+                        .font(.subheadline)
                         .foregroundStyle(Color.textSecondary)
                 } else {
                     ForEach(candidates) { option in
@@ -665,13 +670,12 @@ private struct DefaultModelDetailView: View {
                             HStack(spacing: 12) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(option.displayName)
-                                        .font(.system(size: 17, weight: .regular))
-                                        .tracking(-0.2)
+                                        .font(.body)
                                         .foregroundStyle(.primary)
                                     if let subtitle = subtitle(for: option) {
                                         Text(subtitle)
-                                            .font(.system(size: 13, weight: .regular))
-                                            .tracking(-0.05)
+                                            .font(.footnote)
+                                            .fontWeight(.regular)
                                             .foregroundStyle(Color.textSecondary)
                                     }
                                 }

@@ -181,13 +181,11 @@ struct ModelPickerView: View {
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Frontier (via Cloud)".uppercased())
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(Color.textSecondary)
-                        .tracking(0.5)
                         .padding(.horizontal, 16)
                     Text("Connect NEAR Cloud to use Claude Opus 4.5, GPT-5.5, Gemini 3 Pro.")
-                        .font(.system(size: 13, weight: .regular))
-                        .tracking(-0.05)
+                        .font(.subheadline)
                         .foregroundStyle(Color.textTertiary)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
@@ -354,9 +352,8 @@ private struct ModelSpecSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
-                .font(.system(size: 11, weight: .semibold))
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(Color.textSecondary)
-                .tracking(0.5)
                 .padding(.horizontal, 16)
 
             VStack(spacing: 0) {
@@ -400,14 +397,12 @@ private struct ModelSpecRow: View {
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text(title)
-                            .font(.system(size: 17, weight: .regular))
-                            .tracking(-0.2)
+                            .font(.body)
                             .foregroundStyle(isEnabled ? Color.primary : Color.textSecondary)
                             .lineLimit(1)
 
                         Text(subtitle)
-                            .font(.system(size: 13, weight: .regular))
-                            .tracking(-0.05)
+                            .font(.subheadline)
                             .foregroundStyle(Color.textSecondary)
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
@@ -472,13 +467,11 @@ private struct CouncilNumberedRow: View {
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
-                        .font(.system(size: 17, weight: .regular))
-                        .tracking(-0.2)
+                        .font(.body)
                         .foregroundStyle(Color.primary)
                         .lineLimit(1)
                     Text(subtitle)
-                        .font(.system(size: 13, weight: .regular))
-                        .tracking(-0.05)
+                        .font(.subheadline)
                         .foregroundStyle(Color.textSecondary)
                         .lineLimit(1)
                 }

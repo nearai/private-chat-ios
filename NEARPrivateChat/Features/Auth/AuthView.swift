@@ -101,8 +101,7 @@ struct AuthView: View {
                     showingSharedLink = true
                 } label: {
                     Text("Open shared link")
-                        .font(.system(size: 15, weight: .regular))
-                        .tracking(-0.1)
+                        .font(.subheadline)
                         .foregroundStyle(Color.textSecondary)
                         .padding(.vertical, 10)
                         .padding(.horizontal, 12)
@@ -120,7 +119,9 @@ struct AuthView: View {
                 #endif
 
                 Text("https://private.near.ai")
-                    .font(.system(size: 13, weight: .regular, design: .monospaced))
+                    .font(.footnote)
+                    .fontDesign(.monospaced)
+                    .fontWeight(.regular)
                     .foregroundStyle(Color.textSecondary)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 18)
@@ -146,7 +147,7 @@ struct AuthView: View {
                     SecureField("Paste token", text: $token)
                         .tokenInputTraits()
                         .padding(12)
-                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
+                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     Spacer()
                 }
                 .padding()
@@ -229,8 +230,8 @@ private struct TermsRowCard: View {
                 CheckBox(isOn: isAccepted)
 
                 Text("I agree to the Terms and Privacy Policy")
-                    .font(.system(size: 13, weight: .regular))
-                    .tracking(-0.08)
+                    .font(.footnote)
+                    .fontWeight(.regular)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -238,8 +239,8 @@ private struct TermsRowCard: View {
 
                 Button(action: onReadTerms) {
                     Text("Read terms")
-                        .font(.system(size: 13, weight: .medium))
-                        .tracking(-0.08)
+                        .font(.footnote)
+                        .fontWeight(.medium)
                         .foregroundStyle(Color.actionPrimary)
                         .lineLimit(1)
                 }
@@ -300,8 +301,8 @@ private struct AuthProviderButton: View {
                     .frame(width: 20, height: 20)
 
                 Text(provider.title)
-                    .font(.system(size: 16, weight: .semibold))
-                    .tracking(-0.2)
+                    .font(.callout)
+                    .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)
 
                 // Right-side spacer matches glyph width + leading gap so the
@@ -508,7 +509,7 @@ private struct DebugMoreSignInOptions: View {
             } label: {
                 HStack(spacing: 6) {
                     Text("More sign-in options")
-                        .font(.system(size: 14, weight: .regular))
+                        .font(.subheadline)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 10, weight: .semibold))
                         .rotationEffect(.degrees(isOpen ? 180 : 0))
@@ -531,10 +532,11 @@ private struct DebugMoreSignInOptions: View {
                             .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Developer session token")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.subheadline)
+                                .fontWeight(.medium)
                                 .foregroundStyle(.primary)
                             Text("DEBUG · paste a session JWT")
-                                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                                .font(.system(.caption2, design: .monospaced))
                                 .foregroundStyle(Color.textTertiary)
                         }
                         Spacer(minLength: 0)

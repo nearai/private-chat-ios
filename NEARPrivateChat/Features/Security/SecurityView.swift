@@ -21,7 +21,8 @@ struct SecurityView: View {
                         .padding(.top, 8)
                     } label: {
                         Text("How verification works")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
                             .foregroundStyle(.primary)
                     }
                     .padding(14)
@@ -92,12 +93,13 @@ struct SecurityView: View {
 
             VStack(spacing: 14) {
                 Text(proof.title)
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.title2)
+                    .fontWeight(.semibold)
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
 
                 Text(proof.detail)
-                    .font(.system(size: 15))
+                    .font(.subheadline)
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
                     .lineSpacing(3)
@@ -115,14 +117,14 @@ struct SecurityView: View {
             ClaudeDetailRow(label: "Model", trailing: modelTrailing) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(chatStore.selectedModelDisplayName)
-                        .font(.system(size: 15))
+                        .font(.subheadline)
                         .foregroundStyle(.primary)
                     if let hash = modelHashShort {
                         Text("·")
-                            .font(.system(size: 15))
+                            .font(.subheadline)
                             .foregroundStyle(Color.textTertiary)
                         Text(hash)
-                            .font(.system(size: 13, design: .monospaced))
+                            .font(.system(.footnote, design: .monospaced))
                             .foregroundStyle(.primary)
                     }
                 }
@@ -132,10 +134,11 @@ struct SecurityView: View {
             ClaudeDetailRow(label: "Hardware", trailing: hardwareTrailing) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(hardwareSummary)
-                        .font(.system(size: 15))
+                        .font(.subheadline)
                         .foregroundStyle(.primary)
                     Text(hardwareDetail)
-                        .font(.system(size: 13))
+                        .font(.footnote)
+                        .fontWeight(.regular)
                         .foregroundStyle(Color.textSecondary)
                 }
             }
@@ -147,10 +150,11 @@ struct SecurityView: View {
             ) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(conversationSummary)
-                        .font(.system(size: 15))
+                        .font(.subheadline)
                         .foregroundStyle(.primary)
                     Text(conversationDetail)
-                        .font(.system(size: 13))
+                        .font(.footnote)
+                        .fontWeight(.regular)
                         .foregroundStyle(Color.textSecondary)
                 }
             }
@@ -178,7 +182,7 @@ struct SecurityView: View {
                         Image(systemName: "lock.shield")
                             .font(.system(size: 16, weight: .semibold))
                         Text("Verify on-device")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.headline)
                     }
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -197,7 +201,7 @@ struct SecurityView: View {
                         Image(systemName: "arrow.up.right")
                             .font(.system(size: 14, weight: .semibold))
                     }
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.headline)
                     .foregroundStyle(Color.actionPrimary)
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
@@ -205,7 +209,8 @@ struct SecurityView: View {
 
                 if let localVerificationMessage {
                     Text(localVerificationMessage)
-                        .font(.system(size: 13))
+                        .font(.footnote)
+                        .fontWeight(.regular)
                         .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 4)
@@ -224,7 +229,7 @@ struct SecurityView: View {
                                 .font(.system(size: 16, weight: .semibold))
                         }
                         Text(chatStore.isLoadingAttestation ? "Fetching proof" : "Fetch proof")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.headline)
                     }
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -235,7 +240,8 @@ struct SecurityView: View {
                 .disabled(chatStore.isLoadingAttestation)
             } else {
                 Text(proofActionsUnavailableText)
-                    .font(.system(size: 13))
+                    .font(.footnote)
+                    .fontWeight(.regular)
                     .foregroundStyle(Color.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -251,7 +257,8 @@ struct SecurityView: View {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 11, weight: .semibold))
                 }
-                .font(.system(size: 13))
+                .font(.footnote)
+                .fontWeight(.regular)
                 .foregroundStyle(Color.textTertiary)
             }
             .buttonStyle(.plain)
@@ -735,9 +742,8 @@ private struct ClaudeDetailRow<Content: View>: View {
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             Text(label.uppercased())
-                .font(.system(size: 13, weight: .semibold))
+                .font(.footnote)
                 .foregroundStyle(Color.textSecondary)
-                .kerning(0.5)
                 .frame(width: 96, alignment: .leading)
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
