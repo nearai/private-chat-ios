@@ -10,7 +10,7 @@
 
 import Foundation
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 
 struct Briefing: Codable, Hashable, Identifiable {
     var id: UUID
