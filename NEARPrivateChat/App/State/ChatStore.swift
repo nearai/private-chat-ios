@@ -194,7 +194,8 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    private static let defaultModelID = "zai-org/GLM-5.1-FP8"
+    static let defaultModelID = "zai-org/GLM-5.1-FP8"
+    private static let preferredDefaultModelDefaultsKey = "preferredDefaultModelID"
     private static let selectedModelDefaultsKey = "selectedModel"
     private static let councilModelDefaultsKey = "councilModelIDs"
     private static let pinnedModelDefaultsKey = "pinnedModelIDs"
@@ -543,6 +544,59 @@ final class ChatStore: ObservableObject {
 
     var activeModelDisplayName: String {
         isCouncilModeEnabled ? "LLM Council \(activeCouncilModels.count)" : selectedModelDisplayName
+    }
+
+    // MARK: - Preferred default model (user override of shipped default)
+
+    /// The user's chosen default model for new chats. `nil` means use the
+    /// shipped fallback (`defaultModelID`). Persisted in account-scoped
+    /// UserDefaults so multiple accounts on one device can each pick.
+    var preferredDefaultModelID: String? {
+        get {
+            UserDefaults.standard.string(forKey: scopedDefaultsKey(Self.preferredDefaultModelDefaultsKey))
+        }
+        set {
+            let key = scopedDefaultsKey(Self.preferredDefaultModelDefaultsKey)
+            if let newValue, !newValue.isEmpty {
+                UserDefaults.standard.set(newValue, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+            objectWillChange.send()
+        }
+    }
+
+    /// Resolves the active default model id for new chats, preferring the
+    /// user's override when present. No validation against pickerModels —
+    /// the catalog may not be loaded yet at boot. Downstream selection
+    /// guards handle invalid ids.
+    var effectiveDefaultModelID: String {
+        if let preferred = preferredDefaultModelID, !preferred.isEmpty {
+            return preferred
+        }
+        return Self.defaultModelID
+    }
+
+    /// Models eligible to be the user's default — the public picker list,
+    /// minus IronClaw runtimes (those route to the agent, not chat) and
+    /// the synthesis pseudo-model.
+    var preferredDefaultModelCandidates: [ModelOption] {
+        pickerModels.filter { option in
+            !option.isIronclawModel && option.modelID != ModelOption.llmCouncilSynthesisModelID
+        }
+    }
+
+    /// Sets the user's preferred default model and, if the current chat
+    /// is on the shipped default with no messages, switches it over so the
+    /// change is felt immediately.
+    func setPreferredDefaultModel(_ modelID: String?) {
+        preferredDefaultModelID = modelID
+        if messages.isEmpty,
+           selectedConversation == nil,
+           let resolved = modelID,
+           pickerModels.contains(where: { $0.id == resolved }) {
+            selectedModel = resolved
+        }
     }
 
     var activeCouncilModels: [ModelOption] {
@@ -5209,8 +5263,8 @@ final class ChatStore: ObservableObject {
         nearCloudKeyConfigured = loadNearCloudAPIKey()?.isEmpty == false
 
         let storedModel = UserDefaults.standard.string(forKey: scopedDefaultsKey(Self.selectedModelDefaultsKey))
-        let initialModel = storedModel ?? Self.defaultModelID
-        selectedModel = Self.routeKind(forModelID: initialModel).isIronclawRoute ? Self.defaultModelID : initialModel
+        let initialModel = storedModel ?? effectiveDefaultModelID
+        selectedModel = Self.routeKind(forModelID: initialModel).isIronclawRoute ? effectiveDefaultModelID : initialModel
         let storedCouncilModelIDs = loadStoredCouncilModelIDs()
         councilModelIDs = storedCouncilModelIDs.isEmpty ? [selectedModel] : storedCouncilModelIDs
         pinnedModelIDs = loadPinnedModelIDs()

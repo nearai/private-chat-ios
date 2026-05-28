@@ -184,6 +184,16 @@ struct AccountSettingsView: View {
         }
     }
 
+    /// Friendly name for the active default model, falling back to the
+    /// raw id humanized if the catalog hasn't loaded yet.
+    private var currentDefaultModelLabel: String {
+        let id = chatStore.effectiveDefaultModelID
+        if let option = chatStore.pickerModels.first(where: { $0.id == id }) {
+            return option.displayName
+        }
+        return ModelOption.humanize(modelID: id)
+    }
+
     // MARK: - 2. Appearance
 
     private var appearanceSection: some View {
@@ -253,7 +263,7 @@ struct AccountSettingsView: View {
             NavigationLink {
                 DefaultModelDetailView()
             } label: {
-                accountDetailRow(title: "Default model", detail: "GLM 5.1")
+                accountDetailRow(title: "Default model", detail: currentDefaultModelLabel)
             }
 
             NavigationLink {
@@ -627,13 +637,55 @@ private struct DynamicTypeDetailView: View {
 // MARK: - Model defaults detail pushes
 
 private struct DefaultModelDetailView: View {
+    @EnvironmentObject private var chatStore: ChatStore
+
+    private var candidates: [ModelOption] {
+        chatStore.preferredDefaultModelCandidates
+    }
+
+    private var currentSelection: String {
+        chatStore.effectiveDefaultModelID
+    }
+
     var body: some View {
         List {
             Section {
-                HStack {
-                    Text("Default model").foregroundStyle(.primary)
-                    Spacer()
-                    Text("GLM 5.1").foregroundStyle(Color.textSecondary)
+                if candidates.isEmpty {
+                    Text("Loading model catalog…")
+                        .font(.system(size: 15, weight: .regular))
+                        .foregroundStyle(Color.textSecondary)
+                } else {
+                    ForEach(candidates) { option in
+                        Button {
+                            // Writing the SHIPPED default as nil keeps the
+                            // store clean for users who never override.
+                            let next: String? = option.id == ChatStore.defaultModelID ? nil : option.id
+                            chatStore.setPreferredDefaultModel(next)
+                        } label: {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(option.displayName)
+                                        .font(.system(size: 17, weight: .regular))
+                                        .tracking(-0.2)
+                                        .foregroundStyle(.primary)
+                                    if let subtitle = subtitle(for: option) {
+                                        Text(subtitle)
+                                            .font(.system(size: 13, weight: .regular))
+                                            .tracking(-0.05)
+                                            .foregroundStyle(Color.textSecondary)
+                                    }
+                                }
+                                Spacer(minLength: 0)
+                                if option.id == currentSelection {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(Color.actionPrimary)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             } footer: {
                 Text("Used when starting a new chat. Switch routes per-chat from the model picker.")
@@ -643,6 +695,19 @@ private struct DefaultModelDetailView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Default model")
         .platformInlineNavigationTitle()
+    }
+
+    private func subtitle(for option: ModelOption) -> String? {
+        if option.id == ChatStore.defaultModelID {
+            return "Shipped default · verified private route"
+        }
+        if option.isNearCloudModel {
+            return "Routed via NEAR Cloud privacy proxy"
+        }
+        if option.isVerifiable {
+            return "Private · verifiable"
+        }
+        return nil
     }
 }
 
