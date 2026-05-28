@@ -299,7 +299,7 @@ struct ConversationListView: View {
                         } else {
                             VStack(spacing: 14) {
                                 ClaudeHomeEmptyState(
-                                    title: searchQuery.isEmpty ? "Ask privately." : "No matching chats",
+                                    title: searchQuery.isEmpty ? "Verifiably Yours." : "No matching chats",
                                     showsAction: searchQuery.isEmpty,
                                     action: openNewChat
                                 )

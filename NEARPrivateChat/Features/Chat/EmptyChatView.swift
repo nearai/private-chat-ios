@@ -19,7 +19,7 @@ struct EmptyChatView: View {
         VStack(spacing: 14) {
             NearAppIconMark(size: 56)
 
-            Text("Ask privately.")
+            Text("Verifiably Yours.")
                 .font(.body)
                 .lineSpacing(24 - 17)
                 .foregroundStyle(Color.textTertiary)
