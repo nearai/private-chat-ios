@@ -181,7 +181,13 @@ final class PrivateChatAPI {
     }
 
     func fetchUserSettings() async throws -> UserSettingsResponse {
-        try await request("/v1/users/me/settings", method: "GET", authenticated: true)
+        #if targetEnvironment(simulator) && DEBUG
+        if authToken?.hasPrefix("simulator-debug-token-") == true {
+            let stubJSON = "{}".data(using: .utf8) ?? Data()
+            return try JSONDecoder().decode(UserSettingsResponse.self, from: stubJSON)
+        }
+        #endif
+        return try await request("/v1/users/me/settings", method: "GET", authenticated: true)
     }
 
     func updateUserSettings(
@@ -211,6 +217,11 @@ final class PrivateChatAPI {
     }
 
     func fetchSubscriptions(includeInactive: Bool = false) async throws -> [SubscriptionInfo] {
+        #if targetEnvironment(simulator) && DEBUG
+        if authToken?.hasPrefix("simulator-debug-token-") == true {
+            return []
+        }
+        #endif
         let suffix = includeInactive ? "?include_inactive=true" : ""
         let response: SubscriptionsResponse = try await request("/v1/subscriptions\(suffix)", method: "GET", authenticated: true)
         return response.subscriptions
@@ -473,7 +484,12 @@ final class PrivateChatAPI {
     }
 
     func fetchSharedWithMe() async throws -> [SharedConversationInfo] {
-        try await request("/v1/shared-with-me", method: "GET", authenticated: true)
+        #if targetEnvironment(simulator) && DEBUG
+        if authToken?.hasPrefix("simulator-debug-token-") == true {
+            return []
+        }
+        #endif
+        return try await request("/v1/shared-with-me", method: "GET", authenticated: true)
     }
 
     func createPublicShare(_ conversationID: String) async throws -> [ConversationShareInfo] {
@@ -780,6 +796,7 @@ final class PrivateChatAPI {
         body: B,
         authenticated: Bool
     ) async throws -> T {
+        try shortCircuitIfSimulatorStub(authenticated: authenticated)
         let bodyData = try encoder.encode(body)
         let request = try makeRequest(path: path, method: method, body: bodyData, authenticated: authenticated)
         return try await perform(request)
@@ -790,8 +807,21 @@ final class PrivateChatAPI {
         method: String,
         authenticated: Bool
     ) async throws -> T {
+        try shortCircuitIfSimulatorStub(authenticated: authenticated)
         let request = try makeRequest(path: path, method: method, body: nil, authenticated: authenticated)
         return try await perform(request)
+    }
+
+    /// In simulator-DEBUG builds, ANY authenticated request that wasn't
+    /// individually stubbed throws CancellationError instead of hitting
+    /// the real backend with the bogus stub bearer token. Callers that
+    /// just want to fire-and-forget the call (`try? await`, banner-only
+    /// paths) get a silent no-op. Production never sees this branch.
+    private func shortCircuitIfSimulatorStub(authenticated: Bool) throws {
+        #if targetEnvironment(simulator) && DEBUG
+        guard authenticated, authToken?.hasPrefix("simulator-debug-token-") == true else { return }
+        throw CancellationError()
+        #endif
     }
 
     private func readableRequest<T: Decodable>(_ path: String) async throws -> T {

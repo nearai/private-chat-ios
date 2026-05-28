@@ -394,6 +394,18 @@ final class SessionStore: NSObject, ObservableObject {
     }
 
     private func showBanner(_ message: String) {
+        #if targetEnvironment(simulator) && DEBUG
+        // Suppress API-auth failure banners from the simulator stub
+        // session so they don't pollute visual QA. Production unchanged.
+        let suppressed = ["Invalid or expired authentication token",
+                          "Session not found",
+                          "Unauthorized",
+                          "401 Unauthorized",
+                          "403 Forbidden"]
+        if suppressed.contains(where: { message.localizedCaseInsensitiveContains($0) }) {
+            return
+        }
+        #endif
         bannerMessage = message
         Task {
             try? await Task.sleep(nanoseconds: 3_000_000_000)
