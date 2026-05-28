@@ -52,13 +52,25 @@ struct ThreadedBriefingView: View {
     let title: String
     let schedule: String
     var onClose: () -> Void = {}
+    private let store: BriefingStore?
+    private let briefingID: UUID?
 
     @State private var deliveries: [BriefingDelivery]
     @State private var replyText = ""
+    @State private var isRunning = false
 
-    init(title: String, schedule: String, deliveries: [BriefingDelivery], onClose: @escaping () -> Void = {}) {
+    init(
+        title: String,
+        schedule: String,
+        deliveries: [BriefingDelivery],
+        store: BriefingStore? = nil,
+        briefingID: UUID? = nil,
+        onClose: @escaping () -> Void = {}
+    ) {
         self.title = title
         self.schedule = schedule
+        self.store = store
+        self.briefingID = briefingID
         self.onClose = onClose
         _deliveries = State(initialValue: deliveries)
     }
@@ -105,14 +117,24 @@ struct ThreadedBriefingView: View {
             }
             Spacer(minLength: 0)
             Menu {
-                Button("Mark all read") {}
-                Button("Briefing settings") {}
+                if store != nil, briefingID != nil {
+                    Button { runNow() } label: { Label("Run now", systemImage: "arrow.clockwise") }
+                    Button(role: .destructive) { deleteBriefing() } label: { Label("Delete briefing", systemImage: "trash") }
+                } else {
+                    Button("Mark all read") {}
+                }
             } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Color.textSecondary)
-                    .frame(width: 44, height: 44)
+                Group {
+                    if isRunning {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "ellipsis").font(.system(size: 18, weight: .semibold))
+                    }
+                }
+                .foregroundStyle(Color.textSecondary)
+                .frame(width: 44, height: 44)
             }
+            .disabled(isRunning)
         }
         .padding(.horizontal, 8)
         .frame(height: 52)
@@ -148,6 +170,26 @@ struct ThreadedBriefingView: View {
 
     private var replyTrimmed: String {
         replyText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func runNow() {
+        guard let store, let briefingID,
+              let briefing = store.briefings.first(where: { $0.id == briefingID }) else { return }
+        isRunning = true
+        Task {
+            await store.run(briefing)
+            if let updated = store.briefings.first(where: { $0.id == briefingID }) {
+                deliveries = ThreadedBriefingView.deliveries(for: updated)
+            }
+            isRunning = false
+        }
+    }
+
+    private func deleteBriefing() {
+        guard let store, let briefingID,
+              let briefing = store.briefings.first(where: { $0.id == briefingID }) else { return }
+        store.remove(briefing)
+        onClose()
     }
 
     private func sendReply() {
@@ -371,11 +413,13 @@ private func threadHexColor(_ hex: String) -> Color {
 // MARK: - Mapping a live Briefing into deliveries
 
 extension ThreadedBriefingView {
-    init(briefing: Briefing, onClose: @escaping () -> Void = {}) {
+    init(briefing: Briefing, store: BriefingStore? = nil, onClose: @escaping () -> Void = {}) {
         self.init(
             title: briefing.title,
             schedule: briefing.schedule.scheduleLabel,
             deliveries: ThreadedBriefingView.deliveries(for: briefing),
+            store: store,
+            briefingID: briefing.id,
             onClose: onClose
         )
     }
