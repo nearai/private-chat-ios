@@ -709,19 +709,41 @@ extension MessageWidget {
     /// Returns the parsed widget (or nil) and the text with that block removed.
     /// On any parse failure the original text is returned untouched, so a
     /// malformed block degrades to visible prose rather than being lost.
-    static func extract(from text: String) -> (widget: MessageWidget?, cleanedText: String) {
+    /// Earliest fenced opener (any alias) at or after `from`.
+    private static func nextFenceOpener(in text: String, from: String.Index) -> (tokenStart: String.Index, tokenEnd: String.Index)? {
+        var best: (start: String.Index, end: String.Index)?
         for token in fenceTokens {
-            guard let openRange = text.range(of: token, options: .caseInsensitive) else { continue }
-            let afterOpen = openRange.upperBound
-            guard let closeRange = text.range(of: "```", range: afterOpen..<text.endIndex) else { continue }
-            let jsonString = text[afterOpen..<closeRange.lowerBound]
+            if let r = text.range(of: token, options: .caseInsensitive, range: from..<text.endIndex) {
+                if best == nil || r.lowerBound < best!.start {
+                    best = (r.lowerBound, r.upperBound)
+                }
+            }
+        }
+        return best.map { ($0.start, $0.end) }
+    }
+
+    static func extract(from text: String) -> (widget: MessageWidget?, cleanedText: String) {
+        var searchStart = text.startIndex
+        while let opener = nextFenceOpener(in: text, from: searchStart) {
+            guard let closeRange = text.range(of: "```", range: opener.tokenEnd..<text.endIndex) else {
+                break // unclosed fence — nothing parseable beyond here
+            }
+            var jsonString = text[opener.tokenEnd..<closeRange.lowerBound]
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let data = jsonString.data(using: .utf8),
-                  let widget = try? JSONDecoder().decode(MessageWidget.self, from: data),
-                  widget.hasRenderableBody else { continue }
-            var cleaned = text
-            cleaned.removeSubrange(openRange.lowerBound..<closeRange.upperBound)
-            return (widget, cleaned.trimmingCharacters(in: .whitespacesAndNewlines))
+            // Drop a leading info-string line (e.g. ```near-widget json) before the JSON body.
+            if let firstChar = jsonString.first, firstChar != "{", firstChar != "[",
+               let newline = jsonString.firstIndex(of: "\n") {
+                jsonString = String(jsonString[jsonString.index(after: newline)...])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            if let data = jsonString.data(using: .utf8),
+               let widget = try? JSONDecoder().decode(MessageWidget.self, from: data),
+               widget.hasRenderableBody {
+                var cleaned = text
+                cleaned.removeSubrange(opener.tokenStart..<closeRange.upperBound)
+                return (widget, cleaned.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            searchStart = closeRange.upperBound // skip this block, keep scanning for a valid one
         }
         return (nil, text)
     }
@@ -729,16 +751,18 @@ extension MessageWidget {
     /// During streaming, hide an as-yet-unclosed near-widget fence so the user
     /// never sees raw JSON mid-stream.
     static func strippedStreamingPreview(_ text: String) -> String {
+        // Remove a fully-closed widget block if one already landed mid-stream,
+        // so its raw JSON never shows.
+        let withoutClosed = extract(from: text).cleanedText
+        // Then hide a still-open trailing fence.
         for token in fenceTokens {
-            if let openRange = text.range(of: token, options: .caseInsensitive) {
-                // If there's no closing fence yet, drop everything from the opener on.
-                if text.range(of: "```", range: openRange.upperBound..<text.endIndex) == nil {
-                    return String(text[text.startIndex..<openRange.lowerBound])
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                }
+            if let openRange = withoutClosed.range(of: token, options: .caseInsensitive),
+               withoutClosed.range(of: "```", range: openRange.upperBound..<withoutClosed.endIndex) == nil {
+                return String(withoutClosed[withoutClosed.startIndex..<openRange.lowerBound])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
             }
         }
-        return text
+        return withoutClosed
     }
 }
 

@@ -2916,4 +2916,29 @@ extension PrivateChatCoreTests {
         let result = MessageWidget.extract(from: text)
         XCTAssertNil(result.widget)
     }
+
+    func testWidgetExtractSkipsInvalidFirstFenceAndParsesSecond() throws {
+        let text = """
+        Intro.
+
+        ```near-widget
+        {broken
+        ```
+
+        More.
+
+        ```near-widget
+        {"kind":"metric","metric":{"label":"X","value":"42"}}
+        ```
+        """
+        let widget = try XCTUnwrap(MessageWidget.extract(from: text).widget)
+        XCTAssertEqual(widget.kind, .metric)
+        XCTAssertEqual(widget.metric?.value, "42")
+    }
+
+    func testWidgetExtractToleratesInfoStringOnFenceLine() throws {
+        let text = "Answer.\n\n```near-widget json\n{\"kind\":\"metric\",\"metric\":{\"label\":\"X\",\"value\":\"7\"}}\n```"
+        let widget = try XCTUnwrap(MessageWidget.extract(from: text).widget)
+        XCTAssertEqual(widget.metric?.value, "7")
+    }
 }

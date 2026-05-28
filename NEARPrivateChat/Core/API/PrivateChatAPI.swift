@@ -1134,8 +1134,8 @@ let promptText = text.isEmpty && !attachments.isEmpty
 
 
     Generative widgets:
-    - When the answer is naturally a single number/price, a trend over time, a head-to-head comparison, or a multi-item news digest, ALSO append exactly one fenced code block tagged near-widget containing a compact JSON object. This is the only place raw JSON is allowed.
-    - Put the prose answer first; the near-widget block goes last. Never emit more than one. Never wrap a plain explanatory answer in a widget.
+    - When the answer is naturally a trend over time, a head-to-head comparison, a multi-item news digest, or a key tracked metric that benefits from emphasis, ALSO append exactly one fenced code block tagged near-widget containing a compact JSON object. This is the only place raw JSON is allowed.
+    - Do NOT emit a widget for a simple one-off number, a short factual reply, or a plain explanatory answer — only when a native card materially helps. Put the prose answer first; the near-widget block goes last; never emit more than one.
     - Schema (include only the keys that apply):
       {"kind":"chart|metric|comparison|news_brief","title":"short source label","time":"e.g. 1h ago","freshness":"fresh|stale","follow_up":"a natural follow-up question","chart":{"label":"ETH / USD","value":"$3,124","delta":"-2.3%","trend":"up|down|flat","points":[3210,3180,3150,3124],"caption":"context line","timeframe":"past 1h"},"metric":{"label":"...","value":"...","delta":"...","trend":"up|down|flat","caption":"..."},"comparison":{"subtitle":"A vs B","columns":["A","B"],"rows":[{"label":"Row","cells":[{"text":"yes","tone":"good"},{"text":"no","tone":"off"}]}]},"news_brief":{"heading":"Today · 3 stories","stories":[{"title":"...","tag":"Markets","sources":[{"label":"R","domain":"reuters.com"}]}]}}
     """

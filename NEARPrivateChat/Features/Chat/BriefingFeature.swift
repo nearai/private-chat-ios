@@ -276,12 +276,15 @@ final class BriefingStore: ObservableObject {
     }
 
     func run(_ briefing: Briefing) async {
+        guard let snapshot = briefings.first(where: { $0.id == briefing.id }) else { return }
+        let result = await runner(snapshot)
+        // Re-resolve after the await; the list may have changed during the call.
         guard let index = briefings.firstIndex(where: { $0.id == briefing.id }) else { return }
-        let result = await runner(briefings[index])
+        // On failure (e.g. signed out), leave lastRunAt untouched so the briefing
+        // stays due and retries, rather than silently skipping its next run.
+        guard let result else { return }
+        briefings[index].latestResult = result
         briefings[index].lastRunAt = Date()
-        if let result {
-            briefings[index].latestResult = result
-        }
         save()
     }
 
