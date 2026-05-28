@@ -1125,6 +1125,21 @@ let promptText = text.isEmpty && !attachments.isEmpty
         return nil
     }
 
+    /// Steering that lets the model attach exactly one structured "near-widget"
+    /// block to an answer when the answer's natural shape is a number, a trend,
+    /// a comparison, or a digest. Parsed client-side by `MessageWidget.extract`
+    /// and rendered as a native card. This is the one sanctioned exception to
+    /// the "avoid raw JSON" rule in the answer contract above.
+    private static let widgetInstruction = """
+
+
+    Generative widgets:
+    - When the answer is naturally a single number/price, a trend over time, a head-to-head comparison, or a multi-item news digest, ALSO append exactly one fenced code block tagged near-widget containing a compact JSON object. This is the only place raw JSON is allowed.
+    - Put the prose answer first; the near-widget block goes last. Never emit more than one. Never wrap a plain explanatory answer in a widget.
+    - Schema (include only the keys that apply):
+      {"kind":"chart|metric|comparison|news_brief","title":"short source label","time":"e.g. 1h ago","freshness":"fresh|stale","follow_up":"a natural follow-up question","chart":{"label":"ETH / USD","value":"$3,124","delta":"-2.3%","trend":"up|down|flat","points":[3210,3180,3150,3124],"caption":"context line","timeframe":"past 1h"},"metric":{"label":"...","value":"...","delta":"...","trend":"up|down|flat","caption":"..."},"comparison":{"subtitle":"A vs B","columns":["A","B"],"rows":[{"label":"Row","cells":[{"text":"yes","tone":"good"},{"text":"no","tone":"off"}]}]},"news_brief":{"heading":"Today · 3 stories","stories":[{"title":"...","tag":"Markets","sources":[{"label":"R","domain":"reuters.com"}]}]}}
+    """
+
     private static func responseInstructions(webSearchEnabled: Bool, systemPrompt: String) -> String {
         let date = Date.now.formatted(date: .complete, time: .omitted)
         let trimmedSystemPrompt = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1139,7 +1154,7 @@ let promptText = text.isEmpty && !attachments.isEmpty
             - Prefer concrete dates, names, numbers, and named sources.
             - Separate facts, inference, and recommended next actions when the topic is ambiguous.
             - Avoid generic caveats, fake tool calls, XML, raw JSON, and emoji headings.
-            - Treat attached files as user-provided project context and cite filenames when helpful.\(userInstruction)
+            - Treat attached files as user-provided project context and cite filenames when helpful.\(Self.widgetInstruction)\(userInstruction)
             """
         }
 
@@ -1153,7 +1168,7 @@ let promptText = text.isEmpty && !attachments.isEmpty
         - Separate facts, inference, and recommended next actions when the topic is ambiguous.
         - Avoid generic caveats, fake tool calls, XML, raw JSON, and emoji headings.
         - Treat attached files as user-provided project context and cite filenames when helpful.
-        - Be explicit when an answer may require current information.\(userInstruction)
+        - Be explicit when an answer may require current information.\(Self.widgetInstruction)\(userInstruction)
         """
     }
 

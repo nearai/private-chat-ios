@@ -348,6 +348,7 @@ struct ChatMessage: Identifiable, Hashable, Codable {
     var pendingApproval: IronclawPendingGate? = nil
     var branchVariant: MessageBranchVariant? = nil
     var metadata: MessageMetadata? = nil
+    var widget: MessageWidget? = nil
 
     var tint: Color {
         switch role {
@@ -414,5 +415,329 @@ struct MessageBranchVariant: Hashable, Codable {
     var nextResponseID: String? {
         guard currentIndex + 1 < responseIDs.count else { return nil }
         return responseIDs[currentIndex + 1]
+    }
+}
+
+// MARK: - Generative widgets
+//
+// A typed, render-ready payload attached to an assistant message so the answer's
+// *shape* matches the question's shape: a price question returns a chart, a
+// comparison returns a table, a digest returns a story list. The model emits a
+// fenced ```near-widget JSON block; `MessageWidget.extract` parses it client-side
+// and strips it from the displayed prose. Decoders are deliberately forgiving —
+// model-emitted JSON varies, and a malformed block must degrade to plain text,
+// never crash.
+
+enum WidgetKind: String, Codable, Hashable {
+    case chart
+    case metric
+    case comparison
+    case newsBrief
+    case generic
+
+    init(from decoder: Decoder) throws {
+        let raw = ((try? decoder.singleValueContainer().decode(String.self)) ?? "")
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+        switch raw {
+        case "chart", "sparkline", "price", "trend", "line": self = .chart
+        case "metric", "stat", "number", "kpi", "gauge": self = .metric
+        case "comparison", "compare", "table", "matrix", "versus", "vs": self = .comparison
+        case "newsbrief", "news", "brief", "digest", "headlines", "stories": self = .newsBrief
+        default: self = .generic
+        }
+    }
+}
+
+enum WidgetTrend: String, Codable, Hashable {
+    case up, down, flat
+
+    init(from decoder: Decoder) throws {
+        let raw = ((try? decoder.singleValueContainer().decode(String.self)) ?? "").lowercased()
+        switch raw {
+        case "up", "rise", "rising", "positive", "gain", "bull": self = .up
+        case "down", "fall", "falling", "negative", "loss", "drop", "bear": self = .down
+        default: self = .flat
+        }
+    }
+}
+
+enum WidgetTone: String, Codable, Hashable {
+    case neutral, good, warn, off
+
+    init(from decoder: Decoder) throws {
+        let raw = ((try? decoder.singleValueContainer().decode(String.self)) ?? "").lowercased()
+        switch raw {
+        case "good", "ok", "yes", "pass", "positive", "supported": self = .good
+        case "warn", "warning", "preview", "partial", "caution": self = .warn
+        case "off", "no", "none", "na", "n/a", "missing", "unsupported": self = .off
+        default: self = .neutral
+        }
+    }
+}
+
+enum WidgetFreshness: String, Codable, Hashable {
+    case fresh, stale
+
+    init(from decoder: Decoder) throws {
+        let raw = ((try? decoder.singleValueContainer().decode(String.self)) ?? "").lowercased()
+        self = (raw == "stale" || raw == "old" || raw == "cached") ? .stale : .fresh
+    }
+}
+
+struct WidgetChart: Codable, Hashable {
+    var label: String? = nil       // "ETH / USD"
+    var value: String? = nil       // "$3,124"
+    var delta: String? = nil       // "−$74.20 (−2.3%)"
+    var trend: WidgetTrend? = nil
+    var points: [Double] = []      // sparkline samples, oldest → newest
+    var caption: String? = nil     // "Threshold $3,180 broken at 9:47am"
+    var timeframe: String? = nil   // "past 1h"
+}
+
+extension WidgetChart {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            label: try? c.decode(String.self, forKey: .label),
+            value: try? c.decode(String.self, forKey: .value),
+            delta: try? c.decode(String.self, forKey: .delta),
+            trend: try? c.decode(WidgetTrend.self, forKey: .trend),
+            points: (try? c.decode([Double].self, forKey: .points)) ?? [],
+            caption: try? c.decode(String.self, forKey: .caption),
+            timeframe: try? c.decode(String.self, forKey: .timeframe)
+        )
+    }
+}
+
+struct WidgetMetric: Codable, Hashable {
+    var label: String? = nil
+    var value: String = ""
+    var delta: String? = nil
+    var trend: WidgetTrend? = nil
+    var caption: String? = nil
+}
+
+extension WidgetMetric {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            label: try? c.decode(String.self, forKey: .label),
+            value: (try? c.decode(String.self, forKey: .value)) ?? "",
+            delta: try? c.decode(String.self, forKey: .delta),
+            trend: try? c.decode(WidgetTrend.self, forKey: .trend),
+            caption: try? c.decode(String.self, forKey: .caption)
+        )
+    }
+}
+
+struct WidgetComparisonCell: Codable, Hashable {
+    var text: String = ""
+    var tone: WidgetTone? = nil
+}
+
+extension WidgetComparisonCell {
+    init(from decoder: Decoder) throws {
+        // Accept a bare string ("AES-128 XEX") or an object ({text, tone}).
+        if let single = try? decoder.singleValueContainer(), let s = try? single.decode(String.self) {
+            self.init(text: s, tone: nil)
+            return
+        }
+        let c = try? decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            text: (try? c?.decode(String.self, forKey: .text)) ?? "",
+            tone: try? c?.decode(WidgetTone.self, forKey: .tone)
+        )
+    }
+}
+
+struct WidgetComparisonRow: Codable, Hashable {
+    var label: String = ""
+    var cells: [WidgetComparisonCell] = []
+}
+
+extension WidgetComparisonRow {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            label: (try? c.decode(String.self, forKey: .label)) ?? "",
+            cells: (try? c.decode([WidgetComparisonCell].self, forKey: .cells)) ?? []
+        )
+    }
+}
+
+struct WidgetComparison: Codable, Hashable {
+    var subtitle: String? = nil    // "SEV-SNP vs TDX"
+    var columns: [String] = []
+    var rows: [WidgetComparisonRow] = []
+}
+
+extension WidgetComparison {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            subtitle: try? c.decode(String.self, forKey: .subtitle),
+            columns: (try? c.decode([String].self, forKey: .columns)) ?? [],
+            rows: (try? c.decode([WidgetComparisonRow].self, forKey: .rows)) ?? []
+        )
+    }
+}
+
+struct WidgetNewsSource: Codable, Hashable {
+    var label: String = ""         // favicon initial, e.g. "W"
+    var color: String? = nil       // hex, e.g. "#ff7e1c"
+    var domain: String? = nil
+}
+
+extension WidgetNewsSource {
+    init(from decoder: Decoder) throws {
+        if let single = try? decoder.singleValueContainer(), let s = try? single.decode(String.self) {
+            self.init(label: String(s.prefix(1)).uppercased(), color: nil, domain: s)
+            return
+        }
+        let c = try? decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            label: (try? c?.decode(String.self, forKey: .label)) ?? "",
+            color: try? c?.decode(String.self, forKey: .color),
+            domain: try? c?.decode(String.self, forKey: .domain)
+        )
+    }
+}
+
+struct WidgetNewsStory: Codable, Hashable {
+    var title: String = ""
+    var tag: String? = nil
+    var sources: [WidgetNewsSource] = []
+    var url: String? = nil
+}
+
+extension WidgetNewsStory {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            title: (try? c.decode(String.self, forKey: .title)) ?? "",
+            tag: try? c.decode(String.self, forKey: .tag),
+            sources: (try? c.decode([WidgetNewsSource].self, forKey: .sources)) ?? [],
+            url: try? c.decode(String.self, forKey: .url)
+        )
+    }
+}
+
+struct WidgetNewsBrief: Codable, Hashable {
+    var heading: String? = nil     // "Today · 3 stories"
+    var stories: [WidgetNewsStory] = []
+}
+
+extension WidgetNewsBrief {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            heading: try? c.decode(String.self, forKey: .heading),
+            stories: (try? c.decode([WidgetNewsStory].self, forKey: .stories)) ?? []
+        )
+    }
+}
+
+struct MessageWidget: Codable, Hashable, Identifiable {
+    var id: String = UUID().uuidString
+    var kind: WidgetKind = .generic
+    var title: String? = nil       // meta-strip source label "ETH watcher · threshold alert"
+    var freshness: WidgetFreshness? = nil
+    var time: String? = nil        // "8:02am", "1h ago"
+    var followUp: String? = nil    // micro-composer placeholder, "Why is it dropping?"
+    var note: String? = nil        // generic body / fallback prose
+    var chart: WidgetChart? = nil
+    var metric: WidgetMetric? = nil
+    var comparison: WidgetComparison? = nil
+    var newsBrief: WidgetNewsBrief? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, title, freshness, time
+        case followUp = "follow_up"
+        case note, chart, metric, comparison
+        case newsBrief = "news_brief"
+    }
+}
+
+extension MessageWidget {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let chart = try? c.decode(WidgetChart.self, forKey: .chart)
+        let metric = try? c.decode(WidgetMetric.self, forKey: .metric)
+        let comparison = try? c.decode(WidgetComparison.self, forKey: .comparison)
+        let news = try? c.decode(WidgetNewsBrief.self, forKey: .newsBrief)
+
+        var kind = (try? c.decode(WidgetKind.self, forKey: .kind)) ?? .generic
+        if kind == .generic {
+            if chart != nil { kind = .chart }
+            else if metric != nil { kind = .metric }
+            else if comparison != nil { kind = .comparison }
+            else if news != nil { kind = .newsBrief }
+        }
+
+        self.init(
+            id: (try? c.decode(String.self, forKey: .id)) ?? UUID().uuidString,
+            kind: kind,
+            title: try? c.decode(String.self, forKey: .title),
+            freshness: try? c.decode(WidgetFreshness.self, forKey: .freshness),
+            time: try? c.decode(String.self, forKey: .time),
+            followUp: try? c.decode(String.self, forKey: .followUp),
+            note: try? c.decode(String.self, forKey: .note),
+            chart: chart,
+            metric: metric,
+            comparison: comparison,
+            newsBrief: news
+        )
+    }
+
+    /// True when the payload carries something renderable for its kind.
+    var hasRenderableBody: Bool {
+        switch kind {
+        case .chart: return chart != nil
+        case .metric: return metric != nil
+        case .comparison: return (comparison?.rows.isEmpty == false)
+        case .newsBrief: return (newsBrief?.stories.isEmpty == false)
+        case .generic: return (note?.isEmpty == false)
+        }
+    }
+
+    private static let fenceTokens = ["```near-widget", "```near_widget", "```widget"]
+
+    /// Scans assistant text for the first valid fenced near-widget JSON block.
+    /// Returns the parsed widget (or nil) and the text with that block removed.
+    /// On any parse failure the original text is returned untouched, so a
+    /// malformed block degrades to visible prose rather than being lost.
+    static func extract(from text: String) -> (widget: MessageWidget?, cleanedText: String) {
+        for token in fenceTokens {
+            guard let openRange = text.range(of: token, options: .caseInsensitive) else { continue }
+            let afterOpen = openRange.upperBound
+            guard let closeRange = text.range(of: "```", range: afterOpen..<text.endIndex) else { continue }
+            let jsonString = text[afterOpen..<closeRange.lowerBound]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let data = jsonString.data(using: .utf8),
+                  let widget = try? JSONDecoder().decode(MessageWidget.self, from: data),
+                  widget.hasRenderableBody else { continue }
+            var cleaned = text
+            cleaned.removeSubrange(openRange.lowerBound..<closeRange.upperBound)
+            return (widget, cleaned.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return (nil, text)
+    }
+
+    /// During streaming, hide an as-yet-unclosed near-widget fence so the user
+    /// never sees raw JSON mid-stream.
+    static func strippedStreamingPreview(_ text: String) -> String {
+        for token in fenceTokens {
+            if let openRange = text.range(of: token, options: .caseInsensitive) {
+                // If there's no closing fence yet, drop everything from the opener on.
+                if text.range(of: "```", range: openRange.upperBound..<text.endIndex) == nil {
+                    return String(text[text.startIndex..<openRange.lowerBound])
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            }
+        }
+        return text
     }
 }

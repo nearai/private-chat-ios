@@ -3463,6 +3463,16 @@ final class ChatStore: ObservableObject {
         }
     }
 
+    /// Seeds the composer with a widget's scoped follow-up question so the user
+    /// can edit or send it. The conversation already carries the widget's answer
+    /// as context, so the existing send flow handles the follow-up naturally.
+    func composeWidgetFollowUp(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        draft = trimmed
+        AppHaptics.selection()
+    }
+
     func sendDraft() {
         let text = Self.normalizedDraftInput(draft).trimmingCharacters(in: .whitespacesAndNewlines)
         let promptAttachments = pendingAttachments
@@ -4994,6 +5004,13 @@ final class ChatStore: ObservableObject {
             if message.firstTokenAt == nil,
                !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 message.firstTokenAt = Date()
+            }
+            if message.widget == nil {
+                let extraction = MessageWidget.extract(from: message.text)
+                if let widget = extraction.widget {
+                    message.widget = widget
+                    message.text = extraction.cleanedText
+                }
             }
             if message.sources.isEmpty {
                 message.sources = Self.inferredSources(from: message.text)

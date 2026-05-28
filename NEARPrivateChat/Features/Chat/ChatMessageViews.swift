@@ -115,6 +115,12 @@ struct MessageBubble: View {
                     }
                 }
 
+                if message.role == .assistant, let widget = message.widget, !message.isStreaming {
+                    MessageWidgetCard(widget: widget) { followUp in
+                        chatStore.composeWidgetFollowUp(followUp)
+                    }
+                }
+
                 if message.role == .assistant,
                    let branchVariant = message.branchVariant,
                    branchVariant.count > 1,
@@ -319,7 +325,8 @@ struct StreamingMessageText: View {
         }
     }
 
-    private static func streamingPreview(from text: String) -> String {
+    private static func streamingPreview(from rawText: String) -> String {
+        let text = MessageWidget.strippedStreamingPreview(rawText)
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return " " }
         let cappedText: String
@@ -1252,4 +1259,389 @@ private extension WebSearchSource {
     var snippetFallback: String? {
         nil
     }
+}
+
+// MARK: - Generative widget cards
+//
+// Renders a MessageWidget as a native card whose shape matches the answer:
+// chart, metric, comparison table, or news digest. Each card carries a meta
+// strip (freshness + source + time) and a micro-composer for scoped follow-up.
+// Chrome matches SourceCard / IronclawApprovalCard: panel bg, 16r, 1px border.
+
+struct MessageWidgetCard: View {
+    let widget: MessageWidget
+    var onFollowUp: ((String) -> Void)? = nil
+
+    var body: some View {
+        WidgetShell(
+            title: widget.title,
+            time: widget.time,
+            freshness: widget.freshness,
+            followUpPlaceholder: widget.followUp,
+            onFollowUp: onFollowUp
+        ) {
+            switch widget.kind {
+            case .chart:
+                if let chart = widget.chart { WidgetChartBody(chart: chart) }
+            case .metric:
+                if let metric = widget.metric { WidgetMetricBody(metric: metric) }
+            case .comparison:
+                if let comparison = widget.comparison { WidgetComparisonBody(comparison: comparison) }
+            case .newsBrief:
+                if let brief = widget.newsBrief { WidgetNewsBriefBody(brief: brief) }
+            case .generic:
+                if let note = widget.note { WidgetGenericBody(note: note) }
+            }
+        }
+        .frame(maxWidth: 560, alignment: .leading)
+    }
+}
+
+private struct WidgetShell<Content: View>: View {
+    let title: String?
+    let time: String?
+    let freshness: WidgetFreshness?
+    let followUpPlaceholder: String?
+    var onFollowUp: ((String) -> Void)? = nil
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if title != nil || time != nil {
+                HStack(spacing: 8) {
+                    Image(systemName: "seal.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(freshness == .stale ? Color.proofStale : Color.proofVerified)
+                    if let title {
+                        Text(title)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Color.textSecondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    if let time {
+                        Text(time)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                Divider().overlay(Color.appHairline)
+            }
+
+            content
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if onFollowUp != nil {
+                Button {
+                    onFollowUp?(followUpPlaceholder ?? "Tell me more about this")
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(followUpPlaceholder ?? "Ask about this…")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 17))
+                            .foregroundStyle(Color.actionPrimary)
+                    }
+                    .padding(.leading, 14)
+                    .padding(.trailing, 8)
+                    .frame(height: 38)
+                    .background(Color.appSecondaryBackground, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
+                .accessibilityLabel("Ask a follow-up about this widget")
+            }
+        }
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 1)
+        }
+    }
+}
+
+// MARK: Widget bodies
+
+private struct WidgetChartBody: View {
+    let chart: WidgetChart
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    if let label = chart.label {
+                        Text(label.uppercased())
+                            .font(.caption2.weight(.medium))
+                            .tracking(0.6)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let value = chart.value {
+                        Text(value)
+                            .font(.system(.title2, design: .monospaced).weight(.bold))
+                            .foregroundStyle(.primary)
+                    }
+                }
+                Spacer(minLength: 0)
+                VStack(alignment: .trailing, spacing: 2) {
+                    if let delta = chart.delta {
+                        Text(delta)
+                            .font(.system(.subheadline, design: .monospaced).weight(.medium))
+                            .foregroundStyle(widgetTrendColor(chart.trend))
+                    }
+                    if let timeframe = chart.timeframe {
+                        Text(timeframe)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            if chart.points.count > 1 {
+                ZStack {
+                    WidgetSparklineFill(points: chart.points)
+                        .fill(
+                            LinearGradient(
+                                colors: [widgetTrendColor(chart.trend).opacity(0.18), widgetTrendColor(chart.trend).opacity(0)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                    WidgetSparkline(points: chart.points)
+                        .stroke(widgetTrendColor(chart.trend), style: StrokeStyle(lineWidth: 1.75, lineCap: .round, lineJoin: .round))
+                }
+                .frame(height: 64)
+            }
+
+            if let caption = chart.caption {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(widgetTrendColor(chart.trend))
+                        .frame(width: 6, height: 6)
+                    Text(caption)
+                        .font(.caption)
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+}
+
+private struct WidgetMetricBody: View {
+    let metric: WidgetMetric
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let label = metric.label {
+                Text(label.uppercased())
+                    .font(.caption2.weight(.medium))
+                    .tracking(0.6)
+                    .foregroundStyle(.secondary)
+            }
+            Text(metric.value)
+                .font(.system(.title, design: .monospaced).weight(.bold))
+                .foregroundStyle(.primary)
+            if let delta = metric.delta {
+                Text(delta)
+                    .font(.system(.subheadline, design: .monospaced).weight(.medium))
+                    .foregroundStyle(widgetTrendColor(metric.trend))
+            }
+            if let caption = metric.caption {
+                Text(caption)
+                    .font(.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+private struct WidgetComparisonBody: View {
+    let comparison: WidgetComparison
+
+    private var columnCount: Int { max(comparison.columns.count, 1) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let subtitle = comparison.subtitle {
+                Text(subtitle.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .tracking(0.6)
+                    .foregroundStyle(.secondary)
+            }
+            VStack(spacing: 0) {
+                // Header row
+                HStack(alignment: .top, spacing: 8) {
+                    Text("")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ForEach(Array(comparison.columns.enumerated()), id: \.offset) { _, col in
+                        Text(col)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding(.vertical, 6)
+
+                ForEach(Array(comparison.rows.enumerated()), id: \.offset) { _, row in
+                    Divider().overlay(Color.appHairline)
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(row.label)
+                            .font(.caption)
+                            .foregroundStyle(Color.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        ForEach(0..<columnCount, id: \.self) { i in
+                            let cell = i < row.cells.count ? row.cells[i] : WidgetComparisonCell(text: "—", tone: .off)
+                            Text(cell.text)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(widgetToneColor(cell.tone))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+        }
+    }
+}
+
+private struct WidgetNewsBriefBody: View {
+    let brief: WidgetNewsBrief
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let heading = brief.heading {
+                Text(heading.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .tracking(0.6)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(Array(brief.stories.enumerated()), id: \.offset) { _, story in
+                HStack(alignment: .top, spacing: 10) {
+                    Circle()
+                        .fill(Color.textSecondary)
+                        .frame(width: 4, height: 4)
+                        .padding(.top, 7)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(story.title)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 4) {
+                            ForEach(Array(story.sources.enumerated()), id: \.offset) { _, src in
+                                WidgetSourceDot(source: src)
+                            }
+                            if let tag = story.tag {
+                                Text(tag)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.leading, 2)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct WidgetGenericBody: View {
+    let note: String
+
+    var body: some View {
+        Text(note)
+            .font(.subheadline)
+            .foregroundStyle(.primary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+private struct WidgetSourceDot: View {
+    let source: WidgetNewsSource
+
+    var body: some View {
+        Text(source.label.prefix(1).uppercased())
+            .font(.system(size: 8, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 14, height: 14)
+            .background(dotColor, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+    }
+
+    private var dotColor: Color {
+        if let hex = source.color, let c = widgetColor(fromHex: hex) { return c }
+        return Color.actionPrimary
+    }
+}
+
+// MARK: Sparkline shapes
+
+private struct WidgetSparkline: Shape {
+    let points: [Double]
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        guard points.count > 1 else { return path }
+        let minV = points.min() ?? 0
+        let maxV = points.max() ?? 1
+        let range = maxV - minV
+        let stepX = rect.width / CGFloat(points.count - 1)
+        for (i, v) in points.enumerated() {
+            let x = rect.minX + CGFloat(i) * stepX
+            let norm = range == 0 ? 0.5 : CGFloat((v - minV) / range)
+            let y = rect.maxY - norm * rect.height
+            if i == 0 { path.move(to: CGPoint(x: x, y: y)) } else { path.addLine(to: CGPoint(x: x, y: y)) }
+        }
+        return path
+    }
+}
+
+private struct WidgetSparklineFill: Shape {
+    let points: [Double]
+
+    func path(in rect: CGRect) -> Path {
+        var path = WidgetSparkline(points: points).path(in: rect)
+        guard !path.isEmpty else { return path }
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+// MARK: Widget helpers
+
+private func widgetTrendColor(_ trend: WidgetTrend?) -> Color {
+    switch trend {
+    case .up: return .proofVerified
+    case .down: return .proofMismatch
+    default: return .textSecondary
+    }
+}
+
+private func widgetToneColor(_ tone: WidgetTone?) -> Color {
+    switch tone {
+    case .good: return .proofVerified
+    case .warn: return .proofStale
+    case .off: return .secondary
+    default: return .primary
+    }
+}
+
+private func widgetColor(fromHex hex: String) -> Color? {
+    var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+    if s.hasPrefix("#") { s.removeFirst() }
+    guard s.count == 6, let value = UInt32(s, radix: 16) else { return nil }
+    return Color(
+        red: Double((value >> 16) & 0xFF) / 255,
+        green: Double((value >> 8) & 0xFF) / 255,
+        blue: Double(value & 0xFF) / 255
+    )
 }
