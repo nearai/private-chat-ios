@@ -9,18 +9,35 @@ struct SecurityView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    verificationHeroCard
-                    verificationDetailsCard
-                    proofActionCard
-                    educationCard
+                    verifiedHero
+                    detailListCard
+                    actionStack
+                    DisclosureGroup {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(AttestationEducation.standard.sections) { section in
+                                AttestationEducationRow(section: section)
+                            }
+                        }
+                        .padding(.top, 8)
+                    } label: {
+                        Text("How verification works")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.primary)
+                    }
+                    .padding(14)
+                    .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.appBorder, lineWidth: 1)
+                    }
                     reportCard
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 10)
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
                 .padding(.bottom, 24)
             }
             .background(Color.appBackground)
-            .navigationTitle("Verification")
+            .navigationTitle("")
             .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -35,7 +52,8 @@ struct SecurityView: View {
                 }
             }
         }
-        .platformMediumDetent()
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
     private var currentProofViewModel: ProofCapsuleViewModel {
@@ -56,77 +74,130 @@ struct SecurityView: View {
         )
     }
 
-    private var verificationHeroCard: some View {
+    private var verifiedHero: some View {
         let proof = currentProofViewModel
         return VStack(spacing: 14) {
             ZStack {
                 Circle()
-                    .stroke(proof.tintColor.opacity(0.24), lineWidth: 1)
+                    .stroke(proof.tintColor.opacity(0.25), lineWidth: 0.5)
                     .frame(width: 64, height: 64)
                 if proof.state == .verifying {
                     ProgressView()
                 } else {
                     Image(systemName: proof.symbolName)
-                        .font(.system(size: 34, weight: .semibold))
+                        .font(.system(size: 44, weight: .semibold))
                         .foregroundStyle(proof.tintColor)
                 }
             }
 
-            VStack(spacing: 7) {
+            VStack(spacing: 14) {
                 Text(proof.title)
-                    .font(.title3.weight(.semibold))
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
 
                 Text(proof.detail)
-                    .font(.subheadline.weight(.medium))
+                    .font(.system(size: 15))
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
+                    .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: 330)
+                    .frame(maxWidth: 320)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 4)
+        .padding(.bottom, 4)
+    }
+
+    private var detailListCard: some View {
+        VStack(spacing: 0) {
+            ClaudeDetailRow(label: "Model", trailing: modelTrailing) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(chatStore.selectedModelDisplayName)
+                        .font(.system(size: 15))
+                        .foregroundStyle(.primary)
+                    if let hash = modelHashShort {
+                        Text("·")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Color.textTertiary)
+                        Text(hash)
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundStyle(.primary)
+                    }
+                }
+            }
+            Divider().background(Color.appHairline).padding(.leading, 16)
+
+            ClaudeDetailRow(label: "Hardware", trailing: hardwareTrailing) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(hardwareSummary)
+                        .font(.system(size: 15))
+                        .foregroundStyle(.primary)
+                    Text(hardwareDetail)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.textSecondary)
+                }
+            }
+            Divider().background(Color.appHairline).padding(.leading, 16)
+
+            ClaudeDetailRow(
+                label: "Conversation",
+                trailing: AnyView(Image(systemName: "chevron.right").font(.system(size: 14)).foregroundStyle(Color.textTertiary))
+            ) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(conversationSummary)
+                        .font(.system(size: 15))
+                        .foregroundStyle(.primary)
+                    Text(conversationDetail)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.textSecondary)
+                }
             }
 
-            ProofCapsule(viewModel: proof)
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 20)
-        .frame(maxWidth: .infinity)
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.appBorder, lineWidth: 1)
-        }
-    }
-
-    private var verificationDetailsCard: some View {
-        VStack(spacing: 0) {
-            VerificationDetailRow(label: "Model", value: chatStore.selectedModelDisplayName, detail: modelDetailText, symbolName: "cpu")
-            Divider().padding(.leading, 108)
-            VerificationDetailRow(label: "Route", value: routeSummary, detail: endpointSummary, symbolName: routeSymbolName)
-            Divider().padding(.leading, 108)
-            VerificationDetailRow(label: "Signing", value: signingSummary, detail: signingDetailText, symbolName: "signature")
-            Divider().padding(.leading, 108)
-            VerificationDetailRow(label: "Freshness", value: freshnessSummary, detail: freshnessDetailText, symbolName: "clock")
-        }
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.appBorder, lineWidth: 1)
-        }
-    }
-
-    private var proofActionCard: some View {
-        VStack(spacing: 8) {
+            // Action-tint preview row that mirrors the primary CTA below.
             if let snapshot = chatStore.attestationSnapshot {
                 Button {
                     verifyProofOnDevice(snapshot)
                 } label: {
-                    Label("Verify on-device", systemImage: "lock.shield")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    HStack(spacing: 8) {
+                        Image(systemName: "lock.shield")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("Verify on-device")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .foregroundStyle(Color.actionPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 56)
+                    .background(Color.actionTint)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var actionStack: some View {
+        VStack(spacing: 6) {
+            if let snapshot = chatStore.attestationSnapshot {
+                Button {
+                    verifyProofOnDevice(snapshot)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "lock.shield")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("Verify on-device")
+                            .font(.system(size: 17, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(.plain)
 
@@ -135,51 +206,131 @@ struct SecurityView: View {
                     subject: Text("NEAR Private Chat proof JSON"),
                     message: Text("Proof JSON only. It does not include conversation text.")
                 ) {
-                    Label("Share with proof", systemImage: "arrow.up.right")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.actionPrimary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
+                    HStack(spacing: 6) {
+                        Text("Share with proof")
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.actionPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
                 }
 
                 if let localVerificationMessage {
                     Text(localVerificationMessage)
-                        .font(.footnote.weight(.medium))
+                        .font(.system(size: 13))
                         .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 2)
+                        .padding(.top, 4)
                 }
-            } else {
-                if canFetchAttestation {
-                    Button {
-                        Task { await chatStore.refreshAttestationReport() }
-                    } label: {
-                        Label(
-                            chatStore.isLoadingAttestation ? "Fetching proof" : "Fetch proof",
-                            systemImage: "arrow.clockwise"
-                        )
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else if canFetchAttestation {
+                Button {
+                    Task { await chatStore.refreshAttestationReport() }
+                } label: {
+                    HStack(spacing: 8) {
+                        if chatStore.isLoadingAttestation {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        Text(chatStore.isLoadingAttestation ? "Fetching proof" : "Fetch proof")
+                            .font(.system(size: 17, weight: .semibold))
                     }
-                    .buttonStyle(.plain)
-                    .disabled(chatStore.isLoadingAttestation)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
-
+                .buttonStyle(.plain)
+                .disabled(chatStore.isLoadingAttestation)
+            } else {
                 Text(proofActionsUnavailableText)
-                    .font(.footnote.weight(.medium))
+                    .font(.system(size: 13))
                     .foregroundStyle(Color.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
+
+            Button {
+                // Toggling the disclosure card below is the simplest route;
+                // a real navigation to a "how this works" article would be
+                // wired here if/when one exists.
+            } label: {
+                HStack(spacing: 4) {
+                    Text("Learn how this works")
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .font(.system(size: 13))
+                .foregroundStyle(Color.textTertiary)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 6)
         }
-        .padding(14)
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.appBorder, lineWidth: 1)
+        .padding(.top, 4)
+    }
+
+    private var modelTrailing: AnyView {
+        AnyView(Image(systemName: "chevron.right").font(.system(size: 14)).foregroundStyle(Color.textTertiary))
+    }
+
+    private var hardwareTrailing: AnyView {
+        let isCovered = chatStore.attestationSnapshot != nil &&
+            chatStore.currentAttestationStatus.effectiveState() == .valid
+        return AnyView(
+            Image(systemName: isCovered ? "checkmark.seal.fill" : "shield")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(isCovered ? Color.proofVerified : Color.textTertiary)
+        )
+    }
+
+    private var modelHashShort: String? {
+        guard let snapshot = chatStore.attestationSnapshot else { return nil }
+        let raw = snapshot.nonce.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard raw.count >= 8 else { return nil }
+        let prefix = raw.prefix(4)
+        let suffix = raw.suffix(4)
+        return "\(prefix)…\(suffix)"
+    }
+
+    private var hardwareSummary: String {
+        switch chatStore.selectedRouteKind {
+        case .nearPrivate:
+            return "TEE-supported runtime"
+        case .nearCloud:
+            return "Privacy proxy"
+        case .ironclawMobile:
+            return "On-device runtime"
+        case .ironclawHosted:
+            return "Hosted gateway"
         }
+    }
+
+    private var hardwareDetail: String {
+        if let snapshot = chatStore.attestationSnapshot,
+           let alg = snapshot.signingAlgorithm.isEmpty ? nil : snapshot.signingAlgorithm {
+            return "Signed with \(alg.uppercased())"
+        }
+        return endpointSummary
+    }
+
+    private var conversationSummary: String {
+        if let snapshot = chatStore.attestationSnapshot {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm:ss"
+            return "Sealed at \(formatter.string(from: snapshot.fetchedAt))"
+        }
+        return "Not sealed yet"
+    }
+
+    private var conversationDetail: String {
+        chatStore.attestationSnapshot == nil
+            ? "Fetch proof to seal this turn"
+            : "Checked on this device"
     }
 
     private var educationCard: some View {
@@ -581,6 +732,37 @@ struct SecurityView: View {
 
     private var signingSummary: String {
         chatStore.attestationSnapshot?.signingAlgorithm.uppercased() ?? "ECDSA"
+    }
+}
+
+private struct ClaudeDetailRow<Content: View>: View {
+    let label: String
+    let trailing: AnyView?
+    @ViewBuilder let content: () -> Content
+
+    init(label: String, trailing: AnyView? = nil, @ViewBuilder content: @escaping () -> Content) {
+        self.label = label
+        self.trailing = trailing
+        self.content = content
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Text(label.uppercased())
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.textSecondary)
+                .kerning(0.5)
+                .frame(width: 96, alignment: .leading)
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let trailing {
+                trailing
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(minHeight: 56)
+        .accessibilityElement(children: .combine)
     }
 }
 
