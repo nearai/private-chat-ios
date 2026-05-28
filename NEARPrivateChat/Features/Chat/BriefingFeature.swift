@@ -40,9 +40,12 @@ struct Briefing: Codable, Hashable, Identifiable {
     var latestResult: MessageWidget?
     var kind: BriefingKind
     var accountID: String?
+    /// Run a multi-model council + synthesis on each scheduled run (customPrompt
+    /// only; live-data kinds are single API fetches where council is meaningless).
+    var council: Bool
 
     enum CodingKeys: String, CodingKey {
-        case id, title, prompt, schedule, isPaused, createdAt, lastRunAt, latestResult, kind, accountID
+        case id, title, prompt, schedule, isPaused, createdAt, lastRunAt, latestResult, kind, accountID, council
     }
 
     init(
@@ -55,7 +58,8 @@ struct Briefing: Codable, Hashable, Identifiable {
         lastRunAt: Date? = nil,
         latestResult: MessageWidget? = nil,
         kind: BriefingKind = .customPrompt,
-        accountID: String? = nil
+        accountID: String? = nil,
+        council: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -67,6 +71,7 @@ struct Briefing: Codable, Hashable, Identifiable {
         self.latestResult = latestResult
         self.kind = kind
         self.accountID = accountID
+        self.council = council
     }
 
     var status: BriefingStatus {
@@ -91,7 +96,8 @@ extension Briefing {
             lastRunAt: try? c.decode(Date.self, forKey: .lastRunAt),
             latestResult: try? c.decode(MessageWidget.self, forKey: .latestResult),
             kind: (try? c.decode(BriefingKind.self, forKey: .kind)) ?? .customPrompt,
-            accountID: try? c.decode(String.self, forKey: .accountID)
+            accountID: try? c.decode(String.self, forKey: .accountID),
+            council: (try? c.decode(Bool.self, forKey: .council)) ?? false
         )
     }
 }

@@ -3531,17 +3531,32 @@ final class ChatStore: ObservableObject {
             break
         }
 
+        // customPrompt briefings run the chat backend (need sign-in). A council
+        // briefing runs several models + a synthesis on each scheduled run; a
+        // plain one runs a single model. Live kinds above already returned.
+        if briefing.council {
+            return await runCouncilBriefing(briefing)
+        }
+        return await runSingleModelBriefing(briefing)
+    }
+
+    /// One headless model turn → its full text (nil on failure / empty output).
+    private func streamBriefingText(
+        model: String,
+        prompt: String,
+        conversationID: String,
+        webSearchEnabled: Bool
+    ) async -> String? {
         final class TextSink: @unchecked Sendable { var text = "" }
         let sink = TextSink()
         do {
-            let conversation = try await api.createConversation(title: briefing.title)
             try await api.streamResponse(
-                model: Self.defaultModelID,
-                text: briefing.prompt,
+                model: model,
+                text: prompt,
                 attachments: [],
-                conversationID: conversation.id,
+                conversationID: conversationID,
                 previousResponseID: nil,
-                webSearchEnabled: true,
+                webSearchEnabled: webSearchEnabled,
                 systemPrompt: activeSystemPrompt(),
                 onEvent: { event in
                     switch event {
@@ -3557,11 +3572,73 @@ final class ChatStore: ObservableObject {
         } catch {
             return nil
         }
-        let extraction = MessageWidget.extract(from: sink.text)
+        let trimmed = sink.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Renders briefing model output into a widget (structured if the model
+    /// produced a near-widget block, else a generic text card).
+    private func briefingWidget(from text: String, title: String) -> MessageWidget? {
+        let extraction = MessageWidget.extract(from: text)
         if let widget = extraction.widget { return widget }
         let summary = extraction.cleanedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !summary.isEmpty else { return nil }
-        return MessageWidget(kind: .generic, title: briefing.title, time: "just now", note: String(summary.prefix(600)))
+        return MessageWidget(kind: .generic, title: title, time: "just now", note: String(summary.prefix(600)))
+    }
+
+    private func runSingleModelBriefing(_ briefing: Briefing) async -> MessageWidget? {
+        guard let conversation = try? await api.createConversation(title: briefing.title),
+              let text = await streamBriefingText(
+                  model: Self.defaultModelID,
+                  prompt: briefing.prompt,
+                  conversationID: conversation.id,
+                  webSearchEnabled: true
+              ) else {
+            return nil
+        }
+        return briefingWidget(from: text, title: briefing.title)
+    }
+
+    /// Runs a council (several models in the default lineup) on the briefing
+    /// prompt, then synthesizes one answer — the scheduled equivalent of the
+    /// live Council. Falls back to a single model if fewer than two are usable.
+    private func runCouncilBriefing(_ briefing: Briefing) async -> MessageWidget? {
+        let modelIDs = defaultCouncilModelIDs()
+        guard modelIDs.count > 1 else {
+            return await runSingleModelBriefing(briefing)
+        }
+        guard let conversation = try? await api.createConversation(title: briefing.title) else {
+            return nil
+        }
+
+        var responses: [(String, String)] = []
+        for modelID in modelIDs {
+            if let text = await streamBriefingText(
+                model: modelID,
+                prompt: briefing.prompt,
+                conversationID: conversation.id,
+                webSearchEnabled: true
+            ) {
+                responses.append((modelDisplayName(for: modelID), text))
+            }
+        }
+        guard let first = responses.first else { return nil }
+        guard responses.count > 1 else {
+            return briefingWidget(from: first.1, title: briefing.title)
+        }
+
+        let synthesisPrompt = Self.councilSynthesisPrompt(
+            originalPrompt: briefing.prompt,
+            routedPrompt: briefing.prompt,
+            responses: responses
+        )
+        let synthesized = await streamBriefingText(
+            model: modelIDs.first ?? Self.defaultModelID,
+            prompt: synthesisPrompt,
+            conversationID: conversation.id,
+            webSearchEnabled: false
+        )
+        return briefingWidget(from: synthesized ?? first.1, title: briefing.title)
     }
 
     /// Answers a recognized prompt locally: data questions render a live widget,
@@ -3588,7 +3665,14 @@ final class ChatStore: ObservableObject {
 
         switch intent {
         case let .createTracker(spec):
-            let briefing = Briefing(title: spec.title, prompt: prompt, schedule: spec.schedule, kind: spec.kind, accountID: spec.subject)
+            let briefing = Briefing(
+                title: spec.title,
+                prompt: spec.prompt ?? prompt,
+                schedule: spec.schedule,
+                kind: spec.kind,
+                accountID: spec.subject,
+                council: spec.council
+            )
             onCreateTracker?(briefing)
             _ = appendAssistant(text: "Created a tracker — **\(spec.confirmation)**. It runs on schedule and lands on your Today tab; open it any time to Run now, change it, or delete it.")
             AppHaptics.selection()

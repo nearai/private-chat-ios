@@ -3071,6 +3071,24 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(decoded.id, original.id)
     }
 
+    func testBriefingRoundTripsCouncilFlag() throws {
+        let original = Briefing(
+            title: "Council briefing",
+            prompt: "Analyze the AI market",
+            schedule: .daily(hour: 8, minute: 0),
+            kind: .customPrompt,
+            council: true
+        )
+        let data = try JSONEncoder().encode(original)
+        XCTAssertTrue(try JSONDecoder().decode(Briefing.self, from: data).council)
+
+        // A briefings.json written before `council` existed decodes to false.
+        var dict = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        dict.removeValue(forKey: "council")
+        let legacy = try JSONDecoder().decode(Briefing.self, from: JSONSerialization.data(withJSONObject: dict))
+        XCTAssertFalse(legacy.council)
+    }
+
     func testBriefingKindDecodesUnknownAsCustomPrompt() throws {
         let data = try XCTUnwrap("\"someFutureKind\"".data(using: .utf8))
         let kind = try JSONDecoder().decode(BriefingKind.self, from: data)
@@ -3120,7 +3138,25 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(spec.kind, .cryptoPrice)
         XCTAssertEqual(spec.subject, "ethereum")
         XCTAssertEqual(spec.schedule, .daily(hour: 8, minute: 0))
+        // A price is a single deterministic value — council is ignored here.
+        XCTAssertFalse(spec.council)
+    }
+
+    func testQuickIntentParsesCouncilBriefingTracker() throws {
+        let intent = QuickIntentParser.parse(
+            "set up a daily briefing that analyzes the AI market using council"
+        )
+        guard case let .createTracker(spec) = intent else {
+            return XCTFail("Expected a createTracker intent, got \(String(describing: intent)).")
+        }
+        XCTAssertEqual(spec.kind, .customPrompt)
         XCTAssertTrue(spec.council)
+        XCTAssertEqual(spec.schedule, .daily(hour: 8, minute: 0))
+        // The council runs on the user's question, not the scaffolding.
+        let prompt = try XCTUnwrap(spec.prompt).lowercased()
+        XCTAssertTrue(prompt.contains("ai market"))
+        XCTAssertFalse(prompt.contains("council"))
+        XCTAssertFalse(prompt.contains("daily"))
     }
 
     func testQuickIntentCreatesAccountTrackerWithExplicitID() throws {
@@ -3268,6 +3304,30 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(landed.accountID, "ethereum")
         XCTAssertEqual(landed.schedule, .daily(hour: 8, minute: 0))
         XCTAssertEqual(landed.title, "ETH price")
+        XCTAssertFalse(landed.council)
+
+        try? FileManager.default.removeItem(at: tempFile)
+    }
+
+    @MainActor
+    func testCreateCouncilBriefingPromptLandsCouncilTracker() throws {
+        let tempFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("briefings-\(UUID().uuidString).json")
+        let briefingStore = BriefingStore(briefings: [], fileURL: tempFile, runner: { _ in nil })
+        let chatStore = ChatStore(api: PrivateChatAPI(configuration: .production))
+        chatStore.onCreateTracker = { [weak briefingStore] briefing in
+            briefingStore?.add(briefing)
+        }
+
+        chatStore.draft = "set up a daily briefing that analyzes the AI market using council"
+        chatStore.sendDraft()
+
+        let landed = try XCTUnwrap(briefingStore.briefings.first)
+        XCTAssertEqual(landed.kind, .customPrompt)
+        XCTAssertTrue(landed.council)
+        // The persisted prompt is the cleaned question, not the scaffolding.
+        XCTAssertTrue(landed.prompt.lowercased().contains("ai market"))
+        XCTAssertFalse(landed.prompt.lowercased().contains("council"))
 
         try? FileManager.default.removeItem(at: tempFile)
     }

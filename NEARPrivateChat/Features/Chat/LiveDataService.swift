@@ -40,6 +40,7 @@ struct TrackerSpec: Equatable {
     var schedule: BriefingSchedule
     var council: Bool
     var confirmation: String
+    var prompt: String?             // cleaned prompt for customPrompt council trackers
 }
 
 enum QuickIntentParser {
@@ -90,6 +91,8 @@ enum QuickIntentParser {
         let account = extractAccount(from: text)
         let mentionsAccount = contains(text, ["account", "wallet", "near.com"]) || account != nil
 
+        // Live-data kinds are single deterministic fetches — council is
+        // meaningless there, so it's always false regardless of the wording.
         if mentionsAccount, !contains(text, ["price"]) {
             // An account tracker with no id would schedule an empty fetch.
             guard let account else { return nil }
@@ -98,23 +101,59 @@ enum QuickIntentParser {
                 kind: .nearAccount,
                 subject: account,
                 schedule: schedule,
-                council: council,
+                council: false,
                 confirmation: "NEAR account · \(account) · \(label)"
             )
         }
         if contains(text, ["news", "headlines", "stories"]) {
-            return TrackerSpec(title: "Daily news", kind: .dailyNews, subject: nil, schedule: schedule, council: council, confirmation: "Daily news · \(label)")
+            return TrackerSpec(title: "Daily news", kind: .dailyNews, subject: nil, schedule: schedule, council: false, confirmation: "Daily news · \(label)")
         }
-        // Price tracker only for a supported coin — no silent ETH default.
-        guard let coin = matchedCoin(in: text) else { return nil }
+        if let coin = matchedCoin(in: text) {
+            return TrackerSpec(
+                title: "\(coin.symbol) price",
+                kind: .cryptoPrice,
+                subject: coin.id,
+                schedule: schedule,
+                council: false,
+                confirmation: "\(coin.symbol) price · \(label)"
+            )
+        }
+        // No live-data subject. With council requested, schedule a real council
+        // briefing on the user's question (runs several models + a synthesis).
+        guard council else { return nil }
+        let prompt = councilTrackerPrompt(from: text)
+        guard prompt.count >= 4 else { return nil }
         return TrackerSpec(
-            title: "\(coin.symbol) price",
-            kind: .cryptoPrice,
-            subject: coin.id,
+            title: "Council briefing",
+            kind: .customPrompt,
+            subject: nil,
             schedule: schedule,
-            council: council,
-            confirmation: "\(coin.symbol) price · \(label)"
+            council: true,
+            confirmation: "Council briefing · \(label)",
+            prompt: prompt
         )
+    }
+
+    /// Strips the "create a tracker … every morning … using council" scaffolding
+    /// so the scheduled council runs on the user's actual question.
+    static func councilTrackerPrompt(from raw: String) -> String {
+        var s = raw
+        let phrases = [
+            "using council", "with council", "via council", "by the council", "by council", "as a council", "council",
+            "every weekday morning", "every weekday", "each weekday", "every morning", "each morning",
+            "every single day", "every day", "each day", "every week", "weekly", "daily", "weekdays", "weekday"
+        ]
+        for p in phrases {
+            s = s.replacingOccurrences(of: p, with: " ", options: .caseInsensitive)
+        }
+        s = s.replacingOccurrences(of: #"\b(at\s+)?\d{1,2}(:\d{2})?\s*(am|pm)\b"#, with: " ", options: [.regularExpression, .caseInsensitive])
+        s = s.replacingOccurrences(
+            of: #"^\s*(please\s+)?(create|set ?up|make|build|schedule|start|add)\s+(a|an|the)?\s*(tracker|briefing|alert|watcher|digest)\s*(to|for|that|which)?\s*"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        s = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func matchedCoin(in text: String) -> LiveCoin? {
