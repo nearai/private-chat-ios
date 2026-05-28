@@ -629,9 +629,25 @@ struct ClaudeHomeEmptyState: View {
     let action: () -> Void
 
     var body: some View {
+        // Spec (home.jsx EmptyView):
+        //   gridTemplateRows: "1fr auto 0.85fr"
+        //   paddingBottom: 56
+        //
+        // Translated: top spacer and bottom region split the remaining
+        // height in a 1 : 0.85 ratio (top gets 54%, bottom 46%). The
+        // mark+caption block sits between them with padding-top 30; the
+        // CTA pins to the bottom of the lower region with the 56pt
+        // padding accounting for the home indicator.
         GeometryReader { proxy in
+            let bottomPadding: CGFloat = 56
+            let contentHeight: CGFloat = 30 + 64 + 18 + 20 // padding-top + mark + gap + caption line
+            let ctaHeight: CGFloat = showsAction ? 52 : 0
+            let remaining = max(0, proxy.size.height - contentHeight - ctaHeight - bottomPadding)
+            let topSpacer = remaining * (1.0 / 1.85)
+            let bottomSpacer = remaining * (0.85 / 1.85)
+
             VStack(spacing: 0) {
-                Spacer(minLength: 0)
+                Color.clear.frame(height: topSpacer)
 
                 VStack(spacing: 18) {
                     NearAppIconMark(size: 64)
@@ -641,12 +657,10 @@ struct ClaudeHomeEmptyState: View {
                         .font(.subheadline)
                         .foregroundStyle(Color.textSecondary)
                         .multilineTextAlignment(.center)
-                        .lineSpacing(5) // 20pt line height on 15pt font ≈ +5pt spacing
                 }
                 .padding(.top, 30)
 
-                Spacer(minLength: 0)
-                    .frame(height: max(24, proxy.size.height * 0.18))
+                Color.clear.frame(height: bottomSpacer)
 
                 if showsAction {
                     Button(action: action) {
@@ -660,10 +674,10 @@ struct ClaudeHomeEmptyState: View {
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 24)
-                    .padding(.bottom, 56)
+                    .padding(.bottom, bottomPadding)
                 }
             }
-            .frame(width: proxy.size.width, height: proxy.size.height)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
         .frame(minHeight: 560)
     }

@@ -174,6 +174,7 @@ struct ConversationListView: View {
                         action: openNewChat
                     )
                     .frame(maxWidth: .infinity)
+                    .containerRelativeFrame(.vertical)
                 } else {
                     LazyVStack(spacing: 0) {
                         ForEach(Array(filteredConversations.enumerated()), id: \.element.id) { index, conversation in

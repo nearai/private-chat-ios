@@ -5226,6 +5226,20 @@ final class ChatStore: ObservableObject {
     }
 
     private func showBanner(_ message: String) {
+        #if targetEnvironment(simulator) && DEBUG
+        // Suppress API failure banners that the simulator stub session
+        // produces (unauthenticated calls to /v1/profile, /v1/sessions
+        // etc.). These would otherwise pollute every screen during
+        // visual QA.
+        let suppressed = ["Invalid or expired authentication token",
+                          "Session not found",
+                          "Unauthorized",
+                          "401 Unauthorized",
+                          "403 Forbidden"]
+        if suppressed.contains(where: { message.localizedCaseInsensitiveContains($0) }) {
+            return
+        }
+        #endif
         bannerMessage = message
         Task {
             try? await Task.sleep(nanoseconds: 3_000_000_000)
