@@ -1,4 +1,5 @@
 import SwiftUI
+import BackgroundTasks
 
 enum AppAppearancePreference: String, CaseIterable, Codable, Identifiable, Hashable {
     case system = "System"
@@ -117,6 +118,16 @@ struct NEARPrivateChatApp: App {
         _briefingStore = StateObject(wrappedValue: environment.briefingStore)
     }
 
+    static let briefingRefreshTaskID = "ai.near.privatechat.briefings.refresh"
+
+    /// Asks iOS to run briefings in the background. Timing is OS-controlled;
+    /// the handler reschedules itself so the cron keeps running.
+    static func scheduleBriefingRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: briefingRefreshTaskID)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 30 * 60)
+        try? BGTaskScheduler.shared.submit(request)
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -125,6 +136,10 @@ struct NEARPrivateChatApp: App {
                 .environmentObject(briefingStore)
                 .environmentObject(appRouter)
                 .modifier(AppLifecycleModifier(sessionStore: sessionStore, chatStore: chatStore, briefingStore: briefingStore, router: appRouter))
+        }
+        .backgroundTask(.appRefresh(Self.briefingRefreshTaskID)) {
+            await briefingStore.runDue()
+            Self.scheduleBriefingRefresh()
         }
     }
 }

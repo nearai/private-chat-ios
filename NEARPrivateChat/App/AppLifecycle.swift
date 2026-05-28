@@ -28,6 +28,7 @@ struct AppLifecycleModifier: ViewModifier {
                 if DemoCapture.isEnabled { return }
                 #endif
                 await briefingStore.runDue()
+                NEARPrivateChatApp.scheduleBriefingRefresh()
             }
             .onChange(of: sessionStore.session?.token) { _, token in
                 Task {
