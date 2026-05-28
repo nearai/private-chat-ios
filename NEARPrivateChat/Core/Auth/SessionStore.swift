@@ -171,6 +171,34 @@ final class SessionStore: NSObject, ObservableObject {
         isAuthenticating = true
         defer { isAuthenticating = false }
 
+        #if targetEnvironment(simulator) && DEBUG
+        // Simulator builds don't have a working OAuth callback flow — the
+        // `nearprivatechat://` redirect from the NEAR auth backend can't
+        // round-trip through ASWebAuthenticationSession in many test
+        // environments. Short-circuit with a stub session so the rest of
+        // the app is reachable for visual QA. This branch is compiled
+        // out of release builds.
+        let stubSession = AuthSession(
+            token: "simulator-debug-token-\(provider.rawValue)",
+            sessionID: "simulator-debug-session",
+            expiresAt: nil,
+            isNewUser: false
+        )
+        save(stubSession)
+        profile = UserProfile(
+            user: UserProfile.User(
+                id: "simulator.\(provider.rawValue).near",
+                email: "simulator@near.ai",
+                name: "Simulator User",
+                avatarURL: nil
+            ),
+            linkedAccounts: [
+                UserProfile.LinkedAccount(provider: provider.rawValue, linkedAt: "2026-05-27T00:00:00Z")
+            ]
+        )
+        showBanner("Signed in (simulator stub).")
+        return
+        #else
         do {
             let pendingRequest = createPendingAuthRequest(provider: provider)
             let url = try api.authURL(
@@ -193,6 +221,7 @@ final class SessionStore: NSObject, ObservableObject {
             clearPendingAuthState()
             showBanner(error.localizedDescription)
         }
+        #endif
     }
 
     private func createPendingAuthRequest(provider: OAuthProvider) -> PendingAuthRequest {
