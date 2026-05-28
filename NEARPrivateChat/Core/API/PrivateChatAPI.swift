@@ -812,6 +812,17 @@ let promptText = text.isEmpty && !attachments.isEmpty
         request.setValue("1000", forHTTPHeaderField: "ngrok-skip-browser-warning")
         if authenticated {
             guard let authToken, !authToken.isEmpty else { throw APIError.unauthenticated }
+            // Tokens that start with `sess_` are the NEAR backend's web
+            // session cookies — the API validates them via Cookie, not
+            // the Bearer header. Send both so we hit whichever the
+            // server checks (Authorization for OAuth-issued JWTs, Cookie
+            // for raw session ids).
+            if authToken.hasPrefix("sess_") {
+                request.setValue(
+                    "nearai-prod-crabshack-session=\(authToken)",
+                    forHTTPHeaderField: "Cookie"
+                )
+            }
             request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         }
         request.httpBody = body
