@@ -151,6 +151,9 @@ final class ChatStore: ObservableObject {
 
     private let api: PrivateChatAPI
     private let ironclawAPI = IronclawAPI()
+    /// Wired by the app to create a scheduled briefing from a "create a tracker…"
+    /// prompt (the BriefingStore lives outside ChatStore).
+    var onCreateTracker: ((Briefing) -> Void)?
     private let webGroundingService = WebGroundingService()
     private let ironclawMobileRuntime: IronclawMobileRuntime
     private var selectedResponseVariantByConversationID: [String: String] = [:]
@@ -3517,6 +3520,9 @@ final class ChatStore: ObservableObject {
         switch briefing.kind {
         case .ethPrice:
             return await LiveDataService.ethPriceWidget()
+        case .cryptoPrice:
+            let id = briefing.accountID ?? "ethereum"
+            return await LiveDataService.cryptoPriceWidget(coinID: id, symbol: LiveDataService.symbol(forCoinID: id))
         case .nearAccount:
             return await LiveDataService.nearAccountWidget(account: briefing.accountID ?? "")
         case .dailyNews:
@@ -3558,12 +3564,86 @@ final class ChatStore: ObservableObject {
         return MessageWidget(kind: .generic, title: briefing.title, time: "just now", note: String(summary.prefix(600)))
     }
 
+    /// Answers a recognized prompt locally: data questions render a live widget,
+    /// "create a tracker…" creates a scheduled briefing. No chat backend needed.
+    private func handleQuickIntent(_ intent: QuickIntent, prompt: String) {
+        let model = selectedModel
+        let userMessage = ChatMessage(
+            id: "local-user-\(UUID().uuidString)",
+            role: .user, text: prompt, model: model, createdAt: Date(),
+            status: "completed", responseID: nil, isStreaming: false
+        )
+        messages.append(userMessage)
+
+        func appendAssistant(text: String, widget: MessageWidget? = nil, streaming: Bool = false) -> String {
+            let id = "local-assistant-\(UUID().uuidString)"
+            var message = ChatMessage(
+                id: id, role: .assistant, text: text, model: model, createdAt: Date(),
+                status: streaming ? "searching" : "completed", responseID: nil, isStreaming: streaming
+            )
+            message.widget = widget
+            messages.append(message)
+            return id
+        }
+
+        switch intent {
+        case let .createTracker(spec):
+            let briefing = Briefing(title: spec.title, prompt: prompt, schedule: spec.schedule, kind: spec.kind, accountID: spec.subject)
+            onCreateTracker?(briefing)
+            _ = appendAssistant(text: "Created a tracker — **\(spec.confirmation)**. It runs on schedule and lands on your Today tab; open it any time to Run now, change it, or delete it.")
+            AppHaptics.selection()
+        case .nearAccount(nil):
+            _ = appendAssistant(text: "Sure — what’s your NEAR account? Tell me the id (e.g. **yourname.near**) and I’ll pull its balance and holdings.")
+        default:
+            let id = appendAssistant(text: "", streaming: true)
+            isStreaming = true
+            Task { [weak self] in
+                guard let self else { return }
+                let widget = await self.fetchQuickIntentWidget(intent)
+                self.updateMessage(id) { message in
+                    message.isStreaming = false
+                    message.status = "completed"
+                    if let widget {
+                        message.widget = widget
+                    } else {
+                        message.text = "I couldn’t fetch that just now — try again in a moment."
+                    }
+                }
+                self.isStreaming = false
+            }
+        }
+    }
+
+    private func fetchQuickIntentWidget(_ intent: QuickIntent) async -> MessageWidget? {
+        switch intent {
+        case let .price(coinID, symbol):
+            return await LiveDataService.cryptoPriceWidget(coinID: coinID, symbol: symbol)
+        case let .nearAccount(account):
+            return await LiveDataService.nearAccountWidget(account: account ?? "")
+        case .news:
+            return await LiveDataService.newsBriefWidget()
+        case .createTracker:
+            return nil
+        }
+    }
+
     func sendDraft() {
         let text = Self.normalizedDraftInput(draft).trimmingCharacters(in: .whitespacesAndNewlines)
         let promptAttachments = pendingAttachments
         let pendingLargePasteTextsSnapshot = pendingLargePasteTexts
         let attachments = activeAttachments(promptAttachments: promptAttachments)
         guard (!text.isEmpty || !attachments.isEmpty), !isStreaming else { return }
+
+        // Prompt-driven live answers: recognized data questions ("eth price",
+        // "how is my near account") and "create a tracker…" commands are handled
+        // locally with real public-API data — generative chat without sign-in.
+        if attachments.isEmpty, let intent = QuickIntentParser.parse(text) {
+            removePersistedDraft(for: draftPersistenceScopeID)
+            draft = ""
+            handleQuickIntent(intent, prompt: text)
+            return
+        }
+
         if let preflight = hostedHandoffPreflightIfNeeded(text: text, promptAttachments: promptAttachments),
            approvedHostedHandoffFingerprint != preflight.fingerprint {
             pendingHostedHandoffContinuation = .draft
@@ -8597,6 +8677,16 @@ final class ChatStore: ObservableObject {
             sourceMode = .web
             webSearchEnabled = true
             draft = ""
+        case .generativeChat:
+            // Drives the REAL prompt → QuickIntent → live-widget path: types a
+            // prompt and sends it, so the chat answers with real public-API data
+            // (no sign-in). Override the prompt with NEAR_DEMO_PROMPT to capture
+            // eth/near/news/tracker flows from one screen.
+            selectedConversation = data.primaryConversation
+            selectedProjectID = nil
+            messages = []
+            draft = DemoCapture.demoPrompt ?? "what is the eth price"
+            sendDraft()
         case .chat, .councilOutput, .cloudModels, .council, .councilRoom, .threaded, .liveData, .project, .share:
             selectedConversation = data.primaryConversation
             messages = data.messages

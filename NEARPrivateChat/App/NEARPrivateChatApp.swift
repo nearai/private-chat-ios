@@ -54,6 +54,7 @@ enum DemoCaptureScreen: String, CaseIterable {
     case councilRoom
     case threaded
     case liveData
+    case generativeChat
     case councilOutput
     case verification
     case models
@@ -92,6 +93,17 @@ enum DemoCapture {
         let argumentValue = CommandLine.arguments.first { $0.hasPrefix(argumentPrefix) }
             .map { String($0.dropFirst(argumentPrefix.count)) }
         return DemoCaptureScreen(rawValueOrDefault: argumentValue ?? ProcessInfo.processInfo.environment["NEAR_DEMO_SCREEN"])
+    }
+
+    /// Prompt the `generativeChat` demo screen types and sends through the real
+    /// QuickIntent path. Lets one screen capture eth/near/news/tracker flows.
+    static var demoPrompt: String? {
+        let argumentPrefix = "-NEARDemoPrompt="
+        let argumentValue = CommandLine.arguments.first { $0.hasPrefix(argumentPrefix) }
+            .map { String($0.dropFirst(argumentPrefix.count)) }
+        let value = argumentValue ?? ProcessInfo.processInfo.environment["NEAR_DEMO_PROMPT"]
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed?.isEmpty == false) ? trimmed : nil
     }
 
     static var autoPlayDelayNanoseconds: UInt64 {

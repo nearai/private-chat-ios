@@ -17,6 +17,7 @@ import SwiftUI
 enum BriefingKind: String, Codable, Hashable {
     case customPrompt
     case ethPrice
+    case cryptoPrice
     case nearAccount
     case dailyNews
 

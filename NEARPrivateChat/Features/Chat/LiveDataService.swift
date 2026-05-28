@@ -5,42 +5,221 @@ import Foundation
 // news") produce real answers through the widget/briefing UX without the chat
 // backend. Filled in by a ring-fenced workstream.
 
+// Coins recognized in prompts ("eth price", "track near every morning").
+struct LiveCoin: Equatable {
+    let id: String      // CoinGecko id
+    let symbol: String  // display symbol
+    let keywords: [String]
+}
+
+let liveCoins: [LiveCoin] = [
+    LiveCoin(id: "ethereum", symbol: "ETH", keywords: ["ethereum", "eth", "ether"]),
+    LiveCoin(id: "near", symbol: "NEAR", keywords: ["near protocol", "near"]),
+    LiveCoin(id: "bitcoin", symbol: "BTC", keywords: ["bitcoin", "btc"]),
+    LiveCoin(id: "solana", symbol: "SOL", keywords: ["solana", "sol"]),
+    LiveCoin(id: "dogecoin", symbol: "DOGE", keywords: ["dogecoin", "doge"])
+]
+
+func liveCoin(forID id: String) -> LiveCoin? {
+    liveCoins.first { $0.id == id.lowercased() }
+}
+
+/// What a typed prompt should do, parsed locally so common data questions and
+/// "create a tracker…" commands work without the chat backend.
+enum QuickIntent: Equatable {
+    case price(coinID: String, symbol: String)
+    case nearAccount(account: String?)
+    case news
+    case createTracker(TrackerSpec)
+}
+
+struct TrackerSpec: Equatable {
+    var title: String
+    var kind: BriefingKind
+    var subject: String?            // coin id (price) or account (nearAccount)
+    var schedule: BriefingSchedule
+    var council: Bool
+    var confirmation: String
+}
+
+enum QuickIntentParser {
+    static func parse(_ raw: String) -> QuickIntent? {
+        let text = raw.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+
+        // 1) "create a tracker / watch / every morning …"
+        let createVerb = contains(text, ["create", "make", "set up", "set-up", "setup", "build", "schedule", "start", "add", "track", "watch", "remind"])
+        let trackerNoun = contains(text, ["tracker", "watcher", "alert", "briefing", "brief", "digest", "every day", "every morning", "each morning", "each day", "every weekday", "daily", "weekly"])
+        if createVerb && trackerNoun {
+            return .createTracker(makeTracker(from: text))
+        }
+
+        // 2) news
+        if contains(text, ["news", "headlines", "what's happening", "whats happening", "top stories", "current events"]) {
+            return .news
+        }
+
+        // 3) NEAR account — named phrases, or a .near token plus a status word.
+        let account = extractAccount(from: text)
+        if contains(text, ["my near account", "my account", "near account", "near.com account", "account doing", "account balance", "wallet balance", "my wallet", "my balance"]) ||
+            (account != nil && contains(text, ["doing", "balance", "holdings", "how is", "status", "account", "wallet", "worth"])) {
+            return .nearAccount(account: account)
+        }
+
+        // 4) price of a coin
+        if let coin = matchedCoin(in: text),
+           contains(text, ["price", "worth", "trading", "how much", "value", "cost", "?"]) {
+            return .price(coinID: coin.id, symbol: coin.symbol)
+        }
+
+        return nil
+    }
+
+    private static func makeTracker(from text: String) -> TrackerSpec {
+        let council = contains(text, ["council", "panel", "multiple models", "models debate", "debate"])
+        let schedule = extractSchedule(from: text)
+        let label = schedule.scheduleLabel
+
+        if contains(text, ["account", "wallet", "near.com"]), !contains(text, ["price"]) {
+            let account = extractAccount(from: text)
+            return TrackerSpec(
+                title: "NEAR account",
+                kind: .nearAccount,
+                subject: account,
+                schedule: schedule,
+                council: council,
+                confirmation: "NEAR account\(account.map { " · \($0)" } ?? "") · \(label)"
+            )
+        }
+        if contains(text, ["news", "headlines", "stories"]) {
+            return TrackerSpec(title: "Daily news", kind: .dailyNews, subject: nil, schedule: schedule, council: council, confirmation: "Daily news · \(label)")
+        }
+        let coin = matchedCoin(in: text) ?? LiveCoin(id: "ethereum", symbol: "ETH", keywords: [])
+        return TrackerSpec(
+            title: "\(coin.symbol) price",
+            kind: .cryptoPrice,
+            subject: coin.id,
+            schedule: schedule,
+            council: council,
+            confirmation: "\(coin.symbol) price · \(label)\(council ? " · council" : "")"
+        )
+    }
+
+    static func matchedCoin(in text: String) -> LiveCoin? {
+        // Longest keyword first so "near protocol" beats "near".
+        let candidates = liveCoins.flatMap { coin in coin.keywords.map { (coin, $0) } }
+            .sorted { $0.1.count > $1.1.count }
+        for (coin, keyword) in candidates where wordPresent(keyword, in: text) {
+            return coin
+        }
+        return nil
+    }
+
+    static func extractAccount(from text: String) -> String? {
+        // A token ending in .near / .testnet, e.g. "abhishek.near".
+        let words = text.replacingOccurrences(of: "?", with: " ").split(separator: " ")
+        for word in words {
+            let w = word.trimmingCharacters(in: CharacterSet(charactersIn: ".,"))
+            if w.hasSuffix(".near") || w.hasSuffix(".testnet"), w.count > 5 {
+                return w
+            }
+        }
+        return nil
+    }
+
+    private static func extractSchedule(from text: String) -> BriefingSchedule {
+        var hour = 8
+        var minute = 0
+        if contains(text, ["evening", "night", "9pm", "9 pm"]) { hour = 21 }
+        if contains(text, ["noon", "midday"]) { hour = 12 }
+        // explicit "8am", "7:30 am", "at 9 pm"
+        if let r = text.range(of: #"(\d{1,2})(:(\d{2}))?\s*(am|pm)"#, options: .regularExpression) {
+            let token = String(text[r])
+            let digits = token.components(separatedBy: CharacterSet(charactersIn: "0123456789").inverted).filter { !$0.isEmpty }
+            if let h = digits.first.flatMap({ Int($0) }) {
+                hour = h % 12
+                if token.contains("pm") { hour += 12 }
+                if token.contains("am") && h == 12 { hour = 0 }
+            }
+            if digits.count > 1, let m = Int(digits[1]) { minute = m }
+        }
+        if contains(text, ["weekday", "weekdays", "every weekday"]) {
+            return .weekdays(hour: hour, minute: minute)
+        }
+        if contains(text, ["weekly", "every week", "every monday"]) {
+            return .weekly(weekday: 2, hour: hour, minute: minute)
+        }
+        return .daily(hour: hour, minute: minute)
+    }
+
+    private static func contains(_ text: String, _ needles: [String]) -> Bool {
+        needles.contains { text.contains($0) }
+    }
+
+    private static func wordPresent(_ word: String, in text: String) -> Bool {
+        if word.contains(" ") { return text.contains(word) }
+        // whole-word match for short symbols like "eth"/"sol"
+        let padded = " \(text.replacingOccurrences(of: "?", with: " ").replacingOccurrences(of: ",", with: " ")) "
+        return padded.contains(" \(word) ") || padded.contains(" \(word)'") || text == word
+    }
+}
+
+extension LiveDataService {
+    /// Symbol for a CoinGecko id (for cryptoPrice briefings).
+    static func symbol(forCoinID id: String) -> String {
+        liveCoin(forID: id)?.symbol ?? id.uppercased()
+    }
+}
+
 enum LiveDataService {
     /// ETH price + 24h sparkline (CoinGecko) → chart widget.
     static func ethPriceWidget() async -> MessageWidget? {
-        guard let priceURL = URL(string: "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd&include_24hr_change=true"),
-              let chartURL = URL(string: "https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=1") else {
+        await cryptoPriceWidget(coinID: "ethereum", symbol: "ETH")
+    }
+
+    /// Price + 24h sparkline for any CoinGecko coin id → chart widget.
+    /// The sparkline is best-effort: CoinGecko rate-limits the heavier chart
+    /// endpoint first, so if it fails we still surface the live price as a
+    /// metric widget rather than failing the whole answer.
+    static func cryptoPriceWidget(coinID: String, symbol: String) async -> MessageWidget? {
+        let id = coinID.lowercased()
+        guard let priceURL = URL(string: "https://api.coingecko.com/api/v3/simple/price?ids=\(id)&vs_currencies=usd&include_24hr_change=true") else {
             return nil
         }
 
-        do {
-            async let priceData = fetchData(from: priceURL)
-            async let chartData = fetchData(from: chartURL)
+        let decoder = JSONDecoder()
+        guard let priceData = try? await fetchData(from: priceURL),
+              let coin = (try? decoder.decode([String: CoinSimplePrice].self, from: priceData))?[id],
+              let price = coin.usd, let change = coin.usd24HourChange else {
+            return nil
+        }
 
-            let decoder = JSONDecoder()
-            let priceResponse = try decoder.decode(EthereumPriceResponse.self, from: try await priceData)
-            let chartResponse = try decoder.decode(CoinGeckoMarketChartResponse.self, from: try await chartData)
+        let valueString = currencyFormatter(maximumFractionDigits: price < 10 ? 2 : 0)
+            .string(from: NSNumber(value: price)) ?? "$\(price)"
+        let deltaString = percentChangeFormatter().string(from: NSNumber(value: change / 100))
+        let trend: WidgetTrend = change >= 0 ? .up : .down
 
-            guard let price = priceResponse.ethereum.usd,
-                  let change = priceResponse.ethereum.usd24HourChange else {
-                return nil
-            }
+        // Sparkline is best-effort; a rate-limited chart call still yields a price.
+        var points: [Double] = []
+        if let chartURL = URL(string: "https://api.coingecko.com/api/v3/coins/\(id)/market_chart?vs_currency=usd&days=1"),
+           let chartData = try? await fetchData(from: chartURL),
+           let chartResponse = try? decoder.decode(CoinGeckoMarketChartResponse.self, from: chartData) {
+            points = downsample(chartResponse.prices.compactMap(\.price), targetCount: 30)
+        }
 
-            let points = downsample(chartResponse.prices.compactMap(\.price), targetCount: 30)
-            guard !points.isEmpty else { return nil }
-
+        if !points.isEmpty {
             return MessageWidget(
                 kind: .chart,
-                title: "ETH watcher",
+                title: "\(symbol) watcher",
                 freshness: .fresh,
                 time: shortCurrentTimeString(),
                 followUp: "Why is it moving?",
                 note: nil,
                 chart: WidgetChart(
-                    label: "ETH / USD",
-                    value: currencyFormatter(maximumFractionDigits: 0).string(from: NSNumber(value: price)),
-                    delta: percentChangeFormatter().string(from: NSNumber(value: change / 100)),
-                    trend: change >= 0 ? .up : .down,
+                    label: "\(symbol) / USD",
+                    value: valueString,
+                    delta: deltaString,
+                    trend: trend,
                     points: points,
                     caption: "past 24h",
                     timeframe: "24h"
@@ -49,9 +228,27 @@ enum LiveDataService {
                 comparison: nil,
                 newsBrief: nil
             )
-        } catch {
-            return nil
         }
+
+        // No sparkline available — still show the live price as a metric.
+        return MessageWidget(
+            kind: .metric,
+            title: "\(symbol) price",
+            freshness: .fresh,
+            time: shortCurrentTimeString(),
+            followUp: "Why is it moving?",
+            note: nil,
+            chart: nil,
+            metric: WidgetMetric(
+                label: "\(symbol) / USD",
+                value: valueString,
+                delta: deltaString,
+                trend: trend,
+                caption: "24h change"
+            ),
+            comparison: nil,
+            newsBrief: nil
+        )
     }
 
     /// NEAR account balance / holdings (NEAR RPC + FastNEAR) → metric widget.
@@ -142,11 +339,7 @@ enum LiveDataService {
 }
 
 private extension LiveDataService {
-    struct EthereumPriceResponse: Decodable {
-        let ethereum: EthereumPrice
-    }
-
-    struct EthereumPrice: Decodable {
+    struct CoinSimplePrice: Decodable {
         let usd: Double?
         let usd24HourChange: Double?
 

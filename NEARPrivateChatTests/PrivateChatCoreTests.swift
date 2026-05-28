@@ -1362,6 +1362,51 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertFalse(UserSetupStorage.needsFirstRunSetup(for: accountID, defaults: defaults))
     }
 
+    func testUserSetupCompleteFirstRunPrivateChatPersistsSimpleDefaults() throws {
+        let defaults = try makeIsolatedDefaults()
+        let accountID = "user:first-run-private-chat"
+
+        let profile = UserSetupStorage.completeFirstRunPrivateChat(for: accountID, defaults: defaults)
+
+        XCTAssertEqual(profile, .defaults)
+        XCTAssertEqual(UserSetupStorage.load(for: accountID, defaults: defaults), .defaults)
+        XCTAssertTrue(UserSetupStorage.isCompleted(for: accountID, defaults: defaults))
+        XCTAssertFalse(UserSetupStorage.hasPendingLaunchCard(for: accountID, defaults: defaults))
+        XCTAssertFalse(UserSetupStorage.needsFirstRunSetup(for: accountID, defaults: defaults))
+    }
+
+    func testStarterPresetQuickStartProfileKeepsSamplePromptOutOfSavedGoal() {
+        let profile = UserSetupStarterPreset.researchBrief.quickStartProfile
+
+        XCTAssertEqual(profile.useCases, [.research])
+        XCTAssertEqual(profile.goalText, "")
+        XCTAssertTrue(profile.wantsWeb)
+        XCTAssertTrue(profile.wantsCouncil)
+        XCTAssertEqual(profile.experienceMode, .power)
+        XCTAssertEqual(profile.firstRunDraft, UserSetupStarterPreset.researchBrief.prompt)
+    }
+
+    func testUserSetupCompleteFirstRunQuickStartPersistsPresetDefaults() throws {
+        let defaults = try makeIsolatedDefaults()
+        let accountID = "user:first-run-quick-start"
+
+        let profile = UserSetupStorage.completeFirstRunQuickStart(
+            for: accountID,
+            preset: .agentMission,
+            defaults: defaults
+        )
+
+        XCTAssertEqual(profile, UserSetupStarterPreset.agentMission.quickStartProfile)
+        XCTAssertEqual(
+            UserSetupStorage.load(for: accountID, defaults: defaults),
+            UserSetupStarterPreset.agentMission.quickStartProfile
+        )
+        XCTAssertEqual(UserSetupStorage.load(for: accountID, defaults: defaults)?.goalText, "")
+        XCTAssertTrue(UserSetupStorage.isCompleted(for: accountID, defaults: defaults))
+        XCTAssertFalse(UserSetupStorage.hasPendingLaunchCard(for: accountID, defaults: defaults))
+        XCTAssertFalse(UserSetupStorage.needsFirstRunSetup(for: accountID, defaults: defaults))
+    }
+
     func testUserSetupStorageMigratesFallbackToUserAccount() throws {
         let defaults = try makeIsolatedDefaults()
         let fallbackAccount = UserSetupStorage.accountID(userID: nil, sessionID: "session-1", token: nil)!
@@ -3030,5 +3075,164 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(kind, .customPrompt)
         XCTAssertFalse(kind.isLiveData)
         XCTAssertTrue(BriefingKind.ethPrice.isLiveData)
+    }
+}
+
+// MARK: - Generative chat intent parsing
+
+extension PrivateChatCoreTests {
+    func testQuickIntentParsesPriceQuestions() {
+        XCTAssertEqual(
+            QuickIntentParser.parse("what is the eth price"),
+            .price(coinID: "ethereum", symbol: "ETH")
+        )
+        XCTAssertEqual(
+            QuickIntentParser.parse("near price"),
+            .price(coinID: "near", symbol: "NEAR")
+        )
+        XCTAssertEqual(
+            QuickIntentParser.parse("what's bitcoin worth"),
+            .price(coinID: "bitcoin", symbol: "BTC")
+        )
+    }
+
+    func testQuickIntentParsesAccountAndNews() {
+        XCTAssertEqual(
+            QuickIntentParser.parse("how is my near.com account doing"),
+            .nearAccount(account: nil)
+        )
+        XCTAssertEqual(
+            QuickIntentParser.parse("how is abhishek.near doing"),
+            .nearAccount(account: "abhishek.near")
+        )
+        XCTAssertEqual(QuickIntentParser.parse("pull the daily news"), .news)
+    }
+
+    func testQuickIntentParsesTracker() throws {
+        let intent = QuickIntentParser.parse(
+            "create a tracker to tell me the eth price every morning at 8 am using council"
+        )
+        guard case let .createTracker(spec) = intent else {
+            return XCTFail("Expected a createTracker intent, got \(String(describing: intent)).")
+        }
+        XCTAssertEqual(spec.kind, .cryptoPrice)
+        XCTAssertEqual(spec.subject, "ethereum")
+        XCTAssertEqual(spec.schedule, .daily(hour: 8, minute: 0))
+        XCTAssertTrue(spec.council)
+    }
+
+    func testQuickIntentParsesWeekdayNearAccountTracker() throws {
+        let intent = QuickIntentParser.parse(
+            "set up a daily briefing for my near account every weekday at 7am"
+        )
+        guard case let .createTracker(spec) = intent else {
+            return XCTFail("Expected a createTracker intent, got \(String(describing: intent)).")
+        }
+        XCTAssertEqual(spec.kind, .nearAccount)
+        XCTAssertNil(spec.subject)
+        XCTAssertEqual(spec.schedule, .weekdays(hour: 7, minute: 0))
+        XCTAssertFalse(spec.council)
+    }
+
+    func testQuickIntentIgnoresChitChat() {
+        XCTAssertNil(QuickIntentParser.parse("hello how are you"))
+        XCTAssertNil(QuickIntentParser.parse("write me a poem about the ocean"))
+        XCTAssertNil(QuickIntentParser.parse("tell me a joke"))
+        XCTAssertNil(QuickIntentParser.parse("   "))
+    }
+}
+
+// MARK: - sendDraft routes recognized prompts to live answers
+
+extension PrivateChatCoreTests {
+    @MainActor
+    func testSendDraftAnswersDataQuestionLocallyWithStreamingPlaceholder() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        store.draft = "what is the eth price"
+
+        store.sendDraft()
+
+        // The draft is consumed and a user turn + assistant placeholder appear
+        // immediately, before the async live-data fetch completes.
+        XCTAssertEqual(store.draft, "")
+        XCTAssertEqual(store.messages.count, 2)
+        XCTAssertEqual(store.messages.first?.role, .user)
+        XCTAssertEqual(store.messages.first?.text, "what is the eth price")
+        XCTAssertEqual(store.messages.last?.role, .assistant)
+        XCTAssertTrue(store.messages.last?.isStreaming == true)
+        XCTAssertTrue(store.isStreaming)
+        // No route-readiness block: the prompt is answered without sign-in.
+        XCTAssertNil(store.routeReadinessIssue)
+    }
+
+    @MainActor
+    func testSendDraftCreateTrackerInvokesCallbackWithoutStreaming() throws {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        var created: Briefing?
+        store.onCreateTracker = { created = $0 }
+        store.draft = "create a tracker to tell me the eth price every morning at 8 am using council"
+
+        store.sendDraft()
+
+        let briefing = try XCTUnwrap(created)
+        XCTAssertEqual(briefing.kind, .cryptoPrice)
+        XCTAssertEqual(briefing.accountID, "ethereum")
+        XCTAssertEqual(briefing.schedule, .daily(hour: 8, minute: 0))
+        // Tracker creation is synchronous: a confirmation turn, no streaming.
+        XCTAssertFalse(store.isStreaming)
+        XCTAssertEqual(store.messages.first?.role, .user)
+        XCTAssertEqual(store.messages.last?.role, .assistant)
+        XCTAssertTrue(store.messages.last?.text.contains("Created a tracker") == true)
+    }
+
+    @MainActor
+    func testSendDraftNearAccountWithoutIDAsksForAccount() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        store.draft = "how is my near account doing"
+
+        store.sendDraft()
+
+        XCTAssertEqual(store.draft, "")
+        XCTAssertFalse(store.isStreaming)
+        XCTAssertEqual(store.messages.count, 2)
+        XCTAssertEqual(store.messages.last?.role, .assistant)
+        XCTAssertTrue(store.messages.last?.text.lowercased().contains("near account") == true)
+    }
+
+    @MainActor
+    func testSendDraftLeavesUnrecognizedPromptToNormalRouting() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        store.draft = "write me a haiku about the sea"
+
+        store.sendDraft()
+
+        // No QuickIntent match: the local fast-path does not consume the turn,
+        // so no local user/assistant pair is synthesized here.
+        XCTAssertTrue(store.messages.isEmpty)
+    }
+
+    /// End-to-end wiring mirroring AppEnvironment: a "create a tracker…" prompt
+    /// in chat lands a real Briefing in the BriefingStore (the Today tab source).
+    @MainActor
+    func testCreateTrackerPromptLandsBriefingInStore() throws {
+        let tempFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("briefings-\(UUID().uuidString).json")
+        let briefingStore = BriefingStore(briefings: [], fileURL: tempFile, runner: { _ in nil })
+        let chatStore = ChatStore(api: PrivateChatAPI(configuration: .production))
+        chatStore.onCreateTracker = { [weak briefingStore] briefing in
+            briefingStore?.add(briefing)
+        }
+
+        chatStore.draft = "create a tracker to tell me the eth price every morning at 8 am using council"
+        chatStore.sendDraft()
+
+        XCTAssertEqual(briefingStore.briefings.count, 1)
+        let landed = try XCTUnwrap(briefingStore.briefings.first)
+        XCTAssertEqual(landed.kind, .cryptoPrice)
+        XCTAssertEqual(landed.accountID, "ethereum")
+        XCTAssertEqual(landed.schedule, .daily(hour: 8, minute: 0))
+        XCTAssertEqual(landed.title, "ETH price")
+
+        try? FileManager.default.removeItem(at: tempFile)
     }
 }

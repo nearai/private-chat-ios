@@ -25,6 +25,11 @@ struct AppEnvironment {
             guard let chatStore else { return nil }
             return await chatStore.runBriefing(briefing)
         }
+        chatStore.onCreateTracker = { [weak briefingStore] briefing in
+            guard let briefingStore else { return }
+            briefingStore.add(briefing)
+            Task { await briefingStore.run(briefing) }
+        }
         return AppEnvironment(
             api: api,
             sessionStore: sessionStore,
