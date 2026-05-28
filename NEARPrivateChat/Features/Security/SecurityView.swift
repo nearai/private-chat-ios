@@ -62,7 +62,7 @@ struct SecurityView: View {
             return ProofCapsuleViewModel(
                 state: .proxied,
                 title: "Privacy proxy",
-                detail: "NEAR AI Cloud can use app-supplied web and project context, but this route does not carry NEAR Private verification.",
+                detail: "NEAR AI Cloud anonymizes your prompt to the provider before forwarding. Anonymized routes do not carry NEAR Private verification.",
                 badge: "Privacy proxy",
                 symbolName: "eye.slash"
             )
@@ -581,7 +581,7 @@ struct SecurityView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Privacy proxy route")
                         .font(.headline)
-                    Text("NEAR AI Cloud can use app-supplied web and project context, but this route does not carry NEAR Private verification.")
+                    Text("NEAR AI Cloud anonymizes your prompt to the provider before forwarding. Anonymized routes do not carry NEAR Private verification.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

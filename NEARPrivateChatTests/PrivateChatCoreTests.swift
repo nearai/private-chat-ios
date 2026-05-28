@@ -1507,6 +1507,21 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(plan.expectedFirstAction, "Start from your goal")
     }
 
+    func testSetupProjectInstructionsCombineMultipleUseCases() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .research
+        profile.useCases = [.research, .teamProjects]
+        profile.contextStyle = .project
+        profile.goalText = "Keep project context tidy for a cited brief."
+
+        let instructions = profile.normalizedForDefaults.setupProjectInstructions
+
+        XCTAssertTrue(instructions.contains("This workspace was configured for: Research, Projects."))
+        XCTAssertTrue(instructions.contains("Research: Prioritize dated sources, citations, contradictions, and a concise recommendation. Save strong outputs as project notes."))
+        XCTAssertTrue(instructions.contains("Projects: Use project files, saved source links, memory, and saved outputs before broad web. Keep context tidy and ask only when a missing source blocks progress."))
+        XCTAssertTrue(instructions.contains("Setup goal: Keep project context tidy for a cited brief."))
+    }
+
     func testSetupLaunchCardUsesGoalAsSubtitleWhenPresent() {
         var profile = UserSetupProfile.defaults
         profile.useCase = .research
@@ -1532,6 +1547,21 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(normalized.emptyStateSubtitle, "Goal ready: Map the strongest privacy proof workflow.")
         XCTAssertEqual(suggestions.map(\.title), ["Start brief", "Find sources", "Recommend next step"])
         XCTAssertEqual(suggestions.first?.prompt, "Create a sourced research brief for this goal: Map the strongest privacy proof workflow.")
+    }
+
+    func testAppSetupPlanExposesStarterWorkspaceAndPromptPreview() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .buildAgents
+        profile.useCases = [.buildAgents]
+        profile.contextStyle = .project
+        profile.goalText = "Review the repo and plan the first safe patch."
+
+        let plan = AppSetupPlan(profile: profile, readiness: .optimistic)
+
+        XCTAssertEqual(plan.starterWorkspaceSeeds.map(\.title), ["Workspace", "Instructions", "Setup guide", "Goal"])
+        XCTAssertEqual(plan.starterWorkspaceSeeds.first?.detail, "Build Workspace opens as the active project for your first chats.")
+        XCTAssertEqual(plan.starterPromptSuggestions.map(\.title), ["Plan repo task", "Safe patch", "Repo checklist"])
+        XCTAssertEqual(plan.starterPromptSuggestions.first?.prompt, "Plan the first repo task for this goal: Review the repo and plan the first safe patch.")
     }
 
     func testSetupUseCaseProvidesFallbackEmptyStatePromptsWithoutGoal() {

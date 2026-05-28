@@ -796,12 +796,89 @@ struct SetupPlanPreviewCard: View {
                 }
                 SetupPlanLine(symbolName: "arrow.right.circle", title: "First action", value: plan.expectedFirstAction)
             }
+
+            if !plan.starterWorkspaceSeeds.isEmpty {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Starter workspace")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    ForEach(plan.starterWorkspaceSeeds) { seed in
+                        SetupSeedRow(seed: seed)
+                    }
+                }
+            }
+
+            if !plan.starterPromptSuggestions.isEmpty {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("First prompts")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    ForEach(plan.starterPromptSuggestions) { suggestion in
+                        SetupPromptPreviewRow(suggestion: suggestion)
+                    }
+                }
+            }
         }
         .padding(12)
         .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.appBorder, lineWidth: 1)
+        }
+    }
+}
+
+private struct SetupSeedRow: View {
+    let seed: SetupWorkspaceSeed
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: seed.symbolName)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.brandBlue)
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(seed.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(seed.detail)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+private struct SetupPromptPreviewRow: View {
+    let suggestion: SetupPromptSuggestion
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: suggestion.symbolName)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.brandBlue)
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(suggestion.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(suggestion.prompt)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(3)
+            }
+
+            Spacer(minLength: 0)
         }
     }
 }

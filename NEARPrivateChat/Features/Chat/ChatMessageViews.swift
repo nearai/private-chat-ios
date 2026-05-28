@@ -279,7 +279,7 @@ struct MessageBubble: View {
             return ProofCapsuleViewModel(
                 state: .proxied,
                 title: "Privacy proxy",
-                detail: "This answer used the privacy proxy route. It does not carry NEAR Private verification for this turn.",
+                detail: "This answer was anonymized through the NEAR AI Cloud privacy proxy. Anonymized turns do not carry NEAR Private verification.",
                 badge: "Privacy proxy",
                 symbolName: "eye.slash"
             )

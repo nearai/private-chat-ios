@@ -236,13 +236,23 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
     }
 }
 
-struct SetupPromptSuggestion: Identifiable, Hashable {
+struct SetupPromptSuggestion: Codable, Identifiable, Hashable {
     let title: String
     let symbolName: String
     let prompt: String
 
     var id: String {
         "\(title)-\(prompt)"
+    }
+}
+
+struct SetupWorkspaceSeed: Codable, Identifiable, Hashable {
+    let title: String
+    let detail: String
+    let symbolName: String
+
+    var id: String {
+        "\(title)-\(detail)"
     }
 }
 
@@ -378,14 +388,33 @@ struct UserSetupProfile: Codable, Hashable {
     }
 
     var setupProjectInstructions: String {
-        let primaryInstructions = useCases.setupPrimaryUseCase.starterInstructions
+        let orderedUseCases = useCases.setupOrderedUnique
+        let instructionBlocks = orderedUseCases.map { useCase in
+            if orderedUseCases.count == 1 {
+                return useCase.starterInstructions
+            }
+            return "\(useCase.title): \(useCase.starterInstructions)"
+        }
         let goal = normalizedGoalText
-        guard !goal.isEmpty else { return primaryInstructions }
-        return """
-        \(primaryInstructions)
+        var sections: [String] = []
+        if orderedUseCases.count > 1 {
+            let titles = orderedUseCases.map(\.title).joined(separator: ", ")
+            sections.append("This workspace was configured for: \(titles).")
+        }
+        sections.append(contentsOf: instructionBlocks)
+        if !goal.isEmpty {
+            sections.append("Setup goal: \(goal)")
+        }
+        return sections.joined(separator: "\n\n")
+    }
 
-        Setup goal: \(goal)
-        """
+    var setupInstructionSummary: String {
+        let orderedUseCases = useCases.setupOrderedUnique
+        let lead = orderedUseCases.setupPrimaryUseCase.starterInstructions
+        if orderedUseCases.count > 1 {
+            return "\(orderedUseCases.count) setup tracks are combined into shared project instructions."
+        }
+        return lead
     }
 
     var firstRunDraft: String? {
@@ -578,6 +607,41 @@ struct UserSetupProfile: Codable, Hashable {
         }
     }
 
+    var setupWorkspaceSeeds: [SetupWorkspaceSeed] {
+        guard let starterProjectName = setupStarterProjectName else { return [] }
+
+        var seeds = [
+            SetupWorkspaceSeed(
+                title: "Workspace",
+                detail: "\(starterProjectName) opens as the active project for your first chats.",
+                symbolName: "folder.badge.plus"
+            ),
+            SetupWorkspaceSeed(
+                title: "Instructions",
+                detail: setupInstructionSummary,
+                symbolName: "text.document"
+            ),
+            SetupWorkspaceSeed(
+                title: "Setup guide",
+                detail: "A reusable note keeps next steps visible inside the project.",
+                symbolName: "note.text.badge.plus"
+            )
+        ]
+
+        let goal = normalizedGoalText
+        if !goal.isEmpty {
+            seeds.append(
+                SetupWorkspaceSeed(
+                    title: "Goal",
+                    detail: goal,
+                    symbolName: "target"
+                )
+            )
+        }
+
+        return seeds
+    }
+
     mutating func toggleUseCase(_ useCase: UserSetupUseCase) {
         var next = useCases.setupOrderedUnique
         if next.contains(useCase) {
@@ -669,6 +733,8 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
     var firstRunDraft: String?
     var readinessStatus: String
     var experienceSummary: String
+    var starterWorkspaceSeeds: [SetupWorkspaceSeed]
+    var starterPromptSuggestions: [SetupPromptSuggestion]
 
     var launchCardTitle: String {
         expectedFirstAction
@@ -707,6 +773,8 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
         experienceSummary = profile.experienceMode == .power
             ? "Power mode keeps advanced routes visible."
             : "Beginner mode starts simple; power routes remain available later."
+        starterWorkspaceSeeds = profile.setupWorkspaceSeeds
+        starterPromptSuggestions = Array(profile.emptyStatePromptSuggestions.prefix(3))
         id = [
             profile.useCases.map(\.rawValue).joined(separator: "+"),
             profile.experienceMode.rawValue,

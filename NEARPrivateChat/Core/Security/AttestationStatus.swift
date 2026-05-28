@@ -300,7 +300,7 @@ enum AttestationStatus: Codable, Equatable, Sendable {
             case .routeNotSupported:
                 return AttestationStatusCopy(
                     title: "Unverified route",
-                    detail: "This route does not carry NEAR Private verification. Use a private model when verification matters.",
+                    detail: "This route is anonymized through NEAR AI Cloud. Anonymized routes do not carry NEAR Private verification — use a private model when verification matters.",
                     badge: "Unverified"
                 )
             case .serviceUnavailable:

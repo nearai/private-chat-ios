@@ -277,11 +277,21 @@ final class PrivateChatAPI {
     }
 
     func createConversation(title: String) async throws -> ConversationSummary {
+        #if targetEnvironment(simulator) && DEBUG
+        if authToken?.hasPrefix("simulator-debug-token-") == true {
+            return Self.makeStubConversation(title: title)
+        }
+        #endif
         let payload = ConversationCreatePayload(metadata: ["title": title])
         return try await request("/v1/conversations", method: "POST", body: payload, authenticated: true)
     }
 
     func createConversation(title: String, metadata: [String: String]) async throws -> ConversationSummary {
+        #if targetEnvironment(simulator) && DEBUG
+        if authToken?.hasPrefix("simulator-debug-token-") == true {
+            return Self.makeStubConversation(title: title)
+        }
+        #endif
         var payloadMetadata = metadata
         payloadMetadata["title"] = title
         let payload = ConversationCreatePayload(metadata: payloadMetadata)
@@ -289,6 +299,11 @@ final class PrivateChatAPI {
     }
 
     func addItemsToConversation(_ conversationID: String, items: [ConversationImportItem]) async throws {
+        #if targetEnvironment(simulator) && DEBUG
+        if authToken?.hasPrefix("simulator-debug-token-") == true {
+            return
+        }
+        #endif
         let payload = ConversationItemsCreatePayload(items: items)
         let bodyData = try encoder.encode(payload)
         let request = try makeRequest(
@@ -301,6 +316,11 @@ final class PrivateChatAPI {
     }
 
     func updateConversationTitle(_ conversationID: String, title: String) async throws {
+        #if targetEnvironment(simulator) && DEBUG
+        if authToken?.hasPrefix("simulator-debug-token-") == true {
+            return
+        }
+        #endif
         let payload = ConversationCreatePayload(metadata: ["title": title])
         let _: ConversationSummary = try await request(
             Self.conversationPath(conversationID),
@@ -311,7 +331,15 @@ final class PrivateChatAPI {
     }
 
     func fetchConversationItems(_ conversationID: String) async throws -> ConversationItemsResponse {
-        try await request(Self.conversationPath(conversationID, suffix: ["items"]), method: "GET", authenticated: true)
+        #if targetEnvironment(simulator) && DEBUG
+        if authToken?.hasPrefix("simulator-debug-token-") == true {
+            let json = "{\"items\":[],\"hasMore\":false}".data(using: .utf8) ?? Data()
+            if let decoded = try? JSONDecoder().decode(ConversationItemsResponse.self, from: json) {
+                return decoded
+            }
+        }
+        #endif
+        return try await request(Self.conversationPath(conversationID, suffix: ["items"]), method: "GET", authenticated: true)
     }
 
     func uploadFile(from url: URL) async throws -> ChatAttachment {
@@ -1286,6 +1314,25 @@ final class PrivateChatAPI {
                            verifiable: false)
     ]
 
+    /// Decode a stub ConversationSummary so the simulator can create
+    /// conversations without hitting the real `/v1/conversations` endpoint.
+    static func makeStubConversation(title: String) -> ConversationSummary {
+        let escapedTitle = title.replacingOccurrences(of: "\"", with: "\\\"")
+        let createdAt = Date().timeIntervalSince1970
+        let json = """
+        {"id":"sim-conv-\(UUID().uuidString.prefix(8))","created_at":\(createdAt),"metadata":{"title":"\(escapedTitle)"}}
+        """
+        let data = json.data(using: .utf8) ?? Data()
+        if let conversation = try? JSONDecoder().decode(ConversationSummary.self, from: data) {
+            return conversation
+        }
+        // Fallback if decoding ever fails — keep the chat flow alive.
+        let fallback = """
+        {"id":"sim-conv-fallback","metadata":{"title":"New chat"}}
+        """
+        return (try? JSONDecoder().decode(ConversationSummary.self, from: Data(fallback.utf8)))!
+    }
+
     private static func makeStubModel(
         id: String,
         displayName: String,
@@ -1318,6 +1365,11 @@ final class PrivateChatAPI {
     ) async throws {
         let responseID = "sim-resp-\(UUID().uuidString.prefix(8))"
         await onEvent(.created(responseID: responseID))
+
+        // Hold the empty-streaming state briefly so the typing dots are
+        // visible before any text arrives.
+        await onEvent(.reasoningStarted)
+        try? await Task.sleep(nanoseconds: 450_000_000)
 
         // Title derived from the first ~6 words of the prompt.
         let title = userText

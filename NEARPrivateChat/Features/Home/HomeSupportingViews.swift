@@ -11,6 +11,7 @@ struct SetupLaunchCard: View {
     let plan: AppSetupPlan
     let recommendation: SetupCardRecommendation?
     let onPrimaryAction: () -> Void
+    let onPromptSuggestion: ((SetupPromptSuggestion) -> Void)?
     let onRecommendationAction: (() -> Void)?
     let onDismiss: () -> Void
 
@@ -65,6 +66,18 @@ struct SetupLaunchCard: View {
                 }
                 .padding(12)
                 .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+
+            if !plan.starterWorkspaceSeeds.isEmpty {
+                SetupWorkspaceSeedSection(seeds: Array(plan.starterWorkspaceSeeds.prefix(3)))
+            }
+
+            if !plan.starterPromptSuggestions.isEmpty {
+                SetupPromptSuggestionSection(
+                    title: "Quick starts",
+                    suggestions: plan.starterPromptSuggestions,
+                    onSelect: onPromptSuggestion
+                )
             }
 
             Text(plan.readinessStatus)
@@ -142,6 +155,7 @@ struct SavedSetupHomeCard: View {
     let restoreState: SetupRestoreState
     let recommendation: SetupCardRecommendation?
     let onPrimaryAction: () -> Void
+    let onPromptSuggestion: ((SetupPromptSuggestion) -> Void)?
     let onRecommendationAction: (() -> Void)?
     let onChangeSetup: () -> Void
 
@@ -196,6 +210,18 @@ struct SavedSetupHomeCard: View {
                 }
                 .padding(12)
                 .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+
+            if !plan.starterWorkspaceSeeds.isEmpty {
+                SetupWorkspaceSeedSection(seeds: Array(plan.starterWorkspaceSeeds.prefix(3)))
+            }
+
+            if !plan.starterPromptSuggestions.isEmpty {
+                SetupPromptSuggestionSection(
+                    title: "Quick starts",
+                    suggestions: plan.starterPromptSuggestions,
+                    onSelect: onPromptSuggestion
+                )
             }
 
             Text(plan.readinessStatus)
@@ -321,6 +347,183 @@ struct SetupLaunchPill: View {
                 Capsule()
                     .stroke(Color.appBorder, lineWidth: 1)
             }
+    }
+}
+
+private struct SetupWorkspaceSeedSection: View {
+    let seeds: [SetupWorkspaceSeed]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Starter workspace")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.textSecondary)
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(seeds) { seed in
+                    SetupWorkspaceSeedRow(seed: seed)
+                }
+            }
+        }
+    }
+}
+
+private struct SetupWorkspaceSeedRow: View {
+    let seed: SetupWorkspaceSeed
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: seed.symbolName)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.brandBlue)
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(seed.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(seed.detail)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(3)
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+private struct SetupPromptSuggestionSection: View {
+    let title: String
+    let suggestions: [SetupPromptSuggestion]
+    let onSelect: ((SetupPromptSuggestion) -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.textSecondary)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(suggestions) { suggestion in
+                        SetupPromptSuggestionChip(
+                            suggestion: suggestion,
+                            action: onSelect.map { select in
+                                { select(suggestion) }
+                            }
+                        )
+                    }
+                }
+                .padding(.horizontal, 1)
+            }
+            .scrollClipDisabled()
+        }
+    }
+}
+
+private struct SetupPromptSuggestionChip: View {
+    let suggestion: SetupPromptSuggestion
+    let action: (() -> Void)?
+
+    var body: some View {
+        Group {
+            if let action {
+                Button(action: action) {
+                    chipLabel
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Use setup prompt, \(suggestion.title)")
+                .accessibilityHint("Reopens setup defaults and fills this first prompt without sending.")
+            } else {
+                chipLabel
+            }
+        }
+    }
+
+    private var chipLabel: some View {
+        Label(suggestion.title, systemImage: suggestion.symbolName)
+            .font(.footnote.weight(.medium))
+            .labelStyle(.titleAndIcon)
+            .foregroundStyle(Color.textSecondary)
+            .lineLimit(1)
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+            .background(Color.appSecondaryBackground, in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(Color.appBorder, lineWidth: 1)
+            }
+    }
+}
+
+struct HomeTrustReadinessCard: View {
+    let viewModel: ProofCapsuleViewModel
+    let routeLabel: String
+    let modelLabel: String
+    let actionTitle: String
+    let actionSymbolName: String
+    let action: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: viewModel.symbolName)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(viewModel.tintColor)
+                    .frame(width: 38, height: 38)
+                    .background(viewModel.tintColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Trust check")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.primaryAction)
+                    Text(viewModel.title)
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(viewModel.detail)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            HStack(alignment: .center, spacing: 10) {
+                ProofCapsule(viewModel: viewModel)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(routeLabel)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(modelLabel)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+
+            Button(action: action) {
+                Label(actionTitle, systemImage: actionSymbolName)
+                    .font(.subheadline.weight(.bold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white)
+            .background(Color.primaryAction, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .padding(14)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(viewModel.tintColor.opacity(0.12), lineWidth: 1)
+        }
+        .shadow(color: Color.brandBlue.opacity(0.04), radius: 12, y: 6)
     }
 }
 

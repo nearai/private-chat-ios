@@ -8,6 +8,7 @@ struct ConversationListView: View {
     @State private var showingNewProject = false
     @State private var showingProjectFiles = false
     @State private var showingAccountSettings = false
+    @State private var showingSecurity = false
     @State private var isSearchVisible = false
     @State private var editingProject: ChatProject?
     let onOpenChat: () -> Void
@@ -122,6 +123,86 @@ struct ConversationListView: View {
         return savedSetupState
     }
 
+    private var shouldShowHomeTrustCard: Bool {
+        selectedHomeFilter == .all && searchQuery.isEmpty && filteredConversations.isEmpty
+    }
+
+    private var homeTrustCardViewModel: ProofCapsuleViewModel {
+        if chatStore.selectedRouteUsesNearCloud || (chatStore.isCouncilModeEnabled && chatStore.activeCouncilHasNearCloudRoutes) {
+            return ProofCapsuleViewModel(
+                state: .proxied,
+                title: "Privacy proxy route",
+                detail: "NEAR AI Cloud anonymizes your prompt to the provider before forwarding. Anonymized routes do not carry NEAR Private verification.",
+                badge: "Privacy proxy",
+                symbolName: "eye.slash"
+            )
+        }
+
+        if chatStore.selectedModelOption?.isIronclawHostedModel == true {
+            return ProofCapsuleViewModel(
+                state: .unknown,
+                title: "Hosted agent route",
+                detail: "Hosted IronClaw uses its own trust boundary. Open Security when you need the current route summary before handing work off.",
+                badge: "Hosted route",
+                symbolName: "terminal"
+            )
+        }
+
+        if chatStore.selectedModelOption?.isIronclawMobileRuntime == true {
+            return ProofCapsuleViewModel(
+                state: .private_,
+                title: "Phone agent route",
+                detail: "IronClaw Mobile runs on the phone. Switch back to a NEAR Private model whenever you need signed private-route proof.",
+                badge: "On-device agent",
+                symbolName: "iphone"
+            )
+        }
+
+        return ProofCapsuleViewModel(
+            status: chatStore.currentAttestationStatus,
+            isLoading: chatStore.isLoadingAttestation,
+            modelID: chatStore.selectedModel
+        )
+    }
+
+    private var canFetchHomeAttestation: Bool {
+        if chatStore.isCouncilModeEnabled {
+            return !chatStore.activeCouncilHasExternalRoutes && chatStore.selectedRouteKind == .nearPrivate
+        }
+        return chatStore.selectedRouteKind == .nearPrivate
+    }
+
+    private var shouldFetchHomeAttestation: Bool {
+        guard canFetchHomeAttestation, !chatStore.isLoadingAttestation else { return false }
+        switch chatStore.currentAttestationStatus.effectiveState() {
+        case .valid:
+            return false
+        case .stale, .unknown, .unavailable, .mismatch:
+            return true
+        }
+    }
+
+    private var homeTrustRouteLabel: String {
+        if chatStore.isCouncilModeEnabled {
+            return chatStore.activeCouncilRouteSummary
+        }
+        return chatStore.selectedProviderDisplayName
+    }
+
+    private var homeTrustActionTitle: String {
+        if chatStore.isLoadingAttestation {
+            return "Checking proof"
+        }
+        return shouldFetchHomeAttestation ? "Fetch proof" : "Open Security"
+    }
+
+    private var homeTrustActionSymbolName: String {
+        if chatStore.isLoadingAttestation {
+            return "arrow.triangle.2.circlepath"
+        }
+        return shouldFetchHomeAttestation ? "arrow.clockwise" : "checkmark.shield"
+    }
+
     private var resumeConversations: [ConversationSummary] {
         guard selectedHomeFilter == .all, searchQuery.isEmpty else { return [] }
         return Array(filteredConversations.prefix(3))
@@ -167,47 +248,103 @@ struct ConversationListView: View {
             }
 
             ScrollView {
-                if filteredConversations.isEmpty {
-                    ClaudeHomeEmptyState(
-                        title: searchQuery.isEmpty ? "Ask privately." : "No matching chats",
-                        showsAction: searchQuery.isEmpty,
-                        action: openNewChat
-                    )
-                    .frame(maxWidth: .infinity)
-                    .containerRelativeFrame(.vertical)
-                } else {
-                    LazyVStack(spacing: 0) {
-                        ForEach(Array(filteredConversations.enumerated()), id: \.element.id) { index, conversation in
-                            Button {
-                                openConversation(conversation)
-                            } label: {
-                                ClaudeThreadRow(
-                                    conversation: conversation,
-                                    preview: previewText(for: conversation),
-                                    isLast: index == filteredConversations.count - 1
-                                )
+                LazyVStack(spacing: 14) {
+                    if let pendingSetupLaunchCard, selectedHomeFilter == .all, searchQuery.isEmpty {
+                        SetupLaunchCard(
+                            plan: pendingSetupLaunchCard.plan,
+                            recommendation: setupCardRecommendation(for: pendingSetupLaunchCard.plan),
+                            onPrimaryAction: {
+                                openPendingSetupLaunchCard(pendingSetupLaunchCard)
+                            },
+                            onPromptSuggestion: { suggestion in
+                                openSetupPromptSuggestion(suggestion, from: pendingSetupLaunchCard, clearsPendingCard: true)
+                            },
+                            onRecommendationAction: {
+                                runSetupCardRecommendation(for: pendingSetupLaunchCard.plan)
+                            },
+                            onDismiss: {
+                                dismissPendingSetupLaunchCard(pendingSetupLaunchCard)
                             }
-                            .buttonStyle(.plain)
-                            .contextMenu {
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                    }
+
+                    if filteredConversations.isEmpty {
+                        if let emptyHomeSetupState {
+                            VStack(spacing: 14) {
+                                SavedSetupHomeCard(
+                                    plan: emptyHomeSetupState.plan,
+                                    restoreState: emptyHomeSetupState.restoreState,
+                                    recommendation: setupCardRecommendation(for: emptyHomeSetupState.plan),
+                                    onPrimaryAction: {
+                                        reopenSavedSetup(emptyHomeSetupState)
+                                    },
+                                    onPromptSuggestion: { suggestion in
+                                        openSetupPromptSuggestion(suggestion, from: emptyHomeSetupState, clearsPendingCard: false)
+                                    },
+                                    onRecommendationAction: {
+                                        runSetupCardRecommendation(for: emptyHomeSetupState.plan)
+                                    },
+                                    onChangeSetup: onRunSetupAgain
+                                )
+
+                                // v2: HomeTrustReadinessCard removed — trust state
+                                // is surfaced inside the chat thread, not on Home.
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.top, pendingSetupLaunchCard == nil ? 12 : 0)
+                        } else {
+                            VStack(spacing: 14) {
+                                ClaudeHomeEmptyState(
+                                    title: searchQuery.isEmpty ? "Ask privately." : "No matching chats",
+                                    showsAction: searchQuery.isEmpty,
+                                    action: openNewChat
+                                )
+                                .frame(maxWidth: .infinity)
+                                .containerRelativeFrame(.vertical)
+
+                                // v2: HomeTrustReadinessCard removed — trust state
+                                // lives inside the chat thread, not on Home.
+                            }
+                        }
+                    } else {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(filteredConversations.enumerated()), id: \.element.id) { index, conversation in
                                 Button {
-                                    chatStore.togglePinConversation(conversation)
+                                    openConversation(conversation)
                                 } label: {
-                                    Label(conversation.isPinned ? "Unpin" : "Pin", systemImage: conversation.isPinned ? "pin.slash" : "pin")
+                                    ClaudeThreadRow(
+                                        conversation: conversation,
+                                        preview: previewText(for: conversation),
+                                        isLast: index == filteredConversations.count - 1
+                                    )
                                 }
-                                Button {
-                                    chatStore.archiveConversation(conversation)
-                                } label: {
-                                    Label("Archive", systemImage: "archivebox")
-                                }
-                                Button(role: .destructive) {
-                                    chatStore.requestDeleteConversation(conversation)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button {
+                                        chatStore.togglePinConversation(conversation)
+                                    } label: {
+                                        Label(conversation.isPinned ? "Unpin" : "Pin", systemImage: conversation.isPinned ? "pin.slash" : "pin")
+                                    }
+                                    Button {
+                                        chatStore.archiveConversation(conversation)
+                                    } label: {
+                                        Label("Archive", systemImage: "archivebox")
+                                    }
+                                    Button(role: .destructive) {
+                                        chatStore.requestDeleteConversation(conversation)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
                                 }
                             }
                         }
+                        .padding(.top, pendingSetupLaunchCard == nil ? 0 : 4)
+                        .padding(.bottom, 28)
                     }
-                    .padding(.bottom, 28)
                 }
             }
             .refreshable {
@@ -231,6 +368,10 @@ struct ConversationListView: View {
         .sheet(isPresented: $showingAccountSettings) {
             AccountSettingsView(onRunSetupAgain: onRunSetupAgain)
                 .environmentObject(sessionStore)
+                .environmentObject(chatStore)
+        }
+        .sheet(isPresented: $showingSecurity) {
+            SecurityView()
                 .environmentObject(chatStore)
         }
         .navigationDestination(for: SharedConversationInfo.self) { item in
@@ -419,6 +560,43 @@ struct ConversationListView: View {
         }
         AppHaptics.lightImpact()
         chatStore.applySetupProfile(state.profile)
+    }
+
+    private func openSetupPromptSuggestion(
+        _ suggestion: SetupPromptSuggestion,
+        from state: SetupLaunchCardState,
+        clearsPendingCard: Bool
+    ) {
+        if clearsPendingCard {
+            UserSetupStorage.clearPendingLaunchCard(for: state.accountID)
+        }
+
+        AppHaptics.selection()
+
+        let profileWillOpenDraft = state.restoreState.needsRestore && state.plan.firstRunDraft != nil
+        if state.restoreState.needsRestore {
+            chatStore.applySetupProfile(state.profile)
+        }
+
+        if !profileWillOpenDraft {
+            chatStore.startNewConversation()
+            onStartNewChat()
+        }
+
+        chatStore.draft = suggestion.prompt
+        chatStore.bannerMessage = "Starter prompt ready."
+    }
+
+    private func openHomeTrustFlow() {
+        AppHaptics.selection()
+        if shouldFetchHomeAttestation {
+            Task {
+                await chatStore.refreshAttestationReport()
+                showingSecurity = true
+            }
+            return
+        }
+        showingSecurity = true
     }
 
     private var currentModelRoute: AppSetupModelRoute {
