@@ -2008,7 +2008,8 @@ final class ChatStore: ObservableObject {
             selectedProjectID = nil
         }
 
-        if let draft = profile.firstRunDraft {
+        let shouldSeedStarterDraft = shouldSeedSetupStarterDraft(for: profile)
+        if let draft = profile.firstRunDraft, shouldSeedStarterDraft {
             startNewConversation()
             self.draft = draft
             openSelectedConversationToken = UUID()
@@ -2038,6 +2039,17 @@ final class ChatStore: ObservableObject {
         case .privateModel:
             return openedDraft ? "Setup applied. First prompt ready." : "Setup applied."
         }
+    }
+
+    private func shouldSeedSetupStarterDraft(for profile: UserSetupProfile) -> Bool {
+        if !profile.normalizedGoalText.isEmpty {
+            return true
+        }
+        let hasDraftText = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if hasDraftText || !pendingAttachments.isEmpty || !pendingLargePasteTexts.isEmpty {
+            return false
+        }
+        return messages.isEmpty
     }
 
     private func seedSetupProjectMetadata(projectIndex index: Int, profile: UserSetupProfile) -> Bool {

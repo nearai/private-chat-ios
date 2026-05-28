@@ -1564,17 +1564,38 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(plan.starterPromptSuggestions.first?.prompt, "Plan the first repo task for this goal: Review the repo and plan the first safe patch.")
     }
 
-    func testSetupUseCaseProvidesFallbackEmptyStatePromptsWithoutGoal() {
+    func testSetupUseCaseProvidesFallbackStarterDraftAndEmptyStatePromptsWithoutGoal() {
         var profile = UserSetupProfile.defaults
         profile.useCase = .buildAgents
         profile.useCases = [.buildAgents]
 
-        let suggestions = profile.normalizedForDefaults.emptyStatePromptSuggestions
+        let normalized = profile.normalizedForDefaults
+        let suggestions = normalized.emptyStatePromptSuggestions
 
-        XCTAssertNil(profile.normalizedForDefaults.firstRunDraft)
-        XCTAssertEqual(profile.normalizedForDefaults.emptyStateSubtitle, "Start with a safe repo plan, then verify the patch or test pass.")
+        XCTAssertEqual(normalized.firstRunDraft, "Plan the first repo task: what to inspect, what to change, and which focused tests should run.")
+        XCTAssertEqual(normalized.emptyStateSubtitle, "Start with a safe repo plan, then verify the patch or test pass.")
         XCTAssertEqual(suggestions.map(\.title), ["Repo plan", "Review repo", "Focused tests"])
         XCTAssertEqual(suggestions.first?.prompt, "Plan the first repo task: what to inspect, what to change, and which focused tests should run.")
+    }
+
+    func testSetupNonPrivateTracksExposeStarterDraftWithoutGoal() {
+        var researchProfile = UserSetupProfile.defaults
+        researchProfile.useCase = .research
+        researchProfile.useCases = [.research]
+
+        var projectProfile = UserSetupProfile.defaults
+        projectProfile.useCase = .teamProjects
+        projectProfile.useCases = [.teamProjects]
+        projectProfile.contextStyle = .project
+
+        XCTAssertEqual(
+            researchProfile.normalizedForDefaults.firstRunDraft,
+            "Create a sourced research brief on the latest important AI developments, with dates, citations, and a short recommendation."
+        )
+        XCTAssertEqual(
+            projectProfile.normalizedForDefaults.firstRunDraft,
+            "Help me set up this project workspace: what files, links, instructions, and first chat should I add?"
+        )
     }
 
     func testSetupLaunchCardMetadataFallsBackToRouteFocusAndProject() {
@@ -1776,6 +1797,20 @@ final class PrivateChatCoreTests: XCTestCase {
         store.applySetupProfile(profile)
 
         XCTAssertEqual(store.draft, "Keep this draft.")
+    }
+
+    @MainActor
+    func testApplyingSetupWithoutGoalSeedsStarterDraftWhenComposerIsEmpty() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .buildAgents
+        profile.useCases = [.buildAgents]
+        profile.contextStyle = .project
+
+        store.applySetupProfile(profile)
+
+        XCTAssertEqual(store.draft, "Plan the first repo task: what to inspect, what to change, and which focused tests should run.")
     }
 
     @MainActor

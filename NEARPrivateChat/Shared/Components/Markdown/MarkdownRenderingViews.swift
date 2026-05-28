@@ -487,8 +487,49 @@ private struct InlineMarkdownText: View {
             guard let url = run.link, !Self.isSafeInlineURL(url) else { continue }
             attributed[run.range].link = nil
         }
+        // Replace "[N]" link runs with a styled circled-digit so
+        // citation markers read as numbered pills, not raw "[1]" text.
+        // SwiftUI's AttributedString doesn't support inline SF Symbol
+        // attachments cleanly, so we use unicode circled digits which
+        // render as a small filled glyph and pick up the link tint
+        // from `actionPrimary`. Falls back to "[N]" if the index is
+        // outside the supported range.
+        attributed = Self.styleCitationRuns(in: attributed)
         attributedCache.setObject(InlineAttributedCacheBox(attributedText: attributed), forKey: key)
         return attributed
+    }
+
+    private static func styleCitationRuns(in input: AttributedString) -> AttributedString {
+        var output = input
+        for run in output.runs {
+            guard run.link != nil else { continue }
+            let segment = String(output.characters[run.range])
+            guard let glyph = citationGlyph(for: segment) else { continue }
+            var replacement = AttributedString(glyph)
+            replacement.font = .body.weight(.bold)
+            replacement.foregroundColor = .actionPrimary
+            replacement.link = run.link
+            output.replaceSubrange(run.range, with: replacement)
+        }
+        return output
+    }
+
+    private static func citationGlyph(for displayText: String) -> String? {
+        // Matches "[1]" / "[12]" / " [1]" — link text after our
+        // linkCitationMarkers pass. Returns a unicode circled digit
+        // (1-20) sized to the surrounding font.
+        let trimmed = displayText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("["), trimmed.hasSuffix("]") else { return nil }
+        let inner = trimmed.dropFirst().dropLast()
+        guard let value = Int(inner), value >= 1 else { return nil }
+        let circled: [String] = [
+            "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩",
+            "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳"
+        ]
+        if value <= circled.count {
+            return circled[value - 1]
+        }
+        return nil
     }
 
     private static func isSafeInlineURL(_ url: URL) -> Bool {

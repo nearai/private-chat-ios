@@ -431,6 +431,15 @@ struct UserSetupProfile: Codable, Hashable {
         if !goal.isEmpty {
             return "Help me with this goal: \(goal)"
         }
+        if useCases.contains(.buildAgents) {
+            return UserSetupUseCase.buildAgents.starterPrompt
+        }
+        if useCases.contains(.research) {
+            return UserSetupUseCase.research.starterPrompt
+        }
+        if useCases.contains(.teamProjects) || contextStyle != .simple {
+            return UserSetupUseCase.teamProjects.starterPrompt
+        }
         return nil
     }
 
