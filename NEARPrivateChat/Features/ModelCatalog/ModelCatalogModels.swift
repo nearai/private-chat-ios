@@ -176,7 +176,10 @@ struct ModelOption: Decodable, Identifiable, Hashable {
         if modelID == Self.llmCouncilSynthesisModelID {
             return "Council Synthesis"
         }
-        return sanitizedModelDisplayName ?? modelID
+        if let metadataName = sanitizedModelDisplayName {
+            return metadataName
+        }
+        return Self.humanize(modelID: modelID)
     }
 
     private var sanitizedModelDisplayName: String? {
@@ -185,6 +188,39 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             return nil
         }
         return value
+    }
+
+    /// Turn a fully-qualified model id like "zai-org/GLM-5.1-FP8" into a
+    /// chip-friendly label like "GLM 5.1". Drops the org prefix, the
+    /// numeric-precision suffix (FP8/FP16/INT8/BF16/Q4/Q8…), and replaces
+    /// the family/version hyphen with a space. Falls back to the raw
+    /// trailing segment if no recognisable pattern is present.
+    static func humanize(modelID: String) -> String {
+        let trailing = modelID.split(separator: "/").last.map(String.init) ?? modelID
+        let precisionSuffixes = ["-FP8", "-FP16", "-INT8", "-INT4", "-BF16", "-Q4", "-Q8", "-Q4_K_M", "-Q5_K_M"]
+        var trimmed = trailing
+        for suffix in precisionSuffixes where trimmed.uppercased().hasSuffix(suffix) {
+            trimmed = String(trimmed.dropLast(suffix.count))
+            break
+        }
+        // Family-version split: "GLM-5.1" → "GLM 5.1", "gpt-5.5" → "GPT 5.5",
+        // "kimi-k2" → "Kimi K2". Multi-segment names like
+        // "claude-opus-4-7" map to "Claude Opus 4 7" — acceptable for a chip.
+        let parts = trimmed.split(separator: "-").map(String.init)
+        guard !parts.isEmpty else { return trailing }
+        let humanized = parts.enumerated().map { index, part -> String in
+            // Preserve all-caps family acronyms (GLM, GPT, LLM, etc.) and
+            // version segments that mix digits + dots (5.1, 4.7, k2).
+            if index == 0, part.uppercased() == part, part.count <= 4 {
+                return part
+            }
+            if part.contains(".") || part.first?.isLetter == false {
+                return part
+            }
+            // Title-case otherwise.
+            return part.prefix(1).uppercased() + part.dropFirst()
+        }
+        return humanized.joined(separator: " ")
     }
 
     var isVerifiable: Bool {
