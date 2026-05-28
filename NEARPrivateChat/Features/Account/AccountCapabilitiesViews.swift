@@ -855,14 +855,8 @@ private struct PowerToolAPIKeysView: View {
             } header: {
                 Text("NEAR AI Cloud")
             }
-
-            Section("Manual key") {
-                SecureField("Fallback Cloud key", text: $nearCloudAPIKey)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-            }
         }
-        .navigationTitle("API keys")
+        .navigationTitle("NEAR AI Cloud")
         .platformInlineNavigationTitle()
     }
 }
@@ -1661,7 +1655,8 @@ private struct NearCloudConnectionCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
+            // Header — same shape in both states; copy + badge swap.
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: isConnected ? "cloud.fill" : "cloud")
                     .font(.subheadline.weight(.bold))
@@ -1672,7 +1667,9 @@ private struct NearCloudConnectionCard: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("NEAR AI Cloud")
                         .font(.subheadline.weight(.bold))
-                    Text(isConnected ? "\(max(modelCount, 1)) Cloud models ready." : "Link your NEAR account when supported, or paste a Cloud key and test it before it is saved.")
+                    Text(isConnected
+                         ? "\(max(modelCount, 1)) cloud models ready."
+                         : "Link your NEAR account, or paste a key and test it before it is saved.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1688,61 +1685,93 @@ private struct NearCloudConnectionCard: View {
                     .background((isConnected ? Color.trustVerified : Color.proofStale).opacity(0.12), in: Capsule())
             }
 
-            if !isConnected {
-                Button(action: onConnectAccount) {
-                    Label(isAutoConnecting ? "Connecting Account" : "Connect with NEAR account", systemImage: isAutoConnecting ? "arrow.triangle.2.circlepath" : "person.crop.circle.badge.checkmark")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isAutoConnecting || isConnecting)
+            if isConnected {
+                connectedBody
+            } else {
+                setupBody
             }
+        }
+        .padding(.vertical, 4)
+    }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Label("Fallback setup", systemImage: "list.number")
+    // MARK: Connected state — minimal: open cloud, disconnect.
+
+    private var connectedBody: some View {
+        HStack(spacing: 8) {
+            Button(action: onOpenCloud) {
+                Label("Open NEAR AI Cloud", systemImage: "arrow.up.forward.app")
+            }
+            .buttonStyle(.bordered)
+
+            Spacer(minLength: 0)
+
+            Button(role: .destructive, action: onRemove) {
+                Label("Disconnect", systemImage: "trash")
+            }
+            .buttonStyle(.bordered)
+            .disabled(isAutoConnecting || isConnecting)
+        }
+        .font(.caption.weight(.semibold))
+    }
+
+    // MARK: Setup state — one-tap account link first, key fallback below.
+
+    private var setupBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button(action: onConnectAccount) {
+                Label(isAutoConnecting ? "Connecting Account" : "Connect with NEAR account",
+                      systemImage: isAutoConnecting ? "arrow.triangle.2.circlepath" : "person.crop.circle.badge.checkmark")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isAutoConnecting || isConnecting)
+
+            // Fallback paste-key flow — inline, single column.
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Or paste a key", systemImage: "key")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.textSecondary)
-                Text("If one-tap linking is not available yet: open NEAR AI Cloud, sign up or sign in, create an API key, then paste and test it here.")
+                Text("Open NEAR AI Cloud, create an API key, then paste it here and test before saving.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(10)
-            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-            HStack(spacing: 8) {
-                Button(action: onOpenCloud) {
-                    Label("Open Cloud", systemImage: "arrow.up.forward.app")
-                }
-                .buttonStyle(.bordered)
+                SecureField("Paste NEAR AI Cloud key", text: $apiKey)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(10)
+                    .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.appBorder, lineWidth: 1)
+                    }
 
-                Button(action: onPasteKey) {
-                    Label("Paste Key", systemImage: "doc.on.clipboard")
-                }
-                .buttonStyle(.bordered)
-
-                Spacer(minLength: 0)
-            }
-            .font(.caption.weight(.semibold))
-
-            HStack(spacing: 8) {
-                Button(action: onConnect) {
-                    Label(isConnecting ? "Testing" : "Connect & Test", systemImage: isConnecting ? "arrow.triangle.2.circlepath" : "checkmark.seal")
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isAutoConnecting || isConnecting || trimmedKey.isEmpty)
-
-                if isConnected {
-                    Button(role: .destructive, action: onRemove) {
-                        Label("Disconnect", systemImage: "trash")
+                HStack(spacing: 8) {
+                    Button(action: onOpenCloud) {
+                        Label("Open Cloud", systemImage: "arrow.up.forward.app")
                     }
                     .buttonStyle(.bordered)
-                    .disabled(isAutoConnecting || isConnecting)
+
+                    Button(action: onPasteKey) {
+                        Label("Paste", systemImage: "doc.on.clipboard")
+                    }
+                    .buttonStyle(.bordered)
+
+                    Spacer(minLength: 0)
+
+                    Button(action: onConnect) {
+                        Label(isConnecting ? "Testing" : "Connect & Test",
+                              systemImage: isConnecting ? "arrow.triangle.2.circlepath" : "checkmark.seal")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isAutoConnecting || isConnecting || trimmedKey.isEmpty)
                 }
+                .font(.caption.weight(.semibold))
             }
-            .font(.caption.weight(.semibold))
+            .padding(12)
+            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-        .padding(.vertical, 4)
     }
 }
 
