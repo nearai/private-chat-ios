@@ -88,12 +88,22 @@ struct EmptyChatView: View {
                 EmptyPromptSuggestion(
                     title: "Compare",
                     symbolName: "square.grid.2x2",
-                    prompt: "Compare leading models on this task: "
+                    prompt: "Compare the council's answers on this task: "
                 ),
                 EmptyPromptSuggestion(
                     title: "Disagreements",
                     symbolName: "arrow.triangle.branch",
-                    prompt: "Ask the council to identify strongest agreements and disagreements on: "
+                    prompt: "Show me where the council agrees and disagrees on: "
+                ),
+                EmptyPromptSuggestion(
+                    title: "Validate",
+                    symbolName: "checkmark.shield",
+                    prompt: "Have each council model fact-check this claim and flag what's uncertain: "
+                ),
+                EmptyPromptSuggestion(
+                    title: "Decide",
+                    symbolName: "arrow.left.arrow.right.circle",
+                    prompt: "Ask the council which option they'd recommend and why for: "
                 )
             ]
         }
