@@ -8567,10 +8567,10 @@ final class ChatStore: ObservableObject {
         return [
             user("dw-u1", "What's in today's news?", -600),
             assistant("dw-a1", "Three stories leading today, weighted to what you track.", -595, widget: .demoNewsBrief),
-            user("dw-u2", "How's ETH doing right now?", -420),
-            assistant("dw-a2", "ETH slipped below your $3,180 threshold in the last hour.", -415, widget: .demoChart),
-            user("dw-u3", "Compare SEV-SNP and TDX for our TEE.", -300),
-            assistant("dw-a3", "Both give you memory encryption and attestation; they differ on isolation and live migration.", -295, widget: .demoComparison)
+            user("dw-u2", "Compare SEV-SNP and TDX for our TEE.", -420),
+            assistant("dw-a2", "Both give you memory encryption and attestation; they differ on isolation and live migration.", -415, widget: .demoComparison),
+            user("dw-u3", "How's ETH doing right now?", -300),
+            assistant("dw-a3", "ETH slipped below your $3,180 threshold in the last hour.", -295, widget: .demoChart)
         ]
     }
     #endif
