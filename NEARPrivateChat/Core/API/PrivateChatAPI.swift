@@ -1405,30 +1405,40 @@ final class PrivateChatAPI {
         return trailing
     }
 
-    /// Builds an assistant-voice reply for the simulator stub that reads
-    /// like a real model response. Picks one of three short bodies based
-    /// on a hash of the user's prompt so successive sends don't return
-    /// the identical reply.
+    /// Returns a short, generic assistant-voice reply for the simulator
+    /// stub. Replies read as if a real model is answering — no
+    /// references to stubs, simulators, offline mode, or the UI itself.
+    /// One of four bodies is selected by a hash of the user's prompt
+    /// so consecutive sends don't surface the same text.
     static func simulatorStubAssistantReply(for userText: String) -> String {
         let prompts: [String] = [
             """
-            Here's the short version: I'm running locally on your simulator without a live backend connection, so I'm answering from a small offline pool while the chat surface, verification flow, and source rendering get exercised end-to-end.
+            Short answer: it depends on what you're optimizing for. Speed, accuracy, and cost usually pull in different directions, so the right move is to name the constraint you can't move on first.
 
-            If you send a follow-up, I'll respond again. Open the verification sheet from the "..." menu to see the proof state, or switch models from the chip row below.
-            """,
-            """
-            Good question. I can outline the trade-offs at a high level: speed, privacy boundary, and whether the route can carry a fresh proof are usually the three axes worth comparing. Tell me which of those matters most for what you're working on and I'll go deeper.
-
-            (You're on the offline simulator session — the surrounding UI is fully wired even though I'm replying from a local pool.)
+            Tell me which of those is the hard one and I'll go deeper on the trade-off.
             """,
             """
             Let's break it into three steps:
 
-            1. Clarify what you actually need — outcome, deadline, audience.
-            2. Pick the minimum tools that can ship it.
+            1. Define the outcome you actually need — who it's for, what done looks like, by when.
+            2. Pick the smallest set of moving parts that can deliver it.
             3. Cut anything that doesn't move step 1 forward.
 
-            Send a follow-up if you want me to apply this to a concrete project.
+            Send a follow-up with a specific project and I'll apply this to it.
+            """,
+            """
+            A few angles to consider:
+
+            • The strongest version of this question is usually about underlying mechanism, not surface comparison.
+            • The framing you choose changes which evidence counts.
+            • Constraints (time, scope, audience) decide more than people expect.
+
+            Want me to push on any one of those?
+            """,
+            """
+            Here's how I'd frame it: the interesting question isn't whether the answer is yes or no, but what would have to be true for each to win. List those conditions, then weigh which set is more likely in your situation.
+
+            If you give me the specifics, I'll walk through both sides.
             """
         ]
         var hash = 5381
