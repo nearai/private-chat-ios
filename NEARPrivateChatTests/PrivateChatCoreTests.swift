@@ -2990,3 +2990,45 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(widget.metric?.value, "7")
     }
 }
+
+// MARK: - Briefing kinds + back-compat persistence
+
+extension PrivateChatCoreTests {
+    func testBriefingDecodesLegacyJSONWithoutKind() throws {
+        // Simulate a briefings.json written before `kind`/`accountID` existed.
+        let modern = Briefing(title: "Legacy", prompt: "p", schedule: .daily(hour: 8, minute: 0))
+        let data = try JSONEncoder().encode(modern)
+        var dict = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        dict.removeValue(forKey: "kind")
+        dict.removeValue(forKey: "accountID")
+        let legacyData = try JSONSerialization.data(withJSONObject: dict)
+
+        let decoded = try JSONDecoder().decode(Briefing.self, from: legacyData)
+        XCTAssertEqual(decoded.kind, .customPrompt)
+        XCTAssertNil(decoded.accountID)
+        XCTAssertEqual(decoded.title, "Legacy")
+    }
+
+    func testBriefingRoundTripsKindAndAccount() throws {
+        let original = Briefing(
+            title: "My NEAR",
+            prompt: "How is my NEAR account doing?",
+            schedule: .daily(hour: 8, minute: 0),
+            kind: .nearAccount,
+            accountID: "abhishek.near"
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(Briefing.self, from: data)
+        XCTAssertEqual(decoded.kind, .nearAccount)
+        XCTAssertEqual(decoded.accountID, "abhishek.near")
+        XCTAssertEqual(decoded.id, original.id)
+    }
+
+    func testBriefingKindDecodesUnknownAsCustomPrompt() throws {
+        let data = try XCTUnwrap("\"someFutureKind\"".data(using: .utf8))
+        let kind = try JSONDecoder().decode(BriefingKind.self, from: data)
+        XCTAssertEqual(kind, .customPrompt)
+        XCTAssertFalse(kind.isLiveData)
+        XCTAssertTrue(BriefingKind.ethPrice.isLiveData)
+    }
+}
