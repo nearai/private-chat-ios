@@ -58,6 +58,8 @@ struct ThreadedBriefingView: View {
     @State private var deliveries: [BriefingDelivery]
     @State private var replyText = ""
     @State private var isRunning = false
+    @State private var showingAccountEditor = false
+    @State private var accountInput = ""
 
     init(
         title: String,
@@ -96,6 +98,29 @@ struct ThreadedBriefingView: View {
             replyComposer
         }
         .background(Color.appBackground)
+        .alert("Change NEAR account", isPresented: $showingAccountEditor) {
+            TextField("yourname.near", text: $accountInput)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Button("Update") { changeAccount() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Track a different NEAR mainnet account in this briefing.")
+        }
+    }
+
+    private var liveBriefing: Briefing? {
+        guard let store, let briefingID else { return nil }
+        return store.briefings.first(where: { $0.id == briefingID })
+    }
+
+    private func changeAccount() {
+        guard let store, var briefing = liveBriefing else { return }
+        let account = accountInput.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !account.isEmpty else { return }
+        briefing.accountID = account
+        store.update(briefing)
+        runNow()
     }
 
     private var header: some View {
@@ -119,6 +144,12 @@ struct ThreadedBriefingView: View {
             Menu {
                 if store != nil, briefingID != nil {
                     Button { runNow() } label: { Label("Run now", systemImage: "arrow.clockwise") }
+                    if liveBriefing?.kind == .nearAccount {
+                        Button {
+                            accountInput = liveBriefing?.accountID ?? ""
+                            showingAccountEditor = true
+                        } label: { Label("Change account", systemImage: "at") }
+                    }
                     Button(role: .destructive) { deleteBriefing() } label: { Label("Delete briefing", systemImage: "trash") }
                 } else {
                     Button("Mark all read") {}
