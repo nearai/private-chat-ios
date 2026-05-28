@@ -134,6 +134,7 @@ struct CouncilRoomModel {
             return "Council Synthesis"
         }
         return ModelOption.humanize(modelID: modelID)
+            .replacingOccurrences(of: "Glm", with: "GLM")
     }
 
     private static func stableColor(for modelID: String) -> Color {

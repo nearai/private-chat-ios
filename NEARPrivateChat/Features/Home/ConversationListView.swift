@@ -252,7 +252,8 @@ struct ConversationListView: View {
 
             ScrollView {
                 LazyVStack(spacing: 14) {
-                    if selectedHomeFilter == .all, searchQuery.isEmpty, !briefingStore.briefings.isEmpty {
+                    if selectedHomeFilter == .all, searchQuery.isEmpty,
+                       !(briefingStore.briefings.isEmpty && filteredConversations.isEmpty) {
                         TodaySection(
                             store: briefingStore,
                             onOpenBriefing: { openedBriefing = $0 },
