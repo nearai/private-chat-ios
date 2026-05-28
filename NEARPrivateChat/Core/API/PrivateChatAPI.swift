@@ -217,15 +217,31 @@ final class PrivateChatAPI {
     }
 
     func fetchModels() async throws -> [ModelOption] {
+        #if targetEnvironment(simulator) && DEBUG
+        if authToken?.hasPrefix("simulator-debug-token-") == true {
+            return Self.simulatorStubModels
+        }
+        #endif
         let response: ModelListResponse = try await request("/v1/model/list", method: "GET", authenticated: true)
         return response.models
     }
 
     func connectNearCloudAccount() async throws -> NearCloudConnectResponse {
-        try await request("/v1/near-cloud/connect", method: "POST", body: NearCloudConnectPayload(), authenticated: true)
+        #if targetEnvironment(simulator) && DEBUG
+        if authToken?.hasPrefix("simulator-debug-token-") == true {
+            let stubJSON = #"{"apiKey":"sim-cloud-key","models":[]}"#.data(using: .utf8) ?? Data()
+            return try JSONDecoder().decode(NearCloudConnectResponse.self, from: stubJSON)
+        }
+        #endif
+        return try await request("/v1/near-cloud/connect", method: "POST", body: NearCloudConnectPayload(), authenticated: true)
     }
 
     func fetchNearCloudModels(apiKey: String? = nil) async throws -> [ModelOption] {
+        #if targetEnvironment(simulator) && DEBUG
+        if authToken?.hasPrefix("simulator-debug-token-") == true || apiKey?.hasPrefix("sim-cloud-key-") == true {
+            return Self.simulatorStubCloudModels
+        }
+        #endif
         guard let url = URL(string: "https://cloud-api.near.ai/v1/model/list") else {
             throw APIError.invalidURL
         }
@@ -241,7 +257,12 @@ final class PrivateChatAPI {
     }
 
     func fetchConversations() async throws -> [ConversationSummary] {
-        try await request("/v1/conversations", method: "GET", authenticated: true)
+        #if targetEnvironment(simulator) && DEBUG
+        if authToken?.hasPrefix("simulator-debug-token-") == true {
+            return []
+        }
+        #endif
+        return try await request("/v1/conversations", method: "GET", authenticated: true)
     }
 
     func createConversation(title: String) async throws -> ConversationSummary {
@@ -617,6 +638,21 @@ final class PrivateChatAPI {
         visibleOutputTimeout: TimeInterval? = nil,
         onEvent: @escaping (ResponseStreamEvent) async -> Void
     ) async throws {
+        #if targetEnvironment(simulator) && DEBUG
+        // Simulator stub session can't reach the chat-completion endpoint.
+        // Emit a canned streaming response so visual QA can walk the full
+        // chat flow without a real backend. Production builds bypass this
+        // branch entirely.
+        if authToken?.hasPrefix("simulator-debug-token-") == true {
+            try await emitSimulatorStubResponse(
+                model: model,
+                userText: text,
+                conversationID: conversationID,
+                onEvent: onEvent
+            )
+            return
+        }
+        #endif
         let promptText = text.isEmpty && !attachments.isEmpty
             ? "Review the attached file context. Lead with the most useful summary, then call out decisions, risks, and next actions."
             : text
@@ -1177,6 +1213,134 @@ final class PrivateChatAPI {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? "Attachment" : String(cleaned.prefix(160))
     }
+
+    #if targetEnvironment(simulator) && DEBUG
+    /// Stub model catalog returned to the simulator stub session so the
+    /// model picker, council picker and Account screens have real models
+    /// to render. Real backend never sees this branch.
+    static let simulatorStubModels: [ModelOption] = [
+        PrivateChatAPI.makeStubModel(id: "zai-org/GLM-5.1-FP8",
+                           displayName: "GLM 5.1",
+                           description: "Default private route with verification.",
+                           verifiable: true),
+        PrivateChatAPI.makeStubModel(id: "openai/gpt-5.2",
+                           displayName: "GPT 5.2",
+                           description: "OpenAI reasoning model.",
+                           verifiable: true),
+        PrivateChatAPI.makeStubModel(id: "qwen/qwen3.5-122b-a10b",
+                           displayName: "Qwen 3.5 122B",
+                           description: "Deeper reasoning, slower.",
+                           verifiable: true),
+        PrivateChatAPI.makeStubModel(id: "moonshotai/kimi-k2",
+                           displayName: "Kimi K2",
+                           description: "Long-context private chat.",
+                           verifiable: true)
+    ]
+
+    static let simulatorStubCloudModels: [ModelOption] = [
+        PrivateChatAPI.makeStubModel(id: "near-cloud/anthropic/claude-opus-4-7",
+                           displayName: "Claude Opus 4.7",
+                           description: "Anthropic via NEAR AI Cloud.",
+                           verifiable: false),
+        PrivateChatAPI.makeStubModel(id: "near-cloud/openai/gpt-5.5",
+                           displayName: "GPT 5.5",
+                           description: "OpenAI via NEAR AI Cloud.",
+                           verifiable: false),
+        PrivateChatAPI.makeStubModel(id: "near-cloud/qwen3.7-max",
+                           displayName: "Qwen 3.7 Max",
+                           description: "Frontier model via NEAR AI Cloud.",
+                           verifiable: false),
+        PrivateChatAPI.makeStubModel(id: "near-cloud/google/gemini-3-pro",
+                           displayName: "Gemini 3 Pro",
+                           description: "Google via NEAR AI Cloud.",
+                           verifiable: false)
+    ]
+
+    private static func makeStubModel(
+        id: String,
+        displayName: String,
+        description: String,
+        verifiable: Bool
+    ) -> ModelOption {
+        ModelOption(
+            modelID: id,
+            publicModel: !verifiable,
+            metadata: ModelOption.Metadata(
+                verifiable: verifiable,
+                contextLength: 131_072,
+                modelDisplayName: displayName,
+                modelDescription: description,
+                modelIcon: nil,
+                aliases: [displayName]
+            )
+        )
+    }
+
+    /// Stubs the chat-completion stream when running on a simulator
+    /// session token. Emits `created → titleUpdated → textDelta* → itemDone
+    /// → completed` over ~1.2s so the UI exercises every code path in the
+    /// normal happy flow.
+    fileprivate func emitSimulatorStubResponse(
+        model: String,
+        userText: String,
+        conversationID: String,
+        onEvent: @escaping (ResponseStreamEvent) async -> Void
+    ) async throws {
+        let responseID = "sim-resp-\(UUID().uuidString.prefix(8))"
+        await onEvent(.created(responseID: responseID))
+
+        // Title derived from the first ~6 words of the prompt.
+        let title = userText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+            .prefix(6)
+            .joined(separator: " ")
+        if !title.isEmpty {
+            await onEvent(.titleUpdated(title))
+        }
+
+        // Canned reply. Chunked to mimic a real streaming response.
+        let reply = """
+        This is a simulator stub response from \(humanizedModelName(model)). The real backend is not reachable from this build, so the iOS app is rendering a canned reply so you can walk every chat-thread surface.
+
+        Useful things to try while on this stub:
+          • Open the verification sheet from the "..." menu.
+          • Switch models from the composer chip row.
+          • Try the source carousel and citation pills (added when the real API attaches sources).
+          • Send another message — the stub will reply again.
+        """
+
+        // Stream as token-sized chunks so SSE event handlers actually move.
+        for chunk in chunked(reply, every: 6) {
+            try Task.checkCancellation()
+            await onEvent(.textDelta(chunk))
+            try? await Task.sleep(nanoseconds: 35_000_000)
+        }
+
+        await onEvent(.itemDone(text: reply))
+        await onEvent(.completed(responseID: responseID))
+        _ = conversationID  // kept for symmetry with the real API
+    }
+
+    private func humanizedModelName(_ modelID: String) -> String {
+        guard let trailing = modelID.split(separator: "/").last.map(String.init), !trailing.isEmpty else {
+            return modelID
+        }
+        return trailing
+    }
+
+    private func chunked(_ text: String, every count: Int) -> [String] {
+        guard count > 0 else { return [text] }
+        var chunks: [String] = []
+        var index = text.startIndex
+        while index < text.endIndex {
+            let next = text.index(index, offsetBy: count, limitedBy: text.endIndex) ?? text.endIndex
+            chunks.append(String(text[index..<next]))
+            index = next
+        }
+        return chunks
+    }
+    #endif
 }
 
 private struct EmptyResponse: Decodable {}
