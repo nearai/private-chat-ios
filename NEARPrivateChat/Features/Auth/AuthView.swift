@@ -49,7 +49,7 @@ struct AuthView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .accessibilityHidden(true)
 
-                Text("Private AI with verifiable answers.")
+                Text("Private AI. Verifiably Yours.")
                     .font(.system(size: 26, weight: .semibold))
                     .tracking(-0.5)
                     .foregroundStyle(.primary)
@@ -252,7 +252,7 @@ struct AuthHeroCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .accessibilityHidden(true)
 
-            Text("Private AI with verifiable answers.")
+            Text("Private AI. Verifiably Yours.")
                 .font(.system(size: 26, weight: .semibold))
                 .tracking(-0.5)
                 .foregroundStyle(.primary)
