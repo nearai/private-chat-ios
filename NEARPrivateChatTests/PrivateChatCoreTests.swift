@@ -156,6 +156,41 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(action.draft?.count, AppDeepLinkAction.maxDraftCharacters)
     }
 
+    func testAppDeepLinkCanImportHostedIronclawBridge() throws {
+        var components = URLComponents(string: "nearprivatechat://connect")!
+        components.queryItems = [
+            URLQueryItem(name: "endpoint", value: "https://example.com/ironclaw"),
+            URLQueryItem(name: "token", value: "secret-token"),
+            URLQueryItem(name: "thread_id", value: "thread-123"),
+            URLQueryItem(name: "prompt", value: "Review the latest repo status")
+        ]
+
+        let action = try XCTUnwrap(AppDeepLinkAction.parse(components.url!))
+
+        XCTAssertEqual(action.route, .agent)
+        XCTAssertEqual(action.draft, "Review the latest repo status")
+        XCTAssertEqual(action.hostedBridgeImport?.endpoint, "https://example.com/ironclaw")
+        XCTAssertEqual(action.hostedBridgeImport?.authToken, "secret-token")
+        XCTAssertEqual(action.hostedBridgeImport?.threadID, "thread-123")
+        XCTAssertTrue(action.hostedBridgeImport?.isEnabled == true)
+    }
+
+    @MainActor
+    func testPendingExternalDeepLinkDescriptionMentionsHostedBridgeImport() throws {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        let url = try XCTUnwrap(
+            URL(
+                string: "nearprivatechat://ironclaw?endpoint=https%3A%2F%2Fexample.com%2Fironclaw&token=secret-token&prompt=Review%20this"
+            )
+        )
+
+        XCTAssertTrue(store.handleIncomingURL(url))
+        XCTAssertEqual(
+            store.pendingExternalDeepLinkDescription,
+            "Open an IronClaw Mobile agent. Hosted bridge for example.com will be saved and enabled. Token will be saved. A prompt will be staged but not sent."
+        )
+    }
+
     func testChatRoleDecodesDeveloperAndToolRoles() throws {
         let decoder = JSONDecoder()
 
@@ -1312,6 +1347,19 @@ final class PrivateChatCoreTests: XCTestCase {
         )
 
         XCTAssertEqual(afterCompletion, current.normalizedForDefaults)
+    }
+
+    func testUserSetupNeedsFirstRunSetupOnlyForBrandNewAccounts() throws {
+        let defaults = try makeIsolatedDefaults()
+        let accountID = "user:first-run-setup"
+
+        XCTAssertTrue(UserSetupStorage.needsFirstRunSetup(for: accountID, defaults: defaults))
+
+        UserSetupStorage.saveWithoutPendingLaunchCard(.defaults, for: accountID, defaults: defaults)
+        XCTAssertFalse(UserSetupStorage.needsFirstRunSetup(for: accountID, defaults: defaults))
+
+        UserSetupStorage.clearCompletion(for: accountID, defaults: defaults)
+        XCTAssertFalse(UserSetupStorage.needsFirstRunSetup(for: accountID, defaults: defaults))
     }
 
     func testUserSetupStorageMigratesFallbackToUserAccount() throws {
