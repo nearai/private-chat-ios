@@ -55,7 +55,6 @@
 		D10000000000000000000005 /* AppRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000005 /* AppRoute.swift */; };
 		D10000000000000000000006 /* AppSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000006 /* AppSheet.swift */; };
 		D10000000000000000000007 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000007 /* AppRouter.swift */; };
-		D10000000000000000000008 /* LegalTermsRequiredView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000008 /* LegalTermsRequiredView.swift */; };
 		D10000000000000000000009 /* UserSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000009 /* UserSetupView.swift */; };
 		D1000000000000000000000A /* RoutePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000000000000000000000A /* RoutePlanner.swift */; };
 		E10000000000000000000001 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* DesignTokens.swift */; };
@@ -145,7 +144,6 @@
 		D20000000000000000000005 /* AppRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRoute.swift; sourceTree = "<group>"; };
 		D20000000000000000000006 /* AppSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSheet.swift; sourceTree = "<group>"; };
 		D20000000000000000000007 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
-		D20000000000000000000008 /* LegalTermsRequiredView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalTermsRequiredView.swift; sourceTree = "<group>"; };
 		D20000000000000000000009 /* UserSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSetupView.swift; sourceTree = "<group>"; };
 		D2000000000000000000000A /* RoutePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutePlanner.swift; sourceTree = "<group>"; };
 		E20000000000000000000001 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
@@ -371,7 +369,6 @@
 			isa = PBXGroup;
 			children = (
 				F2000000000000000000000A /* SetupModels.swift */,
-				D20000000000000000000008 /* LegalTermsRequiredView.swift */,
 				D20000000000000000000009 /* UserSetupView.swift */,
 			);
 			path = Setup;
@@ -672,7 +669,6 @@
 				D10000000000000000000005 /* AppRoute.swift in Sources */,
 				D10000000000000000000006 /* AppSheet.swift in Sources */,
 				D10000000000000000000007 /* AppRouter.swift in Sources */,
-				D10000000000000000000008 /* LegalTermsRequiredView.swift in Sources */,
 				D10000000000000000000009 /* UserSetupView.swift in Sources */,
 				D1000000000000000000000A /* RoutePlanner.swift in Sources */,
 				E10000000000000000000001 /* DesignTokens.swift in Sources */,

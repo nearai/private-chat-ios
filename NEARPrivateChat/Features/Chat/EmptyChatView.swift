@@ -16,14 +16,14 @@ struct EmptyChatView: View {
     }
 
     var body: some View {
-        VStack(spacing: 18) {
-            Spacer(minLength: 0)
-
-            NearAppIconMark(size: 64)
+        VStack(spacing: 14) {
+            NearAppIconMark(size: 56)
 
             Text("Ask privately.")
                 .font(.system(size: 17, weight: .regular))
-                .foregroundStyle(Color.textSecondary)
+                .tracking(-0.2)
+                .lineSpacing(24 - 17)
+                .foregroundStyle(Color.textTertiary)
 
             if !emptyPromptSuggestions.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -37,10 +37,9 @@ struct EmptyChatView: View {
                 .scrollClipDisabled()
                 .padding(.top, 12)
             }
-
-            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     private func suggestionChip(_ suggestion: EmptyPromptSuggestion) -> some View {

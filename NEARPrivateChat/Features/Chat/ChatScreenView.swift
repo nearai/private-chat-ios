@@ -41,13 +41,15 @@ private struct ChatTranscriptView: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 18) {
-                        if messages.isEmpty {
+                    if messages.isEmpty {
+                        GeometryReader { geo in
                             EmptyChatView()
-                                .frame(maxWidth: .infinity)
-                                .padding(.top, 54)
-                                .padding(.bottom, 22)
-                        } else {
+                                .frame(width: geo.size.width, height: geo.size.height)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 360)
+                        .containerRelativeFrame(.vertical)
+                    } else {
+                        LazyVStack(alignment: .leading, spacing: 18) {
                             ForEach(displayItems) { item in
                                 switch item {
                                 case let .message(message):
@@ -59,9 +61,9 @@ private struct ChatTranscriptView: View {
                                 }
                             }
                         }
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 18)
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 18)
                 }
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 1)

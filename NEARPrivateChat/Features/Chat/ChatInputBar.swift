@@ -115,13 +115,22 @@ struct InputBar: View {
                 .disabled(transcriptStore.isStreaming)
                 .accessibilityLabel("Attach File")
 
-                TextField(composerPlaceholder, text: draftBinding, axis: .vertical)
+                TextField(
+                    "",
+                    text: draftBinding,
+                    prompt: Text(composerPlaceholder)
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundColor(Color.textTertiary),
+                    axis: .vertical
+                )
                     .textFieldStyle(.plain)
                     .tokenInputTraits()
                     .autocorrectionDisabled()
                     .lineLimit(1...6)
                     .focused($isFocused)
-                    .font(.body)
+                    .font(.system(size: 17, weight: .regular))
+                    .tracking(-0.2)
+                    .foregroundStyle(Color.textPrimary)
                     .onSubmit {
                         chatStore.sendDraft()
                         isFocused = false
@@ -287,7 +296,7 @@ struct InputBar: View {
 
     private var composerRoutingControls: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 7) {
+            HStack(spacing: 6) {
                 Button {
                     openModelPicker(openingCouncil: false)
                 } label: {
@@ -309,7 +318,7 @@ struct InputBar: View {
                         title: chatStore.isCouncilModeEnabled ? "Council \(chatStore.activeCouncilModels.count)" : "Council",
                         symbolName: "person.3",
                         isActive: chatStore.isCouncilModeEnabled,
-                        showsChevron: true
+                        showsChevron: false
                     )
                 }
                 .buttonStyle(.plain)
@@ -336,7 +345,7 @@ struct InputBar: View {
                             title: "Effort \(chatStore.advancedModelParams.reasoningEffort.title)",
                             symbolName: "gauge.medium",
                             isActive: chatStore.advancedModelParams.reasoningEffort != .automatic,
-                            showsChevron: true
+                            showsChevron: false
                         )
                     }
                     .buttonStyle(.plain)
@@ -344,7 +353,7 @@ struct InputBar: View {
                     .accessibilityHint("Changes reasoning effort from the chat window.")
                 }
             }
-            .padding(.horizontal, 1)
+            .padding(.horizontal, 2)
         }
     }
 
@@ -612,19 +621,21 @@ struct ComposerRouteChip: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: symbolName)
-                .font(.caption.weight(.bold))
+                .font(.system(size: 13, weight: .semibold))
             Text(title)
-                .font(.caption.weight(.semibold))
+                .font(.system(size: 13, weight: .medium))
+                .tracking(-0.1)
                 .lineLimit(1)
             if showsChevron {
                 Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.bold))
-                    .opacity(0.65)
+                    .font(.system(size: 11, weight: .semibold))
+                    .opacity(0.55)
             }
         }
-        .foregroundStyle(isActive ? activeForeground : Color.textSecondary)
-        .padding(.horizontal, 10)
-        .frame(height: 32)
+        .foregroundStyle(isActive ? Color.actionPress : Color.textPrimary)
+        .padding(.leading, 10)
+        .padding(.trailing, 12)
+        .frame(height: 30)
         .background(background, in: Capsule())
         .overlay {
             Capsule()
@@ -632,19 +643,12 @@ struct ComposerRouteChip: View {
         }
     }
 
-    private var activeForeground: Color {
-        symbolName == "gauge.medium" ? Color.brandBlack : Color.actionPrimary
-    }
-
     private var background: Color {
-        if isActive {
-            return symbolName == "gauge.medium" ? Color.brandSky.opacity(0.55) : Color.actionTint
-        }
-        return Color.appPanelBackground
+        isActive ? Color.actionFill : Color.appPanelBackground
     }
 
     private var border: Color {
-        isActive ? Color.actionPrimary.opacity(0.16) : Color.appBorder
+        isActive ? Color.actionPrimary.opacity(0.30) : Color.appBorder
     }
 }
 

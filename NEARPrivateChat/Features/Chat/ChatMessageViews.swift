@@ -15,25 +15,29 @@ struct MessageBubble: View {
             }
 
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Text(headerTitle)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    if let authorBadgeTitle {
-                        MetadataPill(title: authorBadgeTitle, symbolName: "person.crop.circle", isPrimary: false)
-                    }
-                    if message.role == .assistant, let badge = statusBadge {
-                        Text(badge)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(badge == "Failed" ? .red : Color.brandBlue)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background((badge == "Failed" ? Color.red.opacity(0.08) : Color.brandBlue.opacity(0.08)), in: Capsule())
+                if shouldShowHeader {
+                    HStack(spacing: 6) {
+                        Text(headerTitle)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        if let authorBadgeTitle {
+                            MetadataPill(title: authorBadgeTitle, symbolName: "person.crop.circle", isPrimary: false)
+                        }
+                        if message.role == .assistant, let badge = statusBadge {
+                            Text(badge)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(badge == "Failed" ? .red : Color.brandBlue)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background((badge == "Failed" ? Color.red.opacity(0.08) : Color.brandBlue.opacity(0.08)), in: Capsule())
+                        }
                     }
                 }
 
                 if message.role == .assistant && !message.sources.isEmpty {
-                    SearchContextStrip(query: message.searchQuery, sources: message.sources)
+                    SourceCarousel(sources: message.sources) {
+                        showingSources = true
+                    }
                 }
 
                 Group {
@@ -51,14 +55,24 @@ struct MessageBubble: View {
                         }
                     } else {
                         Text(message.text.isEmpty ? " " : message.text)
+                            .font(.system(size: 17, weight: .regular))
+                            .lineSpacing(7)
                             .textSelection(.enabled)
                     }
                 }
-                .font(.body)
-                .foregroundStyle(message.role == .user ? .white : .primary)
-                .padding(.horizontal, message.role == .user ? 14 : 0)
-                .padding(.vertical, message.role == .user ? 11 : 0)
-                .background(message.role == .user ? Color.actionPrimary : Color.clear, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .if(message.role == .user) { view in
+                    view
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .if(message.role != .user) { view in
+                    view
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 0)
+                        .padding(.vertical, 0)
+                }
                 .contextMenu {
                     Button {
                         Clipboard.copy(message.text)
@@ -144,14 +158,10 @@ struct MessageBubble: View {
                         .foregroundStyle(.red)
                 }
 
-                if let answerProofCapsule {
-                    Button {
+                if let footerViewModel = verifiedFooterViewModel {
+                    VerifiedFooterButton(viewModel: footerViewModel) {
                         showingSecurity = true
-                    } label: {
-                        ProofCapsule(viewModel: answerProofCapsule)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open verification details")
                 }
             }
             .frame(maxWidth: message.role == .user ? 560 : 740, alignment: message.role == .user ? .trailing : .leading)
@@ -192,6 +202,18 @@ struct MessageBubble: View {
         }
     }
 
+    // Spec: assistant messages render without the redundant "GLM 5.1" header
+    // because the model is already named in the verification footer. User
+    // messages similarly hide "You" — the bubble side already carries that.
+    // Show the row only when we have an actual status badge, shared author
+    // attribution, or a live streaming status to surface.
+    private var shouldShowHeader: Bool {
+        if let badge = statusBadge, !badge.isEmpty { return true }
+        if authorBadgeTitle != nil { return true }
+        if chatStore.shouldShowSharedAuthorNames, message.role == .user { return true }
+        return false
+    }
+
     private var headerTitle: String {
         if message.role == .user {
             if chatStore.shouldShowSharedAuthorNames {
@@ -207,6 +229,20 @@ struct MessageBubble: View {
             return nil
         }
         return message.authorDisplayLabel
+    }
+
+    private var verifiedFooterViewModel: VerifiedFooterViewModel? {
+        guard let proof = answerProofCapsule else { return nil }
+        return VerifiedFooterViewModel(
+            state: proof.state,
+            badge: proof.badge,
+            model: message.modelDisplayName,
+            sourceCount: message.sources.count,
+            ago: ChatTimeFormatter.relativeShort(from: message.createdAt),
+            symbolName: proof.symbolName,
+            tintColor: proof.tintColor,
+            detail: proof.detail
+        )
     }
 
     private var answerProofCapsule: ProofCapsuleViewModel? {
@@ -831,5 +867,228 @@ private struct MessageAttachmentStrip: View {
                 .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
             }
         }
+    }
+}
+
+// MARK: - Claude Design Source Carousel
+
+/// Snap-paged source carousel rendered above a web-grounded assistant reply.
+/// Spec: 280×88 cards, 16r, panel bg, 1px border, 20px favicon, numbered
+/// circular badge (white on action), 2-line 15pt SemiBold title, 13pt domain.
+struct SourceCarousel: View {
+    let sources: [WebSearchSource]
+    let onViewAll: () -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 10) {
+                ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
+                    SourceCard(index: index + 1, source: source)
+                        .onTapGesture { onViewAll() }
+                }
+            }
+            .padding(.trailing, 24)
+        }
+        .scrollClipDisabled()
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(sources.count) source\(sources.count == 1 ? "" : "s")")
+    }
+}
+
+private struct SourceCard: View {
+    let index: Int
+    let source: WebSearchSource
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            VStack(alignment: .leading, spacing: 4) {
+                FaviconBadge(source: source)
+                Text(source.displayTitle)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .padding(.top, 2)
+                Spacer(minLength: 0)
+                Text(source.host)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+            }
+            .frame(width: 280, height: 88, alignment: .topLeading)
+            .padding(12)
+            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.appBorder, lineWidth: 1)
+            }
+
+            Text("\(index)")
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(.white)
+                .frame(width: 18, height: 18)
+                .background(Color.actionPrimary, in: Circle())
+                .padding(12)
+        }
+        .frame(width: 304, height: 112, alignment: .topLeading)
+        .contentShape(Rectangle())
+        .accessibilityLabel("Source \(index), \(source.displayTitle), \(source.host)")
+    }
+}
+
+private struct FaviconBadge: View {
+    let source: WebSearchSource
+
+    private var faviconURL: URL? {
+        guard let encodedHost = source.host.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            return nil
+        }
+        return URL(string: "https://www.google.com/s2/favicons?sz=64&domain=\(encodedHost)")
+    }
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(Color.appSecondaryBackground)
+            if let faviconURL {
+                AsyncImage(url: faviconURL) { phase in
+                    switch phase {
+                    case let .success(image):
+                        image.resizable().scaledToFit().padding(2)
+                    default:
+                        fallback
+                    }
+                }
+            } else {
+                fallback
+            }
+        }
+        .frame(width: 20, height: 20)
+        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+    }
+
+    private var fallback: some View {
+        Text(source.sourceInitials.prefix(1))
+            .font(.system(size: 12, weight: .heavy))
+            .foregroundStyle(Color.textSecondary)
+    }
+}
+
+// MARK: - Claude Design Verified Footer
+
+struct VerifiedFooterViewModel {
+    let state: ProofState
+    let badge: String
+    let model: String
+    let sourceCount: Int
+    let ago: String
+    let symbolName: String
+    let tintColor: Color
+    let detail: String
+}
+
+struct VerifiedFooterButton: View {
+    let viewModel: VerifiedFooterViewModel
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: footerSymbol)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(footerTint)
+                Text(footerText)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open verification details")
+        .accessibilityValue(viewModel.detail)
+    }
+
+    private var footerSymbol: String {
+        switch viewModel.state {
+        case .verified:
+            return "checkmark.seal.fill"
+        case .stale:
+            return "clock.badge.exclamationmark"
+        case .mismatch:
+            return "exclamationmark.shield.fill"
+        case .verifying:
+            return "arrow.triangle.2.circlepath"
+        default:
+            return viewModel.symbolName
+        }
+    }
+
+    private var footerTint: Color {
+        switch viewModel.state {
+        case .verified:
+            return Color.proofVerified
+        case .stale:
+            return Color.proofStale
+        case .mismatch:
+            return Color.proofMismatch
+        default:
+            return viewModel.tintColor
+        }
+    }
+
+    private var footerText: String {
+        // "Verified · GLM 5.1 · 4 sources · 2s ago"  (verified case)
+        // For non-verified states keep the badge so users still see "Stale" / "Privacy proxy" etc.
+        var pieces: [String] = []
+        switch viewModel.state {
+        case .verified:
+            pieces.append("Verified")
+        case .stale:
+            pieces.append("Proof stale")
+        case .mismatch:
+            pieces.append("Not covered")
+        case .verifying:
+            pieces.append("Checking proof")
+        default:
+            pieces.append(viewModel.badge)
+        }
+        pieces.append(viewModel.model)
+        if viewModel.sourceCount > 0 {
+            pieces.append("\(viewModel.sourceCount) source\(viewModel.sourceCount == 1 ? "" : "s")")
+        }
+        pieces.append("\(viewModel.ago) ago")
+        return pieces.joined(separator: " · ")
+    }
+}
+
+enum ChatTimeFormatter {
+    static func relativeShort(from date: Date, now: Date = Date()) -> String {
+        let delta = max(0, now.timeIntervalSince(date))
+        if delta < 5 { return "now" }
+        if delta < 60 { return "\(Int(delta))s" }
+        let minutes = Int(delta / 60)
+        if minutes < 60 { return "\(minutes)m" }
+        let hours = minutes / 60
+        if hours < 24 { return "\(hours)h" }
+        let days = hours / 24
+        if days < 7 { return "\(days)d" }
+        let weeks = days / 7
+        if weeks < 5 { return "\(weeks)w" }
+        let months = days / 30
+        if months < 12 { return "\(months)mo" }
+        return "\(days / 365)y"
+    }
+}
+
+// Lightweight `view.if(cond) { ... }` modifier so we can branch the user
+// bubble styling without an Either-view explosion.
+extension View {
+    @ViewBuilder
+    func `if`<Transform: View>(_ condition: Bool, transform: (Self) -> Transform) -> some View {
+        if condition { transform(self) } else { self }
     }
 }

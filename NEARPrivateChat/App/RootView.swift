@@ -28,6 +28,15 @@ struct RootView: View {
         .onChange(of: sessionStore.session?.token) { _, _ in
             refreshLegalTermsAcceptance()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .legalTermsAcceptanceDidChange)) { _ in
+            if sessionStore.isSignedIn, sessionStore.setupAccountID != nil {
+                // Promote AuthView's pending acceptance into the per-account
+                // record so we exit the AuthView branch on the next render.
+                acceptLegalTermsForCurrentAccount()
+            } else {
+                refreshLegalTermsAcceptance()
+            }
+        }
         .onChange(of: sessionStore.setupAccountID) { oldAccountID, accountID in
             refreshLegalTermsAcceptance(previousAccountID: oldAccountID, currentAccountID: accountID)
             migrateSetupStorageIfNeeded(previousAccountID: oldAccountID)
@@ -76,15 +85,15 @@ struct RootView: View {
 
     @ViewBuilder
     private var authenticatedRoot: some View {
-        if sessionStore.isSignedIn {
-            if legalTermsAccepted {
-                AppShellView {
-                    beginSetupRerun()
-                }
-            } else {
-                LegalTermsRequiredView {
-                    acceptLegalTermsForCurrentAccount()
-                }
+        // v2 Claude Design Auth: a signed-in user whose terms have not been
+        // accepted falls back to AuthView (terms-pending state) rather than
+        // routing to a separate LegalTermsRequiredView. AuthView writes the
+        // pending acceptance to LegalTermsAcceptanceStore and posts
+        // `.legalTermsAcceptanceDidChange`; RootView promotes it for the
+        // current account on receipt.
+        if sessionStore.isSignedIn && legalTermsAccepted {
+            AppShellView {
+                beginSetupRerun()
             }
         } else {
             AuthView()

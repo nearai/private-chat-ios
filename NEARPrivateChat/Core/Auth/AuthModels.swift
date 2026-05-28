@@ -246,11 +246,13 @@ enum LegalTermsAcceptanceStore {
     static func recordPendingAcceptance(defaults: UserDefaults = .standard, now: Date = Date()) {
         defaults.set(LegalTerms.version, forKey: pendingVersionKey)
         defaults.set(ISO8601DateFormatter().string(from: now), forKey: pendingAcceptedAtKey)
+        NotificationCenter.default.post(name: .legalTermsAcceptanceDidChange, object: nil)
     }
 
     static func clearPendingAcceptance(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: pendingVersionKey)
         defaults.removeObject(forKey: pendingAcceptedAtKey)
+        NotificationCenter.default.post(name: .legalTermsAcceptanceDidChange, object: nil)
     }
 
     static func hasAcceptedCurrentVersion(for accountID: String, defaults: UserDefaults = .standard) -> Bool {
