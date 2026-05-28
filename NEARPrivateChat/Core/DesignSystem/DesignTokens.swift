@@ -24,6 +24,17 @@ extension Color {
     static let primaryAction = Color.actionPrimary
     static let actionTint = Color.actionPrimary.opacity(0.12)
     static let actionPress = Color.actionPrimary.opacity(0.85)
+    // Saturated avatar / chip fill — matches Claude Design --action-fill
+    // (#C7E8FF light, rgba(0,145,253,0.22) dark).
+    #if canImport(UIKit)
+    static let actionFill = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.0, green: 0.569, blue: 0.992, alpha: 0.22)
+            : UIColor(red: 0.78, green: 0.91, blue: 1.0, alpha: 1.0)
+    })
+    #else
+    static let actionFill = Color(red: 0.78, green: 0.91, blue: 1.0)
+    #endif
     static let proofVerified = Color(red: 0.082, green: 0.745, blue: 0.325)
     static let proofStale = Color(red: 0.961, green: 0.651, blue: 0.137)
     static let proofMismatch = Color(red: 0.898, green: 0.282, blue: 0.302)

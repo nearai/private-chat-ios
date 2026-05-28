@@ -509,7 +509,7 @@ struct ClaudeHomeTopBar: View {
                     .font(.system(size: 13, weight: .semibold, design: .default))
                     .foregroundStyle(Color.actionPrimary)
                     .frame(width: 32, height: 32)
-                    .background(Color.actionTint, in: Circle())
+                    .background(Color.actionFill, in: Circle())
             }
             .buttonStyle(.plain)
             .frame(width: 44, height: 44, alignment: .leading)
@@ -641,11 +641,11 @@ struct ClaudeHomeEmptyState: View {
                         .accessibilityHidden(true)
 
                     Text(title)
-                        .font(.system(size: 14.5, weight: .regular, design: .default))
+                        .font(.system(size: 15, weight: .regular, design: .default))
                         .kerning(-0.1)
                         .foregroundStyle(Color.textSecondary)
                         .multilineTextAlignment(.center)
-                        .frame(height: 20)
+                        .lineSpacing(5) // 20pt line height on 15pt font ≈ +5pt spacing
                 }
                 .padding(.top, 30)
 
@@ -655,10 +655,9 @@ struct ClaudeHomeEmptyState: View {
                 if showsAction {
                     Button(action: action) {
                         Text("Start a new chat")
-                            .font(.system(size: 16, weight: .semibold, design: .default))
+                            .font(.system(size: 17, weight: .semibold, design: .default))
                             .kerning(-0.2)
                             .foregroundStyle(.white)
-                            .frame(height: 22)
                             .frame(maxWidth: .infinity)
                             .frame(height: 52)
                             .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
