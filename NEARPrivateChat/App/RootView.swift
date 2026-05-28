@@ -21,15 +21,16 @@ struct RootView: View {
         .preferredColorScheme(chatStore.appearancePreference.preferredColorScheme)
         .onAppear {
             refreshLegalTermsAcceptance()
-            refreshSetupPresentation()
+            // v2: no automatic Setup presentation on sign-in. The Claude Design
+            // Auth spec flows directly to Home; Setup is reachable only via
+            // explicit "Run setup again" from Account (beginSetupRerun()).
         }
         .onChange(of: sessionStore.session?.token) { _, _ in
             refreshLegalTermsAcceptance()
-            refreshSetupPresentation()
         }
         .onChange(of: sessionStore.setupAccountID) { oldAccountID, accountID in
             refreshLegalTermsAcceptance(previousAccountID: oldAccountID, currentAccountID: accountID)
-            refreshSetupPresentation(previousAccountID: oldAccountID)
+            migrateSetupStorageIfNeeded(previousAccountID: oldAccountID)
         }
         .sheet(
             isPresented: Binding(
@@ -167,30 +168,20 @@ struct RootView: View {
         guard let accountID = sessionStore.setupAccountID else { return }
         LegalTermsAcceptanceStore.acceptCurrentVersion(for: accountID)
         legalTermsAccepted = true
-        refreshSetupPresentation()
+        // v2: terms acceptance flows directly to Home — no Setup gate.
     }
 
-    private func refreshSetupPresentation(previousAccountID: String? = nil) {
-        guard sessionStore.isSignedIn, let accountID = sessionStore.setupAccountID else {
-            presentedSetupAccountID = nil
-            return
-        }
-
-        guard LegalTermsAcceptanceStore.hasAcceptedCurrentVersion(for: accountID) else {
-            presentedSetupAccountID = nil
-            return
-        }
-
+    /// v2 replacement for the old `refreshSetupPresentation`. We no longer
+    /// auto-present Setup based on completion status — only migrate the
+    /// underlying storage when the active account changes. Setup is reached
+    /// solely via the explicit "Run setup again" entry in Account, which
+    /// drives `beginSetupRerun()`.
+    private func migrateSetupStorageIfNeeded(previousAccountID: String?) {
+        guard sessionStore.isSignedIn, let accountID = sessionStore.setupAccountID else { return }
         if let previousAccountID, previousAccountID != accountID {
             UserSetupStorage.migrate(from: previousAccountID, to: accountID)
         } else if let presentedSetupAccountID, presentedSetupAccountID != accountID {
             UserSetupStorage.migrate(from: presentedSetupAccountID, to: accountID)
-        }
-
-        if !UserSetupStorage.isCompleted(for: accountID) {
-            presentedSetupAccountID = accountID
-        } else if presentedSetupAccountID == accountID {
-            presentedSetupAccountID = nil
         }
     }
 }
