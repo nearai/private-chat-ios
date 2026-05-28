@@ -416,7 +416,11 @@ struct TodaySection: View {
             header
 
             if store.briefings.isEmpty {
-                TodayEmptyState(onNewBriefing: onNewBriefing)
+                Text("Pull live briefings into your day. They refresh on schedule and land right here.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                SuggestedBriefingsView(store: store, onOpen: onOpenBriefing)
             } else {
                 let liveBriefings = store.briefings.filter { $0.latestResult != nil }
                 if !liveBriefings.isEmpty {
@@ -449,6 +453,9 @@ struct TodaySection: View {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .stroke(Color.appBorder, lineWidth: 1)
                 }
+
+                SuggestedBriefingsView(store: store, onOpen: onOpenBriefing)
+                    .padding(.top, 2)
             }
         }
         .padding(.horizontal, 16)
@@ -1021,6 +1028,150 @@ private struct BriefingIconChip: View {
         ]
         let index = abs(id.uuidString.hashValue) % colors.count
         return colors[index]
+    }
+}
+
+// MARK: - One-tap templates for the named use cases
+
+struct BriefingTemplate: Identifiable {
+    let id = UUID()
+    let title: String
+    let subtitle: String
+    let symbol: String
+    let tint: Color
+    let kind: BriefingKind
+    let schedule: BriefingSchedule
+    let prompt: String
+    let needsAccount: Bool
+
+    static let suggested: [BriefingTemplate] = [
+        BriefingTemplate(
+            title: "Daily news brief",
+            subtitle: "Top headlines, every weekday morning",
+            symbol: "newspaper.fill",
+            tint: .actionPrimary,
+            kind: .dailyNews,
+            schedule: .weekdays(hour: 8, minute: 0),
+            prompt: "Today's top news",
+            needsAccount: false
+        ),
+        BriefingTemplate(
+            title: "ETH price watcher",
+            subtitle: "Ethereum price + 24h trend, daily",
+            symbol: "chart.line.uptrend.xyaxis",
+            tint: .proofVerified,
+            kind: .ethPrice,
+            schedule: .daily(hour: 9, minute: 0),
+            prompt: "What is the ETH price?",
+            needsAccount: false
+        ),
+        BriefingTemplate(
+            title: "My NEAR account",
+            subtitle: "Balance & holdings for your account",
+            symbol: "person.crop.circle.badge.checkmark",
+            tint: .brandBlue,
+            kind: .nearAccount,
+            schedule: .daily(hour: 8, minute: 0),
+            prompt: "How is my NEAR account doing?",
+            needsAccount: true
+        )
+    ]
+
+    func makeBriefing(account: String? = nil) -> Briefing {
+        Briefing(title: title, prompt: prompt, schedule: schedule, kind: kind, accountID: account)
+    }
+}
+
+/// Tappable suggestions that create (and immediately run) a briefing for each
+/// named use case. NEAR account asks for the account id first.
+struct SuggestedBriefingsView: View {
+    @ObservedObject var store: BriefingStore
+    var onOpen: (Briefing) -> Void = { _ in }
+
+    @State private var pendingAccountTemplate: BriefingTemplate?
+    @State private var accountInput = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Suggested")
+                .font(.caption.weight(.semibold))
+                .textCase(.uppercase)
+                .foregroundStyle(Color.textSecondary)
+
+            VStack(spacing: 0) {
+                ForEach(Array(BriefingTemplate.suggested.enumerated()), id: \.element.id) { index, template in
+                    Button { tap(template) } label: { row(template) }
+                        .buttonStyle(.plain)
+                    if index < BriefingTemplate.suggested.count - 1 {
+                        Divider().overlay(Color.appHairline).padding(.leading, 52)
+                    }
+                }
+            }
+            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.appBorder, lineWidth: 1)
+            }
+        }
+        .alert("Track a NEAR account", isPresented: Binding(
+            get: { pendingAccountTemplate != nil },
+            set: { if !$0 { pendingAccountTemplate = nil } }
+        )) {
+            TextField("yourname.near", text: $accountInput)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Button("Track") { confirmAccount() }
+            Button("Cancel", role: .cancel) { pendingAccountTemplate = nil }
+        } message: {
+            Text("Enter a NEAR mainnet account to track its balance and holdings.")
+        }
+    }
+
+    private func row(_ template: BriefingTemplate) -> some View {
+        HStack(spacing: 12) {
+            BriefingIconChip(symbolName: template.symbol, tint: template.tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(template.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(template.subtitle)
+                    .font(.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Image(systemName: "plus.circle.fill")
+                .font(.title3)
+                .foregroundStyle(Color.actionPrimary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .contentShape(Rectangle())
+    }
+
+    private func tap(_ template: BriefingTemplate) {
+        if template.needsAccount {
+            accountInput = ""
+            pendingAccountTemplate = template
+        } else {
+            create(template.makeBriefing())
+        }
+    }
+
+    private func confirmAccount() {
+        guard let template = pendingAccountTemplate else { return }
+        let account = accountInput.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        pendingAccountTemplate = nil
+        guard !account.isEmpty else { return }
+        create(template.makeBriefing(account: account))
+    }
+
+    private func create(_ briefing: Briefing) {
+        store.add(briefing)
+        AppHaptics.lightImpact()
+        Task {
+            await store.run(briefing)
+            onOpen(briefing)
+        }
     }
 }
 
