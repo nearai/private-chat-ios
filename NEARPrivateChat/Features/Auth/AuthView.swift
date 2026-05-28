@@ -228,7 +228,7 @@ private struct TermsRowCard: View {
             HStack(spacing: 10) {
                 CheckBox(isOn: isAccepted)
 
-                Text("I agree to the Terms and Privacy")
+                Text("I agree to the Terms and Privacy Policy")
                     .font(.system(size: 13, weight: .regular))
                     .tracking(-0.08)
                     .foregroundStyle(.primary)
@@ -331,9 +331,10 @@ private struct AuthProviderButton: View {
     }
 }
 
-/// Monochrome white SVG-style glyphs, 20pt, drawn with SF Symbols and SwiftUI
-/// `Path` so the visual stays close to the Claude Design house-rule
-/// (white-on-blue across all three providers).
+/// Real brand glyphs for each provider, rendered monochrome white on the
+/// brand-blue button per Claude Design's house rule. The shapes themselves
+/// are the canonical brand marks (NEAR letterform, Google "G", GitHub
+/// Octocat), not generic SF Symbol placeholders.
 private struct ProviderGlyph: View {
     let provider: OAuthProvider
     let tint: Color
@@ -341,41 +342,153 @@ private struct ProviderGlyph: View {
     var body: some View {
         switch provider {
         case .near:
-            NearNGlyph()
-                .stroke(tint, style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+            // The official NEAR mark from brand guidelines, rendered as a
+            // tintable template.
+            Image("NearGlyph")
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .foregroundStyle(tint)
         case .google:
-            // Stylized monochrome "G" — outline path mirrors Claude Design's
-            // single-color treatment for visual uniformity. Apple HIG
-            // recommends the multi-color G; revisit if review flags it.
-            Image(systemName: "g.circle.fill")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .foregroundStyle(tint)
+            GoogleGGlyph()
+                .fill(tint)
         case .github:
-            Image(systemName: "chevron.left.forwardslash.chevron.right")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(tint)
+            GitHubOctocatGlyph()
+                .fill(tint)
         }
     }
 }
 
-/// The "N" zig-zag from the Claude Design spec.
-/// SVG path: M 6 19 V 5 L 18 19 V 5 — drawn into a 20x20 square.
-private struct NearNGlyph: Shape {
+/// Google "G" letterform — single-fill monochrome rendering of the canonical
+/// Google G shape. Matches the path used in the Claude Design Auth spec.
+private struct GoogleGGlyph: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        let w = rect.width
-        let h = rect.height
-        // Map original 24-unit viewBox coords (6,5,18,19) into rect.
+        let s = min(rect.width, rect.height)
+        let ox = rect.minX + (rect.width - s) / 2
+        let oy = rect.minY + (rect.height - s) / 2
         func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-            CGPoint(x: rect.minX + (x / 24) * w, y: rect.minY + (y / 24) * h)
+            CGPoint(x: ox + (x / 24) * s, y: oy + (y / 24) * s)
         }
-        path.move(to: pt(6, 19))
-        path.addLine(to: pt(6, 5))
-        path.addLine(to: pt(18, 19))
-        path.addLine(to: pt(18, 5))
+        // Adapted from Material Icons "google" (24x24 viewBox).
+        path.move(to: pt(21.35, 11.1))
+        path.addLine(to: pt(12.18, 11.1))
+        path.addLine(to: pt(12.18, 13.83))
+        path.addLine(to: pt(18.69, 13.83))
+        path.addCurve(to: pt(12.18, 19.5),
+                      control1: pt(18.36, 17.64),
+                      control2: pt(15.19, 19.5))
+        path.addCurve(to: pt(5.34, 12.66),
+                      control1: pt(8.4, 19.5),
+                      control2: pt(5.34, 16.44))
+        path.addCurve(to: pt(12.18, 5.82),
+                      control1: pt(5.34, 8.88),
+                      control2: pt(8.4, 5.82))
+        path.addCurve(to: pt(16.62, 7.4),
+                      control1: pt(13.91, 5.82),
+                      control2: pt(15.4, 6.41))
+        path.addLine(to: pt(18.71, 5.31))
+        path.addCurve(to: pt(12.18, 2.74),
+                      control1: pt(16.91, 3.71),
+                      control2: pt(14.65, 2.74))
+        path.addCurve(to: pt(2.27, 12.66),
+                      control1: pt(6.7, 2.74),
+                      control2: pt(2.27, 7.17))
+        path.addCurve(to: pt(12.18, 22.58),
+                      control1: pt(2.27, 18.15),
+                      control2: pt(6.7, 22.58))
+        path.addCurve(to: pt(21.95, 12.66),
+                      control1: pt(17.81, 22.58),
+                      control2: pt(21.95, 18.6))
+        path.addCurve(to: pt(21.84, 11.34),
+                      control1: pt(21.95, 12.21),
+                      control2: pt(21.91, 11.78))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// GitHub Octocat silhouette — single-fill canonical brand mark.
+/// Path adapted from the public GitHub mark (24x24 viewBox).
+private struct GitHubOctocatGlyph: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let s = min(rect.width, rect.height)
+        let ox = rect.minX + (rect.width - s) / 2
+        let oy = rect.minY + (rect.height - s) / 2
+        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: ox + (x / 24) * s, y: oy + (y / 24) * s)
+        }
+        path.move(to: pt(12, 1.5))
+        path.addCurve(to: pt(1.5, 12),
+                      control1: pt(6.2, 1.5),
+                      control2: pt(1.5, 6.2))
+        path.addCurve(to: pt(8.7, 21.95),
+                      control1: pt(1.5, 16.7),
+                      control2: pt(4.55, 20.62))
+        path.addCurve(to: pt(9.4, 21.45),
+                      control1: pt(9.2, 22.05),
+                      control2: pt(9.4, 21.75))
+        path.addLine(to: pt(9.4, 19.65))
+        path.addCurve(to: pt(5.9, 18.25),
+                      control1: pt(6.5, 20.25),
+                      control2: pt(5.9, 18.25))
+        path.addCurve(to: pt(4.7, 16.75),
+                      control1: pt(5.4, 17.05),
+                      control2: pt(4.7, 16.75))
+        path.addCurve(to: pt(4.8, 16.15),
+                      control1: pt(3.8, 16.05),
+                      control2: pt(4.8, 16.15))
+        path.addCurve(to: pt(6.4, 17.25),
+                      control1: pt(5.8, 16.25),
+                      control2: pt(6.4, 17.25))
+        path.addCurve(to: pt(9.5, 18.15),
+                      control1: pt(7.3, 18.85),
+                      control2: pt(8.9, 18.35))
+        path.addCurve(to: pt(10.2, 16.75),
+                      control1: pt(9.6, 17.45),
+                      control2: pt(9.9, 16.95))
+        path.addCurve(to: pt(5.4, 11.55),
+                      control1: pt(7.9, 16.45),
+                      control2: pt(5.4, 15.55))
+        path.addCurve(to: pt(6.5, 8.75),
+                      control1: pt(5.4, 10.35),
+                      control2: pt(5.8, 9.45))
+        path.addCurve(to: pt(6.6, 5.85),
+                      control1: pt(6.4, 8.45),
+                      control2: pt(6, 7.35))
+        path.addCurve(to: pt(9.6, 6.85),
+                      control1: pt(6.6, 5.85),
+                      control2: pt(7.5, 5.55))
+        path.addCurve(to: pt(15.1, 6.85),
+                      control1: pt(11.7, 6.25),
+                      control2: pt(13.4, 6.25))
+        path.addCurve(to: pt(18.1, 5.85),
+                      control1: pt(17.2, 5.45),
+                      control2: pt(18.1, 5.85))
+        path.addCurve(to: pt(18.2, 8.75),
+                      control1: pt(18.7, 7.35),
+                      control2: pt(18.3, 8.45))
+        path.addCurve(to: pt(19.3, 11.55),
+                      control1: pt(18.9, 9.45),
+                      control2: pt(19.3, 10.35))
+        path.addCurve(to: pt(14.5, 16.75),
+                      control1: pt(19.3, 15.55),
+                      control2: pt(16.9, 16.45))
+        path.addCurve(to: pt(15.2, 18.75),
+                      control1: pt(14.9, 17.05),
+                      control2: pt(15.2, 17.65))
+        path.addLine(to: pt(15.2, 21.75))
+        path.addCurve(to: pt(15.9, 21.95),
+                      control1: pt(15.2, 22.05),
+                      control2: pt(15.4, 22.15))
+        path.addCurve(to: pt(22.5, 12),
+                      control1: pt(20.05, 20.6),
+                      control2: pt(22.5, 16.7))
+        path.addCurve(to: pt(12, 1.5),
+                      control1: pt(22.5, 6.2),
+                      control2: pt(17.8, 1.5))
+        path.closeSubpath()
         return path
     }
 }
