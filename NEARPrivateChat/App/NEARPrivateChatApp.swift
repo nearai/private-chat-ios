@@ -55,6 +55,7 @@ enum DemoCaptureScreen: String, CaseIterable {
     case threaded
     case liveData
     case generativeChat
+    case chatStarters
     case councilOutput
     case verification
     case models

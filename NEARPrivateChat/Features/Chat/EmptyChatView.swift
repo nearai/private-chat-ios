@@ -25,15 +25,16 @@ struct EmptyChatView: View {
                 .foregroundStyle(Color.textTertiary)
 
             if !emptyPromptSuggestions.isEmpty {
-                // 4 short chips on iPhone width fit without scrolling.
-                // A plain centered HStack with maxWidth=.infinity puts
-                // them in the middle of the screen — no GeometryReader
-                // or ScrollView gymnastics needed. minimumScaleFactor
-                // on the labels lets longer chip titles (project mode)
-                // shrink slightly rather than overflow.
-                HStack(spacing: 8) {
-                    ForEach(emptyPromptSuggestions) { suggestion in
-                        suggestionChip(suggestion)
+                // Two chips per row so descriptive titles ("Today's news")
+                // stay readable instead of truncating to "To…". Still centered,
+                // still no scrolling.
+                VStack(spacing: 8) {
+                    ForEach(suggestionRows, id: \.first?.id) { row in
+                        HStack(spacing: 8) {
+                            ForEach(row) { suggestion in
+                                suggestionChip(suggestion)
+                            }
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -62,6 +63,12 @@ struct EmptyChatView: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Use suggestion, \(suggestion.title)")
         .accessibilityHint("Fills the composer without sending.")
+    }
+
+    private var suggestionRows: [[EmptyPromptSuggestion]] {
+        stride(from: 0, to: emptyPromptSuggestions.count, by: 2).map { start in
+            Array(emptyPromptSuggestions[start..<min(start + 2, emptyPromptSuggestions.count)])
+        }
     }
 
     private var emptyPromptSuggestions: [EmptyPromptSuggestion] {
@@ -113,7 +120,31 @@ struct EmptyChatView: View {
             ]
         }
 
-        return []
+        // Default new chat: surface the live-data capability so it's
+        // discoverable. Each sends through the local QuickIntent path to a
+        // real widget / tracker — no sign-in needed.
+        return [
+            EmptyPromptSuggestion(
+                title: "ETH price",
+                symbolName: "chart.line.uptrend.xyaxis",
+                prompt: "What's the ETH price?"
+            ),
+            EmptyPromptSuggestion(
+                title: "My NEAR",
+                symbolName: "person.crop.circle",
+                prompt: "How is my NEAR account doing?"
+            ),
+            EmptyPromptSuggestion(
+                title: "Today's news",
+                symbolName: "newspaper",
+                prompt: "Pull today's news"
+            ),
+            EmptyPromptSuggestion(
+                title: "Daily tracker",
+                symbolName: "bell",
+                prompt: "Create a tracker for the ETH price every morning at 8am"
+            )
+        ]
     }
 
     private func fillDraft(for suggestion: EmptyPromptSuggestion) {

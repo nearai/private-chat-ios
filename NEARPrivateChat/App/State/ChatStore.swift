@@ -8696,6 +8696,15 @@ final class ChatStore: ObservableObject {
             messages = []
             draft = DemoCapture.demoPrompt ?? "what is the eth price"
             sendDraft()
+        case .chatStarters:
+            // Empty new chat with council off so the default live-data starter
+            // chips show (ETH price / My NEAR / Today's news / Daily tracker).
+            selectedConversation = nil
+            selectedProjectID = nil
+            messages = []
+            councilModelIDs = [Self.defaultModelID]
+            selectedModel = Self.defaultModelID
+            draft = ""
         case .chat, .councilOutput, .cloudModels, .council, .councilRoom, .threaded, .liveData, .project, .share:
             selectedConversation = data.primaryConversation
             messages = data.messages
