@@ -326,7 +326,7 @@ struct ConversationListView: View {
                         } else if shouldShowFirstRunSetupCard {
                             FirstRunSetupHomeCard(
                                 onStartSetup: onRunSetupAgain,
-                                onStartPrivateChat: openNewChat
+                                onStartPrivateChat: startPrivateChatFromFirstRun
                             )
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 16)
@@ -436,6 +436,23 @@ struct ConversationListView: View {
             chatStore.bannerMessage = "Finish or cancel the current response before starting a new chat."
             return
         }
+        chatStore.startNewConversation()
+        onStartNewChat()
+    }
+
+    private func startPrivateChatFromFirstRun() {
+        guard !chatStore.isStreaming else {
+            chatStore.bannerMessage = "Finish or cancel the current response before starting a new chat."
+            return
+        }
+
+        if let accountID = sessionStore.setupAccountID,
+           UserSetupStorage.needsFirstRunSetup(for: accountID) {
+            let profile = UserSetupStorage.completeFirstRunPrivateChat(for: accountID)
+            chatStore.applySetupProfile(profile)
+        }
+
+        AppHaptics.selection()
         chatStore.startNewConversation()
         onStartNewChat()
     }

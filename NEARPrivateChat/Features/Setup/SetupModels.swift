@@ -1119,6 +1119,15 @@ enum UserSetupStorage {
         clearPendingLaunchCard(for: accountID, defaults: defaults)
     }
 
+    static func completeFirstRunPrivateChat(
+        for accountID: String,
+        defaults: UserDefaults = .standard
+    ) -> UserSetupProfile {
+        let profile = UserSetupProfile.defaults
+        saveWithoutPendingLaunchCard(profile, for: accountID, defaults: defaults)
+        return profile
+    }
+
     static func clearCompletion(for accountID: String, defaults: UserDefaults = .standard) {
         if usesProtectedStorage(defaults) {
             writeProtectedData(Data("false".utf8), for: accountID, filename: protectedCompletionFilename)

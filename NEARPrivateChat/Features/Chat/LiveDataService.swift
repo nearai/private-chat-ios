@@ -245,7 +245,11 @@ private extension LiveDataService {
     }
 
     static func fetchData(for request: URLRequest) async throws -> Data {
-        let (data, response) = try await URLSession.shared.data(for: request)
+        // Clamp every live fetch to a short timeout so a stalled endpoint can't
+        // tie up a manual or background briefing run.
+        var timedRequest = request
+        timedRequest.timeoutInterval = min(timedRequest.timeoutInterval, 12)
+        let (data, response) = try await URLSession.shared.data(for: timedRequest)
         guard let httpResponse = response as? HTTPURLResponse,
               (200..<300).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)

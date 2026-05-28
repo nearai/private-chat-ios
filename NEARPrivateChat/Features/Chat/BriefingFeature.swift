@@ -803,7 +803,11 @@ struct BriefingEditorSheet: View {
             isPaused: isPaused,
             createdAt: existingBriefing?.createdAt ?? Date(),
             lastRunAt: existingBriefing?.lastRunAt,
-            latestResult: existingBriefing?.latestResult
+            latestResult: existingBriefing?.latestResult,
+            // Preserve the live kind + account when editing, or the edit would
+            // silently revert a live briefing to a custom prompt.
+            kind: existingBriefing?.kind ?? .customPrompt,
+            accountID: existingBriefing?.accountID
         )
     }
 
@@ -1170,7 +1174,10 @@ struct SuggestedBriefingsView: View {
         AppHaptics.lightImpact()
         Task {
             await store.run(briefing)
-            onOpen(briefing)
+            // Open the post-run briefing so the thread shows the saved result,
+            // not the pre-run "No delivery yet" state.
+            let updated = store.briefings.first(where: { $0.id == briefing.id }) ?? briefing
+            onOpen(updated)
         }
     }
 }
