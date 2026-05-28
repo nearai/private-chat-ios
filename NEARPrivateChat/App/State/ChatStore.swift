@@ -3512,6 +3512,19 @@ final class ChatStore: ObservableObject {
     /// the structured widget the model produced (falling back to a generic text
     /// widget). Used by the BriefingStore runner; returns nil on any failure.
     func runBriefing(_ briefing: Briefing) async -> MessageWidget? {
+        // Live kinds fetch real data from auth-free public APIs (work without the
+        // chat backend); custom prompts fall through to the chat model below.
+        switch briefing.kind {
+        case .ethPrice:
+            return await LiveDataService.ethPriceWidget()
+        case .nearAccount:
+            return await LiveDataService.nearAccountWidget(account: briefing.accountID ?? "")
+        case .dailyNews:
+            return await LiveDataService.newsBriefWidget()
+        case .customPrompt:
+            break
+        }
+
         final class TextSink: @unchecked Sendable { var text = "" }
         let sink = TextSink()
         do {
@@ -8584,7 +8597,7 @@ final class ChatStore: ObservableObject {
             sourceMode = .web
             webSearchEnabled = true
             draft = ""
-        case .chat, .councilOutput, .cloudModels, .council, .councilRoom, .threaded, .project, .share:
+        case .chat, .councilOutput, .cloudModels, .council, .councilRoom, .threaded, .liveData, .project, .share:
             selectedConversation = data.primaryConversation
             messages = data.messages
             draft = ""

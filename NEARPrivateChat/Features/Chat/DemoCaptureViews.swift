@@ -82,7 +82,7 @@ struct DemoCaptureRootView: View {
             return 4_000_000_000
         case .models:
             return 4_000_000_000
-        case .council, .councilRoom, .threaded:
+        case .council, .councilRoom, .threaded, .liveData:
             return 6_000_000_000
         case .composer:
             return 5_500_000_000
@@ -96,6 +96,54 @@ struct DemoCaptureRootView: View {
             return 5_000_000_000
         case .share:
             return 6_000_000_000
+        }
+    }
+}
+
+/// Fetches the three named use cases live (CoinGecko, NEAR RPC, BBC RSS) and
+/// renders them as real widget cards — proof the capabilities work through the
+/// widget UX with no chat backend.
+struct LiveDataDemoView: View {
+    @State private var widgets: [MessageWidget] = []
+    @State private var isLoading = true
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "dot.radiowaves.left.and.right")
+                    .foregroundStyle(Color.actionPrimary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Live data").font(.headline.weight(.semibold))
+                    Text("ETH price · NEAR account · today's news").font(.caption).foregroundStyle(Color.textSecondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 14)
+            .background(Color.appPanelBackground)
+            .overlay(alignment: .bottom) { Rectangle().fill(Color.appHairline).frame(height: 1) }
+
+            ScrollView {
+                VStack(spacing: 12) {
+                    if isLoading {
+                        HStack(spacing: 8) { ProgressView(); Text("Fetching live data…").foregroundStyle(Color.textSecondary) }
+                            .padding(.top, 40)
+                    }
+                    ForEach(widgets) { widget in
+                        MessageWidgetCard(widget: widget)
+                    }
+                }
+                .padding(16)
+            }
+            .background(Color.appBackground)
+        }
+        .background(Color.appBackground)
+        .task {
+            var result: [MessageWidget] = []
+            if let eth = await LiveDataService.ethPriceWidget() { result.append(eth) }
+            if let near = await LiveDataService.nearAccountWidget(account: "root.near") { result.append(near) }
+            if let news = await LiveDataService.newsBriefWidget() { result.append(news) }
+            widgets = result
+            isLoading = false
         }
     }
 }
@@ -166,6 +214,8 @@ private struct DemoCaptureScreenHost: View {
                     schedule: "Every weekday · 8:00am",
                     deliveries: ThreadedBriefingView.demoDeliveries
                 )
+            case .liveData:
+                LiveDataDemoView()
             case .project:
                 ProjectFilesView()
             case .share:

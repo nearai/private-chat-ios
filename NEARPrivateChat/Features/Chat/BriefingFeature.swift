@@ -12,6 +12,22 @@ import Foundation
 import SwiftUI
 @preconcurrency import UserNotifications
 
+/// What produces a briefing's result. Live kinds fetch real data from auth-free
+/// public APIs (no chat backend needed); .customPrompt runs the chat model.
+enum BriefingKind: String, Codable, Hashable {
+    case customPrompt
+    case ethPrice
+    case nearAccount
+    case dailyNews
+
+    init(from decoder: Decoder) throws {
+        let raw = (try? decoder.singleValueContainer().decode(String.self)) ?? "customPrompt"
+        self = BriefingKind(rawValue: raw) ?? .customPrompt
+    }
+
+    var isLiveData: Bool { self != .customPrompt }
+}
+
 struct Briefing: Codable, Hashable, Identifiable {
     var id: UUID
     var title: String
@@ -21,6 +37,12 @@ struct Briefing: Codable, Hashable, Identifiable {
     var createdAt: Date
     var lastRunAt: Date?
     var latestResult: MessageWidget?
+    var kind: BriefingKind
+    var accountID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, prompt, schedule, isPaused, createdAt, lastRunAt, latestResult, kind, accountID
+    }
 
     init(
         id: UUID = UUID(),
@@ -30,7 +52,9 @@ struct Briefing: Codable, Hashable, Identifiable {
         isPaused: Bool = false,
         createdAt: Date = Date(),
         lastRunAt: Date? = nil,
-        latestResult: MessageWidget? = nil
+        latestResult: MessageWidget? = nil,
+        kind: BriefingKind = .customPrompt,
+        accountID: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -40,12 +64,34 @@ struct Briefing: Codable, Hashable, Identifiable {
         self.createdAt = createdAt
         self.lastRunAt = lastRunAt
         self.latestResult = latestResult
+        self.kind = kind
+        self.accountID = accountID
     }
 
     var status: BriefingStatus {
         if isPaused { return .paused }
         if latestResult != nil { return .live }
         return .scheduled
+    }
+}
+
+extension Briefing {
+    // Forgiving decode so a briefings.json written before `kind`/`accountID`
+    // existed still loads (back-compat for upgrading users).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: (try? c.decode(UUID.self, forKey: .id)) ?? UUID(),
+            title: (try? c.decode(String.self, forKey: .title)) ?? "Briefing",
+            prompt: (try? c.decode(String.self, forKey: .prompt)) ?? "",
+            schedule: (try? c.decode(BriefingSchedule.self, forKey: .schedule)) ?? .daily(hour: 8, minute: 0),
+            isPaused: (try? c.decode(Bool.self, forKey: .isPaused)) ?? false,
+            createdAt: (try? c.decode(Date.self, forKey: .createdAt)) ?? Date(),
+            lastRunAt: try? c.decode(Date.self, forKey: .lastRunAt),
+            latestResult: try? c.decode(MessageWidget.self, forKey: .latestResult),
+            kind: (try? c.decode(BriefingKind.self, forKey: .kind)) ?? .customPrompt,
+            accountID: try? c.decode(String.self, forKey: .accountID)
+        )
     }
 }
 

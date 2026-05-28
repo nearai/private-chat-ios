@@ -53,6 +53,7 @@ enum DemoCaptureScreen: String, CaseIterable {
     case widgets
     case councilRoom
     case threaded
+    case liveData
     case councilOutput
     case verification
     case models
