@@ -150,6 +150,81 @@ struct SetupLaunchCard: View {
     }
 }
 
+struct FirstRunSetupHomeCard: View {
+    let onStartSetup: () -> Void
+    let onStartPrivateChat: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Color.brandBlue)
+                    .frame(width: 38, height: 38)
+                    .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("First run")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.primaryAction)
+                    Text("Choose what should work first")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Setup picks your route, context, and starter prompt for private chat, research, agents, or project work.")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(["Private chat", "Research", "Agents", "Projects"], id: \.self) { item in
+                        SetupLaunchPill(title: item)
+                    }
+                }
+                .padding(.horizontal, 1)
+            }
+            .scrollClipDisabled()
+
+            Text("You can skip advanced routes now and change everything later from Account.")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                Button(action: onStartSetup) {
+                    Label("Start setup", systemImage: "arrow.right")
+                        .font(.subheadline.weight(.bold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .background(Color.primaryAction, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                Button("Start private chat", action: onStartPrivateChat)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.textSecondary)
+                    .frame(height: 44)
+                    .padding(.horizontal, 12)
+                    .background(Color.secondarySurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.brandBlue.opacity(0.10), lineWidth: 1)
+        }
+        .shadow(color: Color.brandBlue.opacity(0.05), radius: 12, y: 6)
+    }
+}
+
 struct SavedSetupHomeCard: View {
     let plan: AppSetupPlan
     let restoreState: SetupRestoreState

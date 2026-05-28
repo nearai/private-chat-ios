@@ -16,6 +16,17 @@ struct AppConfiguration {
 struct AppDeepLinkAction: Equatable {
     static let maxDraftCharacters = 2_000
 
+    struct HostedBridgeImport: Equatable {
+        var endpoint: String
+        var authToken: String?
+        var threadID: String?
+        var isEnabled: Bool
+
+        var host: String? {
+            URL(string: endpoint)?.host
+        }
+    }
+
     enum Route: String, Equatable {
         case ask
         case agent
@@ -26,6 +37,7 @@ struct AppDeepLinkAction: Equatable {
     var sourceMode: ChatSourceMode?
     var researchMode: Bool
     var draft: String?
+    var hostedBridgeImport: HostedBridgeImport?
 
     static func parse(_ url: URL, callbackScheme: String = AppConfiguration.production.callbackScheme) -> AppDeepLinkAction? {
         guard url.scheme == callbackScheme,
@@ -38,12 +50,15 @@ struct AppDeepLinkAction: Equatable {
             uniqueKeysWithValues: (components?.queryItems ?? []).map { ($0.name.lowercased(), $0.value ?? "") }
         )
         let command = normalizedCommand(from: url)
-        let route = route(from: query["route"] ?? query["mode"] ?? command)
+        let importedBridge = hostedBridgeImport(from: query, command: command)
+        let route = route(from: query["route"] ?? query["mode"] ?? command) ?? (importedBridge == nil ? nil : .agent)
 
         guard command == "new" ||
               command == "ask" ||
               command == "agent" ||
               command == "ironclaw" ||
+              command == "connect" ||
+              command == "bridge" ||
               command == "verified" ||
               command == "private" ||
               command == "chat" ||
@@ -55,7 +70,8 @@ struct AppDeepLinkAction: Equatable {
             route: route ?? .ask,
             sourceMode: query["source"].flatMap(ChatSourceMode.init(rawValue:)),
             researchMode: boolValue(query["research"]),
-            draft: cappedDraft(query["prompt"] ?? query["draft"])
+            draft: cappedDraft(query["prompt"] ?? query["draft"]),
+            hostedBridgeImport: importedBridge
         )
     }
 
@@ -96,6 +112,37 @@ struct AppDeepLinkAction: Equatable {
     private static func nonEmpty(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func hostedBridgeImport(from query: [String: String], command: String) -> HostedBridgeImport? {
+        guard let endpoint = nonEmpty(
+            query["endpoint"] ??
+            query["hosted_endpoint"] ??
+            query["ironclaw_endpoint"] ??
+            query["bridge"]
+        ) else {
+            return nil
+        }
+
+        return HostedBridgeImport(
+            endpoint: endpoint,
+            authToken: nonEmpty(
+                query["token"] ??
+                query["bearer_token"] ??
+                query["auth_token"] ??
+                query["ironclaw_token"]
+            ),
+            threadID: nonEmpty(
+                query["thread_id"] ??
+                query["thread"] ??
+                query["ironclaw_thread_id"]
+            ),
+            isEnabled: boolValue(
+                query["enable_hosted_agent"] ??
+                query["enable_hosted"] ??
+                query["enable"]
+            ) || command == "ironclaw" || command == "connect" || command == "bridge"
+        )
     }
 
     private static func cappedDraft(_ value: String?) -> String? {

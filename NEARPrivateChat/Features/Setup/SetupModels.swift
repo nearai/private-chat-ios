@@ -1167,6 +1167,11 @@ enum UserSetupStorage {
         return .defaults
     }
 
+    static func needsFirstRunSetup(for accountID: String, defaults: UserDefaults = .standard) -> Bool {
+        load(for: accountID, defaults: defaults) == nil &&
+            !isCompleted(for: accountID, defaults: defaults)
+    }
+
     static func migrate(from oldAccountID: String, to newAccountID: String, defaults: UserDefaults = .standard) {
         guard oldAccountID != newAccountID,
               isFallbackAccountID(oldAccountID),

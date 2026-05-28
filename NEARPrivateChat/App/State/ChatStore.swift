@@ -1544,16 +1544,23 @@ final class ChatStore: ObservableObject {
         let route: String
         switch action.route {
         case .ask:
-            route = "new chat"
+            route = "a new chat"
         case .agent:
-            route = "IronClaw Mobile agent"
+            route = "an IronClaw Mobile agent"
         case .verified:
-            route = "verified private chat"
+            route = "a verified private chat"
         }
         let source = action.sourceMode.map { " Source: \($0.title)." } ?? ""
         let research = action.researchMode ? " Research mode will be enabled." : ""
+        let hostedBridge = action.hostedBridgeImport.map { bridge in
+            let host = bridge.host ?? "the hosted IronClaw endpoint"
+            let token = bridge.authToken == nil ? "" : " Token will be saved."
+            let thread = bridge.threadID == nil ? "" : " Thread reuse will be configured."
+            let enabled = bridge.isEnabled ? " Hosted bridge for \(host) will be saved and enabled." : " Hosted bridge for \(host) will be saved."
+            return "\(enabled)\(token)\(thread)"
+        } ?? ""
         let prompt = action.draft == nil ? " No prompt will be added." : " A prompt will be staged but not sent."
-        return "Open a \(route).\(source)\(research)\(prompt)"
+        return "Open \(route).\(source)\(research)\(hostedBridge)\(prompt)"
     }
 
     private func applyExternalDeepLink(_ action: AppDeepLinkAction) {
@@ -1569,15 +1576,20 @@ final class ChatStore: ObservableObject {
         if let draft = action.draft {
             self.draft = draft
         }
+        let importedBridgeValidationMessage = applyHostedBridgeImportIfPresent(action.hostedBridgeImport)
 
         switch action.route {
         case .ask:
-            showBanner(action.draft == nil ? "New chat ready." : "Prompt ready.")
+            if importedBridgeValidationMessage == nil {
+                showBanner(action.draft == nil ? "New chat ready." : "Prompt ready.")
+            }
         case .agent:
             selectedModel = ModelOption.ironclawMobileModelID
             councilModelIDs = []
             clearAttestationState()
-            showBanner(action.draft == nil ? "IronClaw Mobile ready." : "IronClaw prompt ready.")
+            if importedBridgeValidationMessage == nil {
+                showBanner(action.draft == nil ? "IronClaw Mobile ready." : "IronClaw prompt ready.")
+            }
         case .verified:
             if let modelID = preferredAvailableModel(), !Self.isExternalModel(modelID) {
                 selectedModel = modelID
@@ -1586,9 +1598,32 @@ final class ChatStore: ObservableObject {
             }
             councilModelIDs = []
             clearAttestationState()
-            showBanner(action.draft == nil ? "Verified private chat ready." : "Verified prompt ready.")
+            if importedBridgeValidationMessage == nil {
+                showBanner(action.draft == nil ? "Verified private chat ready." : "Verified prompt ready.")
+            }
         }
         openSelectedConversationToken = UUID()
+    }
+
+    @discardableResult
+    private func applyHostedBridgeImportIfPresent(_ bridgeImport: AppDeepLinkAction.HostedBridgeImport?) -> String? {
+        guard let bridgeImport else { return nil }
+        let trimmedEndpoint = bridgeImport.endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedThreadID = bridgeImport.threadID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let validationMessage = IronclawSettings(
+            isEnabled: bridgeImport.isEnabled,
+            baseURL: trimmedEndpoint,
+            threadID: trimmedThreadID
+        ).endpointValidationMessage
+
+        saveIronclawIntegration(
+            isEnabled: bridgeImport.isEnabled,
+            baseURL: trimmedEndpoint,
+            authToken: bridgeImport.authToken ?? "",
+            threadID: trimmedThreadID
+        )
+
+        return validationMessage
     }
 
     func selectModel(_ modelID: String) {
@@ -8549,7 +8584,7 @@ final class ChatStore: ObservableObject {
             sourceMode = .web
             webSearchEnabled = true
             draft = ""
-        case .chat, .councilOutput, .cloudModels, .council, .councilRoom, .project, .share:
+        case .chat, .councilOutput, .cloudModels, .council, .councilRoom, .threaded, .project, .share:
             selectedConversation = data.primaryConversation
             messages = data.messages
             draft = ""

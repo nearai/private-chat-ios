@@ -82,7 +82,7 @@ struct DemoCaptureRootView: View {
             return 4_000_000_000
         case .models:
             return 4_000_000_000
-        case .council, .councilRoom:
+        case .council, .councilRoom, .threaded:
             return 6_000_000_000
         case .composer:
             return 5_500_000_000
@@ -159,6 +159,12 @@ private struct DemoCaptureScreenHost: View {
                     model: demoCouncilRoomModel(),
                     onSend: { _, _ in },
                     onSynthesize: {}
+                )
+            case .threaded:
+                ThreadedBriefingView(
+                    title: "Daily briefing",
+                    schedule: "Every weekday · 8:00am",
+                    deliveries: ThreadedBriefingView.demoDeliveries
                 )
             case .project:
                 ProjectFilesView()

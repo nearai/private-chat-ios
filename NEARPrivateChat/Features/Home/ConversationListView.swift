@@ -126,6 +126,19 @@ struct ConversationListView: View {
         return savedSetupState
     }
 
+    private var shouldShowFirstRunSetupCard: Bool {
+        guard searchQuery.isEmpty,
+              filteredConversations.isEmpty,
+              filteredProjects.isEmpty,
+              filteredProjectContextMatches.isEmpty,
+              pendingSetupLaunchCard == nil,
+              savedSetupState == nil,
+              let accountID = sessionStore.setupAccountID else {
+            return false
+        }
+        return UserSetupStorage.needsFirstRunSetup(for: accountID)
+    }
+
     private var shouldShowHomeTrustCard: Bool {
         selectedHomeFilter == .all && searchQuery.isEmpty && filteredConversations.isEmpty
     }
@@ -310,6 +323,14 @@ struct ConversationListView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 16)
                             .padding(.top, pendingSetupLaunchCard == nil ? 12 : 0)
+                        } else if shouldShowFirstRunSetupCard {
+                            FirstRunSetupHomeCard(
+                                onStartSetup: onRunSetupAgain,
+                                onStartPrivateChat: openNewChat
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
                         } else {
                             VStack(spacing: 14) {
                                 ClaudeHomeEmptyState(
@@ -395,8 +416,8 @@ struct ConversationListView: View {
                 onDelete: { briefingStore.remove($0) }
             )
         }
-        .sheet(item: $openedBriefing) { briefing in
-            BriefingDetailView(store: briefingStore, briefing: briefing)
+        .fullScreenCover(item: $openedBriefing) { briefing in
+            ThreadedBriefingView(briefing: briefing) { openedBriefing = nil }
         }
         .navigationDestination(for: SharedConversationInfo.self) { item in
             SharedWithMePreviewView(item: item)
