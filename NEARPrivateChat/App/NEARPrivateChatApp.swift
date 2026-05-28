@@ -118,7 +118,7 @@ struct NEARPrivateChatApp: App {
         _briefingStore = StateObject(wrappedValue: environment.briefingStore)
     }
 
-    static let briefingRefreshTaskID = "ai.near.privatechat.briefings.refresh"
+    nonisolated static let briefingRefreshTaskID = "ai.near.privatechat.briefings.refresh"
 
     /// Asks iOS to run briefings in the background. Timing is OS-controlled;
     /// the handler reschedules itself so the cron keeps running.
