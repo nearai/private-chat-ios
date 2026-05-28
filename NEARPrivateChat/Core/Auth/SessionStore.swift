@@ -126,6 +126,16 @@ final class SessionStore: NSObject, ObservableObject {
         if !force, profile != nil {
             return
         }
+        #if targetEnvironment(simulator) && DEBUG
+        // The simulator stub session has a fake bearer token. Skipping
+        // the profile refresh prevents the API's 401 response from
+        // bubbling up as an "Invalid or expired authentication token"
+        // banner that pollutes visual QA. The stub profile is already
+        // populated by `authenticate(with:)`.
+        if session?.sessionID == "simulator-debug-session" {
+            return
+        }
+        #endif
         guard !isRefreshingProfile else { return }
         isRefreshingProfile = true
         defer { isRefreshingProfile = false }
