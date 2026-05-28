@@ -581,9 +581,11 @@ private struct ChatToolbar: View {
     }
 
     private var compactToolbar: some View {
-        // v2: the navigation bar already renders the conversation title, so the
-        // in-body toolbar drops the duplicate title text. Status text remains
-        // (when there are messages) as a thin route/project subtitle.
+        // v2: per Claude Design composer/thread specs, the model picker
+        // lives only in the composer chip row at the bottom. The top
+        // in-body toolbar keeps just the status text (when there are
+        // messages) and the "..." more menu — duplicate model selector
+        // removed.
         HStack(alignment: .center, spacing: 10) {
             if shouldShowCompactStatusText {
                 Text(compactStatusText)
@@ -595,8 +597,6 @@ private struct ChatToolbar: View {
             } else {
                 Spacer(minLength: 0)
             }
-
-            modelSelectorButton(maxWidth: 142)
 
             moreMenuButton
         }

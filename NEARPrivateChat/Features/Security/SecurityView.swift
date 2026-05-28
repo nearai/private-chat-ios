@@ -155,24 +155,10 @@ struct SecurityView: View {
                 }
             }
 
-            // Action-tint preview row that mirrors the primary CTA below.
-            if let snapshot = chatStore.attestationSnapshot {
-                Button {
-                    verifyProofOnDevice(snapshot)
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "lock.shield")
-                            .font(.system(size: 16, weight: .semibold))
-                        Text("Verify on-device")
-                            .font(.system(size: 15, weight: .semibold))
-                    }
-                    .foregroundStyle(Color.actionPrimary)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 56)
-                    .background(Color.actionTint)
-                }
-                .buttonStyle(.plain)
-            }
+            // v2: duplicate in-card "Verify on-device" preview row removed —
+            // the spec's PrimaryButton below is the single tap target. Two
+            // identical labels read as redundant. Only the primary CTA in
+            // `actionStack` stays.
         }
         .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
