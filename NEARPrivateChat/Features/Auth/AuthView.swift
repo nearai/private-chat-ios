@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 extension Notification.Name {
     /// Posted whenever AuthView toggles the inline terms-acceptance checkbox.
@@ -111,6 +114,33 @@ struct AuthView: View {
                 .buttonStyle(.plain)
 
                 #if DEBUG
+                // One-tap session-token paste for debug builds. Lives at
+                // the bottom of the Auth screen so it's not buried under
+                // "More sign-in options" while OAuth callback allowlist
+                // issues are being worked out.
+                Button {
+                    showingTokenLogin = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "key.fill")
+                            .font(.footnote.weight(.semibold))
+                        Text("Paste session token (DEBUG)")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .foregroundStyle(Color.actionPrimary)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Color.actionPrimary.opacity(0.18), lineWidth: 1)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(!hasAcceptedLegalTerms)
+                .opacity(hasAcceptedLegalTerms ? 1 : 0.5)
+
                 DebugMoreSignInOptions(
                     isOpen: $showingMoreSignInOptions,
                     isEnabled: hasAcceptedLegalTerms,
@@ -141,17 +171,35 @@ struct AuthView: View {
         #if DEBUG
         .sheet(isPresented: $showingTokenLogin) {
             NavigationStack {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Session Token")
-                        .font(.headline)
-                    SecureField("Paste token", text: $token)
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Paste a session JWT from a working production sign-in (browser DevTools → Application → Cookies / Local Storage).")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    SecureField("session JWT", text: $token)
                         .tokenInputTraits()
                         .padding(12)
                         .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                    Button {
+                        if let pasted = UIPasteboard.general.string {
+                            token = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
+                        }
+                    } label: {
+                        Label("Paste from clipboard", systemImage: "doc.on.clipboard")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.actionPrimary)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 14)
+                            .background(Color.actionTint, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+
                     Spacer()
                 }
                 .padding()
-                .navigationTitle("Developer Sign In")
+                .navigationTitle("Sign in with token")
                 .platformInlineNavigationTitle()
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
