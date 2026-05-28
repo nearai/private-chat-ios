@@ -4733,6 +4733,24 @@ final class ChatStore: ObservableObject {
             return "New conversation"
         }
 
+        // Short greetings and conversational openers shouldn't become
+        // literal titles ("hello", "hi", "what's up today?") — they don't
+        // describe the topic. Use a placeholder and let the backend's
+        // `titleUpdated` SSE event drop the real summary in once the
+        // model answers.
+        let lowered = normalizedMessage.lowercased()
+            .trimmingCharacters(in: CharacterSet(charactersIn: ".?!,'\""))
+        let greetingOpeners: Set<String> = [
+            "hello", "hi", "hey", "hiya", "howdy", "yo",
+            "sup", "wassup", "what's up", "whats up", "whatsup",
+            "what's up today", "whats up today",
+            "morning", "good morning", "good afternoon", "good evening",
+            "gm", "gn", "lol"
+        ]
+        if greetingOpeners.contains(lowered) || lowered.count <= 3 {
+            return "New chat"
+        }
+
         let withoutInstructions = strippedStarterInstruction(from: normalizedMessage)
         let title = withoutInstructions.trimmingCharacters(in: CharacterSet(charactersIn: "#*` ").union(.whitespacesAndNewlines))
         return clippedTitle(title.isEmpty ? normalizedMessage : title)

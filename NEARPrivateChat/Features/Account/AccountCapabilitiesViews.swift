@@ -1747,27 +1747,34 @@ private struct NearCloudConnectionCard: View {
                             .stroke(Color.appBorder, lineWidth: 1)
                     }
 
+                // Restacked: two small inline utilities up top, the
+                // primary Connect & Test action gets its own full-width
+                // row below so it reads as the canonical action.
                 HStack(spacing: 8) {
                     Button(action: onOpenCloud) {
                         Label("Open Cloud", systemImage: "arrow.up.forward.app")
+                            .font(.footnote.weight(.semibold))
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
 
                     Button(action: onPasteKey) {
                         Label("Paste", systemImage: "doc.on.clipboard")
+                            .font(.footnote.weight(.semibold))
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
-
-                    Spacer(minLength: 0)
-
-                    Button(action: onConnect) {
-                        Label(isConnecting ? "Testing" : "Connect & Test",
-                              systemImage: isConnecting ? "arrow.triangle.2.circlepath" : "checkmark.seal")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isAutoConnecting || isConnecting || trimmedKey.isEmpty)
                 }
-                .font(.caption.weight(.semibold))
+
+                Button(action: onConnect) {
+                    Label(isConnecting ? "Testing…" : "Connect & Test",
+                          systemImage: isConnecting ? "arrow.triangle.2.circlepath" : "checkmark.seal")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isAutoConnecting || isConnecting || trimmedKey.isEmpty)
             }
             .padding(12)
             .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))

@@ -25,26 +25,19 @@ struct EmptyChatView: View {
                 .foregroundStyle(Color.textTertiary)
 
             if !emptyPromptSuggestions.isEmpty {
-                // Center the chip row when the chips fit the viewport; allow
-                // horizontal scroll when they overflow. `frame(minWidth: ...)`
-                // on the inner HStack stretches it to the available width so
-                // the contents end up centered (Spacers at both ends),
-                // while the ScrollView still lets the user pan if it overflows.
-                GeometryReader { proxy in
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            Spacer(minLength: 0)
-                            ForEach(emptyPromptSuggestions) { suggestion in
-                                suggestionChip(suggestion)
-                            }
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.horizontal, 24)
-                        .frame(minWidth: proxy.size.width)
+                // 4 short chips on iPhone width fit without scrolling.
+                // A plain centered HStack with maxWidth=.infinity puts
+                // them in the middle of the screen — no GeometryReader
+                // or ScrollView gymnastics needed. minimumScaleFactor
+                // on the labels lets longer chip titles (project mode)
+                // shrink slightly rather than overflow.
+                HStack(spacing: 8) {
+                    ForEach(emptyPromptSuggestions) { suggestion in
+                        suggestionChip(suggestion)
                     }
-                    .scrollClipDisabled()
                 }
-                .frame(height: 32)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, 16)
                 .padding(.top, 12)
             }
         }
@@ -61,6 +54,7 @@ struct EmptyChatView: View {
                 .labelStyle(.titleAndIcon)
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(1)
+                .minimumScaleFactor(0.85)
                 .padding(.horizontal, 12)
                 .frame(height: 32)
                 .background(Color.appSecondaryBackground, in: Capsule())
