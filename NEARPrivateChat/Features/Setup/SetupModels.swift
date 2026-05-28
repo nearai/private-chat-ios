@@ -402,7 +402,7 @@ struct UserSetupProfile: Codable, Hashable {
         if !goal.isEmpty {
             return "Help me with this goal: \(goal)"
         }
-        return useCases.setupPrimaryUseCase.starterPrompt
+        return nil
     }
 
     var emptyStateSubtitle: String {
@@ -865,7 +865,9 @@ enum SetupRestorePlanner {
 
         return SetupRestoreState(
             needsRestore: false,
-            summaryText: "Your saved setup is ready to reopen with the same route, focus, and starter prompt."
+            summaryText: plan.firstRunDraft == nil
+                ? "Your saved setup is ready to reopen with the same route and focus defaults."
+                : "Your saved setup is ready to reopen with the same route, focus, and starter prompt."
         )
     }
 }

@@ -173,10 +173,12 @@ enum LegalTerms {
     static let nearAIPrivacyPolicyURL = URL(string: "https://near.ai/privacy-policy")!
     static let ironclawRepositoryURL = URL(string: "https://github.com/nearai/ironclaw")!
 
-    static let acceptanceText = "I confirm that I am at least 18, I agree to the NEAR Private Chat iOS Terms, NEAR AI Services Terms, NEAR AI Cloud Terms, Acceptable Use Policy, and applicable IronClaw/third-party terms, and I understand that networked models, web search, files, and agents can send selected content off this device."
+    static let acceptanceText = "I confirm that I am at least 18, I agree to the NEAR Private Chat iOS Terms, NEAR AI Services Terms, NEAR AI Cloud Terms, Acceptable Use Policy, and applicable IronClaw or third-party terms, and I understand that networked models, web search, files, and agents can send selected content off this device."
+    static let acceptancePrompt = "Review the current terms, then confirm acceptance before signing in or continuing."
+    static let acceptanceCheckboxText = "I reviewed version \(version) and accept the current terms for this app and its connected NEAR AI routes."
 
     static let signupSummary = [
-        "Required before sign in.",
+        "Required before account access.",
         "Applies to private chat, NEAR AI Cloud, LLM Council, files, sharing, web, and IronClaw.",
         "Cloud premium models use a privacy proxy and do not carry NEAR Private verification.",
         "Verification is proof of serving environment, not proof that an answer is true.",
