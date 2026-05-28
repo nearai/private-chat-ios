@@ -122,7 +122,7 @@ struct NEARPrivateChatApp: App {
 
     /// Asks iOS to run briefings in the background. Timing is OS-controlled;
     /// the handler reschedules itself so the cron keeps running.
-    static func scheduleBriefingRefresh() {
+    nonisolated static func scheduleBriefingRefresh() {
         let request = BGAppRefreshTaskRequest(identifier: briefingRefreshTaskID)
         request.earliestBeginDate = Date(timeIntervalSinceNow: 30 * 60)
         try? BGTaskScheduler.shared.submit(request)
