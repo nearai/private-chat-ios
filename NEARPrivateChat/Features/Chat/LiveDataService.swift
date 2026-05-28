@@ -47,11 +47,13 @@ enum QuickIntentParser {
         let text = raw.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
 
-        // 1) "create a tracker / watch / every morning …"
+        // 1) "create a tracker / watch / every morning …" — only when the
+        // prompt names a subject we can actually track. Otherwise fall through
+        // so "remind me to stretch daily" goes to the model, not an ETH tracker.
         let createVerb = contains(text, ["create", "make", "set up", "set-up", "setup", "build", "schedule", "start", "add", "track", "watch", "remind"])
         let trackerNoun = contains(text, ["tracker", "watcher", "alert", "briefing", "brief", "digest", "every day", "every morning", "each morning", "each day", "every weekday", "daily", "weekly"])
-        if createVerb && trackerNoun {
-            return .createTracker(makeTracker(from: text))
+        if createVerb && trackerNoun, let spec = makeTracker(from: text) {
+            return .createTracker(spec)
         }
 
         // 2) news
@@ -61,47 +63,57 @@ enum QuickIntentParser {
 
         // 3) NEAR account — named phrases, or a .near token plus a status word.
         let account = extractAccount(from: text)
-        if contains(text, ["my near account", "my account", "near account", "near.com account", "account doing", "account balance", "wallet balance", "my wallet", "my balance"]) ||
+        if contains(text, ["my near account", "near account", "near.com account", "account doing", "account balance", "wallet balance", "my wallet", "my balance"]) ||
             (account != nil && contains(text, ["doing", "balance", "holdings", "how is", "status", "account", "wallet", "worth"])) {
             return .nearAccount(account: account)
         }
 
-        // 4) price of a coin
+        // 4) price of a coin (a bare "?" is not enough — it swallows
+        // "can you explain ethereum?" — so require an explicit price word).
         if let coin = matchedCoin(in: text),
-           contains(text, ["price", "worth", "trading", "how much", "value", "cost", "?"]) {
+           contains(text, ["price", "worth", "trading", "how much", "value", "cost"]) {
             return .price(coinID: coin.id, symbol: coin.symbol)
         }
 
         return nil
     }
 
-    private static func makeTracker(from text: String) -> TrackerSpec {
+    /// Builds a tracker only when a real subject is present. Returns nil for
+    /// generic "remind me …" prompts and account trackers with no id so the
+    /// caller can fall through to the model instead of scheduling a dead fetch.
+    private static func makeTracker(from text: String) -> TrackerSpec? {
+        // `council` is recorded for a future scheduled-council runner; today the
+        // briefing runner fetches live data, so we don't promise it in the label.
         let council = contains(text, ["council", "panel", "multiple models", "models debate", "debate"])
         let schedule = extractSchedule(from: text)
         let label = schedule.scheduleLabel
+        let account = extractAccount(from: text)
+        let mentionsAccount = contains(text, ["account", "wallet", "near.com"]) || account != nil
 
-        if contains(text, ["account", "wallet", "near.com"]), !contains(text, ["price"]) {
-            let account = extractAccount(from: text)
+        if mentionsAccount, !contains(text, ["price"]) {
+            // An account tracker with no id would schedule an empty fetch.
+            guard let account else { return nil }
             return TrackerSpec(
                 title: "NEAR account",
                 kind: .nearAccount,
                 subject: account,
                 schedule: schedule,
                 council: council,
-                confirmation: "NEAR account\(account.map { " · \($0)" } ?? "") · \(label)"
+                confirmation: "NEAR account · \(account) · \(label)"
             )
         }
         if contains(text, ["news", "headlines", "stories"]) {
             return TrackerSpec(title: "Daily news", kind: .dailyNews, subject: nil, schedule: schedule, council: council, confirmation: "Daily news · \(label)")
         }
-        let coin = matchedCoin(in: text) ?? LiveCoin(id: "ethereum", symbol: "ETH", keywords: [])
+        // Price tracker only for a supported coin — no silent ETH default.
+        guard let coin = matchedCoin(in: text) else { return nil }
         return TrackerSpec(
             title: "\(coin.symbol) price",
             kind: .cryptoPrice,
             subject: coin.id,
             schedule: schedule,
             council: council,
-            confirmation: "\(coin.symbol) price · \(label)\(council ? " · council" : "")"
+            confirmation: "\(coin.symbol) price · \(label)"
         )
     }
 

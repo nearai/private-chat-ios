@@ -3596,10 +3596,14 @@ final class ChatStore: ObservableObject {
             _ = appendAssistant(text: "Sure — what’s your NEAR account? Tell me the id (e.g. **yourname.near**) and I’ll pull its balance and holdings.")
         default:
             let id = appendAssistant(text: "", streaming: true)
+            currentAssistantMessageID = id
             isStreaming = true
-            Task { [weak self] in
-                guard let self else { return }
-                let widget = await self.fetchQuickIntentWidget(intent)
+            // Track the fetch in streamTask so cancelStream() can stop it, and
+            // bail after the await if cancelled so we don't overwrite the turn
+            // cancelStream() already finalized.
+            streamTask = Task { [weak self] in
+                let widget = await self?.fetchQuickIntentWidget(intent)
+                guard let self, !Task.isCancelled else { return }
                 self.updateMessage(id) { message in
                     message.isStreaming = false
                     message.status = "completed"
@@ -3609,7 +3613,9 @@ final class ChatStore: ObservableObject {
                         message.text = "I couldn’t fetch that just now — try again in a moment."
                     }
                 }
+                self.currentAssistantMessageID = nil
                 self.isStreaming = false
+                self.streamTask = nil
             }
         }
     }
@@ -3640,6 +3646,9 @@ final class ChatStore: ObservableObject {
         if attachments.isEmpty, let intent = QuickIntentParser.parse(text) {
             removePersistedDraft(for: draftPersistenceScopeID)
             draft = ""
+            // The local answer needs no sign-in/model route, so clear any stale
+            // route-readiness banner left over from a prior blocked send.
+            routeReadinessIssue = nil
             handleQuickIntent(intent, prompt: text)
             return
         }

@@ -3121,17 +3121,33 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(spec.council)
     }
 
-    func testQuickIntentParsesWeekdayNearAccountTracker() throws {
+    func testQuickIntentCreatesAccountTrackerWithExplicitID() throws {
         let intent = QuickIntentParser.parse(
-            "set up a daily briefing for my near account every weekday at 7am"
+            "set up a daily tracker for abhishek.near every weekday at 7am"
         )
         guard case let .createTracker(spec) = intent else {
             return XCTFail("Expected a createTracker intent, got \(String(describing: intent)).")
         }
         XCTAssertEqual(spec.kind, .nearAccount)
-        XCTAssertNil(spec.subject)
+        XCTAssertEqual(spec.subject, "abhishek.near")
         XCTAssertEqual(spec.schedule, .weekdays(hour: 7, minute: 0))
-        XCTAssertFalse(spec.council)
+    }
+
+    func testQuickIntentDoesNotCreateTrackerWithoutSubject() {
+        // No trackable subject → falls through to the model, not an ETH default.
+        XCTAssertNil(QuickIntentParser.parse("remind me to stretch every morning"))
+        // Account tracker with no id → asks for the account instead of
+        // scheduling a fetch that can never resolve.
+        XCTAssertEqual(
+            QuickIntentParser.parse("set up a daily briefing for my near account every weekday at 7am"),
+            .nearAccount(account: nil)
+        )
+    }
+
+    func testQuickIntentIgnoresLooseAccountAndPricePhrases() {
+        // "my account" alone and a bare "?" used to swallow these.
+        XCTAssertNil(QuickIntentParser.parse("how do I delete my account?"))
+        XCTAssertNil(QuickIntentParser.parse("can you explain ethereum?"))
     }
 
     func testQuickIntentIgnoresChitChat() {
@@ -3209,6 +3225,24 @@ extension PrivateChatCoreTests {
         // No QuickIntent match: the local fast-path does not consume the turn,
         // so no local user/assistant pair is synthesized here.
         XCTAssertTrue(store.messages.isEmpty)
+    }
+
+    @MainActor
+    func testCancelStreamStopsInFlightQuickIntentAnswer() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        store.draft = "what is the eth price"
+        store.sendDraft()
+        XCTAssertTrue(store.isStreaming)
+        let placeholderID = store.messages.last?.id
+
+        store.cancelStream()
+
+        // The tracked fetch is cancelled and the placeholder is finalized as
+        // cancelled instead of being left spinning or later overwritten.
+        XCTAssertFalse(store.isStreaming)
+        let placeholder = store.messages.first { $0.id == placeholderID }
+        XCTAssertEqual(placeholder?.isStreaming, false)
+        XCTAssertEqual(placeholder?.status, "cancelled")
     }
 
     /// End-to-end wiring mirroring AppEnvironment: a "create a tracker…" prompt
