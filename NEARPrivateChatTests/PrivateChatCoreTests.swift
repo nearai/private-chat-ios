@@ -3160,6 +3160,14 @@ extension PrivateChatCoreTests {
         XCTAssertNil(QuickIntentParser.parse("what's the weather"))
     }
 
+    func testQuickIntentParsesCurrencyConversion() {
+        XCTAssertEqual(QuickIntentParser.parse("convert 100 usd to eur"), .fx(amount: 100, from: "USD", to: "EUR"))
+        XCTAssertEqual(QuickIntentParser.parse("how much is 50 gbp in usd"), .fx(amount: 50, from: "GBP", to: "USD"))
+        XCTAssertEqual(QuickIntentParser.parse("euros to yen"), .fx(amount: 1, from: "EUR", to: "JPY"))
+        // Same currency or non-currency words don't trigger a conversion.
+        XCTAssertNil(QuickIntentParser.parse("translate this to spanish"))
+    }
+
     func testQuickIntentParsesTracker() throws {
         let intent = QuickIntentParser.parse(
             "create a tracker to tell me the eth price every morning at 8 am using council"

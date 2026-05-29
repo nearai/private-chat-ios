@@ -31,6 +31,7 @@ enum QuickIntent: Equatable {
     case nearAccount(account: String?)
     case news
     case weather(query: String)
+    case fx(amount: Double, from: String, to: String)
     case createTracker(TrackerSpec)
 }
 
@@ -75,6 +76,12 @@ enum QuickIntentParser {
         if contains(text, ["my near account", "near account", "near.com account", "account doing", "account balance", "wallet balance", "my wallet", "my balance"]) ||
             (account != nil && contains(text, ["doing", "balance", "holdings", "how is", "status", "account", "wallet", "worth"])) {
             return .nearAccount(account: account)
+        }
+
+        // 3b) currency conversion ("convert 100 usd to eur", "50 gbp in usd").
+        // The currency-code gate keeps "translate X to spanish" out.
+        if let fx = parseFX(text) {
+            return .fx(amount: fx.amount, from: fx.from, to: fx.to)
         }
 
         // 4) price of a coin (a bare "?" is not enough — it swallows
@@ -229,6 +236,42 @@ enum QuickIntentParser {
         location = location.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
         return location.isEmpty ? nil : location
+    }
+
+    static func parseFX(_ text: String) -> (amount: Double, from: String, to: String)? {
+        let pattern = #"(\d[\d,]*(?:\.\d+)?)?\s*([a-z]{3,8})\s+(?:to|in|into|as)\s+([a-z]{3,8})"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) else {
+            return nil
+        }
+        func group(_ index: Int) -> String? {
+            guard let range = Range(match.range(at: index), in: text) else { return nil }
+            return String(text[range])
+        }
+        guard let from = currencyCode(group(2)), let to = currencyCode(group(3)), from != to else {
+            return nil
+        }
+        let amount = group(1).flatMap { Double($0.replacingOccurrences(of: ",", with: "")) } ?? 1
+        return (amount > 0 ? amount : 1, from, to)
+    }
+
+    private static func currencyCode(_ raw: String?) -> String? {
+        guard let token = raw?.trimmingCharacters(in: .whitespaces).lowercased(), !token.isEmpty else { return nil }
+        let map: [String: String] = [
+            "usd": "USD", "dollar": "USD", "dollars": "USD", "buck": "USD", "bucks": "USD",
+            "eur": "EUR", "euro": "EUR", "euros": "EUR",
+            "gbp": "GBP", "pound": "GBP", "pounds": "GBP", "sterling": "GBP", "quid": "GBP",
+            "jpy": "JPY", "yen": "JPY",
+            "inr": "INR", "rupee": "INR", "rupees": "INR",
+            "cny": "CNY", "rmb": "CNY", "yuan": "CNY",
+            "chf": "CHF", "franc": "CHF", "francs": "CHF",
+            "cad": "CAD", "aud": "AUD", "nzd": "NZD", "sgd": "SGD", "hkd": "HKD",
+            "krw": "KRW", "won": "KRW", "aed": "AED", "dirham": "AED",
+            "brl": "BRL", "real": "BRL", "mxn": "MXN", "zar": "ZAR", "sek": "SEK", "nok": "NOK", "dkk": "DKK", "pln": "PLN", "try": "TRY", "lira": "TRY"
+        ]
+        // Only recognized currencies — keeps arbitrary 3-letter words
+        // ("add abc to xyz") from being treated as a conversion.
+        return map[token]
     }
 
     private static func extractSchedule(from text: String) -> BriefingSchedule {
@@ -509,6 +552,49 @@ enum LiveDataService {
         default: return "—"
         }
     }
+
+    /// Currency conversion via frankfurter.app (ECB rates, auth-free) → metric.
+    static func fxWidget(amount: Double, from: String, to: String) async -> MessageWidget? {
+        let amountString = amount.truncatingRemainder(dividingBy: 1) == 0
+            ? String(Int(amount))
+            : String(format: "%.2f", amount)
+        guard let url = URL(string: "https://api.frankfurter.app/latest?amount=\(amountString)&from=\(from)&to=\(to)") else {
+            return nil
+        }
+        do {
+            let response = try JSONDecoder().decode(FrankfurterResponse.self, from: try await fetchData(from: url))
+            guard let converted = response.rates?[to] else { return nil }
+            let rate = amount != 0 ? converted / amount : converted
+
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            formatter.maximumFractionDigits = 2
+            let convertedString = formatter.string(from: NSNumber(value: converted)) ?? String(format: "%.2f", converted)
+            formatter.maximumFractionDigits = 4
+            let rateString = formatter.string(from: NSNumber(value: rate)) ?? String(format: "%.4f", rate)
+
+            return MessageWidget(
+                kind: .metric,
+                title: "\(from) → \(to)",
+                freshness: .fresh,
+                time: shortCurrentTimeString(),
+                followUp: "Convert a different amount?",
+                note: nil,
+                chart: nil,
+                metric: WidgetMetric(
+                    label: "\(amountString) \(from)",
+                    value: "\(convertedString) \(to)",
+                    delta: nil,
+                    trend: .flat,
+                    caption: "1 \(from) = \(rateString) \(to)"
+                ),
+                comparison: nil,
+                newsBrief: nil
+            )
+        } catch {
+            return nil
+        }
+    }
 }
 
 private extension LiveDataService {
@@ -561,6 +647,12 @@ private extension LiveDataService {
             case temperatureMax = "temperature_2m_max"
             case temperatureMin = "temperature_2m_min"
         }
+    }
+
+    struct FrankfurterResponse: Decodable {
+        let amount: Double?
+        let base: String?
+        let rates: [String: Double]?
     }
 
     struct CoinGeckoPricePoint: Decodable {
