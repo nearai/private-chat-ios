@@ -3254,6 +3254,30 @@ extension PrivateChatCoreTests {
         try? FileManager.default.removeItem(at: tempFile)
     }
 
+    func testQuickIntentParsesActivityLog() {
+        XCTAssertEqual(QuickIntentParser.parse("what have you done"), .activityLog)
+        XCTAssertEqual(QuickIntentParser.parse("show your activity"), .activityLog)
+    }
+
+    func testAgentActivityLogPersistsNewestFirst() throws {
+        let tempFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("activity-\(UUID().uuidString).json")
+        let log = AgentActivityLog(fileURL: tempFile)
+        log.record("Ran briefing “ETH watcher”")
+        log.record("Created tracker “Daily news”")
+        XCTAssertEqual(log.entries.count, 2)
+        XCTAssertEqual(log.entries.first?.summary, "Created tracker “Daily news”") // newest first
+        log.record("   ") // blank ignored
+        XCTAssertEqual(log.entries.count, 2)
+
+        let reloaded = AgentActivityLog(fileURL: tempFile)
+        XCTAssertEqual(reloaded.entries.count, 2)
+        reloaded.clear()
+        XCTAssertTrue(reloaded.entries.isEmpty)
+
+        try? FileManager.default.removeItem(at: tempFile)
+    }
+
     func testQuickIntentParsesForget() {
         XCTAssertEqual(QuickIntentParser.parse("forget that I prefer concise answers"), .forget(text: "I prefer concise answers"))
         XCTAssertEqual(QuickIntentParser.parse("forget everything"), .forget(text: nil))

@@ -38,6 +38,7 @@ enum QuickIntent: Equatable {
     case remember(text: String)
     case recallMemory
     case forget(text: String?)
+    case activityLog
     case createTracker(TrackerSpec)
 }
 
@@ -61,6 +62,9 @@ enum QuickIntentParser {
         // "remember that …" never gets mistaken for a tracker/reminder.
         if contains(text, ["what do you remember", "what do you know about me", "what have you remembered", "what's in your memory", "whats in your memory", "show my memory", "show what you remember"]) {
             return .recallMemory
+        }
+        if contains(text, ["what have you done", "what did you do", "show your activity", "activity log", "what have you been up to", "show what you've done", "your recent activity"]) {
+            return .activityLog
         }
         if contains(text, ["forget everything", "forget it all", "forget all", "clear your memory", "clear my memory", "delete your memory", "wipe your memory", "erase your memory"]) {
             return .forget(text: nil)
@@ -181,7 +185,7 @@ enum QuickIntentParser {
         switch intent {
         case .price, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
-        case .remember, .recallMemory, .forget, .createTracker:
+        case .remember, .recallMemory, .forget, .activityLog, .createTracker:
             return false
         }
     }
@@ -1444,5 +1448,76 @@ final class MemoryStore {
         var hash: UInt64 = 5381
         for byte in raw.utf8 { hash = (hash &* 33) ^ UInt64(byte) }
         return String(hash, radix: 16)
+    }
+}
+
+struct AgentActivityRecord: Codable, Hashable, Identifiable {
+    var id: UUID
+    var summary: String
+    var date: Date
+
+    init(id: UUID = UUID(), summary: String, date: Date = Date()) {
+        self.id = id
+        self.summary = summary
+        self.date = date
+    }
+}
+
+/// A transparency log of what the assistant did on the user's behalf —
+/// scheduled briefing runs, tracker creation, etc. On-device, account-scoped.
+final class AgentActivityLog {
+    private(set) var entries: [AgentActivityRecord] = []
+    private var fileURL: URL?
+
+    init(fileURL: URL? = nil) {
+        if let fileURL { configure(fileURL: fileURL) }
+    }
+
+    func configure(accountID: String?) {
+        configure(fileURL: Self.defaultFileURL(accountID: accountID))
+    }
+
+    func configure(fileURL: URL) {
+        self.fileURL = fileURL
+        load()
+    }
+
+    private func load() {
+        guard let fileURL,
+              let data = try? Data(contentsOf: fileURL),
+              let decoded = try? JSONDecoder().decode([AgentActivityRecord].self, from: data) else {
+            entries = []
+            return
+        }
+        entries = decoded
+    }
+
+    private func save() {
+        guard let fileURL else { return }
+        try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(entries) {
+            try? data.write(to: fileURL, options: [.atomic])
+        }
+    }
+
+    func record(_ summary: String) {
+        let trimmed = String(summary.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+        guard !trimmed.isEmpty else { return }
+        entries.insert(AgentActivityRecord(summary: trimmed), at: 0)
+        if entries.count > 200 { entries = Array(entries.prefix(200)) }
+        save()
+    }
+
+    func clear() {
+        entries.removeAll()
+        save()
+    }
+
+    private static func defaultFileURL(accountID: String?) -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return base
+            .appendingPathComponent("NEARPrivateChat", isDirectory: true)
+            .appendingPathComponent("activity-\(MemoryStore.stableScope(accountID ?? "default")).json")
     }
 }

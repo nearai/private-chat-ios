@@ -161,6 +161,9 @@ final class ChatStore: ObservableObject {
     /// On-device personal memory; injected into the model's system prompt so
     /// answers are personalized. Account-scoped, never leaves the device.
     let memoryStore = MemoryStore()
+    /// On-device transparency log of what the assistant did (briefing runs,
+    /// trackers created). Account-scoped, never leaves the device.
+    let activityLog = AgentActivityLog()
     private let webGroundingService = WebGroundingService()
     private let ironclawMobileRuntime: IronclawMobileRuntime
     private var selectedResponseVariantByConversationID: [String: String] = [:]
@@ -1245,10 +1248,11 @@ final class ChatStore: ObservableObject {
 
     func prepareForAuthenticatedAccount(_ accountID: String?) {
         let resolvedAccountID = Self.storageScope(for: accountID)
-        // Configure memory up front (even when the account is unchanged) so a
-        // fresh signed-out launch still persists memory rather than keeping it
-        // in RAM until the first account switch.
+        // Configure memory + activity log up front (even when the account is
+        // unchanged) so a fresh signed-out launch still persists them rather
+        // than keeping them in RAM until the first account switch.
         memoryStore.configure(accountID: resolvedAccountID)
+        activityLog.configure(accountID: resolvedAccountID)
         guard resolvedAccountID != storageAccountID else { return }
         if Self.shouldMigrateStorage(from: storageAccountID, to: resolvedAccountID) {
             Self.migrateAccountScopedStorage(from: storageAccountID, to: resolvedAccountID)
@@ -3766,6 +3770,7 @@ final class ChatStore: ObservableObject {
                 council: spec.council
             )
             onCreateTracker?(briefing)
+            activityLog.record("Created tracker “\(spec.title)” · \(spec.confirmation)")
             _ = appendAssistant(text: "Created a tracker — **\(spec.confirmation)**. It runs on schedule and lands on your Today tab; open it any time to Run now, change it, or delete it.")
             AppHaptics.selection()
         case .nearAccount(nil):
@@ -3794,6 +3799,16 @@ final class ChatStore: ObservableObject {
                 _ = appendAssistant(text: "Cleared — I’ve forgotten everything stored on this device.")
             }
             AppHaptics.selection()
+        case .activityLog:
+            let entries = activityLog.entries
+            if entries.isEmpty {
+                _ = appendAssistant(text: "Nothing yet — once briefings run or you create a tracker, I’ll log it here (on your device).")
+            } else {
+                let formatter = RelativeDateTimeFormatter()
+                formatter.unitsStyle = .abbreviated
+                let lines = entries.prefix(20).map { "• \($0.summary) — \(formatter.localizedString(for: $0.date, relativeTo: Date()))" }.joined(separator: "\n")
+                _ = appendAssistant(text: "Here’s what I’ve done recently (kept on your device):\n\n\(lines)")
+            }
         default:
             let id = appendAssistant(text: "", streaming: true)
             currentAssistantMessageID = id
@@ -3896,7 +3911,7 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.unitConvertWidget(value: value, from: from, to: to)
         case let .define(word):
             return await LiveDataService.defineWidget(word: word)
-        case .remember, .recallMemory, .forget, .createTracker:
+        case .remember, .recallMemory, .forget, .activityLog, .createTracker:
             // Handled synchronously in handleQuickIntent — never fetched here.
             return nil
         }
