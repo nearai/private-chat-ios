@@ -83,11 +83,15 @@ struct AppLifecycleModifier: ViewModifier {
             }
     }
 
-    /// Drains anything an App Intent (Siri/Shortcuts) staged: a question to
-    /// place in the composer, and a request to refresh briefings.
+    /// Drains anything staged by an out-of-process hand-off: a question from an
+    /// App Intent (Siri/Shortcuts), text/URL from the share extension, and a
+    /// request to refresh briefings. A Siri prompt wins if both are present
+    /// (the share file stays for the next activation).
     @MainActor
     private func consumeSiriCommands() async {
-        chatStore.consumePendingSiriPrompt()
+        if !chatStore.consumePendingSiriPrompt() {
+            chatStore.consumePendingSharedItem()
+        }
         if UserDefaults.standard.bool(forKey: ChatStore.pendingRunBriefingsKey) {
             UserDefaults.standard.removeObject(forKey: ChatStore.pendingRunBriefingsKey)
             await briefingStore.runDue()

@@ -3363,6 +3363,43 @@ extension PrivateChatCoreTests {
         XCTAssertFalse(store.consumePendingSiriPrompt(defaults: defaults))
     }
 
+    /// The share extension writes a pending item to the App Group file; the app
+    /// stages it into the composer exactly once, then clears the file.
+    @MainActor
+    func testConsumePendingSharedItemStagesDraftOnce() throws {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pending-share-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        // The extension's write helper persists the shared text/URL.
+        XCTAssertTrue(
+            PendingShareStore.write(PendingSharedItem(text: "https://near.org"), to: fileURL)
+        )
+
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        XCTAssertTrue(store.consumePendingSharedItem(fileURL: fileURL))
+        XCTAssertEqual(store.draft, "https://near.org")
+
+        // Consumed: the file is gone and a second call is a no-op.
+        XCTAssertNil(PendingShareStore.read(from: fileURL))
+        XCTAssertFalse(store.consumePendingSharedItem(fileURL: fileURL))
+    }
+
+    /// An empty/whitespace-only hand-off file is ignored and never stages a draft.
+    @MainActor
+    func testConsumePendingSharedItemIgnoresEmptyText() throws {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pending-share-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        PendingShareStore.write(PendingSharedItem(text: "   \n  "), to: fileURL)
+        XCTAssertNil(PendingShareStore.read(from: fileURL))
+
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        XCTAssertFalse(store.consumePendingSharedItem(fileURL: fileURL))
+        XCTAssertEqual(store.draft, "")
+    }
+
     @MainActor
     func testCreateTrackerPromptLandsBriefingInStore() throws {
         let tempFile = FileManager.default.temporaryDirectory

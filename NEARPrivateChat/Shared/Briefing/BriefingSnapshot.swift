@@ -23,6 +23,12 @@ enum BriefingSharedStore {
     /// widget never has to compile any SwiftUI view code or design tokens.
     static let snapshotFileName = "briefing-widget-snapshot.json"
 
+    /// File the "Send to Private Chat" share extension writes a single pending
+    /// shared item to. The app drains it on activation and stages it into the
+    /// composer (never auto-sent). Lives in the App Group container so the
+    /// out-of-process extension and the app can both reach it.
+    static let pendingShareFileName = "pending-share.json"
+
     /// Shared App Group container, or `nil` if the entitlement is missing (e.g.
     /// a stripped build). Callers fall back to a local directory.
     static func containerURL() -> URL? {
@@ -34,6 +40,76 @@ enum BriefingSharedStore {
         containerURL()?
             .appendingPathComponent(directoryName, isDirectory: true)
             .appendingPathComponent(fileName)
+    }
+}
+
+/// A single item handed off from the share extension to the app: the selected
+/// text or URL the user shared, plus when it was captured. Tiny and Codable so
+/// the extension (which never links the app's full model graph) can write it
+/// and the app can read it. Both targets compile this file.
+struct PendingSharedItem: Codable, Equatable {
+    var text: String
+    var createdAt: Date
+
+    init(text: String, createdAt: Date = Date()) {
+        self.text = text
+        self.createdAt = createdAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case text, createdAt
+    }
+
+    // Forgiving decode: a file written by an older/newer build still loads.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.text = (try? c.decode(String.self, forKey: .text)) ?? ""
+        self.createdAt = (try? c.decode(Date.self, forKey: .createdAt)) ?? Date()
+    }
+}
+
+/// Read/write/clear helpers for the share hand-off file. The share extension
+/// calls `write`; the app calls `read` then `clear` on activation. A `fileURL`
+/// is injectable so unit tests don't need the real App Group container.
+enum PendingShareStore {
+    /// Default hand-off file location inside the App Group container.
+    static func defaultFileURL() -> URL? {
+        BriefingSharedStore.sharedFileURL(BriefingSharedStore.pendingShareFileName)
+    }
+
+    /// Persists a pending shared item, creating the container subfolder if
+    /// needed. Returns `false` if the file could not be written.
+    @discardableResult
+    static func write(_ item: PendingSharedItem, to fileURL: URL?) -> Bool {
+        guard let fileURL else { return false }
+        do {
+            try FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let data = try JSONEncoder.briefingSnapshot.encode(item)
+            try data.write(to: fileURL, options: .atomic)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// Loads a pending shared item, or `nil` if none is staged or it is empty.
+    static func read(from fileURL: URL?) -> PendingSharedItem? {
+        guard let fileURL,
+              let data = try? Data(contentsOf: fileURL),
+              let item = try? JSONDecoder.briefingSnapshot.decode(PendingSharedItem.self, from: data)
+        else { return nil }
+        let trimmed = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return item
+    }
+
+    /// Removes the hand-off file so the same item is never staged twice.
+    static func clear(_ fileURL: URL?) {
+        guard let fileURL else { return }
+        try? FileManager.default.removeItem(at: fileURL)
     }
 }
 

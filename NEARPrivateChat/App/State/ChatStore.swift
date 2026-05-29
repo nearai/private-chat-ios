@@ -1548,6 +1548,31 @@ final class ChatStore: ObservableObject {
         return true
     }
 
+    /// Stages text/URL handed off by the "Send to Private Chat" share extension
+    /// into the composer (not auto-sent — same staged-but-not-sent contract as
+    /// the Siri bridge and deep links). Reads the App Group hand-off file,
+    /// clears it so the item is staged once, and returns whether anything was
+    /// staged. `fileURL` is injectable so tests don't need the real container.
+    @discardableResult
+    func consumePendingSharedItem(
+        fileURL: URL? = PendingShareStore.defaultFileURL()
+    ) -> Bool {
+        guard let item = PendingShareStore.read(from: fileURL) else { return false }
+        guard !isStreaming else {
+            // Leave the file in place; the next activation can retry once the
+            // current response finishes.
+            showBanner("Finish or cancel the current response before starting a new chat.")
+            return false
+        }
+        PendingShareStore.clear(fileURL)
+        let text = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return false }
+        startNewConversation()
+        draft = String(text.prefix(AppDeepLinkAction.maxDraftCharacters))
+        AppHaptics.selection()
+        return true
+    }
+
     @discardableResult
     func handleIncomingURL(_ url: URL) -> Bool {
         guard let action = AppDeepLinkAction.parse(url) else { return false }
