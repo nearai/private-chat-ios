@@ -391,10 +391,20 @@ final class BriefingStore: ObservableObject {
     /// surfaces proactively even when background refresh doesn't fire. Replaces
     /// any previously scheduled reminders for this briefing; paused briefings
     /// just get their reminders cleared.
+    /// Deterministic reminder identifiers for a briefing. A fixed upper bound
+    /// (≥ any schedule's trigger count, e.g. 5 weekday triggers) lets us clear
+    /// them synchronously without an async getPending round-trip.
+    private nonisolated static func reminderIdentifiers(for id: UUID) -> [String] {
+        (0..<8).map { "briefing-scheduled-\(id.uuidString)-\($0)" }
+    }
+
     nonisolated static func scheduleReminderNotifications(for briefing: Briefing) {
-        cancelReminderNotifications(for: briefing.id)
-        guard !briefing.isPaused else { return }
         let center = UNUserNotificationCenter.current()
+        // Remove this briefing's existing reminders SYNCHRONOUSLY (deterministic
+        // ids) before adding new ones — an async getPending-based cancel could
+        // otherwise fire late and delete the reminders we add just below.
+        center.removePendingNotificationRequests(withIdentifiers: reminderIdentifiers(for: briefing.id))
+        guard !briefing.isPaused else { return }
         let triggers = briefing.schedule.notificationTriggers()
         let title = briefing.title
         center.getNotificationSettings { settings in
@@ -411,13 +421,8 @@ final class BriefingStore: ObservableObject {
     }
 
     nonisolated static func cancelReminderNotifications(for id: UUID) {
-        let center = UNUserNotificationCenter.current()
-        let prefix = "briefing-scheduled-\(id.uuidString)"
-        center.getPendingNotificationRequests { requests in
-            let identifiers = requests.map(\.identifier).filter { $0.hasPrefix(prefix) }
-            guard !identifiers.isEmpty else { return }
-            center.removePendingNotificationRequests(withIdentifiers: identifiers)
-        }
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: reminderIdentifiers(for: id))
     }
 
     /// Posts when a briefing produces a fresh result. iOS suppresses foreground

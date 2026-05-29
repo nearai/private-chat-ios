@@ -1537,11 +1537,13 @@ final class ChatStore: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
             return false
         }
-        defaults.removeObject(forKey: Self.pendingSiriPromptKey)
         guard !isStreaming else {
+            // Leave the key in place; the next activation retries once the
+            // current response finishes. (Clearing here would lose the prompt.)
             showBanner("Finish or cancel the current response before starting a new chat.")
             return false
         }
+        defaults.removeObject(forKey: Self.pendingSiriPromptKey)
         startNewConversation()
         draft = String(raw.prefix(AppDeepLinkAction.maxDraftCharacters))
         AppHaptics.selection()
