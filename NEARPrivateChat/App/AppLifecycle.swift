@@ -5,6 +5,7 @@ struct AppLifecycleModifier: ViewModifier {
     @ObservedObject private var chatStore: ChatStore
     @ObservedObject private var briefingStore: BriefingStore
     @ObservedObject private var router: AppRouter
+    @Environment(\.scenePhase) private var scenePhase
 
     init(sessionStore: SessionStore, chatStore: ChatStore, briefingStore: BriefingStore, router: AppRouter) {
         self.sessionStore = sessionStore
@@ -24,11 +25,16 @@ struct AppLifecycleModifier: ViewModifier {
                 await prepareAuthenticatedChatState()
                 chatStore.updateCurrentUser(profile: sessionStore.profile)
                 router.resetForAccountSwitch(sessionStore.setupAccountID)
+                await consumeSiriCommands()
                 await briefingStore.runDue()
                 #if DEBUG
                 if DemoCapture.isEnabled { return }
                 #endif
                 NEARPrivateChatApp.scheduleBriefingRefresh()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                Task { await consumeSiriCommands() }
             }
             .onChange(of: sessionStore.session?.token) { _, token in
                 Task {
@@ -75,6 +81,17 @@ struct AppLifecycleModifier: ViewModifier {
                     await chatStore.bootstrap()
                 }
             }
+    }
+
+    /// Drains anything an App Intent (Siri/Shortcuts) staged: a question to
+    /// place in the composer, and a request to refresh briefings.
+    @MainActor
+    private func consumeSiriCommands() async {
+        chatStore.consumePendingSiriPrompt()
+        if UserDefaults.standard.bool(forKey: ChatStore.pendingRunBriefingsKey) {
+            UserDefaults.standard.removeObject(forKey: ChatStore.pendingRunBriefingsKey)
+            await briefingStore.runDue()
+        }
     }
 
     @MainActor

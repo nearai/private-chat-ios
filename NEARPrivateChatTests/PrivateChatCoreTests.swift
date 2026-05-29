@@ -3340,6 +3340,19 @@ extension PrivateChatCoreTests {
     /// End-to-end wiring mirroring AppEnvironment: a "create a tracker…" prompt
     /// in chat lands a real Briefing in the BriefingStore (the Today tab source).
     @MainActor
+    func testConsumePendingSiriPromptStagesDraftOnce() throws {
+        let defaults = try makeIsolatedDefaults()
+        defaults.set("what is the eth price", forKey: ChatStore.pendingSiriPromptKey)
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+
+        XCTAssertTrue(store.consumePendingSiriPrompt(defaults: defaults))
+        XCTAssertEqual(store.draft, "what is the eth price")
+        // Consumed: the key is cleared and a second call is a no-op.
+        XCTAssertNil(defaults.string(forKey: ChatStore.pendingSiriPromptKey))
+        XCTAssertFalse(store.consumePendingSiriPrompt(defaults: defaults))
+    }
+
+    @MainActor
     func testCreateTrackerPromptLandsBriefingInStore() throws {
         let tempFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("briefings-\(UUID().uuidString).json")

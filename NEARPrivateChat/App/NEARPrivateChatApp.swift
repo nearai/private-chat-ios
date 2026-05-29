@@ -1,5 +1,6 @@
 import SwiftUI
 import BackgroundTasks
+import AppIntents
 
 enum AppAppearancePreference: String, CaseIterable, Codable, Identifiable, Hashable {
     case system = "System"
@@ -172,5 +173,60 @@ struct NEARPrivateChatApp: App {
             await briefingStore.runDue()
             Self.scheduleBriefingRefresh()
         }
+    }
+}
+
+// MARK: - Siri / Shortcuts (App Intents)
+
+/// "Ask Private Chat <question>" — stages the question and opens the app. The
+/// running app consumes `ChatStore.pendingSiriPromptKey` on activation. This is
+/// the privacy-first answer to a system assistant: the prompt is staged, never
+/// auto-sent, and only this app sees it.
+struct AskPrivateChatIntent: AppIntent {
+    static var title: LocalizedStringResource = "Ask Private Chat"
+    static var description = IntentDescription("Stage a private question in NEAR Private Chat.")
+    static var openAppWhenRun = true
+
+    @Parameter(title: "Question", requestValueDialog: "What do you want to ask privately?")
+    var prompt: String
+
+    func perform() async throws -> some IntentResult {
+        UserDefaults.standard.set(prompt, forKey: ChatStore.pendingSiriPromptKey)
+        return .result()
+    }
+}
+
+/// "Run my Private Chat briefings" — refreshes the scheduled Today briefings.
+struct RunBriefingsIntent: AppIntent {
+    static var title: LocalizedStringResource = "Run my briefings"
+    static var description = IntentDescription("Refresh your scheduled Private Chat briefings.")
+    static var openAppWhenRun = true
+
+    func perform() async throws -> some IntentResult {
+        UserDefaults.standard.set(true, forKey: ChatStore.pendingRunBriefingsKey)
+        return .result()
+    }
+}
+
+struct NearAppShortcuts: AppShortcutsProvider {
+    static var appShortcuts: [AppShortcut] {
+        AppShortcut(
+            intent: AskPrivateChatIntent(),
+            phrases: [
+                "Ask \(.applicationName)",
+                "Ask \(.applicationName) a question"
+            ],
+            shortTitle: "Ask Private Chat",
+            systemImageName: "bubble.left.and.text.bubble.right.fill"
+        )
+        AppShortcut(
+            intent: RunBriefingsIntent(),
+            phrases: [
+                "Run my \(.applicationName) briefings",
+                "Refresh \(.applicationName)"
+            ],
+            shortTitle: "Run briefings",
+            systemImageName: "bell.badge.fill"
+        )
     }
 }

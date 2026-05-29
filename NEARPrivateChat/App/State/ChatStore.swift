@@ -1523,6 +1523,31 @@ final class ChatStore: ObservableObject {
         transitionDraftScopeToCurrentSelection(loadDraft: true)
     }
 
+    /// UserDefaults keys an App Intent (Siri/Shortcuts) writes; the app consumes
+    /// them on activation. The intents run in-process (main-target App Intents),
+    /// so plain UserDefaults is shared — no App Group needed.
+    static let pendingSiriPromptKey = "pendingSiriPrompt"
+    static let pendingRunBriefingsKey = "pendingRunBriefings"
+
+    /// Stages a Siri-supplied question into the composer (not auto-sent — the
+    /// user reviews it, matching the deep-link "staged but not sent" contract).
+    @discardableResult
+    func consumePendingSiriPrompt(defaults: UserDefaults = .standard) -> Bool {
+        guard let raw = defaults.string(forKey: Self.pendingSiriPromptKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return false
+        }
+        defaults.removeObject(forKey: Self.pendingSiriPromptKey)
+        guard !isStreaming else {
+            showBanner("Finish or cancel the current response before starting a new chat.")
+            return false
+        }
+        startNewConversation()
+        draft = String(raw.prefix(AppDeepLinkAction.maxDraftCharacters))
+        AppHaptics.selection()
+        return true
+    }
+
     @discardableResult
     func handleIncomingURL(_ url: URL) -> Bool {
         guard let action = AppDeepLinkAction.parse(url) else { return false }
