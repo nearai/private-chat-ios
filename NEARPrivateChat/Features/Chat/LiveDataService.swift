@@ -363,7 +363,10 @@ enum QuickIntentParser {
             || lower.contains(" plus ") || lower.contains(" & ") else {
             return nil
         }
-        var segments = [lower]
+        // Split the ORIGINAL-case text (separators are lowercase but user input
+        // typically is too) so a segment like "AAPL price" keeps the caps the
+        // ticker parser needs — parse() lowercases internally anyway.
+        var segments = [raw]
         for separator in [" and then ", " and also ", ", and ", " and ", " then ", " plus ", " & ", "; ", ", "] {
             segments = segments.flatMap { $0.components(separatedBy: separator) }
         }
@@ -601,11 +604,16 @@ enum QuickIntentParser {
     /// web-search tracker), so prose is never hijacked into a wrong stock card.
     static func parseStock(_ text: String, original: String) -> (symbol: String, company: String)? {
         let stockCue = contains(text, ["stock", "stocks", "shares", "share price", "ticker", "nasdaq", "nyse", "equity", "equities"]) || original.contains("$")
-        let priceCue = contains(text, ["price", "worth", "trading", "quote", "how much", "value", "doing"])
+        // NB: no "doing" — too broad ("what is Amazon doing about AI" is prose,
+        // not a stock card). Use "stock"/"shares" or "price" to ask for a quote.
+        let priceCue = contains(text, ["price", "worth", "trading", "quote", "how much", "value"])
 
-        // 1) $TICKER — explicit, always wins.
+        // 1) $TICKER — explicit. But a crypto ticker ($ETH, $BTC) is not a stock:
+        // defer to the coin path unless it's a known equity ticker.
         if let r = original.range(of: #"\$([A-Za-z]{1,5})\b"#, options: .regularExpression) {
             let sym = String(original[r].dropFirst()).uppercased()
+            let isKnownStock = knownStocks.contains { $0.symbol == sym }
+            if !isKnownStock, matchedCoin(in: sym.lowercased()) != nil { return nil }
             let company = knownStocks.first { $0.symbol == sym }?.names.first?.capitalized ?? ""
             return (sym, company)
         }
@@ -658,7 +666,15 @@ enum QuickIntentParser {
                 if seen.insert(key).inserted { assets.append(key) }
             }
         }
-        return assets.count >= 2 ? assets.joined(separator: "|") : nil
+        guard assets.count >= 2 else { return nil }
+        // Require a finance signal so ordinary prose with two proper nouns
+        // ("watch Netflix and Disney tonight") isn't turned into a watchlist. A
+        // crypto leg, a $ticker, or an explicit finance word all qualify.
+        let lower = text.lowercased()
+        let financeCue = assets.contains { $0.hasPrefix("crypto:") }
+            || lower.contains("$")
+            || contains(lower, ["watchlist", "watch list", "portfolio", "price", "prices", "stock", "stocks", "shares", "ticker", "crypto", "market", "markets"])
+        return financeCue ? assets.joined(separator: "|") : nil
     }
 
     /// Detects a chart/history follow-up with a timeframe and maps it to the
@@ -1491,8 +1507,9 @@ enum QuickIntentParser {
 
     private static func wordPresent(_ word: String, in text: String) -> Bool {
         if word.contains(" ") { return text.contains(word) }
-        // whole-word match for short symbols like "eth"/"sol"
-        let padded = " \(text.replacingOccurrences(of: "?", with: " ").replacingOccurrences(of: ",", with: " ")) "
+        // whole-word match for short symbols like "eth"/"sol". Treat "$" as a
+        // separator too, so a cashtag ("$eth price") still matches the coin.
+        let padded = " \(text.replacingOccurrences(of: "?", with: " ").replacingOccurrences(of: ",", with: " ").replacingOccurrences(of: "$", with: " ")) "
         return padded.contains(" \(word) ") || padded.contains(" \(word)'") || text == word
     }
 }

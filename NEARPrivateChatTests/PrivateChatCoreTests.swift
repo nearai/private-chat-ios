@@ -4327,6 +4327,33 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(LiveDataService.yahooRange(forDays: "max"), "max")
     }
 
+    func testCryptoDollarTickerIsNotAStock() {
+        // Codex follow-up: "$ETH"/"$BTC" are crypto, not equities.
+        if case .stock = QuickIntentParser.parse("$ETH") { XCTFail("$ETH must not be a stock.") }
+        if case .stock = QuickIntentParser.parse("$BTC") { XCTFail("$BTC must not be a stock.") }
+        // A real equity $ticker still resolves.
+        XCTAssertEqual(QuickIntentParser.parse("$AAPL"), .stock(symbol: "AAPL", company: "Apple"))
+        // "$ETH price" routes to the crypto price card.
+        XCTAssertEqual(QuickIntentParser.parse("$ETH price"), .price(coinID: "ethereum", symbol: "ETH"))
+    }
+
+    func testStockAndWatchlistDoNotHijackProse() {
+        // Codex follow-up: "doing" is no longer a stock cue.
+        if case .stock = QuickIntentParser.parse("what is Amazon doing about AI") { XCTFail("prose must not be a stock card.") }
+        // Two proper nouns with no finance cue is not a watchlist.
+        XCTAssertNil(QuickIntentParser.parse("watch Netflix and Disney tonight"))
+        XCTAssertNil(QuickIntentParser.parseWatchlistAssets("watch Netflix and Disney tonight"))
+        // A finance cue brings it back.
+        XCTAssertNotNil(QuickIntentParser.parseWatchlistAssets("watch Netflix and Disney stocks"))
+    }
+
+    func testCompoundKeepsStockLeg() throws {
+        // Codex follow-up: compound parsing preserves case so the ticker leg survives.
+        let intents = try XCTUnwrap(QuickIntentParser.parseCompound("AAPL price and weather in Tokyo"))
+        XCTAssertTrue(intents.contains { if case .stock = $0 { return true }; return false })
+        XCTAssertTrue(intents.contains { if case .weather = $0 { return true }; return false })
+    }
+
     func testWatchlistParsingResolvesMixedAssets() {
         guard case let .watchlist(serialized)? = QuickIntentParser.parse("watchlist ETH NEAR AAPL") else {
             return XCTFail("Expected a watchlist intent.")

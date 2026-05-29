@@ -605,8 +605,11 @@ final class BriefingStore: ObservableObject {
     func setPaused(_ briefing: Briefing, _ isPaused: Bool) {
         guard let index = briefings.firstIndex(where: { $0.id == briefing.id }) else { return }
         briefings[index].isPaused = isPaused
+        briefings.sort(by: briefingSort) // muted trackers drop down the list
         save()
-        Self.scheduleReminderNotifications(for: briefings[index])
+        if let updated = briefings.first(where: { $0.id == briefing.id }) {
+            Self.scheduleReminderNotifications(for: updated)
+        }
     }
 
     /// Agent-inbox steering: pin a tracker to the top of Today.
@@ -622,6 +625,8 @@ final class BriefingStore: ObservableObject {
         guard let index = briefings.firstIndex(where: { $0.id == briefing.id }) else { return }
         briefings[index].snoozedUntil = Calendar.current.date(byAdding: .day, value: max(1, days), to: Date())
         save()
+        // Cancel any pending local notifications so a snoozed tracker stays quiet.
+        Self.cancelReminderNotifications(for: briefing.id)
     }
 
     /// End a snooze early.
@@ -629,6 +634,7 @@ final class BriefingStore: ObservableObject {
         guard let index = briefings.firstIndex(where: { $0.id == briefing.id }) else { return }
         briefings[index].snoozedUntil = nil
         save()
+        Self.scheduleReminderNotifications(for: briefings[index])
     }
 
     func run(_ briefing: Briefing) async {
