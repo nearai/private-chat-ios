@@ -3787,8 +3787,13 @@ final class ChatStore: ObservableObject {
             if memories.isEmpty {
                 _ = appendAssistant(text: "I’m not remembering anything yet. Tell me something like **“remember that I prefer concise answers”** and I’ll keep it on your device.")
             } else {
-                let lines = memories.prefix(20).map { "• \($0.text)" }.joined(separator: "\n")
-                _ = appendAssistant(text: "Here’s what I’m keeping on your device:\n\n\(lines)")
+                let lines = memories.prefix(20).map { item -> String in
+                    item.source == .inferred ? "• \(item.text)  _(noted automatically)_" : "• \(item.text)"
+                }.joined(separator: "\n")
+                let footer = memories.contains { $0.source == .inferred }
+                    ? "\n\nItems marked _noted automatically_ were picked up from our chats — say “forget …” to drop any of them."
+                    : ""
+                _ = appendAssistant(text: "Here’s what I’m keeping on your device:\n\n\(lines)\(footer)")
             }
         case let .forget(text):
             if let text {
@@ -3918,6 +3923,25 @@ final class ChatStore: ObservableObject {
         }
     }
 
+    /// Passively records durable self-facts the user disclosed in an ordinary
+    /// turn — no "remember" keyword needed. Silent by design (it never injects a
+    /// chat reply) but logged to the activity log so the user can audit what was
+    /// auto-learned, and stored as `.inferred` so recall labels it. Only genuinely
+    /// new facts are logged; re-stating a known fact is a no-op.
+    private func captureInferredMemory(from text: String) {
+        let learned = QuickIntentParser.inferredFacts(from: text)
+        guard !learned.isEmpty else { return }
+        var stored: [String] = []
+        for fact in learned {
+            let isNew = !memoryStore.items.contains { $0.text.caseInsensitiveCompare(fact) == .orderedSame }
+            if memoryStore.add(fact, source: .inferred) != nil, isNew {
+                stored.append(fact)
+            }
+        }
+        guard !stored.isEmpty else { return }
+        activityLog.record("Noted from chat: \(stored.joined(separator: "; "))")
+    }
+
     func sendDraft() {
         let text = Self.normalizedDraftInput(draft).trimmingCharacters(in: .whitespacesAndNewlines)
         let promptAttachments = pendingAttachments
@@ -3956,6 +3980,9 @@ final class ChatStore: ObservableObject {
             return
         }
         routeReadinessIssue = nil
+        // Passively learn durable self-facts from this turn (committed-to-send
+        // path only, so a blocked/rephrased message doesn't store anything).
+        if attachments.isEmpty { captureInferredMemory(from: text) }
         removePersistedDraft(for: draftPersistenceScopeID)
         draft = ""
         pendingAttachments = []

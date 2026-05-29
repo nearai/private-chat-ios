@@ -3254,6 +3254,77 @@ extension PrivateChatCoreTests {
         try? FileManager.default.removeItem(at: tempFile)
     }
 
+    func testInferredFactsExtractsHighConfidenceSelfFacts() {
+        XCTAssertEqual(QuickIntentParser.inferredFacts(from: "I prefer dark mode and concise replies"),
+                       ["I prefer dark mode"])
+        XCTAssertEqual(QuickIntentParser.inferredFacts(from: "i live in Lisbon"), ["I live in Lisbon"])
+        XCTAssertEqual(QuickIntentParser.inferredFacts(from: "I'm based in Berlin."), ["I live in Berlin"])
+        XCTAssertEqual(QuickIntentParser.inferredFacts(from: "my name is Sam"), ["My name is Sam"])
+        XCTAssertEqual(QuickIntentParser.inferredFacts(from: "you can call me Riz"), ["I go by Riz"])
+        XCTAssertEqual(QuickIntentParser.inferredFacts(from: "I work as a product manager"),
+                       ["I work as a product manager"])
+        XCTAssertEqual(QuickIntentParser.inferredFacts(from: "my dog is named Biscuit"),
+                       ["My dog is named Biscuit"])
+        // Crypto holding — useful for this app.
+        XCTAssertTrue(QuickIntentParser.inferredFacts(from: "I hold a lot of ETH").contains("I own a lot of ETH"))
+        // Two facts can come out of one sentence.
+        let two = QuickIntentParser.inferredFacts(from: "my name is Sam and I live in Oslo")
+        XCTAssertTrue(two.contains("My name is Sam"))
+        XCTAssertTrue(two.contains("I live in Oslo"))
+    }
+
+    func testInferredFactsRejectsNonFacts() {
+        // Questions aren't disclosures.
+        XCTAssertTrue(QuickIntentParser.inferredFacts(from: "do you remember my name?").isEmpty)
+        // Negation never matches (the verb isn't adjacent to "i").
+        XCTAssertTrue(QuickIntentParser.inferredFacts(from: "I don't live in Paris").isEmpty)
+        // Assistant-directed phrasing (value starts with a pronoun).
+        XCTAssertTrue(QuickIntentParser.inferredFacts(from: "I prefer you use bullet points").isEmpty)
+        // Transient wording isn't durable.
+        XCTAssertTrue(QuickIntentParser.inferredFacts(from: "I prefer tea right now").isEmpty)
+        // Non-allowlisted possessive ("my point is…", "my guess is…").
+        XCTAssertTrue(QuickIntentParser.inferredFacts(from: "my point is that sharding is hard").isEmpty)
+        XCTAssertTrue(QuickIntentParser.inferredFacts(from: "my guess is 42").isEmpty)
+        // Explicit "remember …" is handled by the remember path, not here.
+        XCTAssertTrue(QuickIntentParser.inferredFacts(from: "remember that I prefer tea").isEmpty)
+        // Generic statement with no durable pattern.
+        XCTAssertTrue(QuickIntentParser.inferredFacts(from: "I am happy today").isEmpty)
+    }
+
+    func testMemoryStoreSourceAndExplicitUpgrade() throws {
+        let tempFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("memory-\(UUID().uuidString).json")
+        let store = MemoryStore(fileURL: tempFile)
+
+        // Inferred fact is tagged as such.
+        let inferred = try XCTUnwrap(store.add("I live in Oslo", source: .inferred))
+        XCTAssertEqual(inferred.source, .inferred)
+        XCTAssertEqual(store.items.count, 1)
+
+        // An explicit re-statement upgrades the inferred entry (case-insensitive),
+        // no duplicate created.
+        XCTAssertNotNil(store.add("i live in oslo", source: .explicit))
+        XCTAssertEqual(store.items.count, 1)
+        XCTAssertEqual(store.items.first?.source, .explicit)
+
+        // An inferred re-derivation never downgrades an explicit fact.
+        XCTAssertNotNil(store.add("I live in Oslo", source: .inferred))
+        XCTAssertEqual(store.items.first?.source, .explicit)
+
+        try? FileManager.default.removeItem(at: tempFile)
+    }
+
+    func testMemoryItemDecodesLegacyJSONWithoutSource() throws {
+        // Facts saved before sources existed must still decode (as .explicit).
+        let json = Data("""
+        [{"id":"\(UUID().uuidString)","text":"legacy fact","createdAt":0}]
+        """.utf8)
+        let items = try JSONDecoder().decode([MemoryItem].self, from: json)
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items.first?.text, "legacy fact")
+        XCTAssertEqual(items.first?.source, .explicit)
+    }
+
     func testQuickIntentParsesActivityLog() {
         XCTAssertEqual(QuickIntentParser.parse("what have you done"), .activityLog)
         XCTAssertEqual(QuickIntentParser.parse("show your activity"), .activityLog)

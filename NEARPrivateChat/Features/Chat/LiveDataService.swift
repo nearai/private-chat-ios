@@ -426,6 +426,97 @@ enum QuickIntentParser {
         return nil
     }
 
+    /// Passively distils durable, high-confidence self-facts from a user turn —
+    /// no "remember" keyword needed. Deliberately narrow: only first-person
+    /// identity/preference statements that read as durable. Questions, negations
+    /// ("i don't live in…" never matches because the verb isn't adjacent),
+    /// assistant-directed phrasings ("i prefer you use…"), and transient ("right
+    /// now") wording are rejected. Returns facts in the user's own first-person
+    /// framing so they match how explicitly-remembered facts are stored. Capped.
+    static func inferredFacts(from raw: String) -> [String] {
+        let original = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = original.lowercased()
+        guard lower.count >= 6, lower.count <= 280 else { return [] }
+        if lower.contains("?") { return [] }                              // questions aren't disclosures
+        if parseRemember(lower, original: original) != nil { return [] }  // explicit path already stores it
+        if contains(lower, ["right now", "for now", "at the moment", "this week",
+                            "currently", "just now", "these days"]) { return [] } // not durable
+
+        // Pronoun/filler values that signal an assistant-directed or empty phrase.
+        let junkValues: Set<String> = ["you", "it", "that", "this", "them", "us", "me",
+                                       "not", "no", "yes", "ok", "okay", "sure", "up", "to"]
+        // Stop the captured value at a clause/sentence boundary.
+        let tail = #"([^.,;!?]+?)(?:\s+(?:and|but|because|so|although|though|when|while)\s|[.,;!?]|$)"#
+
+        var facts: [String] = []
+        func push(_ s: String) {
+            var f = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            f = f.replacingOccurrences(of: #"[\s,.;:!]+$"#, with: "", options: .regularExpression)
+            guard f.count >= 4, f.count <= 160 else { return }
+            if !facts.contains(where: { $0.caseInsensitiveCompare(f) == .orderedSame }) { facts.append(f) }
+        }
+        func value(_ pattern: String) -> String? {
+            guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
+            let range = NSRange(original.startIndex..<original.endIndex, in: original)
+            guard let m = re.firstMatch(in: original, options: [], range: range), m.numberOfRanges >= 2,
+                  let r = Range(m.range(at: 1), in: original) else { return nil }
+            let v = String(original[r]).trimmingCharacters(in: .whitespacesAndNewlines)
+            // Reject whole-value junk and assistant-directed phrasings whose
+            // first word is a pronoun/filler ("i prefer you use bullets").
+            let firstWord = v.lowercased().split(separator: " ").first.map(String.init) ?? v.lowercased()
+            guard v.count >= 2, !junkValues.contains(v.lowercased()), !junkValues.contains(firstWord) else { return nil }
+            return v
+        }
+
+        // 1) Preference — "I prefer X" / "I'd rather X"
+        if let v = value(#"\bi (?:really |honestly |generally |usually |always |typically |strongly )?prefer\s+"# + tail) {
+            push("I prefer \(v)")
+        } else if let v = value(#"\bi(?:'d| would) rather\s+"# + tail) {
+            push("I'd rather \(v)")
+        }
+        // 2) Location — "I live in X" / "I'm based in X" / "I reside in X"
+        if let v = value(#"\bi (?:live|reside) in\s+"# + tail) ?? value(#"\bi(?:'m| am) based in\s+"# + tail) {
+            push("I live in \(v)")
+        }
+        // 3) Name — "my name is X" / "my name's X"
+        if let v = value(#"\bmy name(?:'s| is)\s+"# + tail) {
+            push("My name is \(v)")
+        }
+        // 4) Go-by — "call me X" / "you can call me X"
+        if let v = value(#"\b(?:you can |please |just )?call me\s+"# + tail) {
+            push("I go by \(v)")
+        }
+        // 5) Work — "I work as a X" / "I work at X" / "I work in X"
+        if let v = value(#"\bi work as\s+"# + tail) {
+            push("I work as \(v)")
+        } else if let v = value(#"\bi work at\s+"# + tail) {
+            push("I work at \(v)")
+        } else if let v = value(#"\bi work in\s+"# + tail) {
+            push("I work in \(v)")
+        }
+        // 6) Holdings — "I own X" / "I hold X" (useful for a crypto assistant;
+        // the (?!up) guard skips the "own up" idiom).
+        if let v = value(#"\bi (?:own|hold)\s+(?!up\b)"# + tail) {
+            push("I own \(v)")
+        }
+        // 7) Possessive allowlist — "my <noun> is X". Allowlisted to durable
+        // identity/relationship nouns so "my point is…" / "my guess is…" never
+        // get stored.
+        let possessiveNouns = ["birthday", "anniversary", "timezone", "time zone", "hometown",
+                               "favorite color", "favourite color", "dog", "cat", "pet",
+                               "wife", "husband", "partner", "spouse", "son", "daughter",
+                               "kid", "child", "manager", "boss", "company", "employer",
+                               "goal", "nickname"]
+        for noun in possessiveNouns {
+            if let v = value(#"\bmy "# + NSRegularExpression.escapedPattern(for: noun) + #"(?:'s| is| are)\s+"# + tail) {
+                push("My \(noun) is \(v)")
+                break // one possessive fact per turn keeps it tidy
+            }
+        }
+
+        return Array(facts.prefix(3))
+    }
+
     static func parseDefineWord(_ text: String) -> String? {
         // "what does X mean" — strict: only the bare definition form, so
         // "what does SOL mean for crypto?" stays a model question.
@@ -1320,15 +1411,38 @@ private final class BBCNewsRSSParser: NSObject, XMLParserDelegate {
 
 // MARK: - On-device personal memory
 
+/// How a fact entered memory. `.explicit` = the user told us to remember it
+/// ("remember I prefer X"); `.inferred` = we distilled it passively from what
+/// they said. Inferred facts are held to a higher confidence bar and labelled
+/// for the user so the distinction is never hidden.
+enum MemorySource: String, Codable {
+    case explicit
+    case inferred
+}
+
 struct MemoryItem: Codable, Hashable, Identifiable {
     var id: UUID
     var text: String
     var createdAt: Date
+    var source: MemorySource
 
-    init(id: UUID = UUID(), text: String, createdAt: Date = Date()) {
+    init(id: UUID = UUID(), text: String, createdAt: Date = Date(), source: MemorySource = .explicit) {
         self.id = id
         self.text = text
         self.createdAt = createdAt
+        self.source = source
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, text, createdAt, source }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        text = try c.decode(String.self, forKey: .text)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        // Back-compat: facts saved before sources existed are treated as
+        // explicit (the only kind that existed then).
+        source = try c.decodeIfPresent(MemorySource.self, forKey: .source) ?? .explicit
     }
 }
 
@@ -1375,15 +1489,22 @@ final class MemoryStore {
     }
 
     /// Stores a fact (de-duped, newest first, capped). Returns nil if too short.
+    /// When a fact already exists, an explicit "remember this" upgrades a
+    /// previously-inferred entry (the user just confirmed it) but an inferred
+    /// re-derivation never downgrades an explicit one.
     @discardableResult
-    func add(_ text: String) -> MemoryItem? {
+    func add(_ text: String, source: MemorySource = .explicit) -> MemoryItem? {
         // Clamp a single fact so one huge entry can't dominate the prompt.
         let trimmed = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(280))
         guard trimmed.count >= 3 else { return nil }
-        if let existing = items.first(where: { $0.text.caseInsensitiveCompare(trimmed) == .orderedSame }) {
-            return existing
+        if let idx = items.firstIndex(where: { $0.text.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+            if source == .explicit && items[idx].source == .inferred {
+                items[idx].source = .explicit
+                save()
+            }
+            return items[idx]
         }
-        let item = MemoryItem(text: trimmed)
+        let item = MemoryItem(text: trimmed, source: source)
         items.insert(item, at: 0)
         if items.count > 200 { items = Array(items.prefix(200)) }
         save()
