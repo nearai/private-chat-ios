@@ -464,14 +464,106 @@ final class BriefingStore: ObservableObject {
         } catch {
             return
         }
+        writeWidgetSnapshot()
+    }
+
+    /// Mirror the current briefings into the App Group as a flattened snapshot
+    /// the widget can decode without compiling any app view code. Best-effort:
+    /// failures (e.g. missing entitlement) just leave the widget on its last
+    /// snapshot.
+    private func writeWidgetSnapshot() {
+        guard let snapshotURL = BriefingSharedStore.sharedFileURL(BriefingSharedStore.snapshotFileName) else {
+            return
+        }
+        let snapshots = briefings.map { briefing in
+            BriefingSnapshot(
+                id: briefing.id.uuidString,
+                title: briefing.title,
+                summary: Self.widgetSummary(for: briefing),
+                lastRunAt: briefing.lastRunAt
+            )
+        }
+        do {
+            try FileManager.default.createDirectory(
+                at: snapshotURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let data = try JSONEncoder.briefingSnapshot.encode(snapshots)
+            try data.write(to: snapshotURL, options: [.atomic])
+            BriefingWidgetRefresher.reload()
+        } catch {
+            return
+        }
+    }
+
+    /// One-line summary for the widget, derived from the briefing's latest
+    /// result. Prefers a concrete metric/chart value, then a news headline,
+    /// then the generic note, then a scheduled-state fallback.
+    static func widgetSummary(for briefing: Briefing) -> String {
+        guard let widget = briefing.latestResult else {
+            return briefing.isPaused ? "Paused" : "Scheduled — \(briefing.schedule.scheduleLabel)"
+        }
+        switch widget.kind {
+        case .metric:
+            if let metric = widget.metric, !metric.value.isEmpty {
+                if let delta = metric.delta, !delta.isEmpty { return "\(metric.value) · \(delta)" }
+                return metric.value
+            }
+        case .chart:
+            if let value = widget.chart?.value ?? widget.chart?.label, !value.isEmpty {
+                if let delta = widget.chart?.delta, !delta.isEmpty { return "\(value) · \(delta)" }
+                return value
+            }
+        case .newsBrief:
+            if let headline = widget.newsBrief?.stories.first?.title ?? widget.newsBrief?.heading,
+               !headline.isEmpty {
+                return headline
+            }
+        case .comparison:
+            if let subtitle = widget.comparison?.subtitle, !subtitle.isEmpty { return subtitle }
+        case .generic:
+            break
+        }
+        if let note = widget.note, !note.isEmpty { return note }
+        return "Updated"
     }
 
     private static func defaultFileURL() -> URL {
+        // Prefer the App Group container so the home-screen widget can read the
+        // same briefings file. Fall back to Application Support if the
+        // entitlement is unavailable (e.g. a stripped build).
+        if let shared = BriefingSharedStore.sharedFileURL(BriefingSharedStore.briefingsFileName) {
+            migrateLegacyFileIfNeeded(to: shared)
+            return shared
+        }
+        return legacyFileURL()
+    }
+
+    private static func legacyFileURL() -> URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         return base
-            .appendingPathComponent("NEARPrivateChat", isDirectory: true)
-            .appendingPathComponent("briefings.json")
+            .appendingPathComponent(BriefingSharedStore.directoryName, isDirectory: true)
+            .appendingPathComponent(BriefingSharedStore.briefingsFileName)
+    }
+
+    /// One-time move of a pre-App-Group briefings.json into the shared
+    /// container so upgrading users keep their briefings and the widget sees
+    /// them. No-op once the shared file exists.
+    private static func migrateLegacyFileIfNeeded(to shared: URL) {
+        let fileManager = FileManager.default
+        guard !fileManager.fileExists(atPath: shared.path) else { return }
+        let legacy = legacyFileURL()
+        guard fileManager.fileExists(atPath: legacy.path) else { return }
+        do {
+            try fileManager.createDirectory(
+                at: shared.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try fileManager.copyItem(at: legacy, to: shared)
+        } catch {
+            return
+        }
     }
 }
 

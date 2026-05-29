@@ -88,6 +88,11 @@
 		F10000000000000000000014 /* ShareStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000014 /* ShareStore.swift */; };
 		F10000000000000000000015 /* MessageStreamService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000015 /* MessageStreamService.swift */; };
 		F10000000000000000000016 /* CouncilStreamService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000016 /* CouncilStreamService.swift */; };
+		9100000000000000000000A1 /* BriefingSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A1 /* BriefingSnapshot.swift */; };
+		9100000000000000000000B1 /* BriefingSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A1 /* BriefingSnapshot.swift */; };
+		9100000000000000000000B2 /* BriefingWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000B2 /* BriefingWidgetBundle.swift */; };
+		9100000000000000000000B3 /* BriefingWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000B3 /* BriefingWidget.swift */; };
+		9100000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -97,6 +102,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = A50000000000000000000001;
 			remoteInfo = NEARPrivateChat;
+		};
+		9600000000000000000000C2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A60000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9500000000000000000000C1;
+			remoteInfo = NEARPrivateChatWidgetExtension;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -185,6 +197,13 @@
 		F20000000000000000000014 /* ShareStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareStore.swift; sourceTree = "<group>"; };
 		F20000000000000000000015 /* MessageStreamService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageStreamService.swift; sourceTree = "<group>"; };
 		F20000000000000000000016 /* CouncilStreamService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilStreamService.swift; sourceTree = "<group>"; };
+		9200000000000000000000A1 /* BriefingSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingSnapshot.swift; sourceTree = "<group>"; };
+		9200000000000000000000A2 /* NEARPrivateChat.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NEARPrivateChat.entitlements; sourceTree = "<group>"; };
+		9200000000000000000000B2 /* BriefingWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingWidgetBundle.swift; sourceTree = "<group>"; };
+		9200000000000000000000B3 /* BriefingWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingWidget.swift; sourceTree = "<group>"; };
+		9200000000000000000000B4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		9200000000000000000000B5 /* NEARPrivateChatWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NEARPrivateChatWidget.entitlements; sourceTree = "<group>"; };
+		9200000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NEARPrivateChatWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -202,6 +221,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		9800000000000000000000C3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -209,9 +235,21 @@
 			isa = PBXGroup;
 			children = (
 				A40000000000000000000002 /* NEARPrivateChat */,
+				9400000000000000000000C1 /* NEARPrivateChatWidget */,
 				B40000000000000000000001 /* NEARPrivateChatTests */,
 				A40000000000000000000003 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		9400000000000000000000C1 /* NEARPrivateChatWidget */ = {
+			isa = PBXGroup;
+			children = (
+				9200000000000000000000B2 /* BriefingWidgetBundle.swift */,
+				9200000000000000000000B3 /* BriefingWidget.swift */,
+				9200000000000000000000B4 /* Info.plist */,
+				9200000000000000000000B5 /* NEARPrivateChatWidget.entitlements */,
+			);
+			path = NEARPrivateChatWidget;
 			sourceTree = "<group>";
 		};
 		A40000000000000000000002 /* NEARPrivateChat */ = {
@@ -222,6 +260,7 @@
 					E40000000000000000000001 /* Shared */,
 					D40000000000000000000004 /* Features */,
 				A20000000000000000000009 /* Info.plist */,
+				9200000000000000000000A2 /* NEARPrivateChat.entitlements */,
 				A20000000000000000000013 /* PrivacyInfo.xcprivacy */,
 				A20000000000000000000016 /* PrivateTelemetryPolicy.md */,
 				A2000000000000000000000A /* Assets.xcassets */,
@@ -493,11 +532,20 @@
 		E40000000000000000000001 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				9400000000000000000000A1 /* Briefing */,
 				E40000000000000000000002 /* Components */,
 				E40000000000000000000004 /* Extensions */,
 				E40000000000000000000005 /* Utilities */,
 			);
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		9400000000000000000000A1 /* Briefing */ = {
+			isa = PBXGroup;
+			children = (
+				9200000000000000000000A1 /* BriefingSnapshot.swift */,
+			);
+			path = Briefing;
 			sourceTree = "<group>";
 		};
 		E40000000000000000000002 /* Components */ = {
@@ -539,6 +587,7 @@
 			children = (
 				A2000000000000000000000B /* NEARPrivateChat.app */,
 				B20000000000000000000002 /* NEARPrivateChatTests.xctest */,
+				9200000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -561,15 +610,34 @@
 				A70000000000000000000001 /* Sources */,
 				A30000000000000000000001 /* Frameworks */,
 				A80000000000000000000001 /* Resources */,
+				9800000000000000000000C4 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				9600000000000000000000C3 /* PBXTargetDependency */,
 			);
 			name = NEARPrivateChat;
 			productName = NEARPrivateChat;
 			productReference = A2000000000000000000000B /* NEARPrivateChat.app */;
 			productType = "com.apple.product-type.application";
+		};
+		9500000000000000000000C1 /* NEARPrivateChatWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9900000000000000000000C1 /* Build configuration list for PBXNativeTarget "NEARPrivateChatWidgetExtension" */;
+			buildPhases = (
+				9700000000000000000000C1 /* Sources */,
+				9800000000000000000000C3 /* Frameworks */,
+				9800000000000000000000C5 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NEARPrivateChatWidgetExtension;
+			productName = NEARPrivateChatWidgetExtension;
+			productReference = 9200000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 		B50000000000000000000001 /* NEARPrivateChatTests */ = {
 			isa = PBXNativeTarget;
@@ -605,6 +673,9 @@
 						CreatedOnToolsVersion = 15.0;
 						TestTargetID = A50000000000000000000001;
 					};
+					9500000000000000000000C1 = {
+						CreatedOnToolsVersion = 26.5;
+					};
 				};
 			};
 			buildConfigurationList = A90000000000000000000001 /* Build configuration list for PBXProject "NEARPrivateChat" */;
@@ -622,9 +693,24 @@
 			targets = (
 				A50000000000000000000001 /* NEARPrivateChat */,
 				B50000000000000000000001 /* NEARPrivateChatTests */,
+				9500000000000000000000C1 /* NEARPrivateChatWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		9800000000000000000000C4 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				9100000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A80000000000000000000001 /* Resources */ = {
@@ -634,6 +720,13 @@
 				A10000000000000000000009 /* Assets.xcassets in Resources */,
 				A10000000000000000000011 /* PrivacyInfo.xcprivacy in Resources */,
 				A10000000000000000000014 /* PrivateTelemetryPolicy.md in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9800000000000000000000C5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -721,6 +814,17 @@
 				A10000000000000000000016 /* MarkdownRenderingViews.swift in Sources */,
 				A10000000000000000000017 /* DemoCaptureViews.swift in Sources */,
 				A10000000000000000000018 /* MessagePresentationHelpers.swift in Sources */,
+				9100000000000000000000A1 /* BriefingSnapshot.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9700000000000000000000C1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9100000000000000000000B2 /* BriefingWidgetBundle.swift in Sources */,
+				9100000000000000000000B3 /* BriefingWidget.swift in Sources */,
+				9100000000000000000000B1 /* BriefingSnapshot.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -739,6 +843,11 @@
 			isa = PBXTargetDependency;
 			target = A50000000000000000000001 /* NEARPrivateChat */;
 			targetProxy = B60000000000000000000001 /* PBXContainerItemProxy */;
+		};
+		9600000000000000000000C3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9500000000000000000000C1 /* NEARPrivateChatWidgetExtension */;
+			targetProxy = 9600000000000000000000C2 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -862,6 +971,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = NEARPrivateChat/NEARPrivateChat.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
@@ -889,6 +999,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = NEARPrivateChat/NEARPrivateChat.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
@@ -965,6 +1076,73 @@
 			};
 			name = Release;
 		};
+		9900000000000000000000A1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = NEARPrivateChatWidget/NEARPrivateChatWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NEARPrivateChatWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Private Chat";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.near.privatechat.ios.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		9900000000000000000000A2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = NEARPrivateChatWidget/NEARPrivateChatWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NEARPrivateChatWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Private Chat";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.near.privatechat.ios.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -991,6 +1169,15 @@
 			buildConfigurations = (
 				B90000000000000000000002 /* Debug */,
 				B90000000000000000000003 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		9900000000000000000000C1 /* Build configuration list for PBXNativeTarget "NEARPrivateChatWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9900000000000000000000A1 /* Debug */,
+				9900000000000000000000A2 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
