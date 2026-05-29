@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ChatAttachment: Identifiable, Codable, Hashable {
     static let pendingTextKind = "pending_text"
+    static let localDocumentKind = "pdf_local"
 
     var id: String
     var name: String
@@ -13,6 +14,12 @@ struct ChatAttachment: Identifiable, Codable, Hashable {
         kind == Self.pendingTextKind || id.hasPrefix("local-paste-")
     }
 
+    /// A document kept entirely on-device (privacy mode): never uploaded to the
+    /// backend; only its relevant passages are inlined into the prompt at send.
+    var isLocalOnly: Bool {
+        kind == Self.localDocumentKind || id.hasPrefix("local-doc-")
+    }
+
     var displaySize: String? {
         guard let bytes else { return nil }
         return ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
@@ -21,6 +28,9 @@ struct ChatAttachment: Identifiable, Codable, Hashable {
     var displayKind: String {
         if isLocalPendingText {
             return "Text paste"
+        }
+        if isLocalOnly {
+            return "PDF · on device"
         }
         if kind == "pdf_text" {
             return "PDF text"

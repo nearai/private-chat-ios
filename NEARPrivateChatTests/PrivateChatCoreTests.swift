@@ -3913,6 +3913,29 @@ extension PrivateChatCoreTests {
         XCTAssertNil(created) // nothing asked yet → asks for a subject, makes no tracker
     }
 
+    func testQuickIntentParsesDocumentPrivacy() {
+        XCTAssertEqual(QuickIntentParser.parse("keep documents on device"), .setDocumentPrivacy(onDevice: true))
+        XCTAssertEqual(QuickIntentParser.parse("don't upload my documents"), .setDocumentPrivacy(onDevice: true))
+        XCTAssertEqual(QuickIntentParser.parse("upload documents normally"), .setDocumentPrivacy(onDevice: false))
+    }
+
+    func testChatAttachmentLocalOnly() {
+        XCTAssertTrue(ChatAttachment(id: "local-doc-1", name: "x.pdf", kind: "pdf_local", bytes: 10).isLocalOnly)
+        XCTAssertFalse(ChatAttachment(id: "file_123", name: "x.pdf", kind: "pdf_text", bytes: 10).isLocalOnly)
+    }
+
+    @MainActor
+    func testDocumentPrivacyToggleFlipsFlag() {
+        let chatStore = ChatStore(api: PrivateChatAPI(configuration: .production))
+        chatStore.keepDocumentsOnDevice = false
+        chatStore.draft = "keep documents on device"
+        chatStore.sendDraft()
+        XCTAssertTrue(chatStore.keepDocumentsOnDevice)
+        chatStore.draft = "upload documents normally"
+        chatStore.sendDraft()
+        XCTAssertFalse(chatStore.keepDocumentsOnDevice)
+    }
+
     func testQuickIntentParsesActivityLog() {
         XCTAssertEqual(QuickIntentParser.parse("what have you done"), .activityLog)
         XCTAssertEqual(QuickIntentParser.parse("show your activity"), .activityLog)

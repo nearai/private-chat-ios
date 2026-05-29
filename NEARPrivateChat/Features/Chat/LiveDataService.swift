@@ -46,6 +46,7 @@ enum QuickIntent: Equatable {
     case forget(text: String?)
     case forgetAutoLearned
     case setMemoryCapture(enabled: Bool)
+    case setDocumentPrivacy(onDevice: Bool)
     case activityLog
     case listTrackers
     case capabilities
@@ -116,6 +117,17 @@ enum QuickIntentParser {
                             "turn on passive memory", "turn on auto memory", "resume learning about me",
                             "auto-remember again", "start remembering things automatically"]) {
             return .setMemoryCapture(enabled: true)
+        }
+        // Document privacy mode — keep attached docs entirely on-device.
+        if contains(text, ["keep documents on device", "keep my documents on device", "keep files on device",
+                            "keep documents private", "keep my documents private", "don't upload my documents",
+                            "dont upload my documents", "don't upload documents", "private documents on",
+                            "process documents on device", "keep my docs on device", "private document mode"]) {
+            return .setDocumentPrivacy(onDevice: true)
+        }
+        if contains(text, ["upload documents normally", "documents off device", "turn off private documents",
+                            "stop keeping documents on device", "private documents off", "upload my documents"]) {
+            return .setDocumentPrivacy(onDevice: false)
         }
         if contains(text, ["forget what you learned automatically", "forget what you auto", "forget the auto-learned",
                             "forget auto-learned", "clear auto memory", "clear what you inferred",
@@ -368,7 +380,7 @@ enum QuickIntentParser {
         switch intent {
         case .price, .trendingCrypto, .cryptoMarket, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
-        case .briefMe, .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker, .trackLast:
+        case .briefMe, .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .setDocumentPrivacy, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker, .trackLast:
             return false
         }
     }

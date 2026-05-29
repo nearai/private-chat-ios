@@ -175,6 +175,13 @@ final class ChatStore: ObservableObject {
         set { UserDefaults.standard.set(newValue, forKey: Self.passiveMemoryDefaultsKey) }
     }
     private static let passiveMemoryDefaultsKey = "passiveMemoryEnabled"
+    /// Privacy mode: when on, attached PDFs are kept entirely on-device (never
+    /// uploaded) and only their relevant passages are inlined at send. Default off.
+    var keepDocumentsOnDevice: Bool {
+        get { UserDefaults.standard.bool(forKey: Self.keepDocumentsOnDeviceDefaultsKey) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.keepDocumentsOnDeviceDefaultsKey) }
+    }
+    private static let keepDocumentsOnDeviceDefaultsKey = "keepDocumentsOnDevice"
     private let webGroundingService = WebGroundingService()
     private let ironclawMobileRuntime: IronclawMobileRuntime
     private var selectedResponseVariantByConversationID: [String: String] = [:]
@@ -2713,6 +2720,16 @@ final class ChatStore: ObservableObject {
             if url.pathExtension.lowercased() == "pdf" {
                 if let fileSize, fileSize <= Self.maxPDFTextExtractionBytes,
                    let extraction = await Self.pdfTextExtractionQueue.extract(from: url, fileSize: fileSize) {
+                    let cappedText = String(extraction.text.prefix(Self.maxStagedDocumentChars))
+                    // Privacy mode: keep the PDF entirely on-device — never upload
+                    // it. Only the passages relevant to the question are inlined
+                    // at send (a local-only attachment, excluded from the API).
+                    if keepDocumentsOnDevice {
+                        let localID = "local-doc-\(UUID().uuidString)"
+                        stageDocumentText(cappedText, for: localID)
+                        attachmentUploadNotice = "Kept \(url.lastPathComponent) on your device — only the passages relevant to your question are sent."
+                        return ChatAttachment(id: localID, name: url.lastPathComponent, kind: ChatAttachment.localDocumentKind, bytes: fileSize)
+                    }
                     let extractedFilename = Self.extractedPDFFilename(for: url)
                     var attachment = try await api.uploadTextFile(
                         filename: extractedFilename,
@@ -2722,13 +2739,7 @@ final class ChatStore: ObservableObject {
                     attachment.kind = "pdf_text"
                     // Keep the extracted text on-device too, so a question about
                     // this PDF can inline the most-relevant passages (local RAG).
-                    pendingDocumentTexts[attachment.id] = String(extraction.text.prefix(Self.maxStagedDocumentChars))
-                    pendingDocumentTextIDs.removeAll { $0 == attachment.id }
-                    pendingDocumentTextIDs.append(attachment.id)
-                    while pendingDocumentTextIDs.count > Self.maxStagedDocuments {
-                        let evicted = pendingDocumentTextIDs.removeFirst()
-                        pendingDocumentTexts.removeValue(forKey: evicted)
-                    }
+                    stageDocumentText(cappedText, for: attachment.id)
                     attachmentUploadNotice = extraction.truncated ?
                         "Attached capped readable text from \(url.lastPathComponent)." :
                         "Attached readable text from \(url.lastPathComponent)."
@@ -3952,6 +3963,12 @@ final class ChatStore: ObservableObject {
                 ? "Passive memory is on — I’ll quietly note durable details you mention (like where you live or what you prefer) so answers stay personal. Say “what do you remember” to review, or “stop learning about me” to turn it off."
                 : "Passive memory is off — I’ll stop noting things on my own. I’ll still remember anything you explicitly ask me to. Say “start learning about me” to turn it back on.")
             AppHaptics.selection()
+        case let .setDocumentPrivacy(onDevice):
+            keepDocumentsOnDevice = onDevice
+            _ = appendAssistant(text: onDevice
+                ? "Private document mode is on — attach a PDF and it stays on your device. I only send the passages relevant to your question (over the private route); the file itself is never uploaded. Say “upload documents normally” to turn it off."
+                : "Private document mode is off — attached PDFs upload as usual so the model can read the whole file. Say “keep documents on device” to turn privacy mode back on.")
+            AppHaptics.selection()
         case .activityLog:
             let entries = activityLog.entries
             if entries.isEmpty {
@@ -4108,7 +4125,7 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.unitConvertWidget(value: value, from: from, to: to)
         case let .define(word):
             return await LiveDataService.defineWidget(word: word)
-        case .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker, .trackLast:
+        case .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .setDocumentPrivacy, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker, .trackLast:
             // Handled synchronously in handleQuickIntent — never fetched here.
             return nil
         }
@@ -4519,6 +4536,18 @@ final class ChatStore: ObservableObject {
     /// staged on-device, ranked against the user's question. No-op when there's
     /// no staged doc, no question, or nothing relevant — so it never disturbs a
     /// plain turn.
+    /// Stashes a document's extracted text on-device (capped, insertion-ordered
+    /// eviction) so a question about it can inline the relevant passages.
+    private func stageDocumentText(_ text: String, for id: String) {
+        pendingDocumentTexts[id] = text
+        pendingDocumentTextIDs.removeAll { $0 == id }
+        pendingDocumentTextIDs.append(id)
+        while pendingDocumentTextIDs.count > Self.maxStagedDocuments {
+            let evicted = pendingDocumentTextIDs.removeFirst()
+            pendingDocumentTexts.removeValue(forKey: evicted)
+        }
+    }
+
     private func documentAugmentedPrompt(_ prompt: String, question: String, attachments: [ChatAttachment]) -> String {
         let documents = attachments.compactMap { pendingDocumentTexts[$0.id] }
         guard !documents.isEmpty,
@@ -4584,7 +4613,15 @@ final class ChatStore: ObservableObject {
             // scan, and council synthesis) — excerpts are inlined only on the
             // single-model, non-mission send below.
             let mission = phoneAgentMissionPromptIfNeeded(for: text)
-            let routedText = mission ?? text
+            var routedText = mission ?? text
+            // Privacy mode: on-device docs are never uploaded, so exclude them
+            // from the API attachments and inline only their relevant passages
+            // into the prompt (the sole conveyance, for both council and single).
+            let apiAttachments = attachments.filter { !$0.isLocalOnly }
+            let localDocs = attachments.filter { $0.isLocalOnly }.compactMap { pendingDocumentTexts[$0.id] }
+            if !localDocs.isEmpty, let context = DocumentChunker.contextBlock(for: text, in: localDocs, topK: 4) {
+                routedText = "\(context)\n\nUsing those excerpts (my attached on-device document) where relevant:\n\(routedText)"
+            }
             let existingConversation = selectedConversation
             let requestedModel = selectedModel
             let requestModel = requestedModel
@@ -4594,18 +4631,18 @@ final class ChatStore: ObservableObject {
             let requestInitiator = initiator ?? (existingConversation == nil ? "new_chat" : "new_message")
             let councilModelIDs = appendUserMessage ? requestCouncilModelIDs(for: requestModel) : []
             if councilModelIDs.count > 1 {
-                let conversation = try await ensureConversation(for: text, attachments: attachments)
+                let conversation = try await ensureConversation(for: text, attachments: apiAttachments)
                 selectedConversation = conversation
                 transitionDraftScopeToCurrentSelection(loadDraft: false)
                 organizePhoneAgentConversationIfNeeded(
                     conversation: conversation,
                     originalText: text,
-                    routedText: routedText
+                    routedText: mission ?? text
                 )
                 try await sendCouncilTurn(
                     text: text,
                     routedText: routedText,
-                    attachments: attachments,
+                    attachments: apiAttachments,
                     conversation: conversation,
                     modelIDs: councilModelIDs,
                     previousResponseID: previousResponseID,
@@ -4644,22 +4681,24 @@ final class ChatStore: ObservableObject {
             }
             messages.append(assistantMessage)
 
-            let conversation = try await ensureConversation(for: text, attachments: attachments)
+            let conversation = try await ensureConversation(for: text, attachments: apiAttachments)
             selectedConversation = conversation
             transitionDraftScopeToCurrentSelection(loadDraft: false)
             organizePhoneAgentConversationIfNeeded(
                 conversation: conversation,
                 originalText: text,
-                routedText: routedText
+                routedText: mission ?? text
             )
 
+            // Uploaded-doc focus injection uses apiAttachments (non-local); any
+            // local-only doc is already inlined into routedText above.
             let singleModelText = mission == nil
-                ? documentAugmentedPrompt(routedText, question: text, attachments: attachments)
+                ? documentAugmentedPrompt(routedText, question: text, attachments: apiAttachments)
                 : routedText
             let finalModel = try await streamResponseWithFallback(
                 initialModel: requestModel,
                 text: singleModelText,
-                attachments: attachments,
+                attachments: apiAttachments,
                 conversationID: conversation.id,
                 previousResponseID: previousResponseID,
                 initiator: requestInitiator
