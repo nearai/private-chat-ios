@@ -3715,6 +3715,8 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.nearAccountWidget(account: account ?? "")
         case .news:
             return await LiveDataService.newsBriefWidget()
+        case let .weather(query):
+            return await LiveDataService.weatherWidget(query: query)
         case .createTracker:
             return nil
         }

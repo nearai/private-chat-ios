@@ -3152,6 +3152,14 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(QuickIntentParser.parse("pull the daily news"), .news)
     }
 
+    func testQuickIntentParsesWeather() {
+        XCTAssertEqual(QuickIntentParser.parse("what's the weather in Tokyo"), .weather(query: "tokyo"))
+        XCTAssertEqual(QuickIntentParser.parse("weather in new york"), .weather(query: "new york"))
+        XCTAssertEqual(QuickIntentParser.parse("London forecast"), .weather(query: "london"))
+        // No extractable place → falls through to the model.
+        XCTAssertNil(QuickIntentParser.parse("what's the weather"))
+    }
+
     func testQuickIntentParsesTracker() throws {
         let intent = QuickIntentParser.parse(
             "create a tracker to tell me the eth price every morning at 8 am using council"

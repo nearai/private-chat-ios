@@ -30,6 +30,7 @@ enum QuickIntent: Equatable {
     case price(coinID: String, symbol: String)
     case nearAccount(account: String?)
     case news
+    case weather(query: String)
     case createTracker(TrackerSpec)
 }
 
@@ -60,6 +61,13 @@ enum QuickIntentParser {
         // 2) news
         if contains(text, ["news", "headlines", "what's happening", "whats happening", "top stories", "current events"]) {
             return .news
+        }
+
+        // 2b) weather — needs an extractable place ("weather in tokyo",
+        // "tokyo forecast"). Without a place we fall through to the model.
+        if contains(text, ["weather", "forecast", "temperature"]),
+           let place = extractLocation(from: text) {
+            return .weather(query: place)
         }
 
         // 3) NEAR account — named phrases, or a .near token plus a status word.
@@ -183,6 +191,44 @@ enum QuickIntentParser {
             }
         }
         return nil
+    }
+
+    /// Pulls a place out of a weather prompt: "weather in tokyo" → "tokyo",
+    /// "new york forecast" → "new york". Returns nil when only filler remains.
+    static func extractLocation(from text: String) -> String? {
+        for separator in [" in ", " at ", " for "] {
+            if let range = text.range(of: separator) {
+                return cleanLocation(String(text[range.upperBound...]))
+            }
+        }
+        for keyword in ["weather", "forecast", "temperature"] {
+            if let range = text.range(of: keyword), range.lowerBound > text.startIndex {
+                return cleanLocation(String(text[..<range.lowerBound]))
+            }
+        }
+        return nil
+    }
+
+    private static func cleanLocation(_ raw: String) -> String? {
+        var location = raw.lowercased()
+        let fillers = [
+            "what's the", "whats the", "what is the", "how's the", "hows the",
+            "how is the", "show me the", "tell me the", "give me the",
+            "current", "today's", "todays", "today", "tonight", "tomorrow",
+            "right now", "now", "this week", "like", "weather", "forecast",
+            "temperature", "the", "in", "at", "for"
+        ]
+        for filler in fillers {
+            location = location.replacingOccurrences(
+                of: "\\b\(NSRegularExpression.escapedPattern(for: filler))\\b",
+                with: " ",
+                options: .regularExpression
+            )
+        }
+        location = location.replacingOccurrences(of: "[?.,!]", with: " ", options: .regularExpression)
+        location = location.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        return location.isEmpty ? nil : location
     }
 
     private static func extractSchedule(from text: String) -> BriefingSchedule {
@@ -394,6 +440,75 @@ enum LiveDataService {
             return nil
         }
     }
+
+    /// Current conditions + today's high/low for a named place (open-meteo
+    /// geocoding + forecast, both auth-free) → metric widget.
+    static func weatherWidget(query: String) async -> MessageWidget? {
+        let place = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !place.isEmpty,
+              let encoded = place.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let geoURL = URL(string: "https://geocoding-api.open-meteo.com/v1/search?name=\(encoded)&count=1&language=en&format=json") else {
+            return nil
+        }
+
+        do {
+            let decoder = JSONDecoder()
+            let geo = try decoder.decode(GeocodingResponse.self, from: try await fetchData(from: geoURL))
+            guard let match = geo.results?.first else { return nil }
+
+            guard let forecastURL = URL(string: "https://api.open-meteo.com/v1/forecast?latitude=\(match.latitude)&longitude=\(match.longitude)&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto&forecast_days=1") else {
+                return nil
+            }
+            let forecast = try decoder.decode(WeatherForecastResponse.self, from: try await fetchData(from: forecastURL))
+            guard let temperature = forecast.current?.temperature2m else { return nil }
+
+            let condition = weatherDescription(forCode: forecast.current?.weatherCode ?? -1)
+            var captionParts = [condition]
+            if let high = forecast.daily?.temperatureMax?.first, let low = forecast.daily?.temperatureMin?.first {
+                captionParts.append("H \(Int(high.rounded()))° · L \(Int(low.rounded()))°")
+            }
+            let region = [match.admin1, match.country].compactMap { $0 }.first
+
+            return MessageWidget(
+                kind: .metric,
+                title: match.name ?? place.capitalized,
+                freshness: .fresh,
+                time: shortCurrentTimeString(),
+                followUp: "What should I wear?",
+                note: nil,
+                chart: nil,
+                metric: WidgetMetric(
+                    label: region ?? "Weather",
+                    value: "\(Int(temperature.rounded()))°F",
+                    delta: nil,
+                    trend: .flat,
+                    caption: captionParts.joined(separator: " · ")
+                ),
+                comparison: nil,
+                newsBrief: nil
+            )
+        } catch {
+            return nil
+        }
+    }
+
+    /// Human label for a WMO weather-interpretation code.
+    static func weatherDescription(forCode code: Int) -> String {
+        switch code {
+        case 0: return "Clear"
+        case 1, 2: return "Partly cloudy"
+        case 3: return "Overcast"
+        case 45, 48: return "Fog"
+        case 51, 53, 55, 56, 57: return "Drizzle"
+        case 61, 63, 65, 66, 67: return "Rain"
+        case 71, 73, 75, 77: return "Snow"
+        case 80, 81, 82: return "Rain showers"
+        case 85, 86: return "Snow showers"
+        case 95: return "Thunderstorm"
+        case 96, 99: return "Thunderstorm + hail"
+        default: return "—"
+        }
+    }
 }
 
 private extension LiveDataService {
@@ -409,6 +524,43 @@ private extension LiveDataService {
 
     struct CoinGeckoMarketChartResponse: Decodable {
         let prices: [CoinGeckoPricePoint]
+    }
+
+    struct GeocodingResponse: Decodable {
+        let results: [GeocodingPlace]?
+    }
+
+    struct GeocodingPlace: Decodable {
+        let name: String?
+        let latitude: Double
+        let longitude: Double
+        let country: String?
+        let admin1: String?
+    }
+
+    struct WeatherForecastResponse: Decodable {
+        let current: WeatherCurrent?
+        let daily: WeatherDaily?
+    }
+
+    struct WeatherCurrent: Decodable {
+        let temperature2m: Double?
+        let weatherCode: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case temperature2m = "temperature_2m"
+            case weatherCode = "weather_code"
+        }
+    }
+
+    struct WeatherDaily: Decodable {
+        let temperatureMax: [Double]?
+        let temperatureMin: [Double]?
+
+        enum CodingKeys: String, CodingKey {
+            case temperatureMax = "temperature_2m_max"
+            case temperatureMin = "temperature_2m_min"
+        }
     }
 
     struct CoinGeckoPricePoint: Decodable {
