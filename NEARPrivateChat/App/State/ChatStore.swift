@@ -3862,6 +3862,28 @@ final class ChatStore: ObservableObject {
                 : "Created a tracker — **\(spec.confirmation)**. It runs on schedule and lands on your Today tab; open it any time to Run now, change it, or delete it."
             _ = appendAssistant(text: trackerBody)
             AppHaptics.selection()
+        case let .trackLast(schedule):
+            // Track whatever the previous question was about. handleQuickIntent
+            // already appended this "track that" turn, so the prior user message
+            // (dropLast) is the question to track.
+            let priorText = messages.filter { $0.role == .user }.dropLast().last?.text
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let subject = QuickIntentParser.subjectFromQuery(priorText)
+            if priorText.count >= 3, subject.count >= 2 {
+                let title = QuickIntentParser.prettyTrackerTitle(from: subject)
+                let briefing = Briefing(
+                    title: title,
+                    prompt: "Using web search, find the latest \(subject) and report it concisely — lead with the current number/price (with its currency) and the as-of date. If it's a price or numeric value, present it as a metric or chart widget.",
+                    schedule: schedule,
+                    kind: .customPrompt
+                )
+                onCreateTracker?(briefing)
+                activityLog.record("Created tracker “\(title)” from “track that”")
+                _ = appendAssistant(text: "On it — I’ll track **\(title)** (\(schedule.scheduleLabel)) and surface it on your Today tab. It builds a chart as it runs; reopen it any time to Run now, change, or delete.")
+                AppHaptics.selection()
+            } else {
+                _ = appendAssistant(text: "I’m not sure what to track yet — ask me something first (like “what’s the price of a Rolex GMT Master II”), then say “track that.”")
+            }
         case .nearAccount(nil):
             _ = appendAssistant(text: "Sure — what’s your NEAR account? Tell me the id (e.g. **yourname.near**) and I’ll pull its balance and holdings.")
         case let .remember(text):
@@ -4060,7 +4082,7 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.unitConvertWidget(value: value, from: from, to: to)
         case let .define(word):
             return await LiveDataService.defineWidget(word: word)
-        case .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker:
+        case .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker, .trackLast:
             // Handled synchronously in handleQuickIntent — never fetched here.
             return nil
         }

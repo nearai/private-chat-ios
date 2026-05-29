@@ -51,6 +51,8 @@ enum QuickIntent: Equatable {
     case searchHistory(query: String)
     case createReminder(PersonalReminder)
     case createTracker(TrackerSpec)
+    /// "track that" — make a tracker from whatever the previous answer was about.
+    case trackLast(schedule: BriefingSchedule)
 }
 
 /// A one-off personal reminder parsed from natural language ("remind me to call
@@ -151,6 +153,11 @@ enum QuickIntentParser {
         let infoCue = contains(text, ["price", "value", "cost", "worth", "quote", "rate", "index", "stock",
                                       "score", "news", "level", "status", "forecast", "floor price", "market cap",
                                       "how much", "trading at"])
+        // "track that / watch it daily" → track whatever the last answer was
+        // about (checked before the generic gate; the pronoun has no subject).
+        if parseTrackLast(text) {
+            return .trackLast(schedule: extractSchedule(from: text))
+        }
         if (createVerb && trackerNoun) || (startsWithWatchCommand(text) && infoCue),
            let spec = makeTracker(from: text, original: trimmedRaw) {
             return .createTracker(spec)
@@ -343,7 +350,7 @@ enum QuickIntentParser {
         switch intent {
         case .price, .trendingCrypto, .cryptoMarket, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
-        case .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker:
+        case .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker, .trackLast:
             return false
         }
     }
@@ -451,6 +458,23 @@ enum QuickIntentParser {
         return subject.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
     }
 
+    /// The subject of a question, with common lead-ins stripped, for "track
+    /// that": "what's the price of a Rolex GMT Master II?" → "price of a Rolex
+    /// GMT Master II".
+    static func subjectFromQuery(_ text: String) -> String {
+        var subject = text.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!"))
+        let lower = subject.lowercased()
+        for lead in ["what's the current ", "whats the current ", "what is the current ",
+                     "what's the ", "whats the ", "what is the ", "what's ", "whats ", "what is ",
+                     "how much is the ", "how much is a ", "how much is an ", "how much is ",
+                     "how much does a ", "how much does the ", "current ", "the latest ", "latest ",
+                     "tell me the ", "tell me ", "get the ", "show me the ", "show me ", "find the ", "find "]
+        where lower.hasPrefix(lead) {
+            subject = String(subject.dropFirst(lead.count)); break
+        }
+        return subject.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!"))
+    }
+
     /// A short display title from a tracker subject — strips a leading
     /// "price/value/cost of" and an article. "price of a Rolex GMT Master II"
     /// → "Rolex GMT Master II".
@@ -471,6 +495,13 @@ enum QuickIntentParser {
     /// out" / "watch for" so a statement ("watch out, the price went up") can't
     /// trip it. Expects lowercased input.
     static func startsWithWatchCommand(_ text: String) -> Bool {
+        watchCommandTail(text) != nil
+    }
+
+    /// The text after a leading "track/watch/monitor …" command (and any polite
+    /// lead-in), or nil if the text isn't such a command. Excludes "watch out" /
+    /// "watch for" idioms.
+    static func watchCommandTail(_ text: String) -> String? {
         var rest = text
         for prefix in ["please ", "can you ", "could you ", "would you ", "i want to ", "i'd like to ",
                        "i would like to ", "i want you to ", "i'd like you to ", "let's ", "lets "]
@@ -478,10 +509,30 @@ enum QuickIntentParser {
             rest = String(rest.dropFirst(prefix.count)); break
         }
         let verbs = ["track ", "watch ", "monitor ", "follow ", "keep an eye on ", "keep tabs on ", "keep track of "]
-        guard let verb = verbs.first(where: { rest.hasPrefix($0) }) else { return false }
+        guard let verb = verbs.first(where: { rest.hasPrefix($0) }) else { return nil }
         let tail = String(rest.dropFirst(verb.count))
-        if verb == "watch " && (tail.hasPrefix("out") || tail.hasPrefix("for ")) { return false }
-        return true
+        if verb == "watch " && (tail.hasPrefix("out") || tail.hasPrefix("for ")) { return nil }
+        return tail
+    }
+
+    /// True for a bare "track that / watch it / keep an eye on this [daily]" —
+    /// a follow-up that should track whatever the previous answer was about. The
+    /// pronoun must have NO subject of its own ("track that bitcoin" is a normal
+    /// tracker, not this).
+    static func parseTrackLast(_ text: String) -> Bool {
+        guard let tail = watchCommandTail(text) else { return false }
+        var rest = tail.trimmingCharacters(in: .whitespaces)
+        let pronouns = ["that one", "this one", "those", "these", "that", "this", "it"]
+        guard let pronoun = pronouns.first(where: { rest == $0 || rest.hasPrefix($0 + " ") }) else { return false }
+        rest = String(rest.dropFirst(pronoun.count))
+        for filler in ["for me", "please", "going forward", "from now on",
+                       "every weekday", "every morning", "every day", "each day", "each morning",
+                       "every week", "weekdays", "daily", "weekly", "hourly", "nightly"] {
+            rest = rest.replacingOccurrences(of: filler, with: " ", options: .caseInsensitive)
+        }
+        rest = rest.replacingOccurrences(of: #"\b(at\s+)?\d{1,2}(:\d{2})?\s*(am|pm)\b"#, with: " ", options: [.regularExpression, .caseInsensitive])
+        rest = rest.trimmingCharacters(in: CharacterSet(charactersIn: " ,.!?"))
+        return rest.isEmpty
     }
 
     /// "notify me when ETH drops below $2,000" → a coin-price threshold tracker.

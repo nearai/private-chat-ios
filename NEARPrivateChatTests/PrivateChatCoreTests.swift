@@ -3830,6 +3830,42 @@ extension PrivateChatCoreTests {
         }
     }
 
+    func testQuickIntentParsesTrackThat() {
+        XCTAssertEqual(QuickIntentParser.parse("track that"), .trackLast(schedule: .daily(hour: 8, minute: 0)))
+        XCTAssertEqual(QuickIntentParser.parse("track that daily"), .trackLast(schedule: .daily(hour: 8, minute: 0)))
+        XCTAssertEqual(QuickIntentParser.parse("keep an eye on that"), .trackLast(schedule: .daily(hour: 8, minute: 0)))
+        XCTAssertEqual(QuickIntentParser.parse("watch it every morning"), .trackLast(schedule: .daily(hour: 8, minute: 0)))
+        // A pronoun WITH a subject is a normal tracker, not "track that".
+        if case .trackLast = QuickIntentParser.parse("track that bitcoin price") { XCTFail("has a subject → normal tracker") }
+        if case .trackLast = QuickIntentParser.parse("track the price of a Rolex") { XCTFail("has a subject → open-ended tracker") }
+    }
+
+    @MainActor
+    func testTrackThatCreatesTrackerFromPriorQuestion() {
+        let chatStore = ChatStore(api: PrivateChatAPI(configuration: .production))
+        var created: Briefing?
+        chatStore.onCreateTracker = { created = $0 }
+        // Seed a prior question (a synchronous math intent appends a user message).
+        chatStore.draft = "what is 5 plus 5"
+        chatStore.sendDraft()
+        // "track that" builds a tracker from that prior question.
+        chatStore.draft = "track that"
+        chatStore.sendDraft()
+        XCTAssertEqual(created?.kind, .customPrompt)
+        XCTAssertEqual(created?.title, "5 plus 5")
+        XCTAssertTrue((created?.prompt ?? "").contains("5 plus 5"))
+    }
+
+    @MainActor
+    func testTrackThatWithoutPriorCreatesNothing() {
+        let chatStore = ChatStore(api: PrivateChatAPI(configuration: .production))
+        var created: Briefing?
+        chatStore.onCreateTracker = { created = $0 }
+        chatStore.draft = "track that"
+        chatStore.sendDraft()
+        XCTAssertNil(created) // nothing asked yet → asks for a subject, makes no tracker
+    }
+
     func testQuickIntentParsesActivityLog() {
         XCTAssertEqual(QuickIntentParser.parse("what have you done"), .activityLog)
         XCTAssertEqual(QuickIntentParser.parse("show your activity"), .activityLog)
