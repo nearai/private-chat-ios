@@ -1245,6 +1245,10 @@ final class ChatStore: ObservableObject {
 
     func prepareForAuthenticatedAccount(_ accountID: String?) {
         let resolvedAccountID = Self.storageScope(for: accountID)
+        // Configure memory up front (even when the account is unchanged) so a
+        // fresh signed-out launch still persists memory rather than keeping it
+        // in RAM until the first account switch.
+        memoryStore.configure(accountID: resolvedAccountID)
         guard resolvedAccountID != storageAccountID else { return }
         if Self.shouldMigrateStorage(from: storageAccountID, to: resolvedAccountID) {
             Self.migrateAccountScopedStorage(from: storageAccountID, to: resolvedAccountID)
@@ -1254,7 +1258,6 @@ final class ChatStore: ObservableObject {
         isResettingAccountScopedState = false
         storageAccountID = resolvedAccountID
         loadAccountScopedState()
-        memoryStore.configure(accountID: resolvedAccountID)
     }
 
     func updateCurrentUser(profile: UserProfile?) {
@@ -3628,7 +3631,7 @@ final class ChatStore: ObservableObject {
                 conversationID: conversationID,
                 previousResponseID: nil,
                 webSearchEnabled: webSearchEnabled,
-                systemPrompt: activeSystemPrompt(),
+                systemPrompt: activeSystemPrompt(memoryForModel: model),
                 onEvent: { event in
                     switch event {
                     case let .textDelta(delta):
@@ -4844,7 +4847,7 @@ final class ChatStore: ObservableObject {
             conversationID: conversationID,
             previousResponseID: previousResponseID,
             webSearchEnabled: shouldEnableModelNativeWebTool(model: model, prompt: text),
-            systemPrompt: activeSystemPrompt(),
+            systemPrompt: activeSystemPrompt(memoryForModel: model),
             advancedParams: advancedModelParams,
             initiator: initiator,
             visibleOutputTimeout: visibleOutputTimeout(for: model)
@@ -8243,10 +8246,16 @@ final class ChatStore: ObservableObject {
             )
     }
 
-    private func activeSystemPrompt() -> String {
+    private func activeSystemPrompt(memoryForModel model: String? = nil) -> String {
         let userPrompt = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let modePrompt = sourceModeInstructions().trimmingCharacters(in: .whitespacesAndNewlines)
-        let memoryPrompt = memoryStore.contextBlock()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // Personal memory is injected ONLY for the private near.ai route — never
+        // cloud, council cloud legs, or hosted/IronClaw routes — so on-device
+        // facts never leave for a third-party cloud.
+        let memoryAllowed = model.map { RoutePlanner.routeKind(forModelID: $0) == .nearPrivate } ?? false
+        let memoryPrompt = memoryAllowed
+            ? (memoryStore.contextBlock()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
+            : ""
         let requestedPrompt = researchModeEnabled ? Self.researchModeInstructions(appendingTo: userPrompt) : userPrompt
         let basePrompt = [memoryPrompt, requestedPrompt, modePrompt]
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
