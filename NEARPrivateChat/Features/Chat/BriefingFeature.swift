@@ -460,6 +460,13 @@ final class BriefingStore: ObservableObject {
         guard let result else { return }
         briefings[index].latestResult = result
         briefings[index].lastRunAt = Date()
+        // A conditional alert is one-shot: it only delivers when its threshold is
+        // crossed, so once it fires we pause it rather than re-notifying every
+        // cycle while the condition still holds. It stays on Today as a record the
+        // user can re-enable.
+        if briefings[index].isConditional {
+            briefings[index].isPaused = true
+        }
         save()
         Self.postBriefingReadyNotification(title: briefings[index].title)
     }

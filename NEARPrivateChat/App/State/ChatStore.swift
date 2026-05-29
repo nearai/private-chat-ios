@@ -3822,7 +3822,7 @@ final class ChatStore: ObservableObject {
             onCreateTracker?(briefing)
             activityLog.record("Created tracker “\(spec.title)” · \(spec.confirmation)")
             let trackerBody = spec.condition != nil
-                ? "Set up an alert — **\(spec.confirmation)**. I’ll check on that cadence and only notify you when it triggers. It lives on your Today tab; open it any time to Run now, change it, or delete it."
+                ? "Set up an alert — **\(spec.confirmation)**. I’ll check on that cadence and notify you the first time it triggers, then pause it so I don’t repeat. It lives on your Today tab; reopen it any time to re-arm, change, or delete it."
                 : "Created a tracker — **\(spec.confirmation)**. It runs on schedule and lands on your Today tab; open it any time to Run now, change it, or delete it."
             _ = appendAssistant(text: trackerBody)
             AppHaptics.selection()

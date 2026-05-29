@@ -3769,6 +3769,33 @@ extension PrivateChatCoreTests {
     }
 
     @MainActor
+    func testConditionalBriefingPausesAfterFiringButPlainKeepsRunning() async throws {
+        let tempFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("briefings-\(UUID().uuidString).json")
+        let alert = Briefing(title: "ETH alert", prompt: "", schedule: .everyNHours(3),
+                             kind: .cryptoPrice, accountID: "ethereum",
+                             condition: BriefingCondition(coinID: "ethereum", symbol: "ETH",
+                                                          comparator: .below, threshold: 2_000))
+        let plain = Briefing(title: "News", prompt: "p", schedule: .daily(hour: 8, minute: 0), kind: .dailyNews)
+        let store = BriefingStore(briefings: [alert, plain], fileURL: tempFile,
+                                  runner: { _ in MessageWidget(kind: .generic, title: "x", note: "y") })
+
+        // A conditional alert that delivers a result is one-shot: it auto-pauses.
+        await store.run(alert)
+        let firedAlert = try XCTUnwrap(store.briefings.first { $0.id == alert.id })
+        XCTAssertNotNil(firedAlert.latestResult)
+        XCTAssertTrue(firedAlert.isPaused)
+
+        // A plain recurring briefing keeps running after a result.
+        await store.run(plain)
+        let ranPlain = try XCTUnwrap(store.briefings.first { $0.id == plain.id })
+        XCTAssertNotNil(ranPlain.latestResult)
+        XCTAssertFalse(ranPlain.isPaused)
+
+        try? FileManager.default.removeItem(at: tempFile)
+    }
+
+    @MainActor
     func testCreateCouncilBriefingPromptLandsCouncilTracker() throws {
         let tempFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("briefings-\(UUID().uuidString).json")
