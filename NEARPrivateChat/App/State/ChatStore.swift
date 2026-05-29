@@ -3902,6 +3902,13 @@ final class ChatStore: ObservableObject {
                 }.joined(separator: "\n")
                 _ = appendAssistant(text: "Found \(hits.count) match\(hits.count == 1 ? "" : "es") for “\(query)” in your chats:\n\n\(lines)")
             }
+        case let .createReminder(reminder):
+            BriefingStore.schedulePersonalReminder(title: reminder.title, date: reminder.date)
+            activityLog.record("Set reminder: \(reminder.title)")
+            let relative = RelativeDateTimeFormatter()
+            relative.unitsStyle = .full
+            _ = appendAssistant(text: "Reminder set — I’ll nudge you to **\(reminder.title)** \(relative.localizedString(for: reminder.date, relativeTo: Date())). You’ll get a notification even if the app is closed.")
+            AppHaptics.selection()
         default:
             let id = appendAssistant(text: "", streaming: true)
             currentAssistantMessageID = id
@@ -4004,7 +4011,7 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.unitConvertWidget(value: value, from: from, to: to)
         case let .define(word):
             return await LiveDataService.defineWidget(word: word)
-        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createTracker:
+        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker:
             // Handled synchronously in handleQuickIntent — never fetched here.
             return nil
         }

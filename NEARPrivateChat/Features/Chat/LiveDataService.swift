@@ -44,7 +44,15 @@ enum QuickIntent: Equatable {
     case listTrackers
     case capabilities
     case searchHistory(query: String)
+    case createReminder(PersonalReminder)
     case createTracker(TrackerSpec)
+}
+
+/// A one-off personal reminder parsed from natural language ("remind me to call
+/// mom at 5pm"). Delivered as a local notification at `date`.
+struct PersonalReminder: Equatable {
+    var title: String
+    var date: Date
 }
 
 struct TrackerSpec: Equatable {
@@ -184,6 +192,13 @@ enum QuickIntentParser {
             return .price(coinID: coin.id, symbol: coin.symbol)
         }
 
+        // 5) personal reminder — checked LAST so trackers, alerts, and data
+        // lookups win first. Only fires for a "remind me…" with a real time, so
+        // "remind me why the sky is blue" stays a model question.
+        if let reminder = parseReminder(text, original: trimmedRaw) {
+            return .createReminder(reminder)
+        }
+
         return nil
     }
 
@@ -270,7 +285,7 @@ enum QuickIntentParser {
         switch intent {
         case .price, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
-        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createTracker:
+        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker:
             return false
         }
     }
@@ -603,6 +618,43 @@ enum QuickIntentParser {
             return query.count >= 2 ? query : nil
         }
         return nil
+    }
+
+    /// "remind me to call mom at 5pm tomorrow" → a PersonalReminder. Requires a
+    /// reminder trigger AND a real date/time (via NSDataDetector), so timeless or
+    /// question-shaped "remind me…" prompts fall through to the model. The title
+    /// is the task with the trigger prefix and every detected date phrase removed.
+    static func parseReminder(_ text: String, original: String) -> PersonalReminder? {
+        let triggers = ["remind me to ", "remind me that ", "remind me about ", "remind me ",
+                        "set a reminder to ", "set a reminder that ", "set a reminder ", "reminder to "]
+        guard let trigger = triggers.first(where: { text.hasPrefix($0) }) else { return nil }
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue) else { return nil }
+        let fullRange = NSRange(original.startIndex..<original.endIndex, in: original)
+        let dateMatches = detector.matches(in: original, options: [], range: fullRange).filter { $0.date != nil }
+        guard let firstDate = dateMatches.first?.date else { return nil }
+
+        // Build the title: remove every detected date phrase (back-to-front so
+        // earlier ranges stay valid), then strip the trigger prefix and tidy.
+        var title = original
+        for match in dateMatches.sorted(by: { $0.range.location > $1.range.location }) {
+            if let r = Range(match.range, in: title) { title.removeSubrange(r) }
+        }
+        if let r = title.range(of: trigger, options: [.caseInsensitive, .anchored]) {
+            title.removeSubrange(r)
+        }
+        // Drop dangling connectors a removed date left behind ("… at", "… on").
+        title = title.replacingOccurrences(of: #"\b(at|on|by|in|this|next|every)\b\s*$"#,
+                                           with: "", options: [.regularExpression, .caseInsensitive])
+        title = title.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: " ,.;:!?-"))
+        guard title.count >= 2 else { return nil }
+
+        // Reminders are in the future; bump a time that already passed to the next day.
+        var fire = firstDate
+        if fire <= Date() {
+            fire = Calendar.current.date(byAdding: .day, value: 1, to: fire) ?? fire
+        }
+        return PersonalReminder(title: title, date: fire)
     }
 
     static func parseForget(_ text: String, original: String) -> String? {

@@ -3503,6 +3503,28 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(ConversationHistorySearch.search(query: "bitcoin", cache: boostCache, conversations: boostConvos).first?.conversationID, "a")
     }
 
+    func testReminderParserExtractsTitleAndFutureDate() {
+        let r = QuickIntentParser.parseReminder("remind me to call mom at 5pm", original: "remind me to call mom at 5pm")
+        XCTAssertEqual(r?.title, "call mom")
+        if let r { XCTAssertGreaterThan(r.date, Date()) } else { XCTFail("expected reminder") }
+
+        let r2 = QuickIntentParser.parseReminder("set a reminder to submit the report friday at 9am",
+                                                 original: "set a reminder to submit the report friday at 9am")
+        XCTAssertTrue(r2?.title.contains("submit the report") ?? false)
+
+        // No time → not a scheduled reminder (let the model handle it).
+        XCTAssertNil(QuickIntentParser.parseReminder("remind me to stretch", original: "remind me to stretch"))
+        // Question-shaped "remind me…" stays a model question.
+        XCTAssertNil(QuickIntentParser.parseReminder("remind me why the sky is blue", original: "remind me why the sky is blue"))
+    }
+
+    func testQuickIntentParsesReminder() {
+        guard case let .createReminder(reminder) = QuickIntentParser.parse("remind me to call mom at 5pm") else {
+            return XCTFail("Expected a reminder intent.")
+        }
+        XCTAssertEqual(reminder.title, "call mom")
+    }
+
     func testQuickIntentParsesActivityLog() {
         XCTAssertEqual(QuickIntentParser.parse("what have you done"), .activityLog)
         XCTAssertEqual(QuickIntentParser.parse("show your activity"), .activityLog)

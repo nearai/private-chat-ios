@@ -471,6 +471,22 @@ final class BriefingStore: ObservableObject {
         Self.postBriefingReadyNotification(title: briefings[index].title)
     }
 
+    /// Schedules a one-off personal reminder ("remind me to call mom at 5pm") as
+    /// a local notification. Best-effort: requests authorization if undetermined,
+    /// then adds the request (the system drops it if access is denied).
+    nonisolated static func schedulePersonalReminder(title: String, date: Date, id: String = UUID().uuidString) {
+        requestNotificationAuthorizationIfNeeded()
+        let content = UNMutableNotificationContent()
+        content.title = "Reminder"
+        content.body = title
+        content.sound = .default
+        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "reminder-\(id)", content: content, trigger: trigger)
+        )
+    }
+
     /// Requested contextually when the user creates their first briefing.
     nonisolated static func requestNotificationAuthorizationIfNeeded() {
         let center = UNUserNotificationCenter.current()
