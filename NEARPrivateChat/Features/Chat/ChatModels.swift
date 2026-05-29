@@ -465,13 +465,14 @@ enum WidgetTrend: String, Codable, Hashable {
 }
 
 enum WidgetTone: String, Codable, Hashable {
-    case neutral, good, warn, off
+    case neutral, good, warn, bad, off
 
     init(from decoder: Decoder) throws {
         let raw = ((try? decoder.singleValueContainer().decode(String.self)) ?? "").lowercased()
         switch raw {
-        case "good", "ok", "yes", "pass", "positive", "supported": self = .good
+        case "good", "ok", "yes", "pass", "positive", "up", "supported": self = .good
         case "warn", "warning", "preview", "partial", "caution": self = .warn
+        case "bad", "negative", "down", "error", "fail", "danger": self = .bad
         case "off", "no", "none", "na", "n/a", "missing", "unsupported": self = .off
         default: self = .neutral
         }

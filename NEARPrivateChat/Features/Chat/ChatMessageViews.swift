@@ -1631,6 +1631,7 @@ private func widgetToneColor(_ tone: WidgetTone?) -> Color {
     switch tone {
     case .good: return .proofVerified
     case .warn: return .proofStale
+    case .bad: return .proofMismatch // red — matches the chart card's down-delta
     case .off: return .secondary
     default: return .primary
     }

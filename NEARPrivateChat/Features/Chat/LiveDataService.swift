@@ -2031,7 +2031,7 @@ enum LiveDataService {
             let changeStr = percentChangeFormatter().string(from: NSNumber(value: datum.change / 100)) ?? "\(datum.change)%"
             rows.append(WidgetComparisonRow(label: label, cells: [
                 WidgetComparisonCell(text: priceStr, tone: .neutral),
-                WidgetComparisonCell(text: changeStr, tone: datum.change >= 0 ? .good : .warn)
+                WidgetComparisonCell(text: changeStr, tone: datum.change >= 0 ? .good : .bad)
             ]))
         }
         guard rows.contains(where: { $0.cells.first?.text != "—" }) else { return nil }
