@@ -3395,6 +3395,29 @@ extension PrivateChatCoreTests {
         XCTAssertFalse(plainDecoded.isConditional)
     }
 
+    func testQuickIntentParsesPassiveMemoryControls() {
+        XCTAssertEqual(QuickIntentParser.parse("stop learning about me"), .setMemoryCapture(enabled: false))
+        XCTAssertEqual(QuickIntentParser.parse("turn off auto memory"), .setMemoryCapture(enabled: false))
+        XCTAssertEqual(QuickIntentParser.parse("start learning about me"), .setMemoryCapture(enabled: true))
+        XCTAssertEqual(QuickIntentParser.parse("forget what you learned automatically"), .forgetAutoLearned)
+        // The controls don't swallow an ordinary remember or a full wipe.
+        XCTAssertEqual(QuickIntentParser.parse("remember that I like tea"), .remember(text: "I like tea"))
+        XCTAssertEqual(QuickIntentParser.parse("forget everything"), .forget(text: nil))
+    }
+
+    func testMemoryStoreRemoveInferredKeepsExplicit() {
+        let store = MemoryStore(fileURL: FileManager.default.temporaryDirectory
+            .appendingPathComponent("memory-\(UUID().uuidString).json"))
+        store.add("I live in Oslo", source: .inferred)
+        store.add("I go by Sam", source: .inferred)
+        store.add("My wife's surname is Dangwal", source: .explicit)
+        XCTAssertEqual(store.items.count, 3)
+        XCTAssertEqual(store.removeInferred(), 2)
+        XCTAssertEqual(store.items.count, 1)
+        XCTAssertEqual(store.items.first?.source, .explicit)
+        XCTAssertEqual(store.removeInferred(), 0) // nothing inferred left
+    }
+
     func testQuickIntentParsesActivityLog() {
         XCTAssertEqual(QuickIntentParser.parse("what have you done"), .activityLog)
         XCTAssertEqual(QuickIntentParser.parse("show your activity"), .activityLog)

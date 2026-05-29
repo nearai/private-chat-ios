@@ -38,6 +38,8 @@ enum QuickIntent: Equatable {
     case remember(text: String)
     case recallMemory
     case forget(text: String?)
+    case forgetAutoLearned
+    case setMemoryCapture(enabled: Bool)
     case activityLog
     case createTracker(TrackerSpec)
 }
@@ -66,6 +68,25 @@ enum QuickIntentParser {
         }
         if contains(text, ["what have you done", "what did you do", "show your activity", "activity log", "what have you been up to", "show what you've done", "your recent activity"]) {
             return .activityLog
+        }
+        // Passive-memory control — checked before the generic forget/remember so
+        // "stop remembering things automatically" isn't read as a fact to store.
+        if contains(text, ["stop learning about me", "stop auto", "disable passive memory", "disable auto memory",
+                            "turn off passive memory", "turn off auto memory", "don't auto-remember",
+                            "dont auto-remember", "stop remembering things automatically",
+                            "stop automatically remembering", "stop picking things up"]) {
+            return .setMemoryCapture(enabled: false)
+        }
+        if contains(text, ["start learning about me", "enable passive memory", "enable auto memory",
+                            "turn on passive memory", "turn on auto memory", "resume learning about me",
+                            "auto-remember again", "start remembering things automatically"]) {
+            return .setMemoryCapture(enabled: true)
+        }
+        if contains(text, ["forget what you learned automatically", "forget what you auto", "forget the auto-learned",
+                            "forget auto-learned", "clear auto memory", "clear what you inferred",
+                            "forget what you picked up", "forget what you noticed", "forget the inferred",
+                            "forget things you learned on your own"]) {
+            return .forgetAutoLearned
         }
         if contains(text, ["forget everything", "forget it all", "forget all", "clear your memory", "clear my memory", "delete your memory", "wipe your memory", "erase your memory"]) {
             return .forget(text: nil)
@@ -194,7 +215,7 @@ enum QuickIntentParser {
         switch intent {
         case .price, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
-        case .remember, .recallMemory, .forget, .activityLog, .createTracker:
+        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .createTracker:
             return false
         }
     }
@@ -1648,6 +1669,17 @@ final class MemoryStore {
     func clear() {
         items.removeAll()
         save()
+    }
+
+    /// Drops only passively-learned (.inferred) facts, keeping everything the
+    /// user explicitly asked us to remember. Returns how many were removed.
+    @discardableResult
+    func removeInferred() -> Int {
+        let before = items.count
+        items.removeAll { $0.source == .inferred }
+        let removed = before - items.count
+        if removed > 0 { save() }
+        return removed
     }
 
     /// A system-prompt block of the most recent facts within a character

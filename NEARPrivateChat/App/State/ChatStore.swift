@@ -164,6 +164,13 @@ final class ChatStore: ObservableObject {
     /// On-device transparency log of what the assistant did (briefing runs,
     /// trackers created). Account-scoped, never leaves the device.
     let activityLog = AgentActivityLog()
+    /// User control over passive memory (auto-learning durable facts from chat).
+    /// A single user-level preference, persisted in UserDefaults; default on.
+    var passiveMemoryEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: Self.passiveMemoryDefaultsKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: Self.passiveMemoryDefaultsKey) }
+    }
+    private static let passiveMemoryDefaultsKey = "passiveMemoryEnabled"
     private let webGroundingService = WebGroundingService()
     private let ironclawMobileRuntime: IronclawMobileRuntime
     private var selectedResponseVariantByConversationID: [String: String] = [:]
@@ -3847,6 +3854,18 @@ final class ChatStore: ObservableObject {
                 _ = appendAssistant(text: "Cleared — I’ve wiped everything stored on this device: all remembered facts and my activity log.")
             }
             AppHaptics.selection()
+        case .forgetAutoLearned:
+            let removed = memoryStore.removeInferred()
+            _ = appendAssistant(text: removed > 0
+                ? "Done — dropped \(removed) thing\(removed == 1 ? "" : "s") I’d picked up from our chats. Anything you explicitly asked me to remember is still here."
+                : "There was nothing auto-learned to forget. Everything I have, you told me directly.")
+            AppHaptics.selection()
+        case let .setMemoryCapture(enabled):
+            passiveMemoryEnabled = enabled
+            _ = appendAssistant(text: enabled
+                ? "Passive memory is on — I’ll quietly note durable details you mention (like where you live or what you prefer) so answers stay personal. Say “what do you remember” to review, or “stop learning about me” to turn it off."
+                : "Passive memory is off — I’ll stop noting things on my own. I’ll still remember anything you explicitly ask me to. Say “start learning about me” to turn it back on.")
+            AppHaptics.selection()
         case .activityLog:
             let entries = activityLog.entries
             if entries.isEmpty {
@@ -3959,7 +3978,7 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.unitConvertWidget(value: value, from: from, to: to)
         case let .define(word):
             return await LiveDataService.defineWidget(word: word)
-        case .remember, .recallMemory, .forget, .activityLog, .createTracker:
+        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .createTracker:
             // Handled synchronously in handleQuickIntent — never fetched here.
             return nil
         }
@@ -3971,6 +3990,7 @@ final class ChatStore: ObservableObject {
     /// auto-learned, and stored as `.inferred` so recall labels it. Only genuinely
     /// new facts are logged; re-stating a known fact is a no-op.
     private func captureInferredMemory(from text: String) {
+        guard passiveMemoryEnabled else { return }
         let learned = QuickIntentParser.inferredFacts(from: text)
         guard !learned.isEmpty else { return }
         var stored: [String] = []
