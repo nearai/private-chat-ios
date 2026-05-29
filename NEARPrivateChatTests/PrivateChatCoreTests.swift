@@ -4384,6 +4384,17 @@ extension PrivateChatCoreTests {
         XCTAssertNotNil(decoded.snoozedUntil)
     }
 
+    func testContextualSuggestionsSurfaceDailyBriefAndNews() {
+        let eth = Briefing(title: "ETH", prompt: "p", schedule: .daily(hour: 9, minute: 0), kind: .ethPrice)
+        let watch = Briefing(title: "Watchlist", prompt: "p", schedule: .daily(hour: 8, minute: 0), kind: .watchlist, accountID: "crypto:ethereum|stock:AAPL")
+        let suggestions = BriefingTemplate.contextual(for: [eth, watch])
+        XCTAssertTrue(suggestions.contains { $0.kind == .dailyBrief }, "Once tracking 2+ things, suggest a single Daily Brief.")
+        XCTAssertTrue(suggestions.contains { $0.kind == .dailyNews }, "Market trackers without news should get a news suggestion.")
+        XCTAssertFalse(suggestions.contains { $0.kind == .ethPrice }, "Don't re-suggest a kind already tracked.")
+        // No trackers → the default set of three (unchanged behavior).
+        XCTAssertEqual(BriefingTemplate.contextual(for: []).count, 3)
+    }
+
     func testThreadTranscriptBuildsMultiTurnContext() {
         let replies = [
             ThreadReply(role: .user, text: "why is it up?"),

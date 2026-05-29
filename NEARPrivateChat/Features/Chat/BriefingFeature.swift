@@ -1617,6 +1617,40 @@ struct BriefingTemplate: Identifiable {
         )
     ]
 
+    /// A single daily digest of everything you track — the proactive routine
+    /// that drives recurring engagement.
+    static let dailyBriefTemplate = BriefingTemplate(
+        title: "Daily Brief",
+        subtitle: "One digest of everything you track + markets",
+        symbol: "tray.full.fill",
+        tint: .brandBlue,
+        kind: .dailyBrief,
+        schedule: .daily(hour: 8, minute: 0),
+        prompt: "Brief me",
+        needsAccount: false
+    )
+
+    /// Suggestions tailored to what the user already tracks. Once a couple of
+    /// things are tracked, the top suggestion becomes a single Daily Brief (the
+    /// retention routine); market trackers without news get a news brief; and we
+    /// never re-suggest a kind already tracked. Falls back to the default set
+    /// when nothing is tracked yet.
+    static func contextual(for trackers: [Briefing]) -> [BriefingTemplate] {
+        let kinds = Set(trackers.map { $0.kind })
+        var result: [BriefingTemplate] = []
+        if trackers.count >= 2, !kinds.contains(.dailyBrief) {
+            result.append(dailyBriefTemplate)
+        }
+        let tracksMarket = !kinds.isDisjoint(with: [.cryptoPrice, .ethPrice, .stockPrice, .watchlist])
+        if tracksMarket, !kinds.contains(.dailyNews), let news = suggested.first(where: { $0.kind == .dailyNews }) {
+            result.append(news)
+        }
+        for template in suggested where !result.contains(where: { $0.kind == template.kind }) && !kinds.contains(template.kind) {
+            result.append(template)
+        }
+        return Array(result.prefix(3))
+    }
+
     func makeBriefing(account: String? = nil) -> Briefing {
         Briefing(title: title, prompt: prompt, schedule: schedule, kind: kind, accountID: account)
     }
@@ -1638,11 +1672,12 @@ struct SuggestedBriefingsView: View {
                 .textCase(.uppercase)
                 .foregroundStyle(Color.textSecondary)
 
+            let templates = BriefingTemplate.contextual(for: store.briefings)
             VStack(spacing: 0) {
-                ForEach(Array(BriefingTemplate.suggested.enumerated()), id: \.element.id) { index, template in
+                ForEach(Array(templates.enumerated()), id: \.element.id) { index, template in
                     Button { tap(template) } label: { row(template) }
                         .buttonStyle(.plain)
-                    if index < BriefingTemplate.suggested.count - 1 {
+                    if index < templates.count - 1 {
                         Divider().overlay(Color.appHairline).padding(.leading, 52)
                     }
                 }
