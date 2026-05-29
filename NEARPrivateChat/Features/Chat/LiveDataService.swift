@@ -823,9 +823,12 @@ enum QuickIntentParser {
         expr = expr.trimmingCharacters(in: CharacterSet(charactersIn: " ?=."))
         let low = expr.lowercased()
         let hasDigit = low.contains { $0.isNumber }
-        let hasOperator = low.range(of: #"[-+*/×÷%]"#, options: .regularExpression) != nil
-            || ["plus", "minus", "times", "divided by", "multiplied by", "% of", " x "].contains { low.contains($0) }
-        guard hasDigit, hasOperator else { return nil }
+        let hasRealOperator = low.range(of: #"[-+*/×÷]"#, options: .regularExpression) != nil
+            || ["plus", "minus", "times", "divided by", "multiplied by", " x "].contains { low.contains($0) }
+        // A "%" only counts as math when it's part of an expression (with an
+        // operator or "of"), so "i'm 50% sure" / a bare "50%" stay model questions.
+        let hasPercentMath = low.contains("%") && (hasRealOperator || low.contains(" of "))
+        guard hasDigit, hasRealOperator || hasPercentMath else { return nil }
         guard let value = MathEvaluator.evaluate(expr) else { return nil }
         return (expr.trimmingCharacters(in: .whitespaces), MathEvaluator.format(value))
     }

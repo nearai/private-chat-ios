@@ -3614,6 +3614,13 @@ extension PrivateChatCoreTests {
         } else {
             XCTFail("Expected a math intent for a percentage.")
         }
+        // A bare percentage isn't a calculation — needs an operator or "of".
+        if case .math? = QuickIntentParser.parse("i'm 50% sure") { XCTFail("bare % must not be math") }
+        if case .math? = QuickIntentParser.parse("50%") { XCTFail("bare % must not be math") }
+        // …but "% of" and "% with an operator" still compute.
+        if case let .math(_, r)? = QuickIntentParser.parse("200 + 5%") { XCTAssertEqual(r, "200.05") } else {
+            XCTFail("Expected math for a % with an operator.")
+        }
         // Prose isn't math; currency/unit phrases (digits but no operator) keep
         // their own intents and are not hijacked by the calculator.
         XCTAssertNil(QuickIntentParser.parse("what is bitcoin"))
