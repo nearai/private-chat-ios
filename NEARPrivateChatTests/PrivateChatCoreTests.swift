@@ -3466,6 +3466,8 @@ extension PrivateChatCoreTests {
         // Card stays accurate as features land.
         XCTAssertTrue(text.contains("trending"))
         XCTAssertTrue(text.contains("Remind"))
+        XCTAssertTrue(text.contains("18%"))         // calculator
+        XCTAssertTrue(text.contains("days until"))  // date math
     }
 
     func testQuickIntentParsesSearchHistory() {

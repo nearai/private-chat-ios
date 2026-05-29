@@ -255,6 +255,10 @@ enum QuickIntentParser {
         • “Notify me when ETH drops below $2,000” — I alert once, then pause
         • “What are you tracking?” to review them
 
+        **Quick math & dates** — instant, on-device:
+        • “What’s 18% of 85.50?” · “12 * 7 + 3”
+        • “How many days until Christmas?” · “What’s the date in 2 weeks?”
+
         **Reminders & recall**:
         • “Remind me to call mom at 5pm tomorrow” — I’ll notify you, even if the app’s closed
         • “Search my chats for the Lisbon trip” · “What did I say about my budget?”
