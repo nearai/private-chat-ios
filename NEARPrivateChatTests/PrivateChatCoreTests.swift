@@ -3166,6 +3166,9 @@ extension PrivateChatCoreTests {
         // "time" with no place is not a world-time query.
         XCTAssertNil(QuickIntentParser.parse("what time do you close"))
         XCTAssertNil(QuickIntentParser.parse("time to go home"))
+        // Duration fillers are not places.
+        XCTAssertNil(QuickIntentParser.parse("what time is it in a bit"))
+        XCTAssertNil(QuickIntentParser.parse("set a timer for 5 minutes"))
     }
 
     func testQuickIntentParsesCurrencyConversion() {

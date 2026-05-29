@@ -244,7 +244,15 @@ enum QuickIntentParser {
         location = location.replacingOccurrences(of: "[?.,!]", with: " ", options: .regularExpression)
         location = location.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
-        return location.isEmpty ? nil : location
+        guard !location.isEmpty else { return nil }
+        // Reject time-duration fillers so "time in a bit" / "in five minutes"
+        // fall through to the model instead of geocoding a non-place.
+        let durationFillers: Set<String> = ["a bit", "a while", "a moment", "a sec", "a second", "a minute", "a couple", "a few", "the morning", "the afternoon", "the evening", "bed"]
+        if durationFillers.contains(location) { return nil }
+        if location.range(of: #"\b(minutes?|hours?|seconds?|mins?|secs?)\b"#, options: .regularExpression) != nil {
+            return nil
+        }
+        return location
     }
 
     static func parseFX(_ text: String) -> (amount: Double, from: String, to: String)? {
