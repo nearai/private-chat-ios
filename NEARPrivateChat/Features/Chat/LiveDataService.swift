@@ -30,6 +30,7 @@ enum QuickIntent: Equatable {
     case price(coinID: String, symbol: String)
     case trendingCrypto
     case cryptoMarket
+    case briefMe
     case nearAccount(account: String?)
     case news
     case weather(query: String)
@@ -133,6 +134,22 @@ enum QuickIntentParser {
         }
         if let query = parseSearchHistory(text, original: trimmedRaw) {
             return .searchHistory(query: query)
+        }
+
+        // 0a3) Daily Brief — compose everything tracked + a market snapshot. With
+        // a recurrence word it schedules a recurring morning brief; otherwise it's
+        // on-demand. Checked before the generic tracker path.
+        if contains(text, ["brief me", "morning brief", "my brief", "daily brief", "catch me up",
+                            "what's my brief", "whats my brief", "give me my brief", "my morning brief",
+                            "what's my morning brief", "whats my morning brief", "what should i know today"]) {
+            if contains(text, ["every ", "each ", "weekly", "weekday", " daily", "nightly"]) {
+                let schedule = extractSchedule(from: text)
+                return .createTracker(TrackerSpec(
+                    title: "Daily brief", kind: .dailyBrief, subject: nil, schedule: schedule,
+                    council: false, confirmation: "Daily brief · \(schedule.scheduleLabel)"
+                ))
+            }
+            return .briefMe
         }
 
         // 0b) conditional price alert — "notify me when ETH drops below $2,000".
@@ -350,7 +367,7 @@ enum QuickIntentParser {
         switch intent {
         case .price, .trendingCrypto, .cryptoMarket, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
-        case .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker, .trackLast:
+        case .briefMe, .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker, .trackLast:
             return false
         }
     }

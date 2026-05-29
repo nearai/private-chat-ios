@@ -3639,6 +3639,20 @@ final class ChatStore: ObservableObject {
     /// Runs a briefing prompt headlessly in a throwaway conversation and returns
     /// the structured widget the model produced (falling back to a generic text
     /// widget). Used by the BriefingStore runner; returns nil on any failure.
+    /// The agentic Daily Brief: every active tracker's latest value + a live
+    /// market snapshot (auth-free), composed into one digest. Shared by the
+    /// on-demand "brief me" intent and the scheduled .dailyBrief tracker.
+    private func briefDigestWidget() async -> MessageWidget? {
+        let trackers = trackersProvider?() ?? []
+        async let ethPrice = LiveDataService.coinUSDPrice(coinID: "ethereum")
+        async let btcPrice = LiveDataService.coinUSDPrice(coinID: "bitcoin")
+        let (eth, btc) = await (ethPrice, btcPrice)
+        var market: [(label: String, value: String)] = []
+        if let eth { market.append((label: "ETH", value: LiveDataService.usdPriceString(eth))) }
+        if let btc { market.append((label: "BTC", value: LiveDataService.usdPriceString(btc))) }
+        return BriefDigest.compose(trackers: trackers, market: market)
+    }
+
     func runBriefing(_ briefing: Briefing) async -> MessageWidget? {
         // Conditional trackers are gated: evaluate the threshold against live
         // data and only deliver (non-nil) on a met run, so the rest of the
@@ -3659,6 +3673,8 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.nearAccountWidget(account: briefing.accountID ?? "")
         case .dailyNews:
             return await LiveDataService.newsBriefWidget()
+        case .dailyBrief:
+            return await briefDigestWidget()
         case .customPrompt:
             break
         }
@@ -4068,6 +4084,8 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.trendingCryptoWidget()
         case .cryptoMarket:
             return await LiveDataService.cryptoMarketWidget()
+        case .briefMe:
+            return await briefDigestWidget()
         case let .nearAccount(account):
             return await LiveDataService.nearAccountWidget(account: account ?? "")
         case .news:

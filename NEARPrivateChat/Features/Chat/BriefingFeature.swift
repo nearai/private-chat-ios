@@ -20,6 +20,8 @@ enum BriefingKind: String, Codable, Hashable {
     case cryptoPrice
     case nearAccount
     case dailyNews
+    /// Composed client-side from the user's other trackers + a market snapshot.
+    case dailyBrief
 
     init(from decoder: Decoder) throws {
         let raw = (try? decoder.singleValueContainer().decode(String.self)) ?? "customPrompt"
@@ -192,6 +194,40 @@ enum TrackerHistory {
                 caption: "tracked over time",
                 timeframe: "\(history.count) checks"
             )
+        )
+    }
+}
+
+/// Composes the agentic Daily Brief — every active tracker's latest value plus
+/// a market snapshot — into one digest widget. Pure + deterministic so it's
+/// unit-testable; the "surface what matters on my behalf" capstone.
+enum BriefDigest {
+    static func compose(trackers: [Briefing], market: [(label: String, value: String)], now: Date = Date()) -> MessageWidget {
+        var rows: [WidgetComparisonRow] = []
+        // Skip paused trackers and the brief itself (a dailyBrief tracker
+        // shouldn't list itself).
+        let active = trackers.filter { !$0.isPaused && $0.kind != .dailyBrief }
+        for tracker in active.prefix(8) {
+            let value = tracker.latestResult.flatMap { TrackerHistory.sampleDisplay(from: $0) }
+                ?? tracker.latestResult?.newsBrief?.stories.first?.title
+                ?? (tracker.lastRunAt == nil ? "pending" : "—")
+            rows.append(WidgetComparisonRow(label: tracker.title, cells: [WidgetComparisonCell(text: value, tone: nil)]))
+        }
+        for line in market {
+            rows.append(WidgetComparisonRow(label: line.label, cells: [WidgetComparisonCell(text: line.value, tone: nil)]))
+        }
+        if rows.isEmpty {
+            rows.append(WidgetComparisonRow(label: "Nothing tracked yet", cells: [WidgetComparisonCell(text: "—", tone: nil)]))
+        }
+        let count = active.count
+        let subtitle = count == 0 ? "Market snapshot" : "\(count) tracker\(count == 1 ? "" : "s") · markets"
+        return MessageWidget(
+            kind: .comparison,
+            title: "Your brief",
+            freshness: .fresh,
+            time: "just now",
+            followUp: "Track something else?",
+            comparison: WidgetComparison(subtitle: subtitle, columns: ["Now"], rows: rows)
         )
     }
 }

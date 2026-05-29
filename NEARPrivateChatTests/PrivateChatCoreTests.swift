@@ -3856,6 +3856,36 @@ extension PrivateChatCoreTests {
         XCTAssertTrue((created?.prompt ?? "").contains("5 plus 5"))
     }
 
+    func testQuickIntentParsesBriefMe() {
+        XCTAssertEqual(QuickIntentParser.parse("brief me"), .briefMe)
+        XCTAssertEqual(QuickIntentParser.parse("catch me up"), .briefMe)
+        // With a recurrence word it schedules a recurring brief instead.
+        guard case let .createTracker(spec) = QuickIntentParser.parse("brief me every morning") else {
+            return XCTFail("Expected a scheduled daily brief.")
+        }
+        XCTAssertEqual(spec.kind, .dailyBrief)
+        XCTAssertEqual(spec.schedule, .daily(hour: 8, minute: 0))
+    }
+
+    func testBriefDigestComposesTrackersAndMarket() {
+        let rolex = Briefing(title: "Rolex GMT Master II", prompt: "p", schedule: .daily(hour: 8, minute: 0),
+                             latestResult: MessageWidget(kind: .metric, metric: WidgetMetric(value: "$14,800")),
+                             kind: .customPrompt)
+        let paused = Briefing(title: "Old watch", prompt: "p", schedule: .daily(hour: 9, minute: 0),
+                              isPaused: true, kind: .customPrompt)
+        let theBrief = Briefing(title: "Daily brief", prompt: "", schedule: .daily(hour: 8, minute: 0), kind: .dailyBrief)
+        let widget = BriefDigest.compose(trackers: [rolex, paused, theBrief], market: [("ETH", "$2,019")])
+
+        XCTAssertEqual(widget.kind, .comparison)
+        let labels = widget.comparison?.rows.map(\.label) ?? []
+        XCTAssertTrue(labels.contains("Rolex GMT Master II"))
+        XCTAssertTrue(labels.contains("ETH"))
+        XCTAssertFalse(labels.contains("Old watch"))   // paused excluded
+        XCTAssertFalse(labels.contains("Daily brief"))  // the brief itself excluded
+        let rolexRow = widget.comparison?.rows.first { $0.label == "Rolex GMT Master II" }
+        XCTAssertEqual(rolexRow?.cells.first?.text, "$14,800")
+    }
+
     @MainActor
     func testTrackThatWithoutPriorCreatesNothing() {
         let chatStore = ChatStore(api: PrivateChatAPI(configuration: .production))
