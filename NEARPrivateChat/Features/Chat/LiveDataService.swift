@@ -674,7 +674,13 @@ enum QuickIntentParser {
         let financeCue = assets.contains { $0.hasPrefix("crypto:") }
             || lower.contains("$")
             || contains(lower, ["watchlist", "watch list", "portfolio", "price", "prices", "stock", "stocks", "shares", "ticker", "crypto", "market", "markets"])
-        return financeCue ? assets.joined(separator: "|") : nil
+        // A media/entertainment "watchlist" ("movie watchlist with Netflix and
+        // Disney") names two tickers by coincidence. Exclude it so an evening's
+        // viewing plan isn't turned into a finance card.
+        let mediaContext = contains(lower, ["movie", "movies", "film", "films", "tv ", "show", "shows", "series",
+                                            "book", "books", "reading", "playlist", "anime", "documentary",
+                                            "binge", "to watch", "watch tonight"])
+        return (financeCue && !mediaContext) ? assets.joined(separator: "|") : nil
     }
 
     /// Detects a chart/history follow-up with a timeframe and maps it to the
@@ -898,7 +904,13 @@ enum QuickIntentParser {
         // that opens with when/if, OR a strongly-conditional connector.
         let conditional = text.hasPrefix("when ") || text.hasPrefix("if ")
             || contains(text, [" whenever ", " as soon as "])
-        guard alertVerb || conditional else { return nil }
+        // A conditional that's really a question ("if AAPL drops below 300,
+        // should I buy?") wants advice, not a silent alert. An explicit alert
+        // verb still wins — "notify me when…" is an alert even with a "?".
+        let isQuestion = text.hasSuffix("?")
+            || contains(text, ["should i", "should we", "is it worth", "worth buying",
+                                "good idea", "what do you think", "do you think", "would you"])
+        guard alertVerb || (conditional && !isQuestion) else { return nil }
         // The comparator + number is what makes this an alert (not prose), so it
         // gates both the crypto and stock paths.
         guard let (comparator, threshold) = parsePriceCondition(text) else { return nil }
@@ -943,6 +955,14 @@ enum QuickIntentParser {
                 return (up, stock.names.first?.capitalized ?? up)
             }
         }
+        // A bare company name next to a non-asset noun ("Disney tickets",
+        // "Netflix subscription", "Apple store") is about the product, not the
+        // equity. The explicit-ticker path above already returned; here we only
+        // have a fuzzy name match, so a product/service noun disqualifies it.
+        let nonAssetContext = contains(text, ["ticket", "tickets", "movie", "movies", "show", "concert",
+                                              "flight", "hotel", "seat", "seats", "merch", "subscription",
+                                              "store", "shop", "park", "ride", "menu", "delivery"])
+        guard !nonAssetContext else { return nil }
         for stock in knownStocks {
             for name in stock.names where wordPresent(name, in: text) {
                 return (stock.symbol, name.capitalized)
