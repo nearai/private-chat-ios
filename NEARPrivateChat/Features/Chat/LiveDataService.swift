@@ -136,13 +136,12 @@ enum QuickIntentParser {
             return .searchHistory(query: query)
         }
 
-        // 0a3) Daily Brief — compose everything tracked + a market snapshot. With
-        // a recurrence word it schedules a recurring morning brief; otherwise it's
-        // on-demand. Checked before the generic tracker path.
-        if contains(text, ["brief me", "morning brief", "my brief", "daily brief", "catch me up",
-                            "what's my brief", "whats my brief", "give me my brief", "my morning brief",
-                            "what's my morning brief", "whats my morning brief", "what should i know today"]) {
-            if contains(text, ["every ", "each ", "weekly", "weekday", " daily", "nightly"]) {
+        // 0a3) Daily Brief — compose everything tracked + a market snapshot. Only
+        // a BARE brief request triggers it (exact phrase after stripping schedule/
+        // filler), so "set up a daily briefing about X" stays a normal briefing
+        // tracker and "brief me on the AI market" goes to the model.
+        if let recurring = parseBrief(text) {
+            if recurring {
                 let schedule = extractSchedule(from: text)
                 return .createTracker(TrackerSpec(
                     title: "Daily brief", kind: .dailyBrief, subject: nil, schedule: schedule,
@@ -536,6 +535,33 @@ enum QuickIntentParser {
     /// a follow-up that should track whatever the previous answer was about. The
     /// pronoun must have NO subject of its own ("track that bitcoin" is a normal
     /// tracker, not this).
+    /// Recognizes a BARE Daily Brief request ("brief me", "catch me up", "brief
+    /// me every morning"), returning whether it's recurring. Strips schedule and
+    /// filler, then matches an exact phrase set — so "daily briefing about X" or
+    /// "brief me on the market" (which carry a topic) are NOT the digest.
+    static func parseBrief(_ text: String) -> Bool? {
+        var trimmed = text.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!"))
+        for prefix in ["please ", "can you ", "could you ", "hey ", "ok ", "okay "] where trimmed.hasPrefix(prefix) {
+            trimmed = String(trimmed.dropFirst(prefix.count)); break
+        }
+        let recurringWords = ["every weekday", "every morning", "every day", "each morning", "each day",
+                              "every week", "weekly", "nightly", "daily", "every ", "each "]
+        let recurring = recurringWords.contains { trimmed.contains($0) }
+        var core = trimmed
+        for word in recurringWords + ["for me", "right now", "now", "today", "please"] {
+            core = core.replacingOccurrences(of: word, with: " ", options: .caseInsensitive)
+        }
+        core = core.replacingOccurrences(of: #"\b(at\s+)?\d{1,2}(:\d{2})?\s*(am|pm)\b"#, with: " ", options: [.regularExpression, .caseInsensitive])
+        core = core.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+        let briefs: Set<String> = [
+            "brief me", "brief", "morning brief", "my brief", "my morning brief", "give me my brief",
+            "what's my brief", "whats my brief", "what is my brief", "catch me up",
+            "what should i know", "what should i know today"
+        ]
+        return briefs.contains(core) ? recurring : nil
+    }
+
     static func parseTrackLast(_ text: String) -> Bool {
         guard let tail = watchCommandTail(text) else { return false }
         var rest = tail.trimmingCharacters(in: .whitespaces)
