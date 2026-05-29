@@ -3160,6 +3160,14 @@ extension PrivateChatCoreTests {
         XCTAssertNil(QuickIntentParser.parse("what's the weather"))
     }
 
+    func testQuickIntentParsesWorldTime() {
+        XCTAssertEqual(QuickIntentParser.parse("what time is it in Tokyo"), .worldTime(query: "tokyo"))
+        XCTAssertEqual(QuickIntentParser.parse("London time"), .worldTime(query: "london"))
+        // "time" with no place is not a world-time query.
+        XCTAssertNil(QuickIntentParser.parse("what time do you close"))
+        XCTAssertNil(QuickIntentParser.parse("time to go home"))
+    }
+
     func testQuickIntentParsesCurrencyConversion() {
         XCTAssertEqual(QuickIntentParser.parse("convert 100 usd to eur"), .fx(amount: 100, from: "USD", to: "EUR"))
         XCTAssertEqual(QuickIntentParser.parse("how much is 50 gbp in usd"), .fx(amount: 50, from: "GBP", to: "USD"))

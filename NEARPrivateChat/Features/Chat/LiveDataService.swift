@@ -31,6 +31,7 @@ enum QuickIntent: Equatable {
     case nearAccount(account: String?)
     case news
     case weather(query: String)
+    case worldTime(query: String)
     case fx(amount: Double, from: String, to: String)
     case createTracker(TrackerSpec)
 }
@@ -69,6 +70,13 @@ enum QuickIntentParser {
         if contains(text, ["weather", "forecast", "temperature"]),
            let place = extractLocation(from: text) {
             return .weather(query: place)
+        }
+
+        // 2c) world time — "what time is it in tokyo", "london time". The
+        // place gate keeps "time to go" / "what time do you close" out.
+        if contains(text, ["time", "clock"]),
+           let place = extractLocation(from: text, keywords: ["time", "clock"]) {
+            return .worldTime(query: place)
         }
 
         // 3) NEAR account — named phrases, or a .near token plus a status word.
@@ -202,13 +210,13 @@ enum QuickIntentParser {
 
     /// Pulls a place out of a weather prompt: "weather in tokyo" → "tokyo",
     /// "new york forecast" → "new york". Returns nil when only filler remains.
-    static func extractLocation(from text: String) -> String? {
+    static func extractLocation(from text: String, keywords: [String] = ["weather", "forecast", "temperature"]) -> String? {
         for separator in [" in ", " at ", " for "] {
             if let range = text.range(of: separator) {
                 return cleanLocation(String(text[range.upperBound...]))
             }
         }
-        for keyword in ["weather", "forecast", "temperature"] {
+        for keyword in keywords {
             if let range = text.range(of: keyword), range.lowerBound > text.startIndex {
                 return cleanLocation(String(text[..<range.lowerBound]))
             }
@@ -221,9 +229,10 @@ enum QuickIntentParser {
         let fillers = [
             "what's the", "whats the", "what is the", "how's the", "hows the",
             "how is the", "show me the", "tell me the", "give me the",
+            "what", "whats", "when", "whens", "is it", "do you", "does it",
             "current", "today's", "todays", "today", "tonight", "tomorrow",
             "right now", "now", "this week", "like", "weather", "forecast",
-            "temperature", "the", "in", "at", "for"
+            "temperature", "time", "clock", "the", "in", "at", "for"
         ]
         for filler in fillers {
             location = location.replacingOccurrences(
@@ -553,6 +562,57 @@ enum LiveDataService {
         }
     }
 
+    /// Current local time for a named place (open-meteo geocoding gives the
+    /// IANA timezone; the time itself is computed on-device) → metric widget.
+    static func worldTimeWidget(query: String) async -> MessageWidget? {
+        let place = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !place.isEmpty,
+              let encoded = place.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let geoURL = URL(string: "https://geocoding-api.open-meteo.com/v1/search?name=\(encoded)&count=1&language=en&format=json") else {
+            return nil
+        }
+        do {
+            let geo = try JSONDecoder().decode(GeocodingResponse.self, from: try await fetchData(from: geoURL))
+            guard let match = geo.results?.first,
+                  let timeZoneID = match.timezone,
+                  let timeZone = TimeZone(identifier: timeZoneID) else {
+                return nil
+            }
+            let now = Date()
+            let timeFormatter = DateFormatter()
+            timeFormatter.timeZone = timeZone
+            timeFormatter.dateFormat = "h:mm a"
+            let dayFormatter = DateFormatter()
+            dayFormatter.timeZone = timeZone
+            dayFormatter.dateFormat = "EEEE"
+
+            let offsetHours = Double(timeZone.secondsFromGMT(for: now)) / 3600
+            let offsetString = String(format: "GMT%+g", offsetHours)
+            let region = [match.admin1, match.country].compactMap { $0 }.first
+
+            return MessageWidget(
+                kind: .metric,
+                title: match.name ?? place.capitalized,
+                freshness: .fresh,
+                time: shortCurrentTimeString(),
+                followUp: "Schedule something there?",
+                note: nil,
+                chart: nil,
+                metric: WidgetMetric(
+                    label: region ?? "Local time",
+                    value: timeFormatter.string(from: now),
+                    delta: nil,
+                    trend: .flat,
+                    caption: "\(dayFormatter.string(from: now)) · \(offsetString)"
+                ),
+                comparison: nil,
+                newsBrief: nil
+            )
+        } catch {
+            return nil
+        }
+    }
+
     /// Currency conversion via frankfurter.app (ECB rates, auth-free) → metric.
     static func fxWidget(amount: Double, from: String, to: String) async -> MessageWidget? {
         let amountString = amount.truncatingRemainder(dividingBy: 1) == 0
@@ -622,6 +682,7 @@ private extension LiveDataService {
         let longitude: Double
         let country: String?
         let admin1: String?
+        let timezone: String?
     }
 
     struct WeatherForecastResponse: Decodable {

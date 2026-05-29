@@ -3742,6 +3742,8 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.newsBriefWidget()
         case let .weather(query):
             return await LiveDataService.weatherWidget(query: query)
+        case let .worldTime(query):
+            return await LiveDataService.worldTimeWidget(query: query)
         case let .fx(amount, from, to):
             return await LiveDataService.fxWidget(amount: amount, from: from, to: to)
         case .createTracker:
