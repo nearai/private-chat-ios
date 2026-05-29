@@ -77,6 +77,35 @@ struct BriefingCondition: Codable, Hashable {
     var summary: String { "\(symbol) \(comparator.phrase) \(thresholdLabel)" }
 }
 
+/// Renders the active trackers into a chat reply for "what are you tracking?".
+/// Pure + deterministic so it's unit-testable without the store.
+enum TrackerListFormatter {
+    static func summary(for briefings: [Briefing], now: Date = Date()) -> String {
+        guard !briefings.isEmpty else {
+            return "You don’t have any trackers yet. Try “notify me when ETH drops below $2,000” or “every morning, give me a news briefing.”"
+        }
+        // Active first, then by creation order.
+        let sorted = briefings.sorted { a, b in
+            a.isPaused == b.isPaused ? a.createdAt < b.createdAt : !a.isPaused
+        }
+        let relative = RelativeDateTimeFormatter()
+        relative.unitsStyle = .abbreviated
+        let lines = sorted.prefix(20).map { briefing -> String in
+            var parts = ["**\(briefing.title)**"]
+            if let condition = briefing.condition {
+                parts.append("alerts when \(condition.summary)")
+            }
+            parts.append(briefing.schedule.scheduleLabel)
+            if briefing.isPaused { parts.append("paused") }
+            if let last = briefing.lastRunAt {
+                parts.append("last ran \(relative.localizedString(for: last, relativeTo: now))")
+            }
+            return "• " + parts.joined(separator: " · ")
+        }.joined(separator: "\n")
+        return "Here’s what I’m tracking for you (\(briefings.count)):\n\n\(lines)"
+    }
+}
+
 struct Briefing: Codable, Hashable, Identifiable {
     var id: UUID
     var title: String

@@ -34,6 +34,7 @@ struct AppEnvironment {
             briefingStore.add(briefing)
             Task { await briefingStore.run(briefing) }
         }
+        chatStore.trackersProvider = { [weak briefingStore] in briefingStore?.briefings ?? [] }
         return AppEnvironment(
             api: api,
             sessionStore: sessionStore,

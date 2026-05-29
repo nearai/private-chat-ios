@@ -3418,6 +3418,34 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(store.removeInferred(), 0) // nothing inferred left
     }
 
+    func testQuickIntentParsesListTrackers() {
+        XCTAssertEqual(QuickIntentParser.parse("what are you tracking"), .listTrackers)
+        XCTAssertEqual(QuickIntentParser.parse("show my alerts"), .listTrackers)
+        XCTAssertEqual(QuickIntentParser.parse("list my trackers"), .listTrackers)
+    }
+
+    func testTrackerListFormatter() {
+        XCTAssertTrue(TrackerListFormatter.summary(for: []).contains("any trackers yet"))
+
+        let alert = Briefing(title: "ETH alert", prompt: "", schedule: .everyNHours(3),
+                             kind: .cryptoPrice, accountID: "ethereum",
+                             condition: BriefingCondition(coinID: "ethereum", symbol: "ETH",
+                                                          comparator: .below, threshold: 2_000))
+        let news = Briefing(title: "Daily news", prompt: "p", schedule: .daily(hour: 8, minute: 0), kind: .dailyNews)
+        let paused = Briefing(title: "Old watch", prompt: "p", schedule: .daily(hour: 9, minute: 0),
+                              isPaused: true, kind: .customPrompt)
+        let summary = TrackerListFormatter.summary(for: [alert, news, paused])
+        XCTAssertTrue(summary.contains("(3)"))
+        XCTAssertTrue(summary.contains("ETH alert"))
+        XCTAssertTrue(summary.contains("alerts when"))
+        XCTAssertTrue(summary.contains("Daily news"))
+        XCTAssertTrue(summary.contains("paused"))
+        // Active trackers are listed before paused ones.
+        let ethIndex = try? XCTUnwrap(summary.range(of: "ETH alert")).lowerBound
+        let pausedIndex = try? XCTUnwrap(summary.range(of: "Old watch")).lowerBound
+        if let ethIndex, let pausedIndex { XCTAssertTrue(ethIndex < pausedIndex) }
+    }
+
     func testQuickIntentParsesActivityLog() {
         XCTAssertEqual(QuickIntentParser.parse("what have you done"), .activityLog)
         XCTAssertEqual(QuickIntentParser.parse("show your activity"), .activityLog)

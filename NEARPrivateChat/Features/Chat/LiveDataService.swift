@@ -41,6 +41,7 @@ enum QuickIntent: Equatable {
     case forgetAutoLearned
     case setMemoryCapture(enabled: Bool)
     case activityLog
+    case listTrackers
     case createTracker(TrackerSpec)
 }
 
@@ -68,6 +69,13 @@ enum QuickIntentParser {
         }
         if contains(text, ["what have you done", "what did you do", "show your activity", "activity log", "what have you been up to", "show what you've done", "your recent activity"]) {
             return .activityLog
+        }
+        if contains(text, ["what are you tracking", "what are you watching", "what are you monitoring",
+                            "show my trackers", "list my trackers", "show my alerts", "list my alerts",
+                            "what alerts do i have", "what are my trackers", "my active trackers",
+                            "show my briefings", "list my briefings", "what are you keeping an eye on",
+                            "what's on my today", "whats on my today"]) {
+            return .listTrackers
         }
         // Passive-memory control — checked before the generic forget/remember so
         // "stop remembering things automatically" isn't read as a fact to store.
@@ -215,7 +223,7 @@ enum QuickIntentParser {
         switch intent {
         case .price, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
-        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .createTracker:
+        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .createTracker:
             return false
         }
     }

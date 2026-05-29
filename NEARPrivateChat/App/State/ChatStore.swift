@@ -158,6 +158,10 @@ final class ChatStore: ObservableObject {
     /// Wired by the app to create a scheduled briefing from a "create a tracker…"
     /// prompt (the BriefingStore lives outside ChatStore).
     var onCreateTracker: ((Briefing) -> Void)?
+    /// Read handle to the user's trackers, for "what are you tracking?". Wired in
+    /// AppEnvironment; nil-safe so previews/tests without a BriefingStore degrade
+    /// to an empty list.
+    var trackersProvider: (() -> [Briefing])?
     /// On-device personal memory; injected into the model's system prompt so
     /// answers are personalized. Account-scoped, never leaves the device.
     let memoryStore = MemoryStore()
@@ -3876,6 +3880,8 @@ final class ChatStore: ObservableObject {
                 let lines = entries.prefix(20).map { "• \($0.summary) — \(formatter.localizedString(for: $0.date, relativeTo: Date()))" }.joined(separator: "\n")
                 _ = appendAssistant(text: "Here’s what I’ve done recently (kept on your device):\n\n\(lines)")
             }
+        case .listTrackers:
+            _ = appendAssistant(text: TrackerListFormatter.summary(for: trackersProvider?() ?? []))
         default:
             let id = appendAssistant(text: "", streaming: true)
             currentAssistantMessageID = id
@@ -3978,7 +3984,7 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.unitConvertWidget(value: value, from: from, to: to)
         case let .define(word):
             return await LiveDataService.defineWidget(word: word)
-        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .createTracker:
+        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .createTracker:
             // Handled synchronously in handleQuickIntent — never fetched here.
             return nil
         }
