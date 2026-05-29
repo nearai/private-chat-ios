@@ -169,7 +169,7 @@ enum QuickIntentParser {
         // Checked before the generic tracker path so an alert isn't mistaken for
         // a plain recurring price briefing. Has its own strict gate (alert/when +
         // coin + comparator + number), so ordinary prose can't trip it.
-        if let spec = makeConditionalTracker(from: text) {
+        if let spec = makeConditionalTracker(from: text, original: trimmedRaw) {
             return .createTracker(spec)
         }
 
@@ -890,7 +890,7 @@ enum QuickIntentParser {
     /// Strict gate: must read like an alert (an alert verb or when/if/once) AND
     /// name a known coin AND carry a comparator + number — otherwise nil so
     /// ordinary prompts fall through to the generic tracker path or the model.
-    static func makeConditionalTracker(from text: String) -> TrackerSpec? {
+    static func makeConditionalTracker(from text: String, original: String) -> TrackerSpec? {
         let alertVerb = contains(text, ["notify", "alert", "tell me", "let me know",
                                         "ping me", "warn me", "message me", "remind me"])
         // A bare mid-sentence "if"/"when" is too loose (it would catch "explain
@@ -899,24 +899,56 @@ enum QuickIntentParser {
         let conditional = text.hasPrefix("when ") || text.hasPrefix("if ")
             || contains(text, [" whenever ", " as soon as "])
         guard alertVerb || conditional else { return nil }
-        guard let coin = matchedCoin(in: text) else { return nil }
+        // The comparator + number is what makes this an alert (not prose), so it
+        // gates both the crypto and stock paths.
         guard let (comparator, threshold) = parsePriceCondition(text) else { return nil }
-
-        let condition = BriefingCondition(coinID: coin.id, symbol: coin.symbol,
-                                          comparator: comparator, threshold: threshold)
         // Honor an explicit cadence if the user gave one; otherwise watch on a
         // few-hour cycle so it actually behaves like an alert.
         let schedule = hasExplicitCadence(text) ? extractSchedule(from: text) : .everyNHours(3)
-        return TrackerSpec(
-            title: "\(coin.symbol) alert",
-            kind: .cryptoPrice,
-            subject: coin.id,
-            schedule: schedule,
-            council: false,
-            confirmation: "Alerts when \(condition.summary) · checks \(schedule.scheduleLabel)",
-            prompt: nil,
-            condition: condition
-        )
+
+        if let coin = matchedCoin(in: text) {
+            let condition = BriefingCondition(coinID: coin.id, symbol: coin.symbol,
+                                              comparator: comparator, threshold: threshold)
+            return TrackerSpec(
+                title: "\(coin.symbol) alert", kind: .cryptoPrice, subject: coin.id,
+                schedule: schedule, council: false,
+                confirmation: "Alerts when \(condition.summary) · checks \(schedule.scheduleLabel)",
+                prompt: nil, condition: condition
+            )
+        }
+        if let stock = alertStock(in: text, original: original) {
+            // Stock conditions reuse BriefingCondition with a "stock:" coinID
+            // prefix (no schema change, back-compatible with crypto conditions).
+            let condition = BriefingCondition(coinID: "stock:\(stock.symbol)", symbol: stock.symbol,
+                                              comparator: comparator, threshold: threshold)
+            return TrackerSpec(
+                title: "\(stock.symbol) alert", kind: .stockPrice, subject: stock.symbol,
+                schedule: schedule, council: false,
+                confirmation: "Alerts when \(condition.summary) · checks \(schedule.scheduleLabel)",
+                prompt: nil, condition: condition
+            )
+        }
+        return nil
+    }
+
+    /// Resolves a stock for an ALERT (lenient — the alert verb + threshold is the
+    /// cue, so no stock/price word is required): a `$ticker`, a known all-caps
+    /// ticker, or a known company name.
+    private static func alertStock(in text: String, original: String) -> (symbol: String, label: String)? {
+        for raw in original.split(whereSeparator: { !$0.isLetter && $0 != "$" }).map(String.init) {
+            let token = raw.hasPrefix("$") ? String(raw.dropFirst()) : raw
+            guard (1...5).contains(token.count) else { continue }
+            let up = token.uppercased()
+            if (raw.hasPrefix("$") || token == up), let stock = knownStocks.first(where: { $0.symbol == up }) {
+                return (up, stock.names.first?.capitalized ?? up)
+            }
+        }
+        for stock in knownStocks {
+            for name in stock.names where wordPresent(name, in: text) {
+                return (stock.symbol, name.capitalized)
+            }
+        }
+        return nil
     }
 
     /// Extracts a price comparator + threshold from alert text. Recognizes
@@ -1915,6 +1947,11 @@ enum LiveDataService {
             metric: WidgetMetric(label: "\(symbol) · USD", value: valueString, delta: deltaString, trend: trend, caption: "stock price"),
             comparison: nil, newsBrief: nil
         )
+    }
+
+    /// Spot stock price (USD) for threshold-alert evaluation.
+    static func stockUSDPrice(symbol: String) async -> Double? {
+        await fetchYahooChart(symbol: symbol, range: "1d", interval: "1d")?.price
     }
 
     /// Live stock quote + 1-month sparkline (price, day change vs previous close).

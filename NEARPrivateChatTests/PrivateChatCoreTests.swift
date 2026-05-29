@@ -4354,6 +4354,29 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(intents.contains { if case .weather = $0 { return true }; return false })
     }
 
+    func testStockThresholdAlertCreation() throws {
+        guard case let .createTracker(spec) = QuickIntentParser.parse("alert me when AAPL drops below 300") else {
+            return XCTFail("Expected a stock alert tracker.")
+        }
+        XCTAssertEqual(spec.kind, .stockPrice)
+        let condition = try XCTUnwrap(spec.condition)
+        XCTAssertEqual(condition.coinID, "stock:AAPL") // back-compat encoding
+        XCTAssertEqual(condition.symbol, "AAPL")
+        XCTAssertEqual(condition.comparator, .below)
+        XCTAssertEqual(condition.threshold, 300)
+        // Company-name form resolves too.
+        guard case let .createTracker(tesla) = QuickIntentParser.parse("notify me when Tesla goes above 500") else {
+            return XCTFail("Expected a Tesla alert.")
+        }
+        XCTAssertEqual(tesla.condition?.coinID, "stock:TSLA")
+        XCTAssertEqual(tesla.condition?.comparator, .above)
+        // A crypto alert is unchanged (no stock: prefix).
+        guard case let .createTracker(eth) = QuickIntentParser.parse("notify me when ETH drops below 2000") else {
+            return XCTFail("Expected an ETH alert.")
+        }
+        XCTAssertEqual(eth.condition?.coinID, "ethereum")
+    }
+
     func testWatchlistParsingResolvesMixedAssets() {
         guard case let .watchlist(serialized)? = QuickIntentParser.parse("watchlist ETH NEAR AAPL") else {
             return XCTFail("Expected a watchlist intent.")

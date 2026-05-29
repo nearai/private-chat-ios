@@ -3722,7 +3722,13 @@ final class ChatStore: ObservableObject {
     /// its next cycle). A met run is logged for the activity audit; quiet checks
     /// are intentionally not logged so the log stays meaningful.
     private func runConditionalBriefing(_ briefing: Briefing, condition: BriefingCondition) async -> MessageWidget? {
-        guard let price = await LiveDataService.coinUSDPrice(coinID: condition.coinID) else {
+        // A "stock:" coinID prefix marks an equity alert (Yahoo); otherwise crypto.
+        let isStock = condition.coinID.hasPrefix("stock:")
+        let stockSymbol = isStock ? String(condition.coinID.dropFirst("stock:".count)) : ""
+        let price: Double? = isStock
+            ? await LiveDataService.stockUSDPrice(symbol: stockSymbol)
+            : await LiveDataService.coinUSDPrice(coinID: condition.coinID)
+        guard let price else {
             return nil // couldn't fetch — don't fire on missing data
         }
         guard condition.isSatisfied(by: price) else { return nil }
@@ -3730,7 +3736,10 @@ final class ChatStore: ObservableObject {
         activityLog.record("Alert fired — \(condition.summary) (now \(priceLabel))")
         // Surface the live price card; fall back to a plain metric if the chart
         // fetch is unavailable so a met alert always delivers something.
-        if let widget = await LiveDataService.cryptoPriceWidget(coinID: condition.coinID, symbol: condition.symbol) {
+        let widget = isStock
+            ? await LiveDataService.stockQuoteWidget(symbol: stockSymbol, company: condition.symbol)
+            : await LiveDataService.cryptoPriceWidget(coinID: condition.coinID, symbol: condition.symbol)
+        if let widget {
             return widget
         }
         return MessageWidget(
