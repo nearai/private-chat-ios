@@ -3458,6 +3458,51 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(QuickIntentParser.capabilitiesText().contains("ETH"))
     }
 
+    func testQuickIntentParsesSearchHistory() {
+        XCTAssertEqual(QuickIntentParser.parse("search my chats for bitcoin"), .searchHistory(query: "bitcoin"))
+        XCTAssertEqual(QuickIntentParser.parse("what did I say about my budget?"), .searchHistory(query: "my budget"))
+        XCTAssertEqual(QuickIntentParser.parse("find where I talked about the Lisbon trip"),
+                       .searchHistory(query: "the Lisbon trip"))
+        // A plain question is not a history search.
+        XCTAssertNotEqual(QuickIntentParser.parse("tell me about bitcoin"), .searchHistory(query: "bitcoin"))
+    }
+
+    func testConversationHistorySearchRanksSnippetsAndCitations() {
+        func msg(_ id: String, _ role: ChatRole, _ text: String) -> ChatMessage {
+            ChatMessage(id: id, role: role, text: text, model: nil, createdAt: Date(),
+                        status: "completed", responseID: nil, isStreaming: false)
+        }
+        let cache: [String: [ChatMessage]] = [
+            "c1": [msg("m1", .user, "I'm mapping out my bitcoin strategy for next year"),
+                   msg("m2", .assistant, "Bitcoin tends to lead, then ethereum follows.")],
+            "c2": [msg("m3", .user, "remind me to water the plants tonight")]
+        ]
+        let conversations = [
+            ConversationSummary(id: "c1", createdAt: nil, metadata: ConversationMetadata(title: "Crypto plan")),
+            ConversationSummary(id: "c2", createdAt: nil, metadata: ConversationMetadata(title: "Errands"))
+        ]
+        let hits = ConversationHistorySearch.search(query: "bitcoin", cache: cache, conversations: conversations)
+        XCTAssertEqual(hits.count, 2)
+        XCTAssertTrue(hits.allSatisfy { $0.conversationID == "c1" })
+        XCTAssertTrue(hits.contains { $0.conversationTitle == "Crypto plan" })
+        XCTAssertTrue(hits[0].snippet.lowercased().contains("bitcoin"))
+
+        // No match → empty.
+        XCTAssertTrue(ConversationHistorySearch.search(query: "kangaroo", cache: cache, conversations: conversations).isEmpty)
+
+        // Title boost: a body match in a title-matching conversation outranks an
+        // equal body-only match elsewhere.
+        let boostCache: [String: [ChatMessage]] = [
+            "a": [msg("a1", .user, "one bitcoin mention here")],
+            "b": [msg("b1", .user, "another bitcoin mention here")]
+        ]
+        let boostConvos = [
+            ConversationSummary(id: "a", createdAt: nil, metadata: ConversationMetadata(title: "Bitcoin journal")),
+            ConversationSummary(id: "b", createdAt: nil, metadata: ConversationMetadata(title: "Random"))
+        ]
+        XCTAssertEqual(ConversationHistorySearch.search(query: "bitcoin", cache: boostCache, conversations: boostConvos).first?.conversationID, "a")
+    }
+
     func testQuickIntentParsesActivityLog() {
         XCTAssertEqual(QuickIntentParser.parse("what have you done"), .activityLog)
         XCTAssertEqual(QuickIntentParser.parse("show your activity"), .activityLog)

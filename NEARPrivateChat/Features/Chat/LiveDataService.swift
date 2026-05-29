@@ -43,6 +43,7 @@ enum QuickIntent: Equatable {
     case activityLog
     case listTrackers
     case capabilities
+    case searchHistory(query: String)
     case createTracker(TrackerSpec)
 }
 
@@ -112,6 +113,9 @@ enum QuickIntentParser {
         }
         if let fact = parseRemember(text, original: trimmedRaw) {
             return .remember(text: fact)
+        }
+        if let query = parseSearchHistory(text, original: trimmedRaw) {
+            return .searchHistory(query: query)
         }
 
         // 0b) conditional price alert — "notify me when ETH drops below $2,000".
@@ -266,7 +270,7 @@ enum QuickIntentParser {
         switch intent {
         case .price, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
-        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .createTracker:
+        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createTracker:
             return false
         }
     }
@@ -578,6 +582,25 @@ enum QuickIntentParser {
             let dropCount = trigger == "remember my " ? "remember ".count : trigger.count
             let fact = String(original.dropFirst(dropCount)).trimmingCharacters(in: .whitespacesAndNewlines)
             return fact.count >= 3 ? fact : nil
+        }
+        return nil
+    }
+
+    /// "search my chats for X" / "what did I say about X" → the search query X.
+    /// Trigger-prefixed so ordinary questions don't become history searches.
+    static func parseSearchHistory(_ text: String, original: String) -> String? {
+        let triggers = [
+            "search my chats for ", "search my chat history for ", "search my history for ",
+            "search history for ", "search chats for ", "search my conversations for ",
+            "find in my chats ", "find in my history ", "find where i talked about ",
+            "find where i mentioned ", "find when i talked about ", "find my chat about ",
+            "what did i say about ", "what did we say about ", "where did i talk about ",
+            "where did we discuss ", "find that chat about "
+        ]
+        for trigger in triggers where text.hasPrefix(trigger) {
+            let query = String(original.dropFirst(trigger.count))
+                .trimmingCharacters(in: CharacterSet(charactersIn: " ?.!\"'"))
+            return query.count >= 2 ? query : nil
         }
         return nil
     }

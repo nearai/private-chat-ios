@@ -3884,6 +3884,24 @@ final class ChatStore: ObservableObject {
             _ = appendAssistant(text: TrackerListFormatter.summary(for: trackersProvider?() ?? []))
         case .capabilities:
             _ = appendAssistant(text: QuickIntentParser.capabilitiesText())
+        case let .searchHistory(query):
+            let hits = ConversationHistorySearch.search(
+                query: query,
+                cache: Self.loadLocalMessageCache(),
+                conversations: conversations
+            )
+            if hits.isEmpty {
+                _ = appendAssistant(text: "I couldn’t find anything about “\(query)” in your saved chats. I only search conversations cached on this device, so a chat that hasn’t synced here won’t show up.")
+            } else {
+                let relative = RelativeDateTimeFormatter()
+                relative.unitsStyle = .abbreviated
+                let lines = hits.map { hit -> String in
+                    let who = hit.isUser ? "You" : "Assistant"
+                    let when = hit.date.map { " · \(relative.localizedString(for: $0, relativeTo: Date()))" } ?? ""
+                    return "• **\(hit.conversationTitle)** — \(who): \(hit.snippet)\(when)"
+                }.joined(separator: "\n")
+                _ = appendAssistant(text: "Found \(hits.count) match\(hits.count == 1 ? "" : "es") for “\(query)” in your chats:\n\n\(lines)")
+            }
         default:
             let id = appendAssistant(text: "", streaming: true)
             currentAssistantMessageID = id
@@ -3986,7 +4004,7 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.unitConvertWidget(value: value, from: from, to: to)
         case let .define(word):
             return await LiveDataService.defineWidget(word: word)
-        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .createTracker:
+        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createTracker:
             // Handled synchronously in handleQuickIntent — never fetched here.
             return nil
         }

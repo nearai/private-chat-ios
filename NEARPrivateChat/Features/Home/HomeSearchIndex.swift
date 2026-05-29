@@ -235,3 +235,108 @@ enum HomeSearchIndex {
         return String(collapsed.prefix(limit)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
     }
 }
+
+/// One ranked hit from a chat-history search — the "citation" back to where the
+/// user (or the assistant) said something, with a highlighted snippet.
+struct ConversationSearchHit: Identifiable, Hashable {
+    let id: String              // message id (stable per turn)
+    let conversationID: String
+    let conversationTitle: String
+    let isUser: Bool
+    let snippet: String
+    let score: Double
+    let date: Date?
+}
+
+/// On-device full-text search across cached conversation transcripts. Pure +
+/// deterministic (no network, no backend) so it's fully unit-testable and the
+/// index never leaves the device. Term-frequency ranking with a small boost
+/// when a query term also appears in the conversation title.
+enum ConversationHistorySearch {
+    private static let stopwords: Set<String> = [
+        "the", "a", "an", "of", "to", "in", "on", "is", "it", "and", "or", "for",
+        "my", "me", "i", "you", "what", "did", "do", "does", "about", "that",
+        "this", "with", "was", "are", "we", "our", "your"
+    ]
+
+    /// Lowercased content terms (drops stopwords and 1-char tokens).
+    static func terms(in text: String) -> [String] {
+        text.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.count >= 2 && !stopwords.contains($0) }
+    }
+
+    static func search(
+        query: String,
+        cache: [String: [ChatMessage]],
+        conversations: [ConversationSummary],
+        limit: Int = 8
+    ) -> [ConversationSearchHit] {
+        let queryTerms = terms(in: query)
+        guard !queryTerms.isEmpty else { return [] }
+        let titleByID = Dictionary(conversations.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
+
+        var hits: [ConversationSearchHit] = []
+        // Deterministic conversation order so equal-score ties are stable.
+        for conversationID in cache.keys.sorted() {
+            guard let messages = cache[conversationID] else { continue }
+            let title = titleByID[conversationID] ?? "Untitled chat"
+            let titleTerms = Set(terms(in: title))
+            for message in messages where message.role != .system {
+                let body = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !body.isEmpty else { continue }
+                let lowerBody = body.lowercased()
+                var score = 0.0
+                var firstMatchOffset: Int?
+                var firstMatchLength = 0
+                for term in queryTerms {
+                    var searchStart = lowerBody.startIndex
+                    var count = 0
+                    while let range = lowerBody.range(of: term, range: searchStart..<lowerBody.endIndex) {
+                        count += 1
+                        let offset = lowerBody.distance(from: lowerBody.startIndex, to: range.lowerBound)
+                        if firstMatchOffset == nil || offset < firstMatchOffset! {
+                            firstMatchOffset = offset
+                            firstMatchLength = term.count
+                        }
+                        searchStart = range.upperBound
+                    }
+                    if count > 0 { score += Double(count) }
+                    if titleTerms.contains(term) { score += 2 } // title relevance boost
+                }
+                guard score > 0, let firstMatchOffset else { continue }
+                hits.append(ConversationSearchHit(
+                    id: message.id,
+                    conversationID: conversationID,
+                    conversationTitle: title,
+                    isUser: message.role == .user,
+                    snippet: makeSnippet(from: body, matchOffset: firstMatchOffset, matchLength: firstMatchLength),
+                    score: score,
+                    date: message.createdAt
+                ))
+            }
+        }
+        return Array(
+            hits.sorted {
+                $0.score != $1.score ? $0.score > $1.score : ($0.date ?? .distantPast) > ($1.date ?? .distantPast)
+            }.prefix(limit)
+        )
+    }
+
+    /// A ±window-character window around the first match, collapsed to one line
+    /// with ellipses where it was clipped. Offsets are integer-based and clamped,
+    /// so they're safe even if case-folding shifted lengths.
+    private static func makeSnippet(from text: String, matchOffset: Int, matchLength: Int, window: Int = 60) -> String {
+        let count = text.count
+        let lo = max(0, matchOffset - window)
+        let hi = min(count, matchOffset + matchLength + window)
+        let start = text.index(text.startIndex, offsetBy: lo)
+        let end = text.index(text.startIndex, offsetBy: hi)
+        var snippet = String(text[start..<end])
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespaces)
+        if lo > 0 { snippet = "…" + snippet }
+        if hi < count { snippet += "…" }
+        return snippet
+    }
+}
