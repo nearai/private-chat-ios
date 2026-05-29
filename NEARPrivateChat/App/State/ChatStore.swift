@@ -3795,6 +3795,53 @@ final class ChatStore: ObservableObject {
         }
     }
 
+    /// Runs a compound prompt ("eth price and tokyo weather"): one user turn,
+    /// then a live widget per chained data lookup, fetched in order.
+    private func handleCompoundIntent(_ intents: [QuickIntent], prompt: String) {
+        let model = selectedModel
+        messages.append(ChatMessage(
+            id: "local-user-\(UUID().uuidString)",
+            role: .user, text: prompt, model: model, createdAt: Date(),
+            status: "completed", responseID: nil, isStreaming: false
+        ))
+        let pendingID = "local-assistant-\(UUID().uuidString)"
+        var pending = ChatMessage(
+            id: pendingID, role: .assistant, text: "Working on \(intents.count) lookups…",
+            model: model, createdAt: Date(), status: "searching", responseID: nil, isStreaming: true
+        )
+        messages.append(pending)
+        currentAssistantMessageID = pendingID
+        isStreaming = true
+
+        streamTask = Task { [weak self] in
+            guard let self else { return }
+            var produced = false
+            for intent in intents {
+                if Task.isCancelled { break }
+                let widget = await self.fetchQuickIntentWidget(intent)
+                guard !Task.isCancelled else { break }
+                guard let widget else { continue }
+                produced = true
+                var message = ChatMessage(
+                    id: "local-assistant-\(UUID().uuidString)", role: .assistant, text: "",
+                    model: model, createdAt: Date(), status: "completed", responseID: nil, isStreaming: false
+                )
+                message.widget = widget
+                self.messages.append(message)
+            }
+            guard !Task.isCancelled else { return }
+            self.updateMessage(pendingID) { message in
+                message.isStreaming = false
+                message.status = "completed"
+                message.text = produced ? "" : "I couldn’t fetch those just now — try again in a moment."
+            }
+            if produced { self.messages.removeAll { $0.id == pendingID } }
+            self.currentAssistantMessageID = nil
+            self.isStreaming = false
+            self.streamTask = nil
+        }
+    }
+
     private func fetchQuickIntentWidget(_ intent: QuickIntent) async -> MessageWidget? {
         switch intent {
         case let .price(coinID, symbol):
@@ -3829,6 +3876,13 @@ final class ChatStore: ObservableObject {
         // Prompt-driven live answers: recognized data questions ("eth price",
         // "how is my near account") and "create a tracker…" commands are handled
         // locally with real public-API data — generative chat without sign-in.
+        if attachments.isEmpty, let intents = QuickIntentParser.parseCompound(text) {
+            removePersistedDraft(for: draftPersistenceScopeID)
+            draft = ""
+            routeReadinessIssue = nil
+            handleCompoundIntent(intents, prompt: text)
+            return
+        }
         if attachments.isEmpty, let intent = QuickIntentParser.parse(text) {
             removePersistedDraft(for: draftPersistenceScopeID)
             draft = ""

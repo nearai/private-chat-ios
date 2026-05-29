@@ -3252,6 +3252,19 @@ extension PrivateChatCoreTests {
         XCTAssertNil(QuickIntentParser.parse("tell me a story"))
     }
 
+    func testQuickIntentParsesCompoundQueries() {
+        let intents = try? XCTUnwrap(QuickIntentParser.parseCompound("what's the eth price and the weather in tokyo"))
+        XCTAssertEqual(intents?.count, 2)
+        XCTAssertEqual(intents?.first, .price(coinID: "ethereum", symbol: "ETH"))
+        XCTAssertEqual(intents?.last, .weather(query: "tokyo"))
+        // Three lookups chain too.
+        XCTAssertEqual(QuickIntentParser.parseCompound("eth price, bitcoin price and near price")?.count, 3)
+        // Prose with "and" that isn't two data lookups doesn't compound.
+        XCTAssertNil(QuickIntentParser.parseCompound("explain the pros and cons of sharding"))
+        // A memory write with "and" is not swept into a compound run.
+        XCTAssertNil(QuickIntentParser.parseCompound("remember that I like tea and coffee"))
+    }
+
     func testQuickIntentParsesUnitConversion() {
         XCTAssertEqual(QuickIntentParser.parse("5 miles in km"), .unitConvert(value: 5, from: "miles", to: "km"))
         XCTAssertEqual(QuickIntentParser.parse("convert 100 f to c"), .unitConvert(value: 100, from: "f", to: "c"))

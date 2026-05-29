@@ -133,6 +133,38 @@ enum QuickIntentParser {
         return nil
     }
 
+    /// Splits a compound prompt ("eth price and weather in tokyo") into the
+    /// individual data-lookups it chains. Returns the list only when ≥2 segments
+    /// are genuine data intents — so normal prose with "and" falls through.
+    static func parseCompound(_ raw: String) -> [QuickIntent]? {
+        let lower = raw.lowercased()
+        guard lower.contains(" and ") || lower.contains(", ") || lower.contains(" then ")
+            || lower.contains(" plus ") || lower.contains(" & ") else {
+            return nil
+        }
+        var segments = [lower]
+        for separator in [" and then ", " and also ", ", and ", " and ", " then ", " plus ", " & ", "; ", ", "] {
+            segments = segments.flatMap { $0.components(separatedBy: separator) }
+        }
+        let intents = segments
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .compactMap { parse($0) }
+            .filter { isCompoundable($0) }
+        return intents.count >= 2 ? intents : nil
+    }
+
+    /// Read-only data lookups can be chained; actions (trackers, memory writes)
+    /// cannot, so they never get swept into a compound run.
+    private static func isCompoundable(_ intent: QuickIntent) -> Bool {
+        switch intent {
+        case .price, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
+            return true
+        case .remember, .recallMemory, .forget, .createTracker:
+            return false
+        }
+    }
+
     /// Builds a tracker only when a real subject is present. Returns nil for
     /// generic "remind me …" prompts and account trackers with no id so the
     /// caller can fall through to the model instead of scheduling a dead fetch.
