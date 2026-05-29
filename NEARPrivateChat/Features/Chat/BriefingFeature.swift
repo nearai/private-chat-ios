@@ -106,6 +106,76 @@ enum TrackerListFormatter {
     }
 }
 
+/// One recorded data point for a tracker — the numeric value parsed from a run
+/// plus its original display string. Accumulated across runs to chart a trend.
+struct TrackerSample: Codable, Hashable {
+    var date: Date
+    var value: Double
+    var display: String
+}
+
+/// Turns a tracker's per-run values into a trend chart over time. Pure +
+/// deterministic so it's unit-testable; the on-device "watch chart" magic.
+enum TrackerHistory {
+    static let maxSamples = 90
+
+    /// First numeric value in a display string: "$14,500" → 14500, "$2.3M" →
+    /// 2_300_000, "1,234.50" → 1234.5. nil when there's no number.
+    static func numericValue(from string: String) -> Double? {
+        guard let re = try? NSRegularExpression(pattern: #"([0-9][0-9,]*(?:\.[0-9]+)?)\s*([kmb])?"#, options: [.caseInsensitive]) else { return nil }
+        let range = NSRange(string.startIndex..<string.endIndex, in: string)
+        guard let m = re.firstMatch(in: string, options: [], range: range),
+              let numRange = Range(m.range(at: 1), in: string),
+              var value = Double(string[numRange].replacingOccurrences(of: ",", with: "")) else { return nil }
+        if m.range(at: 2).location != NSNotFound, let sufRange = Range(m.range(at: 2), in: string) {
+            switch string[sufRange].lowercased() {
+            case "k": value *= 1_000
+            case "m": value *= 1_000_000
+            case "b": value *= 1_000_000_000
+            default: break
+            }
+        }
+        return value
+    }
+
+    /// The headline value to record from a run's widget (chart → metric → note).
+    static func sampleDisplay(from widget: MessageWidget) -> String? {
+        if let v = widget.chart?.value, !v.isEmpty { return v }
+        if let v = widget.metric?.value, !v.isEmpty { return v }
+        if let note = widget.note,
+           let re = try? NSRegularExpression(pattern: #"\$\s*[0-9][0-9,]*(?:\.[0-9]+)?\s*[kmb]?"#, options: [.caseInsensitive]),
+           let m = re.firstMatch(in: note, options: [], range: NSRange(note.startIndex..<note.endIndex, in: note)),
+           let r = Range(m.range, in: note) {
+            return String(note[r]).trimmingCharacters(in: .whitespaces)
+        }
+        return nil
+    }
+
+    /// A chart widget over the samples (oldest → newest), or nil with < 2 points.
+    static func chartWidget(title: String, history: [TrackerSample]) -> MessageWidget? {
+        guard history.count >= 2, let first = history.first, let last = history.last else { return nil }
+        let change = last.value - first.value
+        let trend: WidgetTrend = change > 0 ? .up : (change < 0 ? .down : .flat)
+        let deltaPct = first.value != 0 ? change / first.value * 100 : 0
+        let delta = String(format: "%+.1f%% over %d checks", deltaPct, history.count)
+        return MessageWidget(
+            kind: .chart,
+            title: title,
+            freshness: .fresh,
+            time: "just now",
+            chart: WidgetChart(
+                label: title,
+                value: last.display,
+                delta: delta,
+                trend: trend,
+                points: history.map(\.value),
+                caption: "tracked over time",
+                timeframe: "\(history.count) checks"
+            )
+        )
+    }
+}
+
 struct Briefing: Codable, Hashable, Identifiable {
     var id: UUID
     var title: String
@@ -123,9 +193,12 @@ struct Briefing: Codable, Hashable, Identifiable {
     /// When set, the tracker only delivers on runs where the condition is met
     /// (e.g. a price threshold). nil = a plain recurring briefing.
     var condition: BriefingCondition?
+    /// Numeric values recorded across runs (oldest → newest), so a tracker can
+    /// chart its trend over time. Empty for trackers whose runs aren't numeric.
+    var history: [TrackerSample]
 
     enum CodingKeys: String, CodingKey {
-        case id, title, prompt, schedule, isPaused, createdAt, lastRunAt, latestResult, kind, accountID, council, condition
+        case id, title, prompt, schedule, isPaused, createdAt, lastRunAt, latestResult, kind, accountID, council, condition, history
     }
 
     init(
@@ -140,7 +213,8 @@ struct Briefing: Codable, Hashable, Identifiable {
         kind: BriefingKind = .customPrompt,
         accountID: String? = nil,
         council: Bool = false,
-        condition: BriefingCondition? = nil
+        condition: BriefingCondition? = nil,
+        history: [TrackerSample] = []
     ) {
         self.id = id
         self.title = title
@@ -154,6 +228,7 @@ struct Briefing: Codable, Hashable, Identifiable {
         self.accountID = accountID
         self.council = council
         self.condition = condition
+        self.history = history
     }
 
     /// True when this tracker is gated on a condition (a threshold alert).
@@ -183,7 +258,8 @@ extension Briefing {
             kind: (try? c.decode(BriefingKind.self, forKey: .kind)) ?? .customPrompt,
             accountID: try? c.decode(String.self, forKey: .accountID),
             council: (try? c.decode(Bool.self, forKey: .council)) ?? false,
-            condition: try? c.decode(BriefingCondition.self, forKey: .condition)
+            condition: try? c.decode(BriefingCondition.self, forKey: .condition),
+            history: (try? c.decode([TrackerSample].self, forKey: .history)) ?? []
         )
     }
 }
@@ -458,7 +534,25 @@ final class BriefingStore: ObservableObject {
         // On failure (e.g. signed out), leave lastRunAt untouched so the briefing
         // stays due and retries, rather than silently skipping its next run.
         guard let result else { return }
-        briefings[index].latestResult = result
+        // Accumulate a numeric value from this run, then — once there are ≥2
+        // points — surface the trend over time as a chart ("watch chart"). Runs
+        // that yield no number just deliver the result as-is.
+        var delivered = result
+        // Only for open-ended (customPrompt) trackers — live-data kinds already
+        // return purpose-built widgets (e.g. crypto's 24h sparkline) we shouldn't
+        // overwrite with a few run-points.
+        if briefings[index].kind == .customPrompt,
+           let display = TrackerHistory.sampleDisplay(from: result),
+           let value = TrackerHistory.numericValue(from: display) {
+            briefings[index].history.append(TrackerSample(date: Date(), value: value, display: display))
+            if briefings[index].history.count > TrackerHistory.maxSamples {
+                briefings[index].history.removeFirst(briefings[index].history.count - TrackerHistory.maxSamples)
+            }
+            if let chart = TrackerHistory.chartWidget(title: briefings[index].title, history: briefings[index].history) {
+                delivered = chart
+            }
+        }
+        briefings[index].latestResult = delivered
         briefings[index].lastRunAt = Date()
         // A conditional alert is one-shot: it only delivers when its threshold is
         // crossed, so once it fires we pause it rather than re-notifying every

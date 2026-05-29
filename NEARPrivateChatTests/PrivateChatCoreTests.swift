@@ -4152,6 +4152,51 @@ extension PrivateChatCoreTests {
         try? FileManager.default.removeItem(at: tempFile)
     }
 
+    func testTrackerHistoryParsesValuesAndBuildsChart() throws {
+        XCTAssertEqual(TrackerHistory.numericValue(from: "$14,500"), 14_500)
+        XCTAssertEqual(TrackerHistory.numericValue(from: "$2.3M"), 2_300_000)
+        XCTAssertEqual(try XCTUnwrap(TrackerHistory.numericValue(from: "1,234.50")), 1_234.5, accuracy: 0.001)
+        XCTAssertNil(TrackerHistory.numericValue(from: "no number here"))
+
+        // sampleDisplay prefers chart → metric → a $-number in the note.
+        XCTAssertEqual(TrackerHistory.sampleDisplay(from: MessageWidget(kind: .metric, metric: WidgetMetric(value: "$14,500"))), "$14,500")
+        XCTAssertEqual(TrackerHistory.sampleDisplay(from: MessageWidget(kind: .generic, note: "Currently about $14,800 as of today.")), "$14,800")
+
+        // <2 samples → no chart; ≥2 → a chart over the values.
+        let one = [TrackerSample(date: Date(), value: 14_000, display: "$14,000")]
+        XCTAssertNil(TrackerHistory.chartWidget(title: "Rolex", history: one))
+        let two = one + [TrackerSample(date: Date(), value: 14_800, display: "$14,800")]
+        let chart = try XCTUnwrap(TrackerHistory.chartWidget(title: "Rolex", history: two))
+        XCTAssertEqual(chart.kind, .chart)
+        XCTAssertEqual(chart.chart?.points, [14_000, 14_800])
+        XCTAssertEqual(chart.chart?.value, "$14,800")
+        XCTAssertEqual(chart.chart?.trend, .up)
+    }
+
+    @MainActor
+    func testRunAccumulatesNumericHistoryIntoChart() async throws {
+        final class Counter { var n = 0 }
+        let counter = Counter()
+        let tempFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("briefings-\(UUID().uuidString).json")
+        let tracker = Briefing(title: "Rolex GMT", prompt: "find the price", schedule: .everyNHours(3), kind: .customPrompt)
+        let store = BriefingStore(briefings: [tracker], fileURL: tempFile, runner: { _ in
+            counter.n += 1
+            let price = counter.n == 1 ? "$14,000" : "$14,800"
+            return MessageWidget(kind: .metric, title: "Rolex GMT", metric: WidgetMetric(label: "Price", value: price))
+        })
+
+        await store.run(tracker)
+        XCTAssertEqual(store.briefings[0].history.count, 1) // first point, no chart yet
+        await store.run(tracker)
+        XCTAssertEqual(store.briefings[0].history.count, 2)
+        XCTAssertEqual(store.briefings[0].latestResult?.kind, .chart) // now a trend chart
+        XCTAssertEqual(store.briefings[0].latestResult?.chart?.points, [14_000, 14_800])
+        XCTAssertEqual(store.briefings[0].latestResult?.chart?.trend, .up)
+
+        try? FileManager.default.removeItem(at: tempFile)
+    }
+
     @MainActor
     func testConditionalBriefingPausesAfterFiringButPlainKeepsRunning() async throws {
         let tempFile = FileManager.default.temporaryDirectory
