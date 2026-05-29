@@ -1954,7 +1954,7 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertTrue(firstGuide.text.contains("Audit the onboarding build path."))
 
         store.updateSelectedProjectInstructions("Keep these custom instructions.")
-        store.saveMessageAsProjectNote(makeMessage(id: "setup-note-1", role: .assistant, text: "Remember to keep the first-run notes visible."))
+        store.saveMessageAsProjectNote(makeMessage(id: "setup-note-1", role: .assistant, text: "Remember to keep the first-run notes visible.", createdAt: Date()))
 
         profile.goalText = "Plan the first simulator-safe patch."
         store.applySetupProfile(profile)
