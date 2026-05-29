@@ -820,11 +820,14 @@ enum QuickIntentParser {
     }
 
     static func extractAccount(from text: String) -> String? {
-        // A token ending in .near / .testnet, e.g. "abhishek.near".
+        // A token ending in .near, e.g. "abhishek.near". Only mainnet (.near):
+        // the account widget's RPC + FastNEAR are mainnet-only, so capturing a
+        // .testnet id would surface a misleading "not found on mainnet" — let
+        // those fall through to the model instead.
         let words = text.replacingOccurrences(of: "?", with: " ").split(separator: " ")
         for word in words {
             let w = word.trimmingCharacters(in: CharacterSet(charactersIn: ".,"))
-            if w.hasSuffix(".near") || w.hasSuffix(".testnet"), w.count > 5 {
+            if w.hasSuffix(".near"), w.count > 5 {
                 return w
             }
         }
@@ -875,6 +878,22 @@ enum QuickIntentParser {
         if location.range(of: #"\b(minutes?|hours?|seconds?|mins?|secs?)\b"#, options: .regularExpression) != nil {
             return nil
         }
+        // Reject abstract non-place nouns so figurative phrasing ("what's the
+        // weather like in a relationship", "in general", "in control") falls
+        // through to the model instead of geocoding a non-place. Multi-word
+        // real places (e.g. "new york") are unaffected — only exact matches of
+        // these abstractions are dropped.
+        let placeless = location.replacingOccurrences(
+            of: #"^(a|an|the|my|your|our|this|that)\s+"#, with: "", options: .regularExpression
+        )
+        let nonPlaceNouns: Set<String> = [
+            "relationship", "relationships", "love", "charge", "control",
+            "general", "trouble", "debt", "life", "doubt", "secret", "denial",
+            "theory", "practice", "question", "jeopardy", "vain", "retrospect",
+            "hindsight", "moment", "mood", "zone", "dark", "fact", "particular",
+            "common", "private", "public", "person", "danger", "limbo", "style"
+        ]
+        if nonPlaceNouns.contains(placeless) { return nil }
         return location
     }
 
@@ -1260,8 +1279,13 @@ enum QuickIntentParser {
             }
             rest = rest.replacingOccurrences(of: "[?.,!\"']", with: "", options: .regularExpression)
                 .trimmingCharacters(in: .whitespaces)
-            // The dictionary API is per-word; take the first token.
-            guard let word = rest.split(separator: " ").first.map(String.init),
+            // The dictionary API is per-word. Only a SINGLE-word target is a
+            // definition lookup — "define success for me as a founder" and
+            // "meaning of machine learning" carry extra words the card would
+            // silently discard, so they fall through to the model instead.
+            let tokens = rest.split(separator: " ")
+            guard tokens.count == 1,
+                  let word = tokens.first.map(String.init),
                   word.count >= 2, word.allSatisfy({ $0.isLetter || $0 == "-" }) else { return nil }
             return word
         }

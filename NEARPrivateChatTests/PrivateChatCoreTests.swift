@@ -4148,6 +4148,93 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(prompt.contains("global politics"), "Prompt should keep the topic: \(prompt)")
     }
 
+    // MARK: - Adversarial review battery (post-audit regression guards)
+    // Each group encodes a bug class the audit surfaced: input-discard,
+    // false-positive capture, and the privacy-route gate. They exist so the
+    // "this shit doesn't happen again" promise is enforced by CI, not vigilance.
+
+    func testWeatherRejectsFigurativeNonPlaces() {
+        // INPUT-DISCARD/false-positive: " in <abstract noun>" must not geocode.
+        XCTAssertNil(QuickIntentParser.parse("what's the weather like in a relationship"))
+        XCTAssertNil(QuickIntentParser.parse("is the weather nice in general"))
+        XCTAssertNil(QuickIntentParser.parse("how's the weather in control"))
+        // Real places — including the "like in <place>" form — still resolve.
+        XCTAssertEqual(QuickIntentParser.parse("what's the weather like in Tokyo"), .weather(query: "tokyo"))
+        XCTAssertEqual(QuickIntentParser.parse("weather in new york"), .weather(query: "new york"))
+    }
+
+    func testDefineOnlyFiresForSingleWordTargets() {
+        // INPUT-DISCARD: extra words after the term must not be silently dropped.
+        XCTAssertNil(QuickIntentParser.parse("define success for me as a founder"))
+        XCTAssertNil(QuickIntentParser.parse("meaning of machine learning"))
+        XCTAssertNil(QuickIntentParser.parse("definition of the modern economy"))
+        // Single-word lookups still work.
+        XCTAssertEqual(QuickIntentParser.parse("define serendipity"), .define(word: "serendipity"))
+        XCTAssertEqual(QuickIntentParser.parse("meaning of zeitgeist"), .define(word: "zeitgeist"))
+    }
+
+    func testAccountIntentIsMainnetOnly() {
+        // .testnet ids can't be served by the mainnet-only widget → don't capture
+        // them (avoids a misleading "not found on mainnet"); let the model field it.
+        XCTAssertNil(QuickIntentParser.extractAccount(from: "how is alice.testnet doing"))
+        XCTAssertNil(QuickIntentParser.parse("how is alice.testnet doing"))
+        XCTAssertEqual(QuickIntentParser.extractAccount(from: "how is abhishek.near doing"), "abhishek.near")
+        XCTAssertEqual(QuickIntentParser.parse("how is abhishek.near doing"), .nearAccount(account: "abhishek.near"))
+    }
+
+    func testPriceDoesNotHijackExplanatoryOrOpinionPrompts() {
+        XCTAssertNil(QuickIntentParser.parse("explain how ethereum works"))
+        XCTAssertNil(QuickIntentParser.parse("is solana a good investment"))
+        XCTAssertNil(QuickIntentParser.parse("why does bitcoin matter"))
+    }
+
+    func testFXDoesNotHijackNonCurrencyPrompts() {
+        XCTAssertNil(QuickIntentParser.parse("how much do you love me"))
+        XCTAssertNil(QuickIntentParser.parse("translate this to spanish"))
+        // Control: a real conversion still fires.
+        XCTAssertEqual(QuickIntentParser.parse("convert 100 usd to eur"), .fx(amount: 100, from: "USD", to: "EUR"))
+    }
+
+    func testNewsIdiomsDoNotTriggerFeed() {
+        // "news" appears, but these carry a non-news subject → not the feed.
+        XCTAssertNil(QuickIntentParser.parse("that's old news"))
+        XCTAssertNil(QuickIntentParser.parse("good news everyone"))
+        // Control: a bare ask still fires.
+        XCTAssertEqual(QuickIntentParser.parse("news"), .news)
+    }
+
+    func testMathDoesNotHijackProsePercentagesOrCounts() {
+        XCTAssertNil(QuickIntentParser.parse("i'm 50% sure about this"))
+        XCTAssertNil(QuickIntentParser.parse("5 apples please"))
+    }
+
+    func testLocalDocExcerptsAllowedOnlyOnPrivateRoute() {
+        // The privacy promise, as a pure predicate: on-device document text may
+        // be inlined ONLY when every destination is the private near.ai route.
+        let priv = ChatStore.defaultModelID                 // "zai-org/GLM-5.1-FP8"
+        let priv2 = "deepseek-ai/DeepSeek-V3"
+        let cloud = ModelOption.nearCloudQwenMaxModelID
+        let hosted = ModelOption.ironclawModelID
+        // Single model.
+        XCTAssertTrue(ChatStore.localDocsAllowedForRoute(councilModelIDs: [], singleModelID: priv))
+        XCTAssertFalse(ChatStore.localDocsAllowedForRoute(councilModelIDs: [], singleModelID: cloud))
+        XCTAssertFalse(ChatStore.localDocsAllowedForRoute(councilModelIDs: [], singleModelID: hosted))
+        // Council: all-private allowed; ANY cloud/hosted leg blocks.
+        XCTAssertTrue(ChatStore.localDocsAllowedForRoute(councilModelIDs: [priv, priv2], singleModelID: priv))
+        XCTAssertFalse(ChatStore.localDocsAllowedForRoute(councilModelIDs: [priv, cloud], singleModelID: priv))
+        XCTAssertFalse(ChatStore.localDocsAllowedForRoute(councilModelIDs: [priv, hosted], singleModelID: priv))
+    }
+
+    @MainActor
+    func testCryptoPriceTrackerWithoutSubjectReturnsNilNotEthereum() async {
+        // INPUT-DISCARD: a nil-subject cryptoPrice tracker must NOT silently
+        // present Ethereum's price as if it were the tracked coin.
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        let briefing = Briefing(title: "x", prompt: "p", schedule: .daily(hour: 8, minute: 0), kind: .cryptoPrice)
+        let widget = await store.runBriefing(briefing)
+        XCTAssertNil(widget)
+    }
+
     func testQuickIntentIgnoresLooseAccountAndPricePhrases() {
         // "my account" alone and a bare "?" used to swallow these.
         XCTAssertNil(QuickIntentParser.parse("how do I delete my account?"))

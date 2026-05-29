@@ -3686,7 +3686,9 @@ final class ChatStore: ObservableObject {
         case .ethPrice:
             return await LiveDataService.ethPriceWidget()
         case .cryptoPrice:
-            let id = briefing.accountID ?? "ethereum"
+            // A cryptoPrice tracker must carry its coin id. Never silently
+            // default to ETH — that would surface a wrong coin's price as fact.
+            guard let id = briefing.accountID, !id.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
             return await LiveDataService.cryptoPriceWidget(coinID: id, symbol: LiveDataService.symbol(forCoinID: id))
         case .nearAccount:
             return await LiveDataService.nearAccountWidget(account: briefing.accountID ?? "")
@@ -4558,6 +4560,19 @@ final class ChatStore: ObservableObject {
         return "\(context)\n\nUsing those excerpts (and the attached file) where relevant:\n\(prompt)"
     }
 
+    /// Whether on-device document excerpts (privacy-mode docs) may be inlined
+    /// into this turn's prompt. They may ONLY go to the private near.ai route —
+    /// never a cloud model, a cloud council leg, or the hosted/mission route —
+    /// so on-device passages never leave the device for a third party. Mirrors
+    /// the personal-memory gate in `activeSystemPrompt`. Pure + static so the
+    /// privacy guarantee is unit-testable without the network.
+    nonisolated static func localDocsAllowedForRoute(councilModelIDs: [String], singleModelID: String) -> Bool {
+        if councilModelIDs.count > 1 {
+            return councilModelIDs.allSatisfy { RoutePlanner.routeKind(forModelID: $0) == .nearPrivate }
+        }
+        return RoutePlanner.routeKind(forModelID: singleModelID) == .nearPrivate
+    }
+
     private func send(
         _ text: String,
         attachments: [ChatAttachment],
@@ -4614,14 +4629,6 @@ final class ChatStore: ObservableObject {
             // single-model, non-mission send below.
             let mission = phoneAgentMissionPromptIfNeeded(for: text)
             var routedText = mission ?? text
-            // Privacy mode: on-device docs are never uploaded, so exclude them
-            // from the API attachments and inline only their relevant passages
-            // into the prompt (the sole conveyance, for both council and single).
-            let apiAttachments = attachments.filter { !$0.isLocalOnly }
-            let localDocs = attachments.filter { $0.isLocalOnly }.compactMap { pendingDocumentTexts[$0.id] }
-            if !localDocs.isEmpty, let context = DocumentChunker.contextBlock(for: text, in: localDocs, topK: 4) {
-                routedText = "\(context)\n\nUsing those excerpts (my attached on-device document) where relevant:\n\(routedText)"
-            }
             let existingConversation = selectedConversation
             let requestedModel = selectedModel
             let requestModel = requestedModel
@@ -4630,6 +4637,24 @@ final class ChatStore: ObservableObject {
                 previousAssistantMessage.flatMap { Self.isExternalModel($0.model ?? "") ? nil : $0.responseID }
             let requestInitiator = initiator ?? (existingConversation == nil ? "new_chat" : "new_message")
             let councilModelIDs = appendUserMessage ? requestCouncilModelIDs(for: requestModel) : []
+            // Privacy mode: on-device docs are never uploaded — exclude them from
+            // the API attachments and inline their relevant passages into the
+            // prompt. CRITICAL privacy gate: inline ONLY when every destination is
+            // the private near.ai route (never a cloud model, a cloud council
+            // leg, or the hosted/mission route), so on-device passages never
+            // leave the device for a third party. Mirrors the memory gate in
+            // `activeSystemPrompt`.
+            let apiAttachments = attachments.filter { !$0.isLocalOnly }
+            let localDocs = attachments.filter { $0.isLocalOnly }.compactMap { pendingDocumentTexts[$0.id] }
+            if !localDocs.isEmpty {
+                if Self.localDocsAllowedForRoute(councilModelIDs: councilModelIDs, singleModelID: requestModel) {
+                    if let context = DocumentChunker.contextBlock(for: text, in: localDocs, topK: 4) {
+                        routedText = "\(context)\n\nUsing those excerpts (my attached on-device document) where relevant:\n\(routedText)"
+                    }
+                } else {
+                    showBanner("Your on-device document stays private — its text isn’t sent to cloud or hosted models. Switch to the private model to use it here.")
+                }
+            }
             if councilModelIDs.count > 1 {
                 let conversation = try await ensureConversation(for: text, attachments: apiAttachments)
                 selectedConversation = conversation
