@@ -3882,6 +3882,8 @@ final class ChatStore: ObservableObject {
             }
         case .listTrackers:
             _ = appendAssistant(text: TrackerListFormatter.summary(for: trackersProvider?() ?? []))
+        case .capabilities:
+            _ = appendAssistant(text: QuickIntentParser.capabilitiesText())
         default:
             let id = appendAssistant(text: "", streaming: true)
             currentAssistantMessageID = id
@@ -3984,7 +3986,7 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.unitConvertWidget(value: value, from: from, to: to)
         case let .define(word):
             return await LiveDataService.defineWidget(word: word)
-        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .createTracker:
+        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .createTracker:
             // Handled synchronously in handleQuickIntent — never fetched here.
             return nil
         }

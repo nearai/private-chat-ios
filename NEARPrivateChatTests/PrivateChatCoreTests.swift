@@ -3446,6 +3446,18 @@ extension PrivateChatCoreTests {
         if let ethIndex, let pausedIndex { XCTAssertTrue(ethIndex < pausedIndex) }
     }
 
+    func testQuickIntentParsesCapabilities() {
+        XCTAssertEqual(QuickIntentParser.parse("what can you do"), .capabilities)
+        XCTAssertEqual(QuickIntentParser.parse("What can you do?"), .capabilities)
+        XCTAssertEqual(QuickIntentParser.parse("help"), .capabilities)
+        XCTAssertEqual(QuickIntentParser.parse("what are your features"), .capabilities)
+        // Exact-match only: requests for help with a task stay model questions.
+        XCTAssertNil(QuickIntentParser.parse("help me write an email"))
+        XCTAssertNil(QuickIntentParser.parse("what can you help me with my taxes"))
+        XCTAssertFalse(QuickIntentParser.capabilitiesText().isEmpty)
+        XCTAssertTrue(QuickIntentParser.capabilitiesText().contains("ETH"))
+    }
+
     func testQuickIntentParsesActivityLog() {
         XCTAssertEqual(QuickIntentParser.parse("what have you done"), .activityLog)
         XCTAssertEqual(QuickIntentParser.parse("show your activity"), .activityLog)

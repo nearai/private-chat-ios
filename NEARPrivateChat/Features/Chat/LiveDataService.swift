@@ -42,6 +42,7 @@ enum QuickIntent: Equatable {
     case setMemoryCapture(enabled: Bool)
     case activityLog
     case listTrackers
+    case capabilities
     case createTracker(TrackerSpec)
 }
 
@@ -76,6 +77,13 @@ enum QuickIntentParser {
                             "show my briefings", "list my briefings", "what are you keeping an eye on",
                             "what's on my today", "whats on my today"]) {
             return .listTrackers
+        }
+        // Capabilities / help — EXACT (punctuation-stripped) match only, so
+        // "help me write an email" or "what can you help me with my taxes" stay
+        // model questions and don't trip the capabilities card.
+        let helpNormalized = text.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!"))
+        if Self.capabilityPhrases.contains(helpNormalized) {
+            return .capabilities
         }
         // Passive-memory control — checked before the generic forget/remember so
         // "stop remembering things automatically" isn't read as a fact to store.
@@ -175,6 +183,41 @@ enum QuickIntentParser {
         return nil
     }
 
+    /// Exact (punctuation-stripped) phrases that surface the capabilities card.
+    static let capabilityPhrases: Set<String> = [
+        "help", "what can you do", "what can i ask", "what can i ask you",
+        "what can you help me with", "what are you capable of", "what are your features",
+        "what features do you have", "show me what you can do", "what can this app do",
+        "what can this do", "what else can you do", "how do you work", "what do you do"
+    ]
+
+    /// A concise tour of what the assistant can do, with copy-pasteable example
+    /// prompts. Static + deterministic so it's testable and reusable.
+    static func capabilitiesText() -> String {
+        """
+        Here’s what I can do — all on-device or over public data, no sign-in needed:
+
+        **Live answers** — ask in plain language:
+        • “What’s the ETH price?” · “How’s my account, alice.near?”
+        • “Weather in Tokyo” · “What time is it in London?”
+        • “Convert 100 USD to EUR” · “5 miles in km” · “Define serendipity”
+        • Top headlines · or chain them: “ETH price and weather in Lisbon”
+
+        **Trackers & alerts** — I check on a schedule and surface results on Today:
+        • “Every morning, give me a news briefing” (add “using council” for a multi-model take)
+        • “Notify me when ETH drops below $2,000” — I alert once, then pause
+        • “What are you tracking?” to review them
+
+        **Memory (private, on this device)**:
+        • “Remember I prefer concise answers” · “What do you remember?”
+        • I also quietly note durable details you mention — say “stop learning about me” to turn that off, or “forget what you learned automatically.”
+
+        **Hands-free**: tap the mic to dictate, or ask Siri to run your briefings.
+
+        Just type what you want — if it’s a question I can answer live, I will; otherwise I’ll think it through.
+        """
+    }
+
     /// Splits a compound prompt ("eth price and weather in tokyo") into the
     /// individual data-lookups it chains. Returns the list only when ≥2 segments
     /// are genuine data intents — so normal prose with "and" falls through.
@@ -223,7 +266,7 @@ enum QuickIntentParser {
         switch intent {
         case .price, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
-        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .createTracker:
+        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .createTracker:
             return false
         }
     }
