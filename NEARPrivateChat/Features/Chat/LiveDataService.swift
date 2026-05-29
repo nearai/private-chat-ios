@@ -29,6 +29,7 @@ func liveCoin(forID id: String) -> LiveCoin? {
 enum QuickIntent: Equatable {
     case price(coinID: String, symbol: String)
     case stock(symbol: String, company: String)
+    case watchlist(serialized: String)
     case trendingCrypto
     case cryptoMarket
     case briefMe
@@ -187,9 +188,14 @@ enum QuickIntentParser {
         if parseTrackLast(text) {
             return .trackLast(schedule: extractSchedule(from: text))
         }
-        if (createVerb && trackerNoun) || (startsWithWatchCommand(text) && (infoCue || parseStock(text, original: trimmedRaw) != nil)),
+        if (createVerb && trackerNoun) || (startsWithWatchCommand(text) && (infoCue || parseStock(text, original: trimmedRaw) != nil || parseWatchlistAssets(text) != nil)),
            let spec = makeTracker(from: text, original: trimmedRaw) {
             return .createTracker(spec)
+        }
+
+        // 1b) watchlist — an explicit "watchlist" of ≥2 assets shown as one card.
+        if contains(text, ["watchlist", "watch list"]), let serialized = parseWatchlistAssets(text) {
+            return .watchlist(serialized: serialized)
         }
 
         // 2) news — only a BARE request ("news", "headlines", "what's
@@ -396,7 +402,7 @@ enum QuickIntentParser {
         switch intent {
         case .price, .stock, .trendingCrypto, .cryptoMarket, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
-        case .briefMe, .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .setDocumentPrivacy, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker, .trackLast:
+        case .watchlist, .briefMe, .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .setDocumentPrivacy, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker, .trackLast:
             return false
         }
     }
@@ -469,6 +475,17 @@ enum QuickIntentParser {
                 )
             }
             return TrackerSpec(title: "Daily news", kind: .dailyNews, subject: nil, schedule: schedule, council: false, confirmation: "Daily news · \(label)")
+        }
+        if let serialized = parseWatchlistAssets(text) {
+            let count = serialized.split(separator: "|").count
+            return TrackerSpec(
+                title: "Watchlist",
+                kind: .watchlist,
+                subject: serialized,
+                schedule: schedule,
+                council: false,
+                confirmation: "Watchlist · \(count) assets · \(label)"
+            )
         }
         if let coin = matchedCoin(in: text) {
             return TrackerSpec(
@@ -607,6 +624,41 @@ enum QuickIntentParser {
             }
         }
         return nil
+    }
+
+    /// Resolves a single token to a known stock (no cue required — used inside a
+    /// watchlist where the list context is the cue). nil if not a known asset.
+    static func resolveStockToken(_ token: String) -> (symbol: String, label: String)? {
+        let lower = token.lowercased()
+        for stock in knownStocks {
+            if lower == stock.symbol.lowercased() { return (stock.symbol, stock.symbol) }
+            for name in stock.names where wordPresent(name, in: lower) { return (stock.symbol, name.capitalized) }
+        }
+        return nil
+    }
+
+    /// Extracts a watchlist (≥2 distinct assets) from free text → a serialized
+    /// "crypto:ethereum|stock:AAPL|crypto:near" string. Resolves each token to a
+    /// known coin or stock; non-asset tokens (track/every/morning/…) are ignored.
+    /// Returns nil for fewer than 2 assets so single-asset trackers stay simple.
+    static func parseWatchlistAssets(_ text: String) -> String? {
+        let normalized = text.lowercased()
+            .replacingOccurrences(of: #"\b(and|plus|with|vs)\b"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "&", with: " ")
+            .replacingOccurrences(of: ",", with: " ")
+        let tokens = normalized.split(whereSeparator: { $0 == " " }).map(String.init)
+        var assets: [String] = []
+        var seen = Set<String>()
+        for token in tokens where token.count >= 2 {
+            if let coin = matchedCoin(in: token) {
+                let key = "crypto:\(coin.id)"
+                if seen.insert(key).inserted { assets.append(key) }
+            } else if let stock = resolveStockToken(token) {
+                let key = "stock:\(stock.symbol)"
+                if seen.insert(key).inserted { assets.append(key) }
+            }
+        }
+        return assets.count >= 2 ? assets.joined(separator: "|") : nil
     }
 
     /// Detects a chart/history follow-up with a timeframe and maps it to the
@@ -1870,6 +1922,72 @@ enum LiveDataService {
         case "365": return "1y"
         default: return "max"
         }
+    }
+
+    /// A glanceable multi-asset watchlist (crypto + stocks) → comparison card,
+    /// one row per asset with price + 24h change (color-as-data). `serialized`
+    /// is "crypto:ethereum|stock:AAPL|crypto:near". Crypto is batched in one
+    /// CoinGecko call; stocks fetch in parallel from Yahoo.
+    static func watchlistWidget(serialized: String) async -> MessageWidget? {
+        let order: [(kind: String, id: String)] = serialized.split(separator: "|").compactMap { entry in
+            let parts = entry.split(separator: ":", maxSplits: 1).map(String.init)
+            return parts.count == 2 ? (parts[0], parts[1]) : nil
+        }
+        guard !order.isEmpty else { return nil }
+        let cryptoIDs = order.filter { $0.kind == "crypto" }.map { $0.id }
+        let stockSymbols = order.filter { $0.kind == "stock" }.map { $0.id }
+
+        var cryptoData: [String: (price: Double, change: Double)] = [:]
+        if !cryptoIDs.isEmpty,
+           let url = URL(string: "https://api.coingecko.com/api/v3/simple/price?ids=\(cryptoIDs.joined(separator: ","))&vs_currencies=usd&include_24hr_change=true"),
+           let data = try? await fetchData(from: url),
+           let decoded = try? JSONDecoder().decode([String: CoinSimplePrice].self, from: data) {
+            for (id, coin) in decoded where coin.usd != nil {
+                cryptoData[id] = (coin.usd!, coin.usd24HourChange ?? 0)
+            }
+        }
+
+        var stockData: [String: (price: Double, change: Double)] = [:]
+        if !stockSymbols.isEmpty {
+            stockData = await withTaskGroup(of: (String, (Double, Double)?).self) { group in
+                for sym in stockSymbols {
+                    group.addTask {
+                        guard let q = await fetchYahooChart(symbol: sym, range: "5d", interval: "1d") else { return (sym, nil) }
+                        let prev = q.prevClose ?? q.closes.first ?? q.price
+                        let change = prev > 0 ? (q.price - prev) / prev * 100 : 0
+                        return (sym, (q.price, change))
+                    }
+                }
+                var result: [String: (price: Double, change: Double)] = [:]
+                for await (sym, value) in group { if let value { result[sym] = (value.0, value.1) } }
+                return result
+            }
+        }
+
+        var rows: [WidgetComparisonRow] = []
+        for item in order {
+            let label = item.kind == "crypto" ? symbol(forCoinID: item.id) : item.id
+            let datum = item.kind == "crypto" ? cryptoData[item.id] : stockData[item.id]
+            guard let datum else {
+                rows.append(WidgetComparisonRow(label: label, cells: [WidgetComparisonCell(text: "—", tone: .off), WidgetComparisonCell(text: "—", tone: .off)]))
+                continue
+            }
+            let digits = datum.price < 100 ? 2 : 0
+            let priceStr = currencyFormatter(maximumFractionDigits: digits).string(from: NSNumber(value: datum.price)) ?? "$\(datum.price)"
+            let changeStr = percentChangeFormatter().string(from: NSNumber(value: datum.change / 100)) ?? "\(datum.change)%"
+            rows.append(WidgetComparisonRow(label: label, cells: [
+                WidgetComparisonCell(text: priceStr, tone: .neutral),
+                WidgetComparisonCell(text: changeStr, tone: datum.change >= 0 ? .good : .warn)
+            ]))
+        }
+        guard rows.contains(where: { $0.cells.first?.text != "—" }) else { return nil }
+        return MessageWidget(
+            kind: .comparison, title: "Watchlist", freshness: .fresh,
+            time: shortCurrentTimeString(), followUp: "What moved most?", note: nil,
+            chart: nil, metric: nil,
+            comparison: WidgetComparison(subtitle: "\(rows.count) assets · 24h", columns: ["Price", "24h"], rows: rows),
+            newsBrief: nil
+        )
     }
 
     /// A real historical price chart over `days` (CoinGecko `market_chart`,

@@ -4327,6 +4327,30 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(LiveDataService.yahooRange(forDays: "max"), "max")
     }
 
+    func testWatchlistParsingResolvesMixedAssets() {
+        guard case let .watchlist(serialized)? = QuickIntentParser.parse("watchlist ETH NEAR AAPL") else {
+            return XCTFail("Expected a watchlist intent.")
+        }
+        let parts = serialized.split(separator: "|").map(String.init)
+        XCTAssertEqual(parts.count, 3)
+        XCTAssertTrue(serialized.contains("crypto:ethereum"), serialized)
+        XCTAssertTrue(serialized.contains("stock:AAPL"), serialized)
+        // A single asset is not a watchlist.
+        XCTAssertNil(QuickIntentParser.parseWatchlistAssets("just ETH please"))
+        // No assets → nil (prose isn't a watchlist).
+        XCTAssertNil(QuickIntentParser.parseWatchlistAssets("watchlist of my favorite things"))
+    }
+
+    func testWatchlistTrackerCreation() throws {
+        guard case let .createTracker(spec) = QuickIntentParser.parse("track ETH, NEAR and Tesla every morning") else {
+            return XCTFail("Expected a watchlist tracker.")
+        }
+        XCTAssertEqual(spec.kind, .watchlist)
+        let parts = spec.subject?.split(separator: "|").map(String.init) ?? []
+        XCTAssertEqual(parts.count, 3)
+        XCTAssertTrue(spec.subject?.contains("stock:TSLA") == true, spec.subject ?? "nil")
+    }
+
     func testBriefingThreadReplyContextPrefersWidgetNote() {
         // The follow-up the model answers is grounded in the delivery's result.
         let widget = MessageWidget(kind: .generic, title: "Global politics", note: "Top 5 developments: Iran, Lebanon, EU sanctions")

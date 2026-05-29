@@ -3694,6 +3694,9 @@ final class ChatStore: ObservableObject {
             guard let symbol = briefing.accountID, !symbol.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
             let company = briefing.title.replacingOccurrences(of: " stock", with: "", options: .caseInsensitive).trimmingCharacters(in: .whitespaces)
             return await LiveDataService.stockQuoteWidget(symbol: symbol, company: company)
+        case .watchlist:
+            guard let serialized = briefing.accountID, !serialized.isEmpty else { return nil }
+            return await LiveDataService.watchlistWidget(serialized: serialized)
         case .nearAccount:
             return await LiveDataService.nearAccountWidget(account: briefing.accountID ?? "")
         case .dailyNews:
@@ -4181,6 +4184,8 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.cryptoPriceWidget(coinID: coinID, symbol: symbol)
         case let .stock(symbol, company):
             return await LiveDataService.stockQuoteWidget(symbol: symbol, company: company)
+        case let .watchlist(serialized):
+            return await LiveDataService.watchlistWidget(serialized: serialized)
         case .trendingCrypto:
             return await LiveDataService.trendingCryptoWidget()
         case .cryptoMarket:

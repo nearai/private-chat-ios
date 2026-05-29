@@ -19,6 +19,7 @@ enum BriefingKind: String, Codable, Hashable {
     case ethPrice
     case cryptoPrice
     case stockPrice
+    case watchlist
     case nearAccount
     case dailyNews
     /// Composed client-side from the user's other trackers + a market snapshot.
