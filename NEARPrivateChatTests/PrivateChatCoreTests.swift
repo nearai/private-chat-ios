@@ -3664,6 +3664,30 @@ extension PrivateChatCoreTests {
         }
     }
 
+    func testQuickIntentParsesTipSplit() {
+        guard case let .tipSplit(combined)? = QuickIntentParser.parse("20% tip on $85 split 3 ways") else {
+            return XCTFail("Expected a tipSplit intent.")
+        }
+        XCTAssertTrue(combined.contains("$17.00"))      // 20% tip
+        XCTAssertTrue(combined.contains("$102.00"))     // total
+        XCTAssertTrue(combined.contains("$34.00 each")) // per person
+
+        guard case let .tipSplit(splitOnly)? = QuickIntentParser.parse("split $120 between 4") else {
+            return XCTFail("Expected a tipSplit intent.")
+        }
+        XCTAssertTrue(splitOnly.contains("$30.00 each"))
+
+        guard case let .tipSplit(tipOnly)? = QuickIntentParser.parse("18% tip on $85") else {
+            return XCTFail("Expected a tipSplit intent.")
+        }
+        XCTAssertTrue(tipOnly.contains("$15.30"))
+        XCTAssertTrue(tipOnly.contains("$100.30"))
+
+        // A pure percentage calc stays math; prose stays prose.
+        if case .tipSplit? = QuickIntentParser.parse("20% of 85") { XCTFail("calc must be math, not tipSplit") }
+        XCTAssertNil(QuickIntentParser.parse("how was your day"))
+    }
+
     func testQuickIntentParsesActivityLog() {
         XCTAssertEqual(QuickIntentParser.parse("what have you done"), .activityLog)
         XCTAssertEqual(QuickIntentParser.parse("show your activity"), .activityLog)

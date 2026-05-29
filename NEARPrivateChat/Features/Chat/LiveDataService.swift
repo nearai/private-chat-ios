@@ -39,6 +39,7 @@ enum QuickIntent: Equatable {
     case define(word: String)
     case math(expression: String, result: String)
     case dateMath(question: String, answer: String)
+    case tipSplit(summary: String)
     case remember(text: String)
     case recallMemory
     case forget(text: String?)
@@ -204,6 +205,12 @@ enum QuickIntentParser {
             return .dateMath(question: dateMath.question, answer: dateMath.answer)
         }
 
+        // 2g) tip & bill split ("20% tip on $85 split 3 ways", "split $120 by 4").
+        // Needs a $-amount plus a tip % or a party size to actually compute.
+        if let tipSplit = parseTipSplit(text) {
+            return .tipSplit(summary: tipSplit)
+        }
+
         // 3) NEAR account — named phrases, or a .near token plus a status word.
         let account = extractAccount(from: text)
         if contains(text, ["my near account", "near account", "near.com account", "account doing", "account balance", "wallet balance", "my wallet", "my balance"]) ||
@@ -330,7 +337,7 @@ enum QuickIntentParser {
         switch intent {
         case .price, .trendingCrypto, .cryptoMarket, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
-        case .math, .dateMath, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker:
+        case .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker:
             return false
         }
     }
@@ -806,6 +813,60 @@ enum QuickIntentParser {
         }
 
         return Array(facts.prefix(3))
+    }
+
+    /// "20% tip on $85 split 3 ways" → "Tip $17.00 (20%) · Total $102.00 ·
+    /// $34.00 each (3 ways)". Needs a $-amount and either a tip % or a party
+    /// size > 1, so plain prose can't trigger it.
+    static func parseTipSplit(_ text: String) -> String? {
+        let mentionsTip = text.contains("tip")
+        let mentionsSplit = contains(text, ["split", " ways", " way ", "each", "between", "among",
+                                            "per person", "per head", "divide the"])
+        guard mentionsTip || mentionsSplit else { return nil }
+        guard let bill = firstCurrencyAmount(in: text) else { return nil }
+
+        var tipPercent = 0.0
+        if mentionsTip, let pct = firstRegexDouble(#"([0-9]+(?:\.[0-9]+)?)\s*%"#, in: text) {
+            tipPercent = pct
+        }
+        let party = max(1, partySize(in: text) ?? 1)
+        guard tipPercent > 0 || party > 1 else { return nil } // must actually compute something
+
+        let tip = bill * tipPercent / 100
+        let total = bill + tip
+        func usd(_ v: Double) -> String { String(format: "$%.2f", v) }
+        func pctLabel(_ v: Double) -> String { v == v.rounded() ? "\(Int(v))%" : String(format: "%g%%", v) }
+
+        var parts: [String] = []
+        if tipPercent > 0 { parts.append("Tip \(usd(tip)) (\(pctLabel(tipPercent)))") }
+        parts.append("Total \(usd(total))")
+        if party > 1 { parts.append("\(usd(total / Double(party))) each (\(party) ways)") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// First $-prefixed amount in the text (commas stripped).
+    private static func firstCurrencyAmount(in text: String) -> Double? {
+        guard let value = firstRegexDouble(#"\$\s*([0-9][0-9,]*(?:\.[0-9]+)?)"#, in: text, stripCommas: true) else { return nil }
+        return value
+    }
+
+    /// Party size from "N ways/people", "between/among/by/for N", or "split … N".
+    private static func partySize(in text: String) -> Int? {
+        for pattern in [#"([0-9]+)\s*(?:ways|way|people|persons|guests|of us|of them)"#,
+                        #"(?:between|among|by|for|split into|split it)\s+([0-9]+)"#] {
+            if let value = firstRegexDouble(pattern, in: text) { return Int(value) }
+        }
+        return nil
+    }
+
+    /// First capture group of `pattern` in `text`, parsed as Double.
+    private static func firstRegexDouble(_ pattern: String, in text: String, stripCommas: Bool = false) -> Double? {
+        guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = re.firstMatch(in: text, options: [], range: range),
+              match.numberOfRanges >= 2, let r = Range(match.range(at: 1), in: text) else { return nil }
+        let raw = stripCommas ? text[r].replacingOccurrences(of: ",", with: "") : String(text[r])
+        return Double(raw)
     }
 
     /// Recognizes a calculation and returns the cleaned expression + formatted
