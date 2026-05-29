@@ -3325,6 +3325,76 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(items.first?.source, .explicit)
     }
 
+    func testParsePriceConditionRecognizesThresholds() {
+        XCTAssertEqual(QuickIntentParser.parsePriceCondition("when eth drops below 2000")?.0, .below)
+        XCTAssertEqual(QuickIntentParser.parsePriceCondition("when eth drops below 2000")?.1, 2000)
+        XCTAssertEqual(QuickIntentParser.parsePriceCondition("if btc goes above $80k")?.0, .above)
+        XCTAssertEqual(QuickIntentParser.parsePriceCondition("if btc goes above $80k")?.1, 80_000)
+        XCTAssertEqual(QuickIntentParser.parsePriceCondition("near over 5")?.0, .above)
+        XCTAssertEqual(QuickIntentParser.parsePriceCondition("eth under 1,500")?.1, 1_500)
+        XCTAssertEqual(QuickIntentParser.parsePriceCondition("eth above $1.2m")?.1, 1_200_000)
+        // No comparator/number → nil.
+        XCTAssertNil(QuickIntentParser.parsePriceCondition("tell me about ethereum"))
+    }
+
+    func testQuickIntentParsesConditionalAlert() {
+        guard case let .createTracker(spec) = QuickIntentParser.parse("notify me when ETH drops below $2,000") else {
+            return XCTFail("Expected a conditional tracker.")
+        }
+        XCTAssertEqual(spec.kind, .cryptoPrice)
+        XCTAssertEqual(spec.subject, "ethereum")
+        XCTAssertEqual(spec.condition?.comparator, .below)
+        XCTAssertEqual(spec.condition?.threshold, 2_000)
+        XCTAssertEqual(spec.condition?.symbol, "ETH")
+        // No explicit cadence → defaults to the few-hour watch cycle.
+        XCTAssertEqual(spec.schedule, .everyNHours(3))
+
+        // An explicit cadence is honored.
+        guard case let .createTracker(daily) = QuickIntentParser.parse("alert me if bitcoin goes above 80k every morning") else {
+            return XCTFail("Expected a conditional tracker.")
+        }
+        XCTAssertEqual(daily.condition?.comparator, .above)
+        XCTAssertEqual(daily.condition?.threshold, 80_000)
+        XCTAssertEqual(daily.schedule, .daily(hour: 8, minute: 0))
+
+        // A plain price tracker (no comparator) is NOT conditional.
+        guard case let .createTracker(plain) = QuickIntentParser.parse("create an eth price tracker every morning") else {
+            return XCTFail("Expected a plain tracker.")
+        }
+        XCTAssertNil(plain.condition)
+
+        // A bare mid-sentence "if" question is NOT an alert (goes to the model).
+        XCTAssertNil(QuickIntentParser.parse("explain what happens if eth hits 5000"))
+    }
+
+    func testBriefingComparatorEvaluatesAndSummarizes() {
+        XCTAssertTrue(BriefingComparator.below.evaluate(1_900, 2_000))
+        XCTAssertFalse(BriefingComparator.below.evaluate(2_100, 2_000))
+        XCTAssertTrue(BriefingComparator.above.evaluate(2_100, 2_000))
+        let condition = BriefingCondition(coinID: "ethereum", symbol: "ETH", comparator: .below, threshold: 2_000)
+        XCTAssertTrue(condition.isSatisfied(by: 1_950))
+        XCTAssertFalse(condition.isSatisfied(by: 2_050))
+        XCTAssertTrue(condition.summary.contains("ETH"))
+        XCTAssertTrue(condition.summary.contains("below"))
+    }
+
+    func testBriefingConditionCodableRoundTripAndBackCompat() throws {
+        let condition = BriefingCondition(coinID: "ethereum", symbol: "ETH", comparator: .below, threshold: 2_000)
+        let briefing = Briefing(title: "ETH alert", prompt: "", schedule: .everyNHours(3),
+                                kind: .cryptoPrice, accountID: "ethereum", condition: condition)
+        let decoded = try JSONDecoder().decode(Briefing.self, from: JSONEncoder().encode(briefing))
+        XCTAssertEqual(decoded.condition, condition)
+        XCTAssertTrue(decoded.isConditional)
+
+        // A plain briefing omits the condition key (back-compat) and decodes nil.
+        let plain = Briefing(title: "News", prompt: "p", schedule: .daily(hour: 8, minute: 0), kind: .dailyNews)
+        let plainData = try JSONEncoder().encode(plain)
+        XCTAssertFalse(String(decoding: plainData, as: UTF8.self).contains("condition"))
+        let plainDecoded = try JSONDecoder().decode(Briefing.self, from: plainData)
+        XCTAssertNil(plainDecoded.condition)
+        XCTAssertFalse(plainDecoded.isConditional)
+    }
+
     func testQuickIntentParsesActivityLog() {
         XCTAssertEqual(QuickIntentParser.parse("what have you done"), .activityLog)
         XCTAssertEqual(QuickIntentParser.parse("show your activity"), .activityLog)

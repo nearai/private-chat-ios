@@ -50,6 +50,7 @@ struct TrackerSpec: Equatable {
     var council: Bool
     var confirmation: String
     var prompt: String?             // cleaned prompt for customPrompt council trackers
+    var condition: BriefingCondition?  // threshold gate ("when ETH < $2,000"); nil = plain recurring
 }
 
 enum QuickIntentParser {
@@ -74,6 +75,14 @@ enum QuickIntentParser {
         }
         if let fact = parseRemember(text, original: trimmedRaw) {
             return .remember(text: fact)
+        }
+
+        // 0b) conditional price alert — "notify me when ETH drops below $2,000".
+        // Checked before the generic tracker path so an alert isn't mistaken for
+        // a plain recurring price briefing. Has its own strict gate (alert/when +
+        // coin + comparator + number), so ordinary prose can't trip it.
+        if let spec = makeConditionalTracker(from: text) {
+            return .createTracker(spec)
         }
 
         // 1) "create a tracker / watch / every morning …" — only when the
@@ -250,6 +259,91 @@ enum QuickIntentParser {
             confirmation: "\(council ? "Council briefing" : "Briefing") · \(label)",
             prompt: prompt
         )
+    }
+
+    /// "notify me when ETH drops below $2,000" → a coin-price threshold tracker.
+    /// Strict gate: must read like an alert (an alert verb or when/if/once) AND
+    /// name a known coin AND carry a comparator + number — otherwise nil so
+    /// ordinary prompts fall through to the generic tracker path or the model.
+    static func makeConditionalTracker(from text: String) -> TrackerSpec? {
+        let alertVerb = contains(text, ["notify", "alert", "tell me", "let me know",
+                                        "ping me", "warn me", "message me", "remind me"])
+        // A bare mid-sentence "if"/"when" is too loose (it would catch "explain
+        // what happens if eth hits 5000"). Require an alert verb, OR a sentence
+        // that opens with when/if, OR a strongly-conditional connector.
+        let conditional = text.hasPrefix("when ") || text.hasPrefix("if ")
+            || contains(text, [" whenever ", " as soon as "])
+        guard alertVerb || conditional else { return nil }
+        guard let coin = matchedCoin(in: text) else { return nil }
+        guard let (comparator, threshold) = parsePriceCondition(text) else { return nil }
+
+        let condition = BriefingCondition(coinID: coin.id, symbol: coin.symbol,
+                                          comparator: comparator, threshold: threshold)
+        // Honor an explicit cadence if the user gave one; otherwise watch on a
+        // few-hour cycle so it actually behaves like an alert.
+        let schedule = hasExplicitCadence(text) ? extractSchedule(from: text) : .everyNHours(3)
+        return TrackerSpec(
+            title: "\(coin.symbol) alert",
+            kind: .cryptoPrice,
+            subject: coin.id,
+            schedule: schedule,
+            council: false,
+            confirmation: "Alerts when \(condition.summary) · checks \(schedule.scheduleLabel)",
+            prompt: nil,
+            condition: condition
+        )
+    }
+
+    /// Extracts a price comparator + threshold from alert text. Recognizes
+    /// below/above synonyms and $/comma/k/m number forms. When both directions
+    /// appear, the earliest-mentioned one wins.
+    static func parsePriceCondition(_ text: String) -> (BriefingComparator, Double)? {
+        let belowWords = ["drops below", "dips below", "falls below", "drop below", "goes below",
+                          "below", "under", "less than", "lower than", "down to", "<"]
+        let aboveWords = ["climbs above", "rises above", "goes above", "breaks above", "jumps above",
+                          "greater than", "more than", "higher than", "above", "over", "exceeds",
+                          "reaches", "hits", "up to", ">"]
+        func earliest(_ words: [String]) -> (pos: Int, value: Double)? {
+            var best: (pos: Int, value: Double)?
+            for w in words {
+                let pattern = NSRegularExpression.escapedPattern(for: w)
+                    + #"\s*\$?\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*([km])?"#
+                guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
+                let range = NSRange(text.startIndex..<text.endIndex, in: text)
+                guard let m = re.firstMatch(in: text, options: [], range: range),
+                      let numR = Range(m.range(at: 1), in: text),
+                      var value = Double(text[numR].replacingOccurrences(of: ",", with: "")) else { continue }
+                if m.range(at: 2).location != NSNotFound, let sufR = Range(m.range(at: 2), in: text) {
+                    switch text[sufR].lowercased() {
+                    case "k": value *= 1_000
+                    case "m": value *= 1_000_000
+                    default: break
+                    }
+                }
+                let pos = m.range.location
+                if best == nil || pos < best!.pos { best = (pos, value) }
+            }
+            return best
+        }
+        let below = earliest(belowWords)
+        let above = earliest(aboveWords)
+        switch (below, above) {
+        case let (b?, a?): return b.pos <= a.pos ? (.below, b.value) : (.above, a.value)
+        case let (b?, nil): return (.below, b.value)
+        case let (nil, a?): return (.above, a.value)
+        case (nil, nil): return nil
+        }
+    }
+
+    /// True when the text names a concrete cadence/time, so we keep it instead of
+    /// defaulting an alert to the few-hour watch cycle.
+    private static func hasExplicitCadence(_ text: String) -> Bool {
+        if text.range(of: #"\b\d{1,2}(:\d{2})?\s*(am|pm)\b"#, options: .regularExpression) != nil { return true }
+        if text.range(of: #"\bevery\s+\d+\s*(h|hr|hrs|hour|hours|min|mins|minutes)\b"#, options: .regularExpression) != nil { return true }
+        return contains(text, [" every morning", " every day", " each day", " daily", " weekly",
+                               " every week", " every weekday", " weekdays", " each morning",
+                               " every evening", " nightly", " every hour", " hourly", " every night",
+                               " at noon", " at midnight", " every monday"])
     }
 
     /// Strips the "create a tracker … every morning … using council" scaffolding
@@ -655,6 +749,25 @@ enum LiveDataService {
     /// ETH price + 24h sparkline (CoinGecko) → chart widget.
     static func ethPriceWidget() async -> MessageWidget? {
         await cryptoPriceWidget(coinID: "ethereum", symbol: "ETH")
+    }
+
+    /// Raw USD spot price for any CoinGecko id — the deterministic value a
+    /// conditional tracker evaluates its threshold against. nil on fetch failure.
+    static func coinUSDPrice(coinID: String) async -> Double? {
+        let id = coinID.lowercased()
+        guard let url = URL(string: "https://api.coingecko.com/api/v3/simple/price?ids=\(id)&vs_currencies=usd") else {
+            return nil
+        }
+        guard let data = try? await fetchData(from: url),
+              let coin = (try? JSONDecoder().decode([String: CoinSimplePrice].self, from: data))?[id] else {
+            return nil
+        }
+        return coin.usd
+    }
+
+    /// "$2,000" / "$1.95" — USD price label for alert copy.
+    static func usdPriceString(_ value: Double) -> String {
+        currencyFormatter(maximumFractionDigits: value < 10 ? 2 : 0).string(from: NSNumber(value: value)) ?? "$\(value)"
     }
 
     /// Price + 24h sparkline for any CoinGecko coin id → chart widget.

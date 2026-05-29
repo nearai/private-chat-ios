@@ -3593,6 +3593,13 @@ final class ChatStore: ObservableObject {
     /// the structured widget the model produced (falling back to a generic text
     /// widget). Used by the BriefingStore runner; returns nil on any failure.
     func runBriefing(_ briefing: Briefing) async -> MessageWidget? {
+        // Conditional trackers are gated: evaluate the threshold against live
+        // data and only deliver (non-nil) on a met run, so the rest of the
+        // pipeline (latestResult + notification) fires exactly when it should.
+        if let condition = briefing.condition {
+            return await runConditionalBriefing(briefing, condition: condition)
+        }
+
         // Live kinds fetch real data from auth-free public APIs (work without the
         // chat backend); custom prompts fall through to the chat model below.
         switch briefing.kind {
@@ -3616,6 +3623,37 @@ final class ChatStore: ObservableObject {
             return await runCouncilBriefing(briefing)
         }
         return await runSingleModelBriefing(briefing)
+    }
+
+    /// Evaluates a conditional tracker against live price data. Returns the live
+    /// price widget only when the threshold is met (so the briefing delivers +
+    /// notifies); returns nil otherwise (the briefing stays due and re-checks on
+    /// its next cycle). A met run is logged for the activity audit; quiet checks
+    /// are intentionally not logged so the log stays meaningful.
+    private func runConditionalBriefing(_ briefing: Briefing, condition: BriefingCondition) async -> MessageWidget? {
+        guard let price = await LiveDataService.coinUSDPrice(coinID: condition.coinID) else {
+            return nil // couldn't fetch — don't fire on missing data
+        }
+        guard condition.isSatisfied(by: price) else { return nil }
+        let priceLabel = LiveDataService.usdPriceString(price)
+        activityLog.record("Alert fired — \(condition.summary) (now \(priceLabel))")
+        // Surface the live price card; fall back to a plain metric if the chart
+        // fetch is unavailable so a met alert always delivers something.
+        if let widget = await LiveDataService.cryptoPriceWidget(coinID: condition.coinID, symbol: condition.symbol) {
+            return widget
+        }
+        return MessageWidget(
+            kind: .metric,
+            title: "\(condition.symbol) alert",
+            time: "just now",
+            metric: WidgetMetric(
+                label: "\(condition.symbol) / USD",
+                value: priceLabel,
+                delta: condition.summary,
+                trend: condition.comparator == .below ? .down : .up,
+                caption: "alert triggered"
+            )
+        )
     }
 
     /// One headless model turn → its full text (nil on failure / empty output).
@@ -3767,11 +3805,15 @@ final class ChatStore: ObservableObject {
                 schedule: spec.schedule,
                 kind: spec.kind,
                 accountID: spec.subject,
-                council: spec.council
+                council: spec.council,
+                condition: spec.condition
             )
             onCreateTracker?(briefing)
             activityLog.record("Created tracker “\(spec.title)” · \(spec.confirmation)")
-            _ = appendAssistant(text: "Created a tracker — **\(spec.confirmation)**. It runs on schedule and lands on your Today tab; open it any time to Run now, change it, or delete it.")
+            let trackerBody = spec.condition != nil
+                ? "Set up an alert — **\(spec.confirmation)**. I’ll check on that cadence and only notify you when it triggers. It lives on your Today tab; open it any time to Run now, change it, or delete it."
+                : "Created a tracker — **\(spec.confirmation)**. It runs on schedule and lands on your Today tab; open it any time to Run now, change it, or delete it."
+            _ = appendAssistant(text: trackerBody)
             AppHaptics.selection()
         case .nearAccount(nil):
             _ = appendAssistant(text: "Sure — what’s your NEAR account? Tell me the id (e.g. **yourname.near**) and I’ll pull its balance and holdings.")

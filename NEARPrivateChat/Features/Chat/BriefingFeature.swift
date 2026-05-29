@@ -29,6 +29,54 @@ enum BriefingKind: String, Codable, Hashable {
     var isLiveData: Bool { self != .customPrompt }
 }
 
+/// Direction of a threshold comparison for a conditional tracker.
+enum BriefingComparator: String, Codable, Hashable {
+    case below
+    case above
+
+    func evaluate(_ value: Double, _ threshold: Double) -> Bool {
+        switch self {
+        case .below: return value < threshold
+        case .above: return value > threshold
+        }
+    }
+
+    var phrase: String { self == .below ? "below" : "above" }
+}
+
+/// A condition gating a tracker so it only delivers when met — e.g. "notify me
+/// when ETH drops below $2,000". Today this is a coin-price threshold (the one
+/// signal we can check deterministically from auth-free public data); the shape
+/// leaves room for other condition types later.
+struct BriefingCondition: Codable, Hashable {
+    var coinID: String          // CoinGecko id, e.g. "ethereum"
+    var symbol: String          // display symbol, e.g. "ETH"
+    var comparator: BriefingComparator
+    var threshold: Double
+    var currency: String        // ISO code lowercased, e.g. "usd"
+
+    init(coinID: String, symbol: String, comparator: BriefingComparator, threshold: Double, currency: String = "usd") {
+        self.coinID = coinID
+        self.symbol = symbol
+        self.comparator = comparator
+        self.threshold = threshold
+        self.currency = currency
+    }
+
+    func isSatisfied(by value: Double) -> Bool { comparator.evaluate(value, threshold) }
+
+    var thresholdLabel: String {
+        let f = NumberFormatter()
+        f.numberStyle = .currency
+        f.currencyCode = currency.uppercased()
+        f.maximumFractionDigits = threshold < 10 ? 2 : 0
+        return f.string(from: NSNumber(value: threshold)) ?? "\(threshold)"
+    }
+
+    /// "ETH below $2,000"
+    var summary: String { "\(symbol) \(comparator.phrase) \(thresholdLabel)" }
+}
+
 struct Briefing: Codable, Hashable, Identifiable {
     var id: UUID
     var title: String
@@ -43,9 +91,12 @@ struct Briefing: Codable, Hashable, Identifiable {
     /// Run a multi-model council + synthesis on each scheduled run (customPrompt
     /// only; live-data kinds are single API fetches where council is meaningless).
     var council: Bool
+    /// When set, the tracker only delivers on runs where the condition is met
+    /// (e.g. a price threshold). nil = a plain recurring briefing.
+    var condition: BriefingCondition?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, prompt, schedule, isPaused, createdAt, lastRunAt, latestResult, kind, accountID, council
+        case id, title, prompt, schedule, isPaused, createdAt, lastRunAt, latestResult, kind, accountID, council, condition
     }
 
     init(
@@ -59,7 +110,8 @@ struct Briefing: Codable, Hashable, Identifiable {
         latestResult: MessageWidget? = nil,
         kind: BriefingKind = .customPrompt,
         accountID: String? = nil,
-        council: Bool = false
+        council: Bool = false,
+        condition: BriefingCondition? = nil
     ) {
         self.id = id
         self.title = title
@@ -72,7 +124,11 @@ struct Briefing: Codable, Hashable, Identifiable {
         self.kind = kind
         self.accountID = accountID
         self.council = council
+        self.condition = condition
     }
+
+    /// True when this tracker is gated on a condition (a threshold alert).
+    var isConditional: Bool { condition != nil }
 
     var status: BriefingStatus {
         if isPaused { return .paused }
@@ -97,7 +153,8 @@ extension Briefing {
             latestResult: try? c.decode(MessageWidget.self, forKey: .latestResult),
             kind: (try? c.decode(BriefingKind.self, forKey: .kind)) ?? .customPrompt,
             accountID: try? c.decode(String.self, forKey: .accountID),
-            council: (try? c.decode(Bool.self, forKey: .council)) ?? false
+            council: (try? c.decode(Bool.self, forKey: .council)) ?? false,
+            condition: try? c.decode(BriefingCondition.self, forKey: .condition)
         )
     }
 }
@@ -405,6 +462,10 @@ final class BriefingStore: ObservableObject {
         // otherwise fire late and delete the reminders we add just below.
         center.removePendingNotificationRequests(withIdentifiers: reminderIdentifiers(for: briefing.id))
         guard !briefing.isPaused else { return }
+        // Conditional trackers must NOT pre-schedule guaranteed pings — that would
+        // fire even when the threshold isn't met. They notify only on a met run,
+        // via postBriefingReadyNotification when runBriefing returns a result.
+        guard briefing.condition == nil else { return }
         let triggers = briefing.schedule.notificationTriggers()
         let title = briefing.title
         center.getNotificationSettings { settings in
