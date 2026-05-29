@@ -766,6 +766,11 @@ final class BriefingStore: ObservableObject {
     /// failures (e.g. missing entitlement) just leave the widget on its last
     /// snapshot.
     private func writeWidgetSnapshot() {
+        #if DEBUG
+        // A demo-capture run uses seeded sample trackers; don't let them
+        // overwrite the real home-screen widget snapshot.
+        if DemoCapture.isEnabled { return }
+        #endif
         guard let snapshotURL = BriefingSharedStore.sharedFileURL(BriefingSharedStore.snapshotFileName) else {
             return
         }
@@ -840,6 +845,21 @@ final class BriefingStore: ObservableObject {
             .appendingPathComponent(BriefingSharedStore.directoryName, isDirectory: true)
             .appendingPathComponent(BriefingSharedStore.briefingsFileName)
     }
+
+    #if DEBUG
+    /// Demo-capture briefings live in their own file so seeded samples (and the
+    /// saves their scheduled runs trigger) never leak into the real
+    /// `briefings.json` that an interactive/real session loads. Without this,
+    /// a screenshot run's sample trackers ("Daily news @ 9am") would reappear
+    /// on Today the next time the app opened for real.
+    static func demoFileURL() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return base
+            .appendingPathComponent(BriefingSharedStore.directoryName, isDirectory: true)
+            .appendingPathComponent("briefings-demo.json")
+    }
+    #endif
 
     /// One-time move of a pre-App-Group briefings.json into the shared
     /// container so upgrading users keep their briefings and the widget sees

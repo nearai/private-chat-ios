@@ -4081,6 +4081,73 @@ extension PrivateChatCoreTests {
         )
     }
 
+    func testBareNewsRequestClassifierSeparatesTopicFromGeneric() {
+        // Bare: just "news"/"headlines"/"what's happening" + filler/schedule.
+        for bare in [
+            "news", "headlines", "what's happening", "top stories",
+            "current events", "pull the daily news", "give me today's headlines",
+            "latest world news", "what's in the news", "create a daily news tracker every morning"
+        ] {
+            XCTAssertTrue(QuickIntentParser.isBareNewsRequest(bare), "Expected bare: \(bare)")
+        }
+        // Topic: names a subject the generic feed can't honor.
+        for topic in [
+            "what's happening in global politics", "tech news", "news about AI",
+            "the latest on Ukraine", "track global politics news every morning at 8am",
+            "crypto news", "sports headlines"
+        ] {
+            XCTAssertFalse(QuickIntentParser.isBareNewsRequest(topic), "Expected topic: \(topic)")
+        }
+    }
+
+    func testQuickIntentBareNewsReturnsFeedTopicNewsFallsThrough() {
+        // Bare news → instant multi-source feed.
+        XCTAssertEqual(QuickIntentParser.parse("news"), .news)
+        XCTAssertEqual(QuickIntentParser.parse("what's happening"), .news)
+        XCTAssertEqual(QuickIntentParser.parse("pull the daily news"), .news)
+        // Topic news → no quick widget; the web-grounded model answers instead
+        // of dumping generic headlines that ignore the topic.
+        XCTAssertNil(QuickIntentParser.parse("what's happening in global politics"))
+        XCTAssertNil(QuickIntentParser.parse("tech news"))
+        XCTAssertNil(QuickIntentParser.parse("what's the latest news on Ukraine"))
+    }
+
+    func testQuickIntentTopicNewsTrackerBecomesWebGroundedPrompt() throws {
+        let intent = QuickIntentParser.parse("track global politics news every morning at 8am")
+        guard case let .createTracker(spec) = intent else {
+            return XCTFail("Expected a createTracker intent, got \(String(describing: intent)).")
+        }
+        XCTAssertEqual(spec.kind, .customPrompt)
+        XCTAssertEqual(spec.schedule, .daily(hour: 8, minute: 0))
+        let prompt = try XCTUnwrap(spec.prompt).lowercased()
+        XCTAssertTrue(prompt.contains("global politics"), "Prompt should carry the topic: \(prompt)")
+        XCTAssertTrue(prompt.contains("web search"), "Topic news should be web-grounded: \(prompt)")
+    }
+
+    func testQuickIntentBareNewsTrackerStaysGenericFeed() throws {
+        let intent = QuickIntentParser.parse("create a daily news tracker every morning")
+        guard case let .createTracker(spec) = intent else {
+            return XCTFail("Expected a createTracker intent, got \(String(describing: intent)).")
+        }
+        XCTAssertEqual(spec.kind, .dailyNews)
+    }
+
+    func testQuickIntentVerboseTopicBriefingKeepsUserPromptNotGenericFeed() throws {
+        // The user's real phrasing that used to become a generic BBC daily-news
+        // feed at 9am, discarding "global politics". It must instead become a
+        // web-grounded custom-prompt briefing that carries the topic.
+        let intent = QuickIntentParser.parse(
+            "can you create a global politics briefing at 9 am every morning that pulls from top politics news and surfaces it please"
+        )
+        guard case let .createTracker(spec) = intent else {
+            return XCTFail("Expected a createTracker intent, got \(String(describing: intent)).")
+        }
+        XCTAssertEqual(spec.kind, .customPrompt, "Topic briefing must not collapse to the generic dailyNews feed.")
+        XCTAssertEqual(spec.schedule, .daily(hour: 9, minute: 0))
+        let prompt = try XCTUnwrap(spec.prompt).lowercased()
+        XCTAssertTrue(prompt.contains("global politics"), "Prompt should keep the topic: \(prompt)")
+    }
+
     func testQuickIntentIgnoresLooseAccountAndPricePhrases() {
         // "my account" alone and a bare "?" used to swallow these.
         XCTAssertNil(QuickIntentParser.parse("how do I delete my account?"))

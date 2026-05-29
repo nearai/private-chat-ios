@@ -191,8 +191,13 @@ enum QuickIntentParser {
             return .createTracker(spec)
         }
 
-        // 2) news
-        if contains(text, ["news", "headlines", "what's happening", "whats happening", "top stories", "current events"]) {
+        // 2) news — only a BARE request ("news", "headlines", "what's
+        // happening") gets the instant multi-source feed. A request that names a
+        // topic ("what's happening in global politics", "tech news") carries a
+        // subject the feed can't honor, so it falls through to the web-grounded
+        // model for a real answer on that topic.
+        if contains(text, ["news", "headlines", "what's happening", "whats happening", "top stories", "current events"]),
+           isBareNewsRequest(text) {
             return .news
         }
 
@@ -411,7 +416,42 @@ enum QuickIntentParser {
                 confirmation: "NEAR account · \(account) · \(label)"
             )
         }
-        if contains(text, ["news", "headlines", "stories"]) {
+        // A request that explicitly asks for a "briefing/digest/report/summary"
+        // — even if it mentions "news" — is honored by the general briefing
+        // branch below, which keeps the user's own phrasing as a web-grounded
+        // prompt (e.g. "create a global politics briefing that pulls from top
+        // politics news"). Only PLAIN news feeds are handled here.
+        let asksForBriefingDoc = contains(text, [
+            "briefing", "digest", "report", "rundown", "recap", "roundup",
+            "round-up", "summary", "summarize", "summarise"
+        ])
+        if contains(text, ["news", "headlines", "stories"]), !asksForBriefingDoc {
+            // Topic-less ("daily news", "headlines every morning") → generic
+            // multi-source feed. A short, clean topic ("global politics news
+            // every morning") → a web-grounded recurring briefing on that
+            // topic, so the user gets real coverage — not a generic dump.
+            if isBareNewsRequest(text) {
+                return TrackerSpec(title: "Daily news", kind: .dailyNews, subject: nil, schedule: schedule, council: false, confirmation: "Daily news · \(label)")
+            }
+            let topic = newsTopic(from: original)
+            let wordCount = topic.split(separator: " ").count
+            let topicIsClean = topic.count >= 2 && (1...5).contains(wordCount)
+                && !contains(topic, ["create", "make", "build", "set up", "pull",
+                                     "surface", "please", "tracker", "every",
+                                     "that ", "which ", "and "])
+            if topicIsClean {
+                let display = prettyTrackerTitle(from: topic)
+                let title = display.prefix(1).uppercased() + display.dropFirst()
+                return TrackerSpec(
+                    title: "\(title) news",
+                    kind: .customPrompt,
+                    subject: nil,
+                    schedule: schedule,
+                    council: council,
+                    confirmation: "\(council ? "Council news" : "News") · \(title) · \(label)",
+                    prompt: "Using web search, give me the latest news on \(topic): the top 3–5 developments from the last day or two, each as a one-line headline with its source. Lead with the single most important update. Be concise."
+                )
+            }
             return TrackerSpec(title: "Daily news", kind: .dailyNews, subject: nil, schedule: schedule, council: false, confirmation: "Daily news · \(label)")
         }
         if let coin = matchedCoin(in: text) {
@@ -518,6 +558,76 @@ enum QuickIntentParser {
         }
         title = title.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
         return String(title.prefix(48))
+    }
+
+    /// True when a news request carries NO topic — just "news" / "headlines" /
+    /// "what's happening" surrounded by filler, schedule words, or tracker
+    /// scaffolding. A request that names a subject ("global politics", "tech",
+    /// "AI") is NOT bare, so the caller routes it to the web-grounded model or a
+    /// topic-specific tracker instead of the generic multi-source feed. Biased
+    /// toward "topic": a leftover noun makes it non-bare, because surfacing a
+    /// generic headline dump for a topic ask is the worse failure.
+    static func isBareNewsRequest(_ text: String) -> Bool {
+        var t = " " + text.lowercased() + " "
+        // Collapse multi-word triggers/lead-ins first so their non-stop words
+        // ("happening", "stories", "events") don't survive as fake topics.
+        let multiword = [
+            "what's happening", "whats happening", "what is happening",
+            "what's going on", "whats going on", "what is going on",
+            "top stories", "top story", "current events", "current affairs",
+            "in the news", "around the world", "the latest", "what's new", "whats new"
+        ]
+        for phrase in multiword {
+            t = t.replacingOccurrences(of: phrase, with: " ")
+        }
+        let stop: Set<String> = [
+            // news words
+            "news", "headlines", "headline", "stories", "story", "events", "event",
+            "happening", "going", "affairs", "update", "updates", "briefing", "brief",
+            // articles / pronouns / imperatives
+            "the", "a", "an", "my", "our", "me", "us", "give", "show", "tell",
+            "get", "fetch", "bring", "find", "read", "list", "display", "want",
+            "see", "like", "to", "please", "with", "of", "new", "pull", "grab",
+            "catch", "check", "gimme", "lemme", "pull up", "whats", "whatre",
+            // questions / time / scope
+            "now", "today", "todays", "this", "morning", "afternoon", "evening",
+            "tonight", "right", "currently", "lately", "recently", "latest",
+            "current", "whats", "what", "is", "are", "any", "some", "for", "in",
+            "on", "out", "there", "day", "these", "days", "around", "world",
+            "global", "international",
+            // tracker / schedule scaffolding (so full tracker commands classify)
+            "create", "set", "setup", "up", "make", "build", "schedule", "start",
+            "add", "tracker", "alert", "watcher", "digest", "watch", "track",
+            "monitor", "follow", "keep", "eye", "tabs", "daily", "weekly",
+            "every", "each", "weekday", "weekdays", "week", "am", "pm", "at",
+            "can", "you", "could", "would", "i"
+        ]
+        let residue = t
+            .split(whereSeparator: { !$0.isLetter && $0 != "'" })
+            .map { $0.replacingOccurrences(of: "'", with: "") }
+            .filter { !$0.isEmpty && !stop.contains($0) }
+        return residue.isEmpty
+    }
+
+    /// The topic of a news tracker, with tracker/schedule scaffolding and the
+    /// news words themselves stripped. "track global politics news every
+    /// morning at 8am" → "global politics". Returns "" for a bare news request.
+    static func newsTopic(from text: String) -> String {
+        var topic = trackerSubject(from: text).lowercased()
+        // Drop the news nouns and the connectors that introduce them, leaving
+        // just the subject. Word-boundary anchored so "newscaster" survives.
+        let dropWords = ["headlines", "headline", "stories", "story", "news",
+                         "latest", "top", "daily", "current", "about", "regarding",
+                         "on", "for", "in", "the", "happenings", "developments"]
+        for word in dropWords {
+            topic = topic.replacingOccurrences(
+                of: "\\b\(NSRegularExpression.escapedPattern(for: word))\\b",
+                with: " ",
+                options: .regularExpression
+            )
+        }
+        topic = topic.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        return topic.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
     }
 
     /// True when the text reads as an imperative "track/watch/monitor <subject>"
@@ -1657,39 +1767,60 @@ enum LiveDataService {
     }
 
     /// Top headlines (public RSS) → news-brief widget.
+    private struct NewsFeed { let name: String; let label: String; let color: String; let domain: String; let url: String }
+    private static let newsFeeds: [NewsFeed] = [
+        NewsFeed(name: "BBC", label: "B", color: "#990000", domain: "bbc.com", url: "https://feeds.bbci.co.uk/news/world/rss.xml"),
+        NewsFeed(name: "NPR", label: "N", color: "#d7322b", domain: "npr.org", url: "https://feeds.npr.org/1001/rss.xml"),
+        NewsFeed(name: "Guardian", label: "G", color: "#052962", domain: "theguardian.com", url: "https://www.theguardian.com/world/rss"),
+        NewsFeed(name: "Al Jazeera", label: "A", color: "#fa9000", domain: "aljazeera.com", url: "https://www.aljazeera.com/xml/rss/all.xml"),
+    ]
+
+    /// Top headlines pulled from SEVERAL reputable feeds (BBC, NPR, Guardian, Al
+    /// Jazeera), interleaved round-robin and de-duped — not a single source.
     static func newsBriefWidget() async -> MessageWidget? {
-        guard let url = URL(string: "https://feeds.bbci.co.uk/news/rss.xml") else {
-            return nil
-        }
-
-        do {
-            let parser = BBCNewsRSSParser()
-            let items = parser.parse(data: try await fetchData(from: url)).prefix(4)
-            guard !items.isEmpty else { return nil }
-
-            let source = WidgetNewsSource(label: "B", color: "#990000", domain: "bbc.com")
-            let stories = items.map { item in
-                WidgetNewsStory(title: item.title, tag: nil, sources: [source], url: item.link)
+        let perFeed: [[WidgetNewsStory]] = await withTaskGroup(of: (Int, [WidgetNewsStory]).self) { group in
+            for (index, feed) in newsFeeds.enumerated() {
+                group.addTask {
+                    guard let url = URL(string: feed.url), let data = try? await fetchData(from: url) else { return (index, []) }
+                    let items = BBCNewsRSSParser().parse(data: data).prefix(3)
+                    let source = WidgetNewsSource(label: feed.label, color: feed.color, domain: feed.domain)
+                    return (index, items.map { WidgetNewsStory(title: $0.title, tag: feed.name, sources: [source], url: $0.link) })
+                }
             }
-
-            return MessageWidget(
-                kind: .newsBrief,
-                title: "Daily news brief",
-                freshness: .fresh,
-                time: shortCurrentTimeString(),
-                followUp: "What's the biggest story?",
-                note: nil,
-                chart: nil,
-                metric: nil,
-                comparison: nil,
-                newsBrief: WidgetNewsBrief(
-                    heading: "Today · \(stories.count) stories",
-                    stories: stories
-                )
-            )
-        } catch {
-            return nil
+            var results = Array(repeating: [WidgetNewsStory](), count: newsFeeds.count)
+            for await (index, stories) in group { results[index] = stories }
+            return results
         }
+
+        // Round-robin across feeds so the brief mixes sources; de-dupe by title.
+        var stories: [WidgetNewsStory] = []
+        var seen = Set<String>()
+        let rounds = perFeed.map(\.count).max() ?? 0
+        outer: for round in 0..<rounds {
+            for feed in perFeed where round < feed.count {
+                let story = feed[round]
+                if seen.insert(story.title.lowercased()).inserted { stories.append(story) }
+                if stories.count >= 6 { break outer }
+            }
+        }
+        guard !stories.isEmpty else { return nil }
+        let sourceCount = Set(stories.compactMap { $0.sources.first?.domain }).count
+
+        return MessageWidget(
+            kind: .newsBrief,
+            title: "News brief",
+            freshness: .fresh,
+            time: shortCurrentTimeString(),
+            followUp: "What's the biggest story?",
+            note: nil,
+            chart: nil,
+            metric: nil,
+            comparison: nil,
+            newsBrief: WidgetNewsBrief(
+                heading: "Top stories · \(sourceCount) source\(sourceCount == 1 ? "" : "s")",
+                stories: stories
+            )
+        )
     }
 
     /// Current conditions + today's high/low for a named place (open-meteo

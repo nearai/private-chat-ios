@@ -11,14 +11,20 @@ struct AppEnvironment {
         let api = PrivateChatAPI(configuration: .production)
         let sessionStore = SessionStore(api: api)
         let chatStore = ChatStore(api: api)
-        let briefingStore = BriefingStore()
         #if DEBUG
+        // Demo capture uses an isolated briefings file so its seeded samples
+        // (and the saves their scheduled runs trigger) never pollute the real
+        // briefings.json a normal/interactive session loads.
+        let briefingStore = DemoCapture.isEnabled
+            ? BriefingStore(fileURL: BriefingStore.demoFileURL())
+            : BriefingStore()
         if DemoCapture.isEnabled {
             briefingStore.seedDemoSamples()
         } else {
             briefingStore.load()
         }
         #else
+        let briefingStore = BriefingStore()
         briefingStore.load()
         #endif
         briefingStore.runner = { [weak chatStore] briefing in
