@@ -1667,8 +1667,12 @@ final class PrivateChatCoreTests: XCTestCase {
 
         let plan = AppSetupPlan(profile: profile, readiness: .optimistic)
 
-        XCTAssertEqual(plan.starterWorkspaceSeeds.map(\.title), ["Workspace", "Instructions", "Setup guide", "Goal"])
+        XCTAssertEqual(plan.starterWorkspaceSeeds.map(\.title), ["Workspace", "Repo plan", "Setup guide", "Goal"])
         XCTAssertEqual(plan.starterWorkspaceSeeds.first?.detail, "Build Workspace opens as the active project for your first chats.")
+        XCTAssertEqual(
+            plan.starterWorkspaceSeeds.dropFirst().first?.detail,
+            "Starter prompts ask for a safe patch plan and focused verification before code changes."
+        )
         XCTAssertEqual(plan.starterPromptSuggestions.map(\.title), ["Plan repo task", "Safe patch", "Repo checklist"])
         XCTAssertEqual(plan.starterPromptSuggestions.first?.prompt, "Plan the first repo task for this goal: Review the repo and plan the first safe patch.")
     }
@@ -1685,6 +1689,72 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(normalized.emptyStateSubtitle, "Start with a safe repo plan, then verify the patch or test pass.")
         XCTAssertEqual(suggestions.map(\.title), ["Repo plan", "Review repo", "Focused tests"])
         XCTAssertEqual(suggestions.first?.prompt, "Plan the first repo task: what to inspect, what to change, and which focused tests should run.")
+    }
+
+    func testMultiTrackSetupBuildsCombinedStarterDraftAndSuggestionsForGoal() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .research
+        profile.useCases = [.research, .teamProjects]
+        profile.contextStyle = .project
+        profile.goalText = "Map the strongest privacy proof workflow."
+
+        let normalized = profile.normalizedForDefaults
+        let suggestions = normalized.emptyStatePromptSuggestions
+        let plan = AppSetupPlan(profile: normalized, readiness: .optimistic)
+
+        XCTAssertEqual(
+            normalized.firstRunDraft,
+            "Create a sourced research brief for this goal using project files, links, notes, and memory: Map the strongest privacy proof workflow."
+        )
+        XCTAssertEqual(suggestions.map(\.title), ["Start goal", "Start brief", "Organize project"])
+        XCTAssertEqual(
+            suggestions.first?.prompt,
+            "Create a sourced research brief for this goal using project files, links, notes, and memory: Map the strongest privacy proof workflow."
+        )
+        XCTAssertEqual(plan.firstRunDraft, normalized.firstRunDraft)
+        XCTAssertEqual(plan.starterPromptSuggestions.map(\.title), ["Start goal", "Start brief", "Organize project"])
+    }
+
+    func testMultiTrackSetupBuildsMixedWorkspaceSeeds() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .buildAgents
+        profile.useCases = [.buildAgents, .research, .teamProjects]
+        profile.contextStyle = .project
+
+        let plan = AppSetupPlan(profile: profile.normalizedForDefaults, readiness: .optimistic)
+
+        XCTAssertEqual(
+            plan.starterWorkspaceSeeds.map(\.title),
+            ["Workspace", "Repo plan", "Research brief", "Project memory", "Shared guide"]
+        )
+        XCTAssertEqual(
+            plan.starterWorkspaceSeeds[1].detail,
+            "Starter prompts ask for a safe patch plan and focused verification before code changes."
+        )
+        XCTAssertEqual(
+            plan.starterWorkspaceSeeds.last?.detail,
+            "3 setup tracks share one reusable guide note and project instructions."
+        )
+    }
+
+    func testMultiTrackSetupUsesCombinedPromptWithoutGoal() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .buildAgents
+        profile.useCases = [.buildAgents, .research, .teamProjects]
+        profile.contextStyle = .project
+
+        let normalized = profile.normalizedForDefaults
+        let suggestions = normalized.emptyStatePromptSuggestions
+
+        XCTAssertEqual(
+            normalized.firstRunDraft,
+            "Plan the first repo task using project files, links, notes, and memory, with current sources and citations."
+        )
+        XCTAssertEqual(suggestions.map(\.title), ["Start plan", "Repo plan", "Research brief"])
+        XCTAssertEqual(
+            suggestions.first?.prompt,
+            "Plan the first repo task using project files, links, notes, and memory, with current sources and citations."
+        )
     }
 
     func testSetupNonPrivateTracksExposeStarterDraftWithoutGoal() {
@@ -1875,20 +1945,21 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(plan.expectedFirstAction, "Ask the council")
     }
 
-    func testStarterPresetsPrefillGoalAndKeepCTAStateDerived() {
+    func testStarterPresetsPrefillExampleGoalAndKeepCTAStateDerived() {
         for preset in UserSetupStarterPreset.allCases {
             var profile = UserSetupProfile.defaults
             profile.applyStarterPreset(preset)
 
             let plan = AppSetupPlan(profile: profile, readiness: .optimistic)
 
-            XCTAssertEqual(profile.goalText, preset.prompt)
+            XCTAssertEqual(profile.goalText, preset.setupExampleGoalText)
+            XCTAssertNotEqual(profile.goalText, preset.prompt)
             XCTAssertEqual(profile.useCases, [preset.useCase])
             XCTAssertEqual(profile.wantsWeb, preset.wantsWeb)
             XCTAssertEqual(profile.wantsIronclaw, preset.wantsIronclaw)
             XCTAssertEqual(profile.wantsCouncil, preset.wantsCouncil)
             XCTAssertEqual(plan.expectedFirstAction, "Start from your goal")
-            XCTAssertEqual(plan.goalText, preset.prompt)
+            XCTAssertEqual(plan.goalText, preset.setupExampleGoalText)
             XCTAssertNotNil(plan.firstRunDraft)
         }
     }
@@ -3686,6 +3757,45 @@ extension PrivateChatCoreTests {
         // A pure percentage calc stays math; prose stays prose.
         if case .tipSplit? = QuickIntentParser.parse("20% of 85") { XCTFail("calc must be math, not tipSplit") }
         XCTAssertNil(QuickIntentParser.parse("how was your day"))
+    }
+
+    func testDocumentChunkerChunksAndRanks() {
+        let doc = """
+        Introduction. This paper is about privacy-preserving inference.
+
+        The TEE attestation chapter explains remote attestation and SEV-SNP.
+
+        The conclusion summarizes the cost tradeoffs of confidential computing.
+        """
+        // Small budget → one chunk per paragraph.
+        let chunks = DocumentChunker.chunk(doc, maxChars: 80)
+        XCTAssertEqual(chunks.count, 3)
+        // The attestation question retrieves the middle paragraph.
+        XCTAssertEqual(DocumentChunker.rank(chunks, query: "attestation SEV-SNP", topK: 1), [1])
+        // Convenience returns the relevant passage text.
+        let passages = DocumentChunker.relevantPassages(in: doc, query: "cost tradeoffs", maxChars: 80, topK: 1)
+        XCTAssertTrue(passages.first?.contains("cost tradeoffs") ?? false)
+        // No matching terms → no chunks.
+        XCTAssertTrue(DocumentChunker.rank(chunks, query: "kangaroo", topK: 3).isEmpty)
+        // A long paragraph with no blank lines still hard-splits.
+        let long = String(repeating: "word ", count: 1000) // ~5000 chars, no "\n\n"
+        XCTAssertGreaterThanOrEqual(DocumentChunker.chunk(long, maxChars: 1000).count, 5)
+
+        // contextBlock yields a promptable excerpt block, or nil when irrelevant.
+        let block = DocumentChunker.contextBlock(for: "attestation SEV-SNP", in: [doc], topK: 1)
+        XCTAssertNotNil(block)
+        XCTAssertTrue(block?.contains("attestation") ?? false)
+        XCTAssertTrue(block?.contains("Relevant excerpts") ?? false)
+        XCTAssertNil(DocumentChunker.contextBlock(for: "kangaroo", in: [doc]))
+        XCTAssertNil(DocumentChunker.contextBlock(for: "anything", in: []))
+
+        // Global cross-document ranking: the answer-bearing doc wins regardless of
+        // attachment order (the first doc must not hog the budget).
+        let docA = "Recipes for sourdough bread.\n\nKneading and proofing times."
+        let docB = "The quarterly revenue was $4.2 million driven by enterprise sales."
+        let multi = DocumentChunker.contextBlock(for: "quarterly revenue", in: [docA, docB], topK: 1)
+        XCTAssertTrue(multi?.contains("revenue") ?? false)
+        XCTAssertFalse(multi?.contains("sourdough") ?? true)
     }
 
     func testQuickIntentParsesActivityLog() {

@@ -183,6 +183,18 @@ final class ChatStore: ObservableObject {
             persistCurrentDraftIfNeeded()
         }
     }
+    /// On-device extracted text for attached PDFs, keyed by the attachment id, so
+    /// a question about the doc can inline only the most-relevant passages (local
+    /// RAG) instead of relying on the model to read the whole uploaded file.
+    /// Capped so it can't grow unbounded; stale entries are looked up only by the
+    /// current turn's attachment ids, so leftovers are harmless.
+    private var pendingDocumentTexts: [String: String] = [:]
+    /// Insertion order for `pendingDocumentTexts`, so the cap evicts the OLDEST
+    /// entry deterministically (a Dictionary has no order; `.suffix` could drop
+    /// the doc just staged for the current turn).
+    private var pendingDocumentTextIDs: [String] = []
+    private static let maxStagedDocumentChars = 200_000
+    private static let maxStagedDocuments = 8
     private var pendingHostedHandoffContinuation: HostedHandoffContinuation?
     private var currentUserMessageMetadata: MessageMetadata?
     private var storageAccountID = "signed-out"
@@ -1315,6 +1327,8 @@ final class ChatStore: ObservableObject {
         routeReadinessIssue = nil
         pendingAttachments = []
         pendingLargePasteTexts = [:]
+        pendingDocumentTexts = [:]
+        pendingDocumentTextIDs = []
         projects = []
         remoteFiles = []
         remoteFilePreview = nil
@@ -2706,6 +2720,15 @@ final class ChatStore: ObservableObject {
                     )
                     attachment.name = extractedFilename
                     attachment.kind = "pdf_text"
+                    // Keep the extracted text on-device too, so a question about
+                    // this PDF can inline the most-relevant passages (local RAG).
+                    pendingDocumentTexts[attachment.id] = String(extraction.text.prefix(Self.maxStagedDocumentChars))
+                    pendingDocumentTextIDs.removeAll { $0 == attachment.id }
+                    pendingDocumentTextIDs.append(attachment.id)
+                    while pendingDocumentTextIDs.count > Self.maxStagedDocuments {
+                        let evicted = pendingDocumentTextIDs.removeFirst()
+                        pendingDocumentTexts.removeValue(forKey: evicted)
+                    }
                     attachmentUploadNotice = extraction.truncated ?
                         "Attached capped readable text from \(url.lastPathComponent)." :
                         "Attached readable text from \(url.lastPathComponent)."
@@ -4444,6 +4467,20 @@ final class ChatStore: ObservableObject {
     }
 
     @discardableResult
+    /// Prepends a "relevant excerpts" block from any attached PDF whose text we
+    /// staged on-device, ranked against the user's question. No-op when there's
+    /// no staged doc, no question, or nothing relevant — so it never disturbs a
+    /// plain turn.
+    private func documentAugmentedPrompt(_ prompt: String, question: String, attachments: [ChatAttachment]) -> String {
+        let documents = attachments.compactMap { pendingDocumentTexts[$0.id] }
+        guard !documents.isEmpty,
+              !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let context = DocumentChunker.contextBlock(for: question, in: documents, topK: 4) else {
+            return prompt
+        }
+        return "\(context)\n\nUsing those excerpts (and the attached file) where relevant:\n\(prompt)"
+    }
+
     private func send(
         _ text: String,
         attachments: [ChatAttachment],
@@ -4492,7 +4529,14 @@ final class ChatStore: ObservableObject {
                 return false
             }
             routeReadinessIssue = nil
-            let routedText = phoneAgentMissionPromptIfNeeded(for: text) ?? text
+            // Inline the most-relevant excerpts of any attached PDF (local RAG)
+            // so the model focuses on the right section; the uploaded file is
+            // still attached, so this only adds context and never removes any.
+            // routedText stays clean (it also feeds the council legs, the repo-URL
+            // scan, and council synthesis) — excerpts are inlined only on the
+            // single-model, non-mission send below.
+            let mission = phoneAgentMissionPromptIfNeeded(for: text)
+            let routedText = mission ?? text
             let existingConversation = selectedConversation
             let requestedModel = selectedModel
             let requestModel = requestedModel
@@ -4561,9 +4605,12 @@ final class ChatStore: ObservableObject {
                 routedText: routedText
             )
 
+            let singleModelText = mission == nil
+                ? documentAugmentedPrompt(routedText, question: text, attachments: attachments)
+                : routedText
             let finalModel = try await streamResponseWithFallback(
                 initialModel: requestModel,
-                text: routedText,
+                text: singleModelText,
                 attachments: attachments,
                 conversationID: conversation.id,
                 previousResponseID: previousResponseID,
@@ -9044,6 +9091,8 @@ final class ChatStore: ObservableObject {
         routeReadinessIssue = nil
         pendingAttachments = []
         pendingLargePasteTexts = [:]
+        pendingDocumentTexts = [:]
+        pendingDocumentTextIDs = []
         selectedProjectID = data.project.id
         selectedModel = Self.defaultModelID
         councilModelIDs = [Self.defaultModelID, ModelOption.nearCloudQwenMaxModelID, "near-cloud/anthropic/claude-opus-4-7"]
