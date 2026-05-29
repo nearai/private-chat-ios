@@ -230,7 +230,7 @@ enum QuickIntentParser {
         Here’s what I can do — all on-device or over public data, no sign-in needed:
 
         **Live answers** — ask in plain language:
-        • “What’s the ETH price?” · “How’s my account, alice.near?”
+        • “What’s the ETH price?” · “What’s trending in crypto?” · “How’s my account, alice.near?”
         • “Weather in Tokyo” · “What time is it in London?”
         • “Convert 100 USD to EUR” · “5 miles in km” · “Define serendipity”
         • Top headlines · or chain them: “ETH price and weather in Lisbon”
@@ -239,6 +239,10 @@ enum QuickIntentParser {
         • “Every morning, give me a news briefing” (add “using council” for a multi-model take)
         • “Notify me when ETH drops below $2,000” — I alert once, then pause
         • “What are you tracking?” to review them
+
+        **Reminders & recall**:
+        • “Remind me to call mom at 5pm tomorrow” — I’ll notify you, even if the app’s closed
+        • “Search my chats for the Lisbon trip” · “What did I say about my budget?”
 
         **Memory (private, on this device)**:
         • “Remember I prefer concise answers” · “What do you remember?”

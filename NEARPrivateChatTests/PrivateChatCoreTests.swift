@@ -3460,8 +3460,12 @@ extension PrivateChatCoreTests {
         // Exact-match only: requests for help with a task stay model questions.
         XCTAssertNil(QuickIntentParser.parse("help me write an email"))
         XCTAssertNil(QuickIntentParser.parse("what can you help me with my taxes"))
-        XCTAssertFalse(QuickIntentParser.capabilitiesText().isEmpty)
-        XCTAssertTrue(QuickIntentParser.capabilitiesText().contains("ETH"))
+        let text = QuickIntentParser.capabilitiesText()
+        XCTAssertFalse(text.isEmpty)
+        XCTAssertTrue(text.contains("ETH"))
+        // Card stays accurate as features land.
+        XCTAssertTrue(text.contains("trending"))
+        XCTAssertTrue(text.contains("Remind"))
     }
 
     func testQuickIntentParsesSearchHistory() {
