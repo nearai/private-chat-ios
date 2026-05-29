@@ -4238,6 +4238,15 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(chart.chart?.value, "$14,800")
         XCTAssertEqual(chart.chart?.trend, .up)
 
+        // Significant-move detection: only a move ≥ threshold counts.
+        XCTAssertNil(TrackerHistory.significantMove(in: one))            // <2 points
+        let smallMove = [TrackerSample(date: Date(), value: 100, display: "$100"),
+                         TrackerSample(date: Date(), value: 101, display: "$101")] // +1%
+        XCTAssertNil(TrackerHistory.significantMove(in: smallMove, threshold: 0.03))
+        let bigMove = [TrackerSample(date: Date(), value: 100, display: "$100"),
+                       TrackerSample(date: Date(), value: 110, display: "$110")] // +10%
+        XCTAssertEqual(try XCTUnwrap(TrackerHistory.significantMove(in: bigMove, threshold: 0.03)), 0.10, accuracy: 0.001)
+
         // Notification body surfaces the value + move (not a generic "ready").
         let body = TrackerHistory.notificationBody(history: two, fallback: chart)
         XCTAssertTrue(body.contains("$14,800"))

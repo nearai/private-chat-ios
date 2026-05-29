@@ -173,6 +173,21 @@ enum TrackerHistory {
         return "Your update is ready."
     }
 
+    /// Default "meaningful move" threshold (fractional, e.g. 0.03 = 3%).
+    static let significantMoveThreshold = 0.03
+
+    /// The fractional change from the previous sample if it's a meaningful move
+    /// (|change| ≥ threshold), else nil — so trackers can ping on signal, not
+    /// every quiet check.
+    static func significantMove(in history: [TrackerSample], threshold: Double = significantMoveThreshold) -> Double? {
+        guard history.count >= 2 else { return nil }
+        let last = history[history.count - 1].value
+        let prev = history[history.count - 2].value
+        guard prev != 0 else { return nil }
+        let change = (last - prev) / prev
+        return abs(change) >= threshold ? change : nil
+    }
+
     /// A chart widget over the samples (oldest → newest), or nil with < 2 points.
     static func chartWidget(title: String, history: [TrackerSample]) -> MessageWidget? {
         guard history.count >= 2, let first = history.first, let last = history.last else { return nil }
@@ -618,10 +633,18 @@ final class BriefingStore: ObservableObject {
             briefings[index].isPaused = true
         }
         save()
-        Self.postBriefingReadyNotification(
-            title: briefings[index].title,
-            body: TrackerHistory.notificationBody(history: briefings[index].history, fallback: delivered)
-        )
+        // Signal, not noise: a numeric tracker pings only on its first reading or
+        // a meaningful move; quiet checks update Today silently. Non-numeric
+        // trackers (news digests, the daily brief) notify each run as before.
+        let history = briefings[index].history
+        let isNumericTracker = briefings[index].kind == .customPrompt && !history.isEmpty
+        let shouldNotify = !isNumericTracker || history.count == 1 || TrackerHistory.significantMove(in: history) != nil
+        if shouldNotify {
+            Self.postBriefingReadyNotification(
+                title: briefings[index].title,
+                body: TrackerHistory.notificationBody(history: history, fallback: delivered)
+            )
+        }
     }
 
     /// Schedules a one-off personal reminder ("remind me to call mom at 5pm") as
