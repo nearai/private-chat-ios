@@ -4351,6 +4351,39 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(spec.subject?.contains("stock:TSLA") == true, spec.subject ?? "nil")
     }
 
+    @MainActor
+    func testTrackerSteeringPinSnoozeAndSort() {
+        let now = Date()
+        let pastCreated = now.addingTimeInterval(-86_400 * 2)
+        let a = Briefing(title: "A", prompt: "p", schedule: .daily(hour: 8, minute: 0), createdAt: pastCreated, kind: .dailyNews)
+        let b = Briefing(title: "B", prompt: "p", schedule: .daily(hour: 8, minute: 0), createdAt: pastCreated, kind: .dailyNews)
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("steer-\(UUID().uuidString).json")
+        let store = BriefingStore(briefings: [a, b], fileURL: tempURL)
+        // Both are due (createdAt is 2 days ago).
+        XCTAssertEqual(store.dueBriefings(now: now).count, 2)
+        // Pin B → it sorts to the top.
+        store.setPinned(b, true)
+        XCTAssertEqual(store.briefings.first?.id, b.id)
+        // Snooze A → no longer due; B still due.
+        store.snooze(a, days: 1)
+        let due = store.dueBriefings(now: now)
+        XCTAssertFalse(due.contains { $0.id == a.id })
+        XCTAssertTrue(due.contains { $0.id == b.id })
+        // End the snooze → A is due again.
+        store.unsnooze(a)
+        XCTAssertTrue(store.dueBriefings(now: now).contains { $0.id == a.id })
+    }
+
+    func testBriefingPersistsPinAndSnooze() throws {
+        var briefing = Briefing(title: "X", prompt: "p", schedule: .daily(hour: 8, minute: 0), kind: .cryptoPrice, accountID: "near")
+        briefing.isPinned = true
+        briefing.snoozedUntil = Date().addingTimeInterval(3600)
+        let data = try JSONEncoder().encode(briefing)
+        let decoded = try JSONDecoder().decode(Briefing.self, from: data)
+        XCTAssertTrue(decoded.isPinned)
+        XCTAssertNotNil(decoded.snoozedUntil)
+    }
+
     func testBriefingThreadReplyContextPrefersWidgetNote() {
         // The follow-up the model answers is grounded in the delivery's result.
         let widget = MessageWidget(kind: .generic, title: "Global politics", note: "Top 5 developments: Iran, Lebanon, EU sanctions")

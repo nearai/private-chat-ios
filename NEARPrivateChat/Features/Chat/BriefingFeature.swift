@@ -269,9 +269,13 @@ struct Briefing: Codable, Hashable, Identifiable {
     /// Numeric values recorded across runs (oldest → newest), so a tracker can
     /// chart its trend over time. Empty for trackers whose runs aren't numeric.
     var history: [TrackerSample]
+    /// User-steered: pinned trackers sort to the top of Today.
+    var isPinned: Bool
+    /// User-steered: skip scheduled runs until this time (snooze), then resume.
+    var snoozedUntil: Date?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, prompt, schedule, isPaused, createdAt, lastRunAt, latestResult, kind, accountID, council, condition, history
+        case id, title, prompt, schedule, isPaused, createdAt, lastRunAt, latestResult, kind, accountID, council, condition, history, isPinned, snoozedUntil
     }
 
     init(
@@ -287,7 +291,9 @@ struct Briefing: Codable, Hashable, Identifiable {
         accountID: String? = nil,
         council: Bool = false,
         condition: BriefingCondition? = nil,
-        history: [TrackerSample] = []
+        history: [TrackerSample] = [],
+        isPinned: Bool = false,
+        snoozedUntil: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -302,6 +308,8 @@ struct Briefing: Codable, Hashable, Identifiable {
         self.council = council
         self.condition = condition
         self.history = history
+        self.isPinned = isPinned
+        self.snoozedUntil = snoozedUntil
     }
 
     /// True when this tracker is gated on a condition (a threshold alert).
@@ -332,7 +340,9 @@ extension Briefing {
             accountID: try? c.decode(String.self, forKey: .accountID),
             council: (try? c.decode(Bool.self, forKey: .council)) ?? false,
             condition: try? c.decode(BriefingCondition.self, forKey: .condition),
-            history: (try? c.decode([TrackerSample].self, forKey: .history)) ?? []
+            history: (try? c.decode([TrackerSample].self, forKey: .history)) ?? [],
+            isPinned: (try? c.decode(Bool.self, forKey: .isPinned)) ?? false,
+            snoozedUntil: try? c.decode(Date.self, forKey: .snoozedUntil)
         )
     }
 }
@@ -599,6 +609,28 @@ final class BriefingStore: ObservableObject {
         Self.scheduleReminderNotifications(for: briefings[index])
     }
 
+    /// Agent-inbox steering: pin a tracker to the top of Today.
+    func setPinned(_ briefing: Briefing, _ isPinned: Bool) {
+        guard let index = briefings.firstIndex(where: { $0.id == briefing.id }) else { return }
+        briefings[index].isPinned = isPinned
+        briefings.sort(by: briefingSort)
+        save()
+    }
+
+    /// Agent-inbox steering: skip scheduled runs for `days` days, then resume.
+    func snooze(_ briefing: Briefing, days: Int = 1) {
+        guard let index = briefings.firstIndex(where: { $0.id == briefing.id }) else { return }
+        briefings[index].snoozedUntil = Calendar.current.date(byAdding: .day, value: max(1, days), to: Date())
+        save()
+    }
+
+    /// End a snooze early.
+    func unsnooze(_ briefing: Briefing) {
+        guard let index = briefings.firstIndex(where: { $0.id == briefing.id }) else { return }
+        briefings[index].snoozedUntil = nil
+        save()
+    }
+
     func run(_ briefing: Briefing) async {
         guard let snapshot = briefings.first(where: { $0.id == briefing.id }) else { return }
         let result = await runner(snapshot)
@@ -739,6 +771,8 @@ final class BriefingStore: ObservableObject {
     func dueBriefings(now: Date = Date()) -> [Briefing] {
         briefings.filter { briefing in
             guard !briefing.isPaused else { return false }
+            // Snoozed trackers skip runs until the snooze elapses, then resume.
+            if let snoozedUntil = briefing.snoozedUntil, snoozedUntil > now { return false }
             let baseline = briefing.lastRunAt ?? briefing.createdAt
             guard let nextRun = briefing.schedule.nextRun(after: baseline) else { return false }
             return nextRun <= now
@@ -922,6 +956,21 @@ struct TodaySection: View {
                     ForEach(store.briefings) { briefing in
                         ScheduleRow(briefing: briefing) {
                             onOpenBriefing(briefing)
+                        }
+                        .contextMenu {
+                            Button { store.setPinned(briefing, !briefing.isPinned) } label: {
+                                Label(briefing.isPinned ? "Unpin" : "Pin to top", systemImage: briefing.isPinned ? "pin.slash" : "pin")
+                            }
+                            Button { store.setPaused(briefing, !briefing.isPaused) } label: {
+                                Label(briefing.isPaused ? "Unmute" : "Mute", systemImage: briefing.isPaused ? "bell" : "bell.slash")
+                            }
+                            if briefing.snoozedUntil != nil {
+                                Button { store.unsnooze(briefing) } label: { Label("End snooze", systemImage: "moon") }
+                            } else {
+                                Button { store.snooze(briefing, days: 1) } label: { Label("Snooze 1 day", systemImage: "moon.zzz") }
+                            }
+                            Divider()
+                            Button(role: .destructive) { store.remove(briefing) } label: { Label("Delete", systemImage: "trash") }
                         }
                         if briefing.id != store.briefings.last?.id {
                             Divider()
@@ -1731,6 +1780,7 @@ private extension JSONDecoder {
 }
 
 private func briefingSort(_ lhs: Briefing, _ rhs: Briefing) -> Bool {
+    if lhs.isPinned != rhs.isPinned { return lhs.isPinned }
     if lhs.isPaused != rhs.isPaused { return !lhs.isPaused }
     let now = Date()
     let lhsNext = lhs.schedule.nextRun(after: lhs.lastRunAt ?? now) ?? .distantFuture
