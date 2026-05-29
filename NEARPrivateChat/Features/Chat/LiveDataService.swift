@@ -296,8 +296,10 @@ enum QuickIntentParser {
         • Top headlines · or chain them: “ETH price and weather in Lisbon”
 
         **Trackers & alerts** — I check on a schedule and surface results on Today:
-        • “Every morning, give me a news briefing” (add “using council” for a multi-model take)
+        • Track *anything*: “Track the price of a Rolex GMT Master II every morning” — I find it on the web and build a chart over time
+        • Ask something, then just say “track that” to start watching it
         • “Notify me when ETH drops below $2,000” — I alert once, then pause
+        • “Brief me” — one digest of everything I’m tracking + the markets (or “brief me every morning”)
         • “What are you tracking?” to review them
 
         **Quick math & dates** — instant, on-device:
