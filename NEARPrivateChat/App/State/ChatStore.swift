@@ -154,6 +154,9 @@ final class ChatStore: ObservableObject {
     /// Wired by the app to create a scheduled briefing from a "create a tracker…"
     /// prompt (the BriefingStore lives outside ChatStore).
     var onCreateTracker: ((Briefing) -> Void)?
+    /// On-device personal memory; injected into the model's system prompt so
+    /// answers are personalized. Account-scoped, never leaves the device.
+    let memoryStore = MemoryStore()
     private let webGroundingService = WebGroundingService()
     private let ironclawMobileRuntime: IronclawMobileRuntime
     private var selectedResponseVariantByConversationID: [String: String] = [:]
@@ -1247,6 +1250,7 @@ final class ChatStore: ObservableObject {
         isResettingAccountScopedState = false
         storageAccountID = resolvedAccountID
         loadAccountScopedState()
+        memoryStore.configure(accountID: resolvedAccountID)
     }
 
     func updateCurrentUser(profile: UserProfile?) {
@@ -3741,6 +3745,21 @@ final class ChatStore: ObservableObject {
             AppHaptics.selection()
         case .nearAccount(nil):
             _ = appendAssistant(text: "Sure — what’s your NEAR account? Tell me the id (e.g. **yourname.near**) and I’ll pull its balance and holdings.")
+        case let .remember(text):
+            if memoryStore.add(text) != nil {
+                _ = appendAssistant(text: "Got it — I’ll remember that:\n\n> \(text)\n\nIt stays on your device and I’ll use it when it’s relevant. Ask “what do you remember” any time.")
+            } else {
+                _ = appendAssistant(text: "I’ve already got that noted.")
+            }
+            AppHaptics.selection()
+        case .recallMemory:
+            let memories = memoryStore.items
+            if memories.isEmpty {
+                _ = appendAssistant(text: "I’m not remembering anything yet. Tell me something like **“remember that I prefer concise answers”** and I’ll keep it on your device.")
+            } else {
+                let lines = memories.prefix(20).map { "• \($0.text)" }.joined(separator: "\n")
+                _ = appendAssistant(text: "Here’s what I’m keeping on your device:\n\n\(lines)")
+            }
         default:
             let id = appendAssistant(text: "", streaming: true)
             currentAssistantMessageID = id
@@ -3785,7 +3804,8 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.unitConvertWidget(value: value, from: from, to: to)
         case let .define(word):
             return await LiveDataService.defineWidget(word: word)
-        case .createTracker:
+        case .remember, .recallMemory, .createTracker:
+            // Handled synchronously in handleQuickIntent — never fetched here.
             return nil
         }
     }
@@ -8130,8 +8150,9 @@ final class ChatStore: ObservableObject {
     private func activeSystemPrompt() -> String {
         let userPrompt = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let modePrompt = sourceModeInstructions().trimmingCharacters(in: .whitespacesAndNewlines)
+        let memoryPrompt = memoryStore.contextBlock()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let requestedPrompt = researchModeEnabled ? Self.researchModeInstructions(appendingTo: userPrompt) : userPrompt
-        let basePrompt = [requestedPrompt, modePrompt]
+        let basePrompt = [memoryPrompt, requestedPrompt, modePrompt]
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")

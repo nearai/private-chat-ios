@@ -3192,6 +3192,46 @@ extension PrivateChatCoreTests {
         XCTAssertNil(QuickIntentParser.parse("translate this to spanish"))
     }
 
+    func testQuickIntentParsesMemory() {
+        XCTAssertEqual(QuickIntentParser.parse("remember that I prefer concise answers"), .remember(text: "I prefer concise answers"))
+        XCTAssertEqual(QuickIntentParser.parse("Remember my anniversary is June 3"), .remember(text: "my anniversary is June 3"))
+        XCTAssertEqual(QuickIntentParser.parse("what do you remember"), .recallMemory)
+        // Original casing is preserved for the stored fact.
+        guard case let .remember(text) = QuickIntentParser.parse("remember that my dog is named Biscuit") else {
+            return XCTFail("Expected a remember intent.")
+        }
+        XCTAssertTrue(text.contains("Biscuit"))
+        // Not a store/recall command.
+        XCTAssertNil(QuickIntentParser.parse("tell me about the memory of a computer"))
+    }
+
+    func testMemoryStorePersistsDedupesAndBuildsContext() throws {
+        let tempFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("memory-\(UUID().uuidString).json")
+        let store = MemoryStore(fileURL: tempFile)
+        XCTAssertNotNil(store.add("I prefer concise answers"))
+        XCTAssertNotNil(store.add("My wife's surname is Dangwal"))
+        XCTAssertNil(store.add("hi")) // too short
+
+        // Case-insensitive de-dupe: no new item, count stays at 2.
+        XCTAssertNotNil(store.add("i prefer concise answers"))
+        XCTAssertEqual(store.items.count, 2)
+
+        let block = try XCTUnwrap(store.contextBlock())
+        XCTAssertTrue(block.contains("Dangwal"))
+
+        // Reloads from disk.
+        let reloaded = MemoryStore(fileURL: tempFile)
+        XCTAssertEqual(reloaded.items.count, 2)
+        XCTAssertTrue(reloaded.items.contains { $0.text == "My wife's surname is Dangwal" })
+
+        reloaded.clear()
+        XCTAssertTrue(reloaded.items.isEmpty)
+        XCTAssertNil(reloaded.contextBlock())
+
+        try? FileManager.default.removeItem(at: tempFile)
+    }
+
     func testQuickIntentParsesDefinition() {
         XCTAssertEqual(QuickIntentParser.parse("define serendipity"), .define(word: "serendipity"))
         XCTAssertEqual(QuickIntentParser.parse("what does ephemeral mean"), .define(word: "ephemeral"))
