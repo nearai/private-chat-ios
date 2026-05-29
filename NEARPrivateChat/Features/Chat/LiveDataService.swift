@@ -141,12 +141,18 @@ enum QuickIntentParser {
             return .createTracker(spec)
         }
 
-        // 1) "create a tracker / watch / every morning …" — only when the
-        // prompt names a subject we can actually track. Otherwise fall through
-        // so "remind me to stretch daily" goes to the model, not an ETH tracker.
+        // 1) "create a tracker / watch / every morning …" — fires when the prompt
+        // either names a schedule (createVerb + trackerNoun) OR asks to watch some
+        // informational subject (watchVerb + an info cue like "price"/"value"),
+        // so "track the price of a Rolex GMT Master II" becomes a web-grounded
+        // recurring tracker while "remind me to stretch daily" stays a reminder.
         let createVerb = contains(text, ["create", "make", "set up", "set-up", "setup", "build", "schedule", "start", "add", "track", "watch", "remind"])
         let trackerNoun = contains(text, ["tracker", "watcher", "alert", "briefing", "brief", "digest", "every day", "every morning", "each morning", "each day", "every weekday", "daily", "weekly"])
-        if createVerb && trackerNoun, let spec = makeTracker(from: text) {
+        let infoCue = contains(text, ["price", "value", "cost", "worth", "quote", "rate", "index", "stock",
+                                      "score", "news", "level", "status", "forecast", "floor price", "market cap",
+                                      "how much", "trading at"])
+        if (createVerb && trackerNoun) || (startsWithWatchCommand(text) && infoCue),
+           let spec = makeTracker(from: text, original: trimmedRaw) {
             return .createTracker(spec)
         }
 
@@ -345,7 +351,7 @@ enum QuickIntentParser {
     /// Builds a tracker only when a real subject is present. Returns nil for
     /// generic "remind me …" prompts and account trackers with no id so the
     /// caller can fall through to the model instead of scheduling a dead fetch.
-    private static func makeTracker(from text: String) -> TrackerSpec? {
+    private static func makeTracker(from text: String, original: String) -> TrackerSpec? {
         // `council` is recorded for a future scheduled-council runner; today the
         // briefing runner fetches live data, so we don't promise it in the label.
         let council = contains(text, ["council", "panel", "multiple models", "models debate", "debate"])
@@ -381,17 +387,38 @@ enum QuickIntentParser {
                 confirmation: "\(coin.symbol) price · \(label)"
             )
         }
-        // No live-data subject. A recurring briefing/digest (or a council
-        // request) becomes a scheduled custom-prompt task on the user's actual
-        // question — run on schedule by a single model, or the council if asked.
-        // A bare reminder with no informational noun falls through to the model
-        // so we don't manufacture trackers from "remind me to stretch".
+        // Open-ended "track/watch the price/value of <X>" for ANY subject we
+        // don't have a built-in feed for (a watch, a stock, a collectible…).
+        // Becomes a web-grounded recurring custom-prompt tracker — the agentic-OS
+        // case: "track the price of a Rolex GMT Master II every morning".
+        let infoCue = contains(text, ["price", "value", "cost", "worth", "quote", "rate", "index", "stock",
+                                      "score", "level", "status", "forecast", "floor price", "market cap",
+                                      "how much", "trading at"])
+        if startsWithWatchCommand(text) && infoCue {
+            let subject = trackerSubject(from: original)
+            guard subject.count >= 2 else { return nil }
+            let title = prettyTrackerTitle(from: subject)
+            return TrackerSpec(
+                title: title,
+                kind: .customPrompt,
+                subject: nil,
+                schedule: schedule,
+                council: council,
+                confirmation: "Tracking \(title) · \(label)",
+                prompt: "Using web search, find the latest \(subject) and report it concisely. Lead with the current number/price (with its currency) and the as-of date, then one short line of context. If it's a price or numeric value, present it as a metric or chart widget."
+            )
+        }
+
+        // A recurring briefing/digest (or a council request) becomes a scheduled
+        // custom-prompt task on the user's actual question. A bare reminder with
+        // no informational noun falls through so we don't manufacture trackers
+        // from "remind me to stretch".
         let wantsBriefing = council || contains(text, [
             "briefing", "brief", "digest", "summary", "summarize", "summarise",
             "report", "rundown", "recap", "roundup", "round-up"
         ])
         guard wantsBriefing else { return nil }
-        let prompt = cleanedTrackerPrompt(from: text)
+        let prompt = cleanedTrackerPrompt(from: original)
         guard prompt.count >= 4 else { return nil }
         return TrackerSpec(
             title: council ? "Council briefing" : "Daily briefing",
@@ -402,6 +429,59 @@ enum QuickIntentParser {
             confirmation: "\(council ? "Council briefing" : "Briefing") · \(label)",
             prompt: prompt
         )
+    }
+
+    /// The subject of an open-ended tracker: the cleaned prompt with leading
+    /// watch verbs and articles stripped. "track the price of a Rolex GMT Master
+    /// II every morning" → "price of a Rolex GMT Master II".
+    static func trackerSubject(from text: String) -> String {
+        var subject = cleanedTrackerPrompt(from: text)
+        let leadVerbs = ["keep an eye on ", "keep tabs on ", "keep track of ", "track ", "watch ", "monitor ", "follow "]
+        var changed = true
+        while changed {
+            changed = false
+            let lower = subject.lowercased()
+            for verb in leadVerbs where lower.hasPrefix(verb) {
+                subject = String(subject.dropFirst(verb.count)); changed = true; break
+            }
+            for article in ["the ", "a ", "an ", "my "] where subject.lowercased().hasPrefix(article) {
+                subject = String(subject.dropFirst(article.count)); changed = true; break
+            }
+        }
+        return subject.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+    }
+
+    /// A short display title from a tracker subject — strips a leading
+    /// "price/value/cost of" and an article. "price of a Rolex GMT Master II"
+    /// → "Rolex GMT Master II".
+    static func prettyTrackerTitle(from subject: String) -> String {
+        var title = subject
+        for prefix in ["current price of ", "price of ", "value of ", "cost of ", "quote for ", "the "] {
+            if title.lowercased().hasPrefix(prefix) { title = String(title.dropFirst(prefix.count)) }
+        }
+        for article in ["a ", "an ", "the "] where title.lowercased().hasPrefix(article) {
+            title = String(title.dropFirst(article.count))
+        }
+        title = title.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+        return String(title.prefix(48))
+    }
+
+    /// True when the text reads as an imperative "track/watch/monitor <subject>"
+    /// command (optionally after a polite lead-in), excluding idioms like "watch
+    /// out" / "watch for" so a statement ("watch out, the price went up") can't
+    /// trip it. Expects lowercased input.
+    static func startsWithWatchCommand(_ text: String) -> Bool {
+        var rest = text
+        for prefix in ["please ", "can you ", "could you ", "would you ", "i want to ", "i'd like to ",
+                       "i would like to ", "i want you to ", "i'd like you to ", "let's ", "lets "]
+        where rest.hasPrefix(prefix) {
+            rest = String(rest.dropFirst(prefix.count)); break
+        }
+        let verbs = ["track ", "watch ", "monitor ", "follow ", "keep an eye on ", "keep tabs on ", "keep track of "]
+        guard let verb = verbs.first(where: { rest.hasPrefix($0) }) else { return false }
+        let tail = String(rest.dropFirst(verb.count))
+        if verb == "watch " && (tail.hasPrefix("out") || tail.hasPrefix("for ")) { return false }
+        return true
     }
 
     /// "notify me when ETH drops below $2,000" → a coin-price threshold tracker.

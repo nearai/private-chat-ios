@@ -3798,6 +3798,38 @@ extension PrivateChatCoreTests {
         XCTAssertFalse(multi?.contains("sourdough") ?? true)
     }
 
+    func testQuickIntentParsesOpenEndedTracker() {
+        // The agentic-OS case: any subject (no built-in feed) becomes a
+        // web-grounded recurring tracker.
+        guard case let .createTracker(rolex) = QuickIntentParser.parse("track the price of a Rolex GMT Master II every morning") else {
+            return XCTFail("Expected an open-ended tracker.")
+        }
+        XCTAssertEqual(rolex.kind, .customPrompt)
+        XCTAssertEqual(rolex.title, "Rolex GMT Master II")          // case preserved
+        XCTAssertEqual(rolex.schedule, .daily(hour: 8, minute: 0))
+        XCTAssertTrue((rolex.prompt ?? "").contains("Rolex GMT Master II"))
+        XCTAssertTrue((rolex.prompt ?? "").lowercased().contains("web search"))
+
+        // Works without an explicit schedule (defaults to daily).
+        guard case let .createTracker(spx) = QuickIntentParser.parse("watch the S&P 500 level") else {
+            return XCTFail("Expected a tracker without an explicit schedule.")
+        }
+        XCTAssertEqual(spx.kind, .customPrompt)
+
+        // No info cue → not a tracker (stays a model question).
+        if case .createTracker = QuickIntentParser.parse("watch this video") {
+            XCTFail("A non-informational 'watch' must not become a tracker.")
+        }
+        // A bare to-do reminder is not a tracker.
+        if case .createTracker = QuickIntentParser.parse("remind me to stretch daily") {
+            XCTFail("A to-do must not become a tracker.")
+        }
+        // The "watch out" idiom in a statement must not become a tracker.
+        if case .createTracker = QuickIntentParser.parse("watch out, the price went up today") {
+            XCTFail("'watch out' is not a tracking command.")
+        }
+    }
+
     func testQuickIntentParsesActivityLog() {
         XCTAssertEqual(QuickIntentParser.parse("what have you done"), .activityLog)
         XCTAssertEqual(QuickIntentParser.parse("show your activity"), .activityLog)
