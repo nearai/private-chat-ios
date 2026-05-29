@@ -56,6 +56,7 @@ enum DemoCaptureScreen: String, CaseIterable {
     case liveData
     case generativeChat
     case chatStarters
+    case councilBriefingLive
     case councilOutput
     case verification
     case models
@@ -113,6 +114,21 @@ enum DemoCapture {
             .flatMap { UInt64(String($0.dropFirst(argumentPrefix.count))) }
         let environmentValue = ProcessInfo.processInfo.environment["NEAR_DEMO_AUTOPLAY_DELAY_MS"].flatMap(UInt64.init)
         return (argumentValue ?? environmentValue ?? 0) * 1_000_000
+    }
+}
+
+/// DEBUG-only live-backend credentials, injected via environment so signed-in
+/// flows can be exercised in the demo harness without bundling any secret.
+/// Values live only in the launched process's environment — never on disk or
+/// in source. Used by the `*Live` demo screens.
+enum DebugBackend {
+    static var sessionToken: String? { trimmedEnv("NEAR_DEBUG_SESSION_TOKEN") }
+    static var cloudKey: String? { trimmedEnv("NEAR_DEBUG_CLOUD_KEY") }
+    static var isEnabled: Bool { sessionToken != nil }
+
+    private static func trimmedEnv(_ key: String) -> String? {
+        let value = ProcessInfo.processInfo.environment[key]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (value?.isEmpty == false) ? value : nil
     }
 }
 #endif

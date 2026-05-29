@@ -353,6 +353,9 @@ final class ChatStore: ObservableObject {
     private var streamTask: Task<Void, Never>?
     private var currentAssistantMessageID: String?
     private var currentCouncilAssistantMessageIDs: [String] = []
+    #if DEBUG
+    private var didStartLiveCouncilDemo = false
+    #endif
     private var councilStopRequestedBatchID: String?
     private var isNormalizingDraft = false
     private var isResettingAccountScopedState = false
@@ -8789,6 +8792,20 @@ final class ChatStore: ObservableObject {
             councilModelIDs = [Self.defaultModelID]
             selectedModel = Self.defaultModelID
             draft = ""
+        case .councilBriefingLive:
+            // Runs a REAL scheduled council briefing against the backend using an
+            // env-injected session token (DebugBackend). Verifies end-to-end that
+            // "using council" trackers do real multi-model work on a schedule.
+            selectedConversation = nil
+            selectedProjectID = nil
+            messages = []
+            draft = ""
+            if !didStartLiveCouncilDemo {
+                didStartLiveCouncilDemo = true
+                Task { @MainActor [weak self] in
+                    await self?.runLiveCouncilBriefingDemo()
+                }
+            }
         case .chat, .councilOutput, .cloudModels, .council, .councilRoom, .threaded, .liveData, .project, .share:
             selectedConversation = data.primaryConversation
             messages = data.messages
@@ -8797,6 +8814,64 @@ final class ChatStore: ObservableObject {
     }
 
     #if DEBUG
+    /// Drives a real scheduled council briefing against the backend (token via
+    /// DebugBackend) and renders its synthesized result inline for verification.
+    @MainActor
+    private func runLiveCouncilBriefingDemo() async {
+        if let key = DebugBackend.cloudKey {
+            saveNearCloudAPIKey(key)
+        }
+        // Load real models directly. NOT bootstrap() — it short-circuits to
+        // prepareDemoCapture in demo mode, which would re-enter this case and
+        // recursively spawn runs (the source of the earlier 502 storm).
+        await refreshModels(loadCloudCatalog: nearCloudKeyConfigured)
+        selectedConversation = ConversationSummary(
+            id: "live-council-demo",
+            createdAt: Date().timeIntervalSince1970,
+            metadata: ConversationMetadata(title: "Council briefing")
+        )
+        messages = [
+            ChatMessage(
+                id: "live-council-user",
+                role: .user,
+                text: "Set up a daily briefing that summarizes today's most important AI developments — using council.",
+                model: nil,
+                createdAt: Date(),
+                status: "completed",
+                responseID: nil,
+                isStreaming: false
+            ),
+            ChatMessage(
+                id: "live-council-pending",
+                role: .assistant,
+                text: "Running the council…",
+                model: ModelOption.llmCouncilSynthesisModelID,
+                createdAt: Date(),
+                status: "searching",
+                responseID: nil,
+                isStreaming: true
+            )
+        ]
+        let briefing = Briefing(
+            title: "AI briefing",
+            prompt: "In 3 short bullets, summarize today's most important AI developments. Keep it under 100 words total.",
+            schedule: .daily(hour: 8, minute: 0),
+            kind: .customPrompt,
+            council: true
+        )
+        let widget = await runBriefing(briefing)
+        updateMessage("live-council-pending") { message in
+            message.isStreaming = false
+            message.status = "completed"
+            if let widget {
+                message.widget = widget
+                message.text = ""
+            } else {
+                message.text = "Council produced no result — check sign-in, models, or network."
+            }
+        }
+    }
+
     static func demoWidgetMessages(now: Date) -> [ChatMessage] {
         func user(_ id: String, _ text: String, _ offset: TimeInterval) -> ChatMessage {
             ChatMessage(id: id, role: .user, text: text, model: nil, createdAt: now.addingTimeInterval(offset), status: "completed", responseID: nil, isStreaming: false)

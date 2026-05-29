@@ -53,9 +53,13 @@ final class SessionStore: NSObject, ObservableObject {
 
     #if DEBUG
     func configureDemoCaptureSession() {
+        // A real session token (env-injected, never persisted) lets the *Live
+        // demo screens exercise the actual backend; otherwise a fake token keeps
+        // the harness fully offline.
+        let liveToken = DebugBackend.sessionToken
         let demoSession = AuthSession(
-            token: "demo-capture-token",
-            sessionID: "demo-capture-session",
+            token: liveToken ?? "demo-capture-token",
+            sessionID: liveToken != nil ? "live-debug-session" : "demo-capture-session",
             expiresAt: nil,
             isNewUser: false
         )
