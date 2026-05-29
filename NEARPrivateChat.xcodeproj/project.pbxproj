@@ -12,6 +12,7 @@
 		A10000000000000000000004 /* PrivateChatAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* PrivateChatAPI.swift */; };
 		A10000000000000000000005 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* SessionStore.swift */; };
 		A10000000000000000000006 /* ChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* ChatStore.swift */; };
+		A1000000000000000000001B /* AgentActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001B /* AgentActivityController.swift */; };
 		A10000000000000000000007 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* AuthView.swift */; };
 		A10000000000000000000008 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* AppShellView.swift */; };
 		A10000000000000000000009 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* Assets.xcassets */; };
@@ -89,9 +90,12 @@
 		F10000000000000000000015 /* MessageStreamService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000015 /* MessageStreamService.swift */; };
 		F10000000000000000000016 /* CouncilStreamService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000016 /* CouncilStreamService.swift */; };
 		9100000000000000000000A1 /* BriefingSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A1 /* BriefingSnapshot.swift */; };
+		9100000000000000000000A3 /* AgentActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A3 /* AgentActivityAttributes.swift */; };
 		9100000000000000000000B1 /* BriefingSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A1 /* BriefingSnapshot.swift */; };
 		9100000000000000000000B2 /* BriefingWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000B2 /* BriefingWidgetBundle.swift */; };
 		9100000000000000000000B3 /* BriefingWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000B3 /* BriefingWidget.swift */; };
+		9100000000000000000000B4 /* AgentActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A3 /* AgentActivityAttributes.swift */; };
+		9100000000000000000000B6 /* AgentLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000B6 /* AgentLiveActivity.swift */; };
 		9100000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		5A00000000000000000000D1 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B00000000000000000000D1 /* ShareViewController.swift */; };
 		5A00000000000000000000D2 /* BriefingSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A1 /* BriefingSnapshot.swift */; };
@@ -128,6 +132,7 @@
 		A20000000000000000000004 /* PrivateChatAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateChatAPI.swift; sourceTree = "<group>"; };
 		A20000000000000000000005 /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
 		A20000000000000000000006 /* ChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStore.swift; sourceTree = "<group>"; };
+		A2000000000000000000001B /* AgentActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActivityController.swift; sourceTree = "<group>"; };
 		A20000000000000000000007 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -208,9 +213,11 @@
 		F20000000000000000000015 /* MessageStreamService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageStreamService.swift; sourceTree = "<group>"; };
 		F20000000000000000000016 /* CouncilStreamService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilStreamService.swift; sourceTree = "<group>"; };
 		9200000000000000000000A1 /* BriefingSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingSnapshot.swift; sourceTree = "<group>"; };
+		9200000000000000000000A3 /* AgentActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActivityAttributes.swift; sourceTree = "<group>"; };
 		9200000000000000000000A2 /* NEARPrivateChat.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NEARPrivateChat.entitlements; sourceTree = "<group>"; };
 		9200000000000000000000B2 /* BriefingWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingWidgetBundle.swift; sourceTree = "<group>"; };
 		9200000000000000000000B3 /* BriefingWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingWidget.swift; sourceTree = "<group>"; };
+		9200000000000000000000B6 /* AgentLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLiveActivity.swift; sourceTree = "<group>"; };
 		9200000000000000000000B4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		9200000000000000000000B5 /* NEARPrivateChatWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NEARPrivateChatWidget.entitlements; sourceTree = "<group>"; };
 		9200000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NEARPrivateChatWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -268,6 +275,7 @@
 			children = (
 				9200000000000000000000B2 /* BriefingWidgetBundle.swift */,
 				9200000000000000000000B3 /* BriefingWidget.swift */,
+				9200000000000000000000B6 /* AgentLiveActivity.swift */,
 				9200000000000000000000B4 /* Info.plist */,
 				9200000000000000000000B5 /* NEARPrivateChatWidget.entitlements */,
 			);
@@ -318,6 +326,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000006 /* ChatStore.swift */,
+				A2000000000000000000001B /* AgentActivityController.swift */,
 			);
 			path = State;
 			sourceTree = "<group>";
@@ -576,6 +585,7 @@
 			isa = PBXGroup;
 			children = (
 				9200000000000000000000A1 /* BriefingSnapshot.swift */,
+				9200000000000000000000A3 /* AgentActivityAttributes.swift */,
 			);
 			path = Briefing;
 			sourceTree = "<group>";
@@ -878,6 +888,8 @@
 				A10000000000000000000017 /* DemoCaptureViews.swift in Sources */,
 				A10000000000000000000018 /* MessagePresentationHelpers.swift in Sources */,
 				9100000000000000000000A1 /* BriefingSnapshot.swift in Sources */,
+				9100000000000000000000A3 /* AgentActivityAttributes.swift in Sources */,
+				A1000000000000000000001B /* AgentActivityController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -887,7 +899,9 @@
 			files = (
 				9100000000000000000000B2 /* BriefingWidgetBundle.swift in Sources */,
 				9100000000000000000000B3 /* BriefingWidget.swift in Sources */,
+				9100000000000000000000B6 /* AgentLiveActivity.swift in Sources */,
 				9100000000000000000000B1 /* BriefingSnapshot.swift in Sources */,
+				9100000000000000000000B4 /* AgentActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

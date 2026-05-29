@@ -151,6 +151,10 @@ final class ChatStore: ObservableObject {
 
     private let api: PrivateChatAPI
     private let ironclawAPI = IronclawAPI()
+    /// Best-effort Live Activity for in-progress council briefings and compound
+    /// multi-lookup runs. Purely a side-effect surface: every call no-ops when
+    /// Live Activities are unavailable and never affects chat logic or results.
+    private let agentActivity = AgentActivityController()
     /// Wired by the app to create a scheduled briefing from a "create a tracker…"
     /// prompt (the BriefingStore lives outside ChatStore).
     var onCreateTracker: ((Briefing) -> Void)?
@@ -3678,22 +3682,38 @@ final class ChatStore: ObservableObject {
             return nil
         }
 
+        // Best-effort Live Activity for the council run: one step per model plus
+        // a final synthesis step. Side-effect only — the returned widget below is
+        // identical whether or not the Activity ever appears.
+        let totalSteps = modelIDs.count + 1
+        agentActivity.start(title: briefing.title, total: totalSteps)
+
         var responses: [(String, String)] = []
+        var stepsDone = 0
         for modelID in modelIDs {
+            let displayName = modelDisplayName(for: modelID)
+            agentActivity.update(stage: "Asking \(displayName)", completed: stepsDone)
             if let text = await streamBriefingText(
                 model: modelID,
                 prompt: briefing.prompt,
                 conversationID: conversation.id,
                 webSearchEnabled: true
             ) {
-                responses.append((modelDisplayName(for: modelID), text))
+                responses.append((displayName, text))
             }
+            stepsDone += 1
+            agentActivity.update(stage: "Asking \(displayName)", completed: stepsDone)
         }
-        guard let first = responses.first else { return nil }
+        guard let first = responses.first else {
+            agentActivity.end()
+            return nil
+        }
         guard responses.count > 1 else {
+            agentActivity.end()
             return briefingWidget(from: first.1, title: briefing.title)
         }
 
+        agentActivity.update(stage: "Synthesizing", completed: modelIDs.count)
         let synthesisPrompt = Self.councilSynthesisPrompt(
             originalPrompt: briefing.prompt,
             routedPrompt: briefing.prompt,
@@ -3705,6 +3725,8 @@ final class ChatStore: ObservableObject {
             conversationID: conversation.id,
             webSearchEnabled: false
         )
+        agentActivity.update(stage: "Synthesizing", completed: totalSteps)
+        agentActivity.end()
         return briefingWidget(from: synthesized ?? first.1, title: briefing.title)
     }
 
@@ -3813,13 +3835,20 @@ final class ChatStore: ObservableObject {
         currentAssistantMessageID = pendingID
         isStreaming = true
 
+        // Best-effort Live Activity for the compound run. Side-effect only:
+        // none of these calls affect the messages produced below.
+        agentActivity.start(title: "Working on \(intents.count) lookups", total: intents.count)
+
         streamTask = Task { [weak self] in
             guard let self else { return }
             var produced = false
+            var completed = 0
             for intent in intents {
                 if Task.isCancelled { break }
                 let widget = await self.fetchQuickIntentWidget(intent)
                 guard !Task.isCancelled else { break }
+                completed += 1
+                self.agentActivity.update(stage: "Lookup \(completed) of \(intents.count)", completed: completed)
                 guard let widget else { continue }
                 produced = true
                 var message = ChatMessage(
@@ -3829,7 +3858,10 @@ final class ChatStore: ObservableObject {
                 message.widget = widget
                 self.messages.append(message)
             }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                self.agentActivity.end()
+                return
+            }
             self.updateMessage(pendingID) { message in
                 message.isStreaming = false
                 message.status = "completed"
@@ -3839,6 +3871,7 @@ final class ChatStore: ObservableObject {
             self.currentAssistantMessageID = nil
             self.isStreaming = false
             self.streamTask = nil
+            self.agentActivity.end()
         }
     }
 
