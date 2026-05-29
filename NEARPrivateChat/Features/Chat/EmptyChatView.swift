@@ -130,6 +130,11 @@ struct EmptyChatView: View {
                 prompt: "What's the ETH price?"
             ),
             EmptyPromptSuggestion(
+                title: "Weather",
+                symbolName: "cloud.sun",
+                prompt: "What's the weather in New York?"
+            ),
+            EmptyPromptSuggestion(
                 title: "My NEAR",
                 symbolName: "person.crop.circle",
                 prompt: "How is my NEAR account doing?"
@@ -138,6 +143,11 @@ struct EmptyChatView: View {
                 title: "Today's news",
                 symbolName: "newspaper",
                 prompt: "Pull today's news"
+            ),
+            EmptyPromptSuggestion(
+                title: "Convert",
+                symbolName: "arrow.left.arrow.right",
+                prompt: "Convert 100 USD to EUR"
             ),
             EmptyPromptSuggestion(
                 title: "Daily tracker",
