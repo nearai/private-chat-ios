@@ -37,6 +37,7 @@ enum QuickIntent: Equatable {
     case unitConvert(value: Double, from: String, to: String)
     case define(word: String)
     case math(expression: String, result: String)
+    case dateMath(question: String, answer: String)
     case remember(text: String)
     case recallMemory
     case forget(text: String?)
@@ -188,6 +189,12 @@ enum QuickIntentParser {
             return .math(expression: math.expression, result: math.result)
         }
 
+        // 2f) date math ("how many days until Christmas", "what's the date in 2
+        // weeks"). Needs a resolvable holiday/date or an explicit span.
+        if let dateMath = parseDateMath(text, original: trimmedRaw) {
+            return .dateMath(question: dateMath.question, answer: dateMath.answer)
+        }
+
         // 3) NEAR account — named phrases, or a .near token plus a status word.
         let account = extractAccount(from: text)
         if contains(text, ["my near account", "near account", "near.com account", "account doing", "account balance", "wallet balance", "my wallet", "my balance"]) ||
@@ -310,7 +317,7 @@ enum QuickIntentParser {
         switch intent {
         case .price, .trendingCrypto, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
-        case .math, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker:
+        case .math, .dateMath, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker:
             return false
         }
     }
@@ -810,6 +817,55 @@ enum QuickIntentParser {
         return (expr.trimmingCharacters(in: .whitespaces), MathEvaluator.format(value))
     }
 
+    /// "how many days until <holiday/date>" or "what's the date in N days/weeks/
+    /// months/years". Returns a question + a ready-to-show answer, or nil. `now`
+    /// is injectable for deterministic tests.
+    static func parseDateMath(_ text: String, original: String, now: Date = Date()) -> (question: String, answer: String)? {
+        // A) days until …
+        let untilTriggers = ["how many days until ", "how many days till ", "how many days to ",
+                             "days until ", "days till ", "how long until ", "how long till "]
+        if let trigger = untilTriggers.first(where: { text.hasPrefix($0) }) {
+            let restLower = String(text.dropFirst(trigger.count))
+            let restOriginal = String(original.dropFirst(trigger.count))
+                .trimmingCharacters(in: CharacterSet(charactersIn: " ?.!"))
+            var target: Date?
+            for holiday in DateMath.holidays where holiday.names.contains(where: { restLower.contains($0) }) {
+                target = DateMath.nextOccurrence(month: holiday.month, day: holiday.day, now: now)
+                break
+            }
+            if target == nil { target = firstDate(in: restOriginal) }
+            guard let date = target else { return nil }
+            let days = DateMath.daysUntil(date, now: now)
+            guard days >= 0 else { return nil }
+            let label = restOriginal.isEmpty ? DateMath.longDate(date) : restOriginal
+            let answer = days == 0
+                ? "That’s today — \(DateMath.longDate(date))."
+                : "**\(days)** day\(days == 1 ? "" : "s") until \(label) — \(DateMath.longDate(date))."
+            return (original, answer)
+        }
+        // B) date in N units
+        if contains(text, ["date in ", "what's the date", "whats the date", "what is the date",
+                           "from now", "from today", "what day is it in", "what day will it be"]),
+           let range = text.range(of: #"(\d+)\s*(day|days|week|weeks|month|months|year|years)"#, options: .regularExpression) {
+            let token = String(text[range])
+            guard let value = Int(token.prefix(while: { $0.isNumber })) else { return nil }
+            let unit: Calendar.Component = token.contains("week") ? .weekOfYear
+                : token.contains("month") ? .month
+                : token.contains("year") ? .year : .day
+            guard let future = DateMath.adding(value, unit, to: now) else { return nil }
+            return (original, "That’ll be **\(DateMath.longDate(future))**.")
+        }
+        return nil
+    }
+
+    /// First absolute date NSDataDetector finds in a string (nil if none).
+    private static func firstDate(in text: String) -> Date? {
+        guard !text.isEmpty,
+              let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue) else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return detector.firstMatch(in: text, options: [], range: range)?.date
+    }
+
     static func parseDefineWord(_ text: String) -> String? {
         // "what does X mean" — strict: only the bare definition form, so
         // "what does SOL mean for crypto?" stays a model question.
@@ -996,6 +1052,54 @@ enum MathEvaluator {
             }
         }
     }
+}
+
+/// On-device date arithmetic — whole-day counts, future dates, and the next
+/// occurrence of a fixed-date holiday. Pure + deterministic (every function
+/// takes `now`), so it's fully unit-testable.
+enum DateMath {
+    /// Whole-day count from today to the target day (negative if already past).
+    static func daysUntil(_ target: Date, now: Date) -> Int {
+        let cal = Calendar.current
+        return cal.dateComponents([.day], from: cal.startOfDay(for: now), to: cal.startOfDay(for: target)).day ?? 0
+    }
+
+    static func adding(_ value: Int, _ unit: Calendar.Component, to now: Date) -> Date? {
+        Calendar.current.date(byAdding: unit, value: value, to: now)
+    }
+
+    /// "Friday, December 25, 2026"
+    static func longDate(_ date: Date) -> String {
+        date.formatted(.dateTime.weekday(.wide).month(.wide).day().year())
+    }
+
+    /// The next occurrence (today or later) of a fixed month/day.
+    static func nextOccurrence(month: Int, day: Int, now: Date) -> Date? {
+        let cal = Calendar.current
+        let year = cal.component(.year, from: now)
+        var components = DateComponents()
+        components.month = month
+        components.day = day
+        for candidateYear in [year, year + 1] {
+            components.year = candidateYear
+            if let date = cal.date(from: components),
+               cal.startOfDay(for: date) >= cal.startOfDay(for: now) {
+                return date
+            }
+        }
+        return nil
+    }
+
+    /// Fixed-date holidays we can resolve by name (no movable feasts).
+    static let holidays: [(names: [String], month: Int, day: Int)] = [
+        (["new year's eve", "new years eve"], 12, 31),
+        (["christmas eve"], 12, 24),
+        (["christmas", "xmas"], 12, 25),
+        (["new year", "new years", "new year's"], 1, 1),
+        (["valentine's day", "valentines day", "valentine's", "valentines", "valentine"], 2, 14),
+        (["halloween"], 10, 31),
+        (["independence day", "fourth of july", "4th of july", "july 4th"], 7, 4),
+    ]
 }
 
 /// On-device unit conversion (length / mass / temperature). Linear units carry

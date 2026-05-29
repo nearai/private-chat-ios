@@ -3585,6 +3585,37 @@ extension PrivateChatCoreTests {
         }
     }
 
+    func testDateMathCore() throws {
+        let cal = Calendar.current
+        let now = try XCTUnwrap(cal.date(from: DateComponents(year: 2026, month: 12, day: 20)))
+        let xmas = try XCTUnwrap(DateMath.nextOccurrence(month: 12, day: 25, now: now))
+        XCTAssertEqual(DateMath.daysUntil(xmas, now: now), 5)
+        // After the date passes, the next occurrence rolls to next year.
+        let dec26 = try XCTUnwrap(cal.date(from: DateComponents(year: 2026, month: 12, day: 26)))
+        let nextXmas = try XCTUnwrap(DateMath.nextOccurrence(month: 12, day: 25, now: dec26))
+        XCTAssertEqual(cal.component(.year, from: nextXmas), 2027)
+        let plus2w = try XCTUnwrap(DateMath.adding(2, .weekOfYear, to: now))
+        XCTAssertEqual(DateMath.daysUntil(plus2w, now: now), 14)
+    }
+
+    func testParseDateMath() throws {
+        let cal = Calendar.current
+        let now = try XCTUnwrap(cal.date(from: DateComponents(year: 2026, month: 12, day: 20)))
+        let untilXmas = try XCTUnwrap(QuickIntentParser.parseDateMath(
+            "how many days until christmas", original: "how many days until christmas", now: now))
+        XCTAssertTrue(untilXmas.answer.contains("5"))
+        XCTAssertTrue(untilXmas.answer.lowercased().contains("christmas"))
+        let span = try XCTUnwrap(QuickIntentParser.parseDateMath(
+            "what's the date in 2 weeks", original: "what's the date in 2 weeks", now: now))
+        XCTAssertTrue(span.answer.contains("2027")) // Dec 20 + 2 weeks → Jan 3, 2027
+        // Not date math.
+        XCTAssertNil(QuickIntentParser.parseDateMath("how are you today", original: "how are you today", now: now))
+        // Routed through parse().
+        if case .dateMath? = QuickIntentParser.parse("how many days until christmas") {} else {
+            XCTFail("Expected a dateMath intent from parse().")
+        }
+    }
+
     func testQuickIntentParsesActivityLog() {
         XCTAssertEqual(QuickIntentParser.parse("what have you done"), .activityLog)
         XCTAssertEqual(QuickIntentParser.parse("show your activity"), .activityLog)
