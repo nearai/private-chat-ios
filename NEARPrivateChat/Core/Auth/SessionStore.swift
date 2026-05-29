@@ -43,6 +43,13 @@ final class SessionStore: NSObject, ObservableObject {
             configureDemoCaptureSession()
             return
         }
+        // A debug token (env-injected, never persisted) signs into the REAL app
+        // for interactive testing — full Home/Chat, no demo screens. Only active
+        // when launched with NEAR_DEBUG_SESSION_TOKEN; a normal run is unaffected.
+        if DebugBackend.isEnabled {
+            configureDemoCaptureSession()
+            return
+        }
         #endif
         session = loadStoredSession()
         api.authToken = session?.token
