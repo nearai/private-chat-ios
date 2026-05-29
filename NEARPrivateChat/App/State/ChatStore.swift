@@ -3632,8 +3632,16 @@ final class ChatStore: ObservableObject {
     func composeWidgetFollowUp(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        draft = trimmed
-        AppHaptics.selection()
+        // A "Track this" follow-up acts immediately (one tap → a tracker); any
+        // other follow-up prefills the composer for the user to refine and send.
+        switch QuickIntentParser.parse(trimmed) {
+        case .createTracker, .trackLast:
+            draft = trimmed
+            sendDraft()
+        default:
+            draft = trimmed
+            AppHaptics.selection()
+        }
     }
 
     /// Runs a briefing prompt headlessly in a throwaway conversation and returns

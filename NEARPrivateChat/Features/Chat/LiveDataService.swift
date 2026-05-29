@@ -1556,7 +1556,7 @@ enum LiveDataService {
                 title: "\(symbol) watcher",
                 freshness: .fresh,
                 time: shortCurrentTimeString(),
-                followUp: "Why is it moving?",
+                followUp: "Track \(symbol) price",
                 note: nil,
                 chart: WidgetChart(
                     label: "\(symbol) / USD",
@@ -1579,7 +1579,7 @@ enum LiveDataService {
             title: "\(symbol) price",
             freshness: .fresh,
             time: shortCurrentTimeString(),
-            followUp: "Why is it moving?",
+            followUp: "Track \(symbol) price",
             note: nil,
             chart: nil,
             metric: WidgetMetric(

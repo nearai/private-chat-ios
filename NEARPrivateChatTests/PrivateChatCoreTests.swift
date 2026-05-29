@@ -3887,6 +3887,23 @@ extension PrivateChatCoreTests {
     }
 
     @MainActor
+    func testTrackThisFollowUpCreatesTrackerImmediately() {
+        let chatStore = ChatStore(api: PrivateChatAPI(configuration: .production))
+        var created: Briefing?
+        chatStore.onCreateTracker = { created = $0 }
+        // Tapping "Track ETH price" (a data widget's follow-up) acts immediately.
+        chatStore.composeWidgetFollowUp("Track ETH price")
+        XCTAssertEqual(created?.kind, .cryptoPrice)
+        XCTAssertEqual(created?.accountID, "ethereum")
+        // A normal follow-up just prefills the composer (no tracker).
+        var created2: Briefing?
+        chatStore.onCreateTracker = { created2 = $0 }
+        chatStore.composeWidgetFollowUp("Why is it moving?")
+        XCTAssertNil(created2)
+        XCTAssertEqual(chatStore.draft, "Why is it moving?")
+    }
+
+    @MainActor
     func testTrackThatWithoutPriorCreatesNothing() {
         let chatStore = ChatStore(api: PrivateChatAPI(configuration: .production))
         var created: Briefing?
