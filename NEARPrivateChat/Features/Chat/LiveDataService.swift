@@ -118,25 +118,32 @@ enum QuickIntentParser {
                 confirmation: "\(coin.symbol) price · \(label)"
             )
         }
-        // No live-data subject. With council requested, schedule a real council
-        // briefing on the user's question (runs several models + a synthesis).
-        guard council else { return nil }
-        let prompt = councilTrackerPrompt(from: text)
+        // No live-data subject. A recurring briefing/digest (or a council
+        // request) becomes a scheduled custom-prompt task on the user's actual
+        // question — run on schedule by a single model, or the council if asked.
+        // A bare reminder with no informational noun falls through to the model
+        // so we don't manufacture trackers from "remind me to stretch".
+        let wantsBriefing = council || contains(text, [
+            "briefing", "brief", "digest", "summary", "summarize", "summarise",
+            "report", "rundown", "recap", "roundup", "round-up"
+        ])
+        guard wantsBriefing else { return nil }
+        let prompt = cleanedTrackerPrompt(from: text)
         guard prompt.count >= 4 else { return nil }
         return TrackerSpec(
-            title: "Council briefing",
+            title: council ? "Council briefing" : "Daily briefing",
             kind: .customPrompt,
             subject: nil,
             schedule: schedule,
-            council: true,
-            confirmation: "Council briefing · \(label)",
+            council: council,
+            confirmation: "\(council ? "Council briefing" : "Briefing") · \(label)",
             prompt: prompt
         )
     }
 
     /// Strips the "create a tracker … every morning … using council" scaffolding
-    /// so the scheduled council runs on the user's actual question.
-    static func councilTrackerPrompt(from raw: String) -> String {
+    /// so the scheduled briefing runs on the user's actual question.
+    static func cleanedTrackerPrompt(from raw: String) -> String {
         var s = raw
         let phrases = [
             "using council", "with council", "via council", "by the council", "by council", "as a council", "council",

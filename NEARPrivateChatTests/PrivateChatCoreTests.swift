@@ -3159,6 +3159,20 @@ extension PrivateChatCoreTests {
         XCTAssertFalse(prompt.contains("daily"))
     }
 
+    func testQuickIntentParsesNonCouncilBriefingTracker() throws {
+        let intent = QuickIntentParser.parse(
+            "set up a daily briefing that summarizes the top AI papers"
+        )
+        guard case let .createTracker(spec) = intent else {
+            return XCTFail("Expected a createTracker intent, got \(String(describing: intent)).")
+        }
+        XCTAssertEqual(spec.kind, .customPrompt)
+        XCTAssertFalse(spec.council)
+        XCTAssertEqual(spec.schedule, .daily(hour: 8, minute: 0))
+        let prompt = try XCTUnwrap(spec.prompt).lowercased()
+        XCTAssertTrue(prompt.contains("ai papers"))
+    }
+
     func testQuickIntentCreatesAccountTrackerWithExplicitID() throws {
         let intent = QuickIntentParser.parse(
             "set up a daily tracker for abhishek.near every weekday at 7am"
