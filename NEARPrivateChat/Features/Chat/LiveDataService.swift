@@ -258,8 +258,12 @@ enum QuickIntentParser {
         }
 
         // 3) NEAR account — named phrases, or a .near token plus a status word.
+        // A .testnet id is present but unservable (mainnet-only widget); skip the
+        // whole branch so it reaches the model rather than asking for a .near id.
         let account = extractAccount(from: text)
-        if contains(text, ["my near account", "near account", "near.com account", "account doing", "account balance", "wallet balance", "my wallet", "my balance"]) ||
+        let mentionsTestnet = text.contains(".testnet")
+        if !mentionsTestnet,
+           contains(text, ["my near account", "near account", "near.com account", "account doing", "account balance", "wallet balance", "my wallet", "my balance"]) ||
             (account != nil && contains(text, ["doing", "balance", "holdings", "how is", "status", "account", "wallet", "worth"])) {
             return .nearAccount(account: account)
         }
@@ -434,11 +438,16 @@ enum QuickIntentParser {
                 return TrackerSpec(title: "Daily news", kind: .dailyNews, subject: nil, schedule: schedule, council: false, confirmation: "Daily news · \(label)")
             }
             let topic = newsTopic(from: original)
-            let wordCount = topic.split(separator: " ").count
-            let topicIsClean = topic.count >= 2 && (1...5).contains(wordCount)
-                && !contains(topic, ["create", "make", "build", "set up", "pull",
-                                     "surface", "please", "tracker", "every",
-                                     "that ", "which ", "and "])
+            let topicWords = topic.split(separator: " ").map(String.init)
+            // Token-based (not substring) so legitimate topics aren't rejected by
+            // an accidental match — e.g. "sand mining" must not trip on "and".
+            let commandNoise: Set<String> = [
+                "create", "make", "build", "set", "setup", "pull", "pulls",
+                "surface", "surfaces", "please", "tracker", "briefing", "every",
+                "each", "that", "which", "and"
+            ]
+            let topicIsClean = topic.count >= 2 && (1...5).contains(topicWords.count)
+                && Set(topicWords).isDisjoint(with: commandNoise)
             if topicIsClean {
                 let display = prettyTrackerTitle(from: topic)
                 let title = display.prefix(1).uppercased() + display.dropFirst()
@@ -528,6 +537,38 @@ enum QuickIntentParser {
         return subject.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
     }
 
+    /// Detects a chart/history follow-up with a timeframe and maps it to the
+    /// CoinGecko `market_chart` `days` value + a short label. Used by price
+    /// tracker threads so "show me the 1 year chart" renders a REAL historical
+    /// chart, not prose. Returns nil when it isn't a chart/timeframe request.
+    static func parseChartTimeframe(_ raw: String) -> (days: String, label: String)? {
+        let text = raw.lowercased()
+        let timeframe: (days: String, label: String)?
+        if contains(text, ["all time", "all-time", "since inception", "ever", "max history", "entire history"]) {
+            timeframe = ("max", "all time")
+        } else if contains(text, ["year", "12 month", "12 months", "1y", "annual", "yearly"]) {
+            timeframe = ("365", "1Y")
+        } else if contains(text, ["6 month", "6 months", "6mo", "half year", "180 day", "180 days"]) {
+            timeframe = ("180", "6M")
+        } else if contains(text, ["quarter", "3 month", "3 months", "90 day", "90 days"]) {
+            timeframe = ("90", "3M")
+        } else if contains(text, ["month", "30 day", "30 days", "1mo", "4 week", "4 weeks"]) {
+            timeframe = ("30", "1M")
+        } else if contains(text, ["week", "7 day", "7 days"]) {
+            timeframe = ("7", "1W")
+        } else {
+            timeframe = nil
+        }
+        guard let tf = timeframe else { return nil }
+        // Require a charting cue so a plain "what happened this year" stays text.
+        let wantsChart = contains(text, [
+            "chart", "graph", "history", "historical", "trend", "performance",
+            "price history", "over the past", "over the last", "show me", "show",
+            "pull up", "see the", "view"
+        ])
+        return wantsChart ? tf : nil
+    }
+
     /// The subject of a question, with common lead-ins stripped, for "track
     /// that": "what's the price of a Rolex GMT Master II?" → "price of a Rolex
     /// GMT Master II".
@@ -585,7 +626,10 @@ enum QuickIntentParser {
             "news", "headlines", "headline", "stories", "story", "events", "event",
             "happening", "going", "affairs", "update", "updates", "briefing", "brief",
             // articles / pronouns / imperatives
-            "the", "a", "an", "my", "our", "me", "us", "give", "show", "tell",
+            // NB: "us" is intentionally NOT a stop word — "US news"/"US headlines"
+            // is a topic (the country), which must reach topic-aware grounding,
+            // not the generic feed. "give us the news" simply routes to the model.
+            "the", "a", "an", "my", "our", "me", "give", "show", "tell",
             "get", "fetch", "bring", "find", "read", "list", "display", "want",
             "see", "like", "to", "please", "with", "of", "new", "pull", "grab",
             "catch", "check", "gimme", "lemme", "pull up", "whats", "whatre",
@@ -1670,6 +1714,48 @@ enum LiveDataService {
     /// The sparkline is best-effort: CoinGecko rate-limits the heavier chart
     /// endpoint first, so if it fails we still surface the live price as a
     /// metric widget rather than failing the whole answer.
+    /// A real historical price chart over `days` (CoinGecko `market_chart`,
+    /// auth-free). `days` is "7"/"30"/"90"/"180"/"365"/"max". Powers chart-
+    /// timeframe follow-ups in a price tracker thread ("show me the 1y chart").
+    static func cryptoHistoryChartWidget(coinID: String, symbol: String, days: String, label: String) async -> MessageWidget? {
+        let id = coinID.lowercased()
+        guard let url = URL(string: "https://api.coingecko.com/api/v3/coins/\(id)/market_chart?vs_currency=usd&days=\(days)") else {
+            return nil
+        }
+        let decoder = JSONDecoder()
+        guard let data = try? await fetchData(from: url),
+              let response = try? decoder.decode(CoinGeckoMarketChartResponse.self, from: data) else {
+            return nil
+        }
+        let prices = response.prices.compactMap(\.price)
+        guard prices.count >= 2, let first = prices.first, let last = prices.last else { return nil }
+        let points = downsample(prices, targetCount: 40)
+        let change = first > 0 ? (last - first) / first * 100 : 0
+        let valueString = currencyFormatter(maximumFractionDigits: last < 10 ? 2 : 0)
+            .string(from: NSNumber(value: last)) ?? "$\(last)"
+        let deltaString = percentChangeFormatter().string(from: NSNumber(value: change / 100))
+        return MessageWidget(
+            kind: .chart,
+            title: "\(symbol) · \(label)",
+            freshness: .fresh,
+            time: shortCurrentTimeString(),
+            followUp: nil,
+            note: nil,
+            chart: WidgetChart(
+                label: "\(symbol) / USD",
+                value: valueString,
+                delta: deltaString,
+                trend: change >= 0 ? .up : .down,
+                points: points,
+                caption: "past \(label)",
+                timeframe: label
+            ),
+            metric: nil,
+            comparison: nil,
+            newsBrief: nil
+        )
+    }
+
     static func cryptoPriceWidget(coinID: String, symbol: String) async -> MessageWidget? {
         let id = coinID.lowercased()
         guard let priceURL = URL(string: "https://api.coingecko.com/api/v3/simple/price?ids=\(id)&vs_currencies=usd&include_24hr_change=true") else {

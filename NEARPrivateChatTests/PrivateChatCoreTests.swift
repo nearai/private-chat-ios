@@ -4235,6 +4235,70 @@ extension PrivateChatCoreTests {
         XCTAssertNil(widget)
     }
 
+    // MARK: - Independent (codex) review follow-ups
+
+    func testNewsCountryTopicReachesModelNotGenericFeed() {
+        // Regression: "US news" is a topic (the country), not a bare ask — it
+        // must reach topic-aware grounding, not the generic feed.
+        XCTAssertNil(QuickIntentParser.parse("US news"))
+        XCTAssertNil(QuickIntentParser.parse("US headlines"))
+        // Common bare phrasings still fire the instant feed.
+        XCTAssertEqual(QuickIntentParser.parse("news"), .news)
+        XCTAssertEqual(QuickIntentParser.parse("give me the news"), .news)
+        XCTAssertEqual(QuickIntentParser.parse("what's happening"), .news)
+    }
+
+    func testTopicNewsTrackerSurvivesStopwordSubstrings() throws {
+        // Regression: "sand mining" must not be rejected by an "and" substring
+        // match — the topic-cleanliness check is token-based.
+        let intent = QuickIntentParser.parse("track sand mining news every morning")
+        guard case let .createTracker(spec) = intent else {
+            return XCTFail("Expected createTracker, got \(String(describing: intent)).")
+        }
+        XCTAssertEqual(spec.kind, .customPrompt)
+        let prompt = try XCTUnwrap(spec.prompt).lowercased()
+        XCTAssertTrue(prompt.contains("sand mining"), "topic preserved: \(prompt)")
+    }
+
+    func testTestnetWithAccountKeywordsFallsThroughToModel() {
+        // Regression: a .testnet id plus account keywords must NOT ask for a
+        // .near account — the mainnet-only widget can't serve it.
+        XCTAssertNil(QuickIntentParser.parse("check alice.testnet near account balance"))
+        // A mainnet id with keywords still resolves.
+        XCTAssertEqual(QuickIntentParser.parse("how is my near account doing root.near"), .nearAccount(account: "root.near"))
+    }
+
+    func testChartTimeframeParsingForTrackerThreadReplies() {
+        // A chart-timeframe follow-up maps to the CoinGecko days/label so a price
+        // tracker thread can render a REAL historical chart instead of prose.
+        func assertTF(_ input: String, _ days: String, _ label: String, line: UInt = #line) {
+            guard let tf = QuickIntentParser.parseChartTimeframe(input) else {
+                return XCTFail("Expected a timeframe for: \(input)", line: line)
+            }
+            XCTAssertEqual(tf.days, days, line: line)
+            XCTAssertEqual(tf.label, label, line: line)
+        }
+        assertTF("show me the 1 year chart", "365", "1Y")
+        assertTF("6 month chart", "180", "6M")
+        assertTF("show me the 30 day history", "30", "1M")
+        assertTF("all time chart", "max", "all time")
+        // Not chart requests → nil (fall through to a prose answer).
+        XCTAssertNil(QuickIntentParser.parseChartTimeframe("why is it up today"))
+        XCTAssertNil(QuickIntentParser.parseChartTimeframe("what's driving this"))
+        XCTAssertNil(QuickIntentParser.parseChartTimeframe("how did it do this month")) // no chart cue
+    }
+
+    func testBriefingThreadReplyContextPrefersWidgetNote() {
+        // The follow-up the model answers is grounded in the delivery's result.
+        let widget = MessageWidget(kind: .generic, title: "Global politics", note: "Top 5 developments: Iran, Lebanon, EU sanctions")
+        let delivery = BriefingDelivery(dayLabel: "Today", time: "9:00am", title: "briefing", widget: widget)
+        XCTAssertTrue(ThreadedBriefingView.replyContext(for: delivery).contains("Top 5 developments"))
+        // Falls back to text fields when there's no widget.
+        let textOnly = BriefingDelivery(dayLabel: "Today", time: "9:00am", title: "briefing", headline: "Markets up", summary: "S&P +1%")
+        let ctx = ThreadedBriefingView.replyContext(for: textOnly)
+        XCTAssertTrue(ctx.contains("Markets up") && ctx.contains("S&P +1%"))
+    }
+
     func testQuickIntentIgnoresLooseAccountAndPricePhrases() {
         // "my account" alone and a bare "?" used to swallow these.
         XCTAssertNil(QuickIntentParser.parse("how do I delete my account?"))

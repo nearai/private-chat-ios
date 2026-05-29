@@ -417,7 +417,13 @@ struct ConversationListView: View {
             )
         }
         .fullScreenCover(item: $openedBriefing) { briefing in
-            ThreadedBriefingView(briefing: briefing, store: briefingStore) { openedBriefing = nil }
+            ThreadedBriefingView(
+                briefing: briefing,
+                store: briefingStore,
+                onAskFollowUp: { question, context in
+                    await chatStore.answerBriefingFollowUp(question: question, context: context, briefing: briefing)
+                }
+            ) { openedBriefing = nil }
         }
         .navigationDestination(for: SharedConversationInfo.self) { item in
             SharedWithMePreviewView(item: item)

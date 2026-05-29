@@ -1557,9 +1557,10 @@ private struct WidgetGenericBody: View {
     let note: String
 
     var body: some View {
-        Text(note)
-            .font(.subheadline)
-            .foregroundStyle(.primary)
+        // Render the note as Markdown (bold, lists, etc.) instead of raw text —
+        // briefing results and other generic widgets carry **bold**/numbered
+        // lists that must not show literal asterisks.
+        MarkdownMessageText(text: note)
             .fixedSize(horizontal: false, vertical: true)
     }
 }

@@ -7,6 +7,10 @@ import SwiftUI
 
 // MARK: - Model
 
+/// Result of a briefing-thread follow-up: prose, a rendered widget (e.g. a real
+/// historical price chart), or both.
+typealias BriefingFollowUpResult = (text: String?, widget: MessageWidget?)
+
 struct BriefingSourceTag: Identifiable, Hashable {
     let id = UUID()
     var letter: String
@@ -22,6 +26,9 @@ struct ThreadReply: Identifiable, Hashable {
     var verifiedModel: String? = nil
     var verifiedSources: Int = 0
     var ago: String? = nil
+    /// An assistant reply can carry a rendered widget (e.g. a real historical
+    /// price chart) instead of, or alongside, text.
+    var widget: MessageWidget? = nil
 }
 
 struct DeliveryThread: Identifiable, Hashable {
@@ -55,10 +62,15 @@ struct ThreadedBriefingView: View {
     var onClose: () -> Void = {}
     private let store: BriefingStore?
     private let briefingID: UUID?
+    /// Sends a follow-up `(question, context)` to the chat backend and returns
+    /// the assistant's reply (text and/or a rendered widget). Injected by the
+    /// parent (which holds ChatStore). Nil in previews → replies recorded locally.
+    private let onAskFollowUp: ((String, String) async -> BriefingFollowUpResult)?
 
     @State private var deliveries: [BriefingDelivery]
     @State private var replyText = ""
     @State private var isRunning = false
+    @State private var isReplying = false
     @State private var showingAccountEditor = false
     @State private var accountInput = ""
 
@@ -68,12 +80,14 @@ struct ThreadedBriefingView: View {
         deliveries: [BriefingDelivery],
         store: BriefingStore? = nil,
         briefingID: UUID? = nil,
+        onAskFollowUp: ((String, String) async -> BriefingFollowUpResult)? = nil,
         onClose: @escaping () -> Void = {}
     ) {
         self.title = title
         self.schedule = schedule
         self.store = store
         self.briefingID = briefingID
+        self.onAskFollowUp = onAskFollowUp
         self.onClose = onClose
         _deliveries = State(initialValue: deliveries)
     }
@@ -95,6 +109,18 @@ struct ThreadedBriefingView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
                 .padding(.bottom, 24)
+            }
+            if isReplying {
+                HStack(spacing: 8) {
+                    NearMark(size: 18)
+                    Text("NEAR is thinking…")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.textTertiary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+                .transition(.opacity)
             }
             replyComposer
         }
@@ -200,9 +226,9 @@ struct ThreadedBriefingView: View {
             Button(action: sendReply) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 30))
-                    .foregroundStyle(replyTrimmed.isEmpty ? Color.textTertiary : Color.actionPrimary)
+                    .foregroundStyle(replyTrimmed.isEmpty || isReplying ? Color.textTertiary : Color.actionPrimary)
             }
-            .disabled(replyTrimmed.isEmpty)
+            .disabled(replyTrimmed.isEmpty || isReplying)
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -236,16 +262,59 @@ struct ThreadedBriefingView: View {
 
     private func sendReply() {
         let text = replyTrimmed
-        guard !text.isEmpty, let index = deliveries.indices.last else { return }
-        var delivery = deliveries[index]
-        var thread = delivery.thread ?? DeliveryThread(label: delivery.headline ?? delivery.title, replies: [])
-        thread.replies.append(ThreadReply(role: .user, text: text))
-        delivery.thread = thread
-        delivery.replyCount += 1
-        deliveries[index] = delivery
+        guard !text.isEmpty, !isReplying, let index = deliveries.indices.last else { return }
+        appendReply(ThreadReply(role: .user, text: text), at: index, bumpCount: true)
         replyText = ""
         AppHaptics.lightImpact()
-        // The assistant reply streams in from the chat backend on a signed-in device.
+
+        // No backend wired (previews) → the user reply is recorded locally only.
+        guard let onAskFollowUp else { return }
+        let context = ThreadedBriefingView.replyContext(for: deliveries[index])
+        isReplying = true
+        Task {
+            let answer = await onAskFollowUp(text, context)
+            await MainActor.run {
+                let succeeded = answer.text != nil || answer.widget != nil
+                let body = answer.text ?? (answer.widget == nil
+                    ? "I couldn’t reach the model just now — try again in a moment."
+                    : "")
+                let reply = ThreadReply(
+                    role: .assistant,
+                    text: body,
+                    verifiedModel: succeeded ? "GLM 5.1" : nil,
+                    ago: "just now",
+                    widget: answer.widget
+                )
+                if let target = deliveries.indices.last {
+                    appendReply(reply, at: target, bumpCount: false)
+                }
+                isReplying = false
+            }
+        }
+    }
+
+    /// Appends a reply to the last delivery's inline thread (creating the thread
+    /// on first use), keeping `replyCount` in sync for user turns.
+    private func appendReply(_ reply: ThreadReply, at index: Int, bumpCount: Bool) {
+        guard deliveries.indices.contains(index) else { return }
+        var delivery = deliveries[index]
+        var thread = delivery.thread ?? DeliveryThread(label: delivery.headline ?? delivery.title, replies: [])
+        thread.replies.append(reply)
+        delivery.thread = thread
+        if bumpCount { delivery.replyCount += 1 }
+        deliveries[index] = delivery
+    }
+
+    /// The text a follow-up is grounded in: the delivery's widget note/summary
+    /// or its body, so the model can answer questions about this specific result.
+    static func replyContext(for delivery: BriefingDelivery) -> String {
+        if let widget = delivery.widget {
+            if let note = widget.note, !note.isEmpty { return note }
+            return summary(for: widget)
+        }
+        return [delivery.headline, delivery.summary, delivery.body, delivery.extra]
+            .compactMap { $0 }
+            .joined(separator: "\n")
     }
 }
 
@@ -375,10 +444,13 @@ private struct ThreadInlineView: View {
                         HStack(alignment: .top, spacing: 8) {
                             NearMark(size: 20)
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(reply.text)
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.primary)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                if let widget = reply.widget {
+                                    MessageWidgetCard(widget: widget)
+                                }
+                                if !reply.text.isEmpty {
+                                    MarkdownMessageText(text: reply.text)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                                 if !reply.citations.isEmpty {
                                     HStack(spacing: 4) {
                                         ForEach(Array(reply.citations.enumerated()), id: \.offset) { index, _ in
@@ -460,13 +532,19 @@ private func threadHexColor(_ hex: String) -> Color {
 // MARK: - Mapping a live Briefing into deliveries
 
 extension ThreadedBriefingView {
-    init(briefing: Briefing, store: BriefingStore? = nil, onClose: @escaping () -> Void = {}) {
+    init(
+        briefing: Briefing,
+        store: BriefingStore? = nil,
+        onAskFollowUp: ((String, String) async -> BriefingFollowUpResult)? = nil,
+        onClose: @escaping () -> Void = {}
+    ) {
         self.init(
             title: briefing.title,
             schedule: briefing.schedule.scheduleLabel,
             deliveries: ThreadedBriefingView.deliveries(for: briefing),
             store: store,
             briefingID: briefing.id,
+            onAskFollowUp: onAskFollowUp,
             onClose: onClose
         )
     }

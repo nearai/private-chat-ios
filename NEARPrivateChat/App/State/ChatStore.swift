@@ -3799,6 +3799,63 @@ final class ChatStore: ObservableObject {
         return briefingWidget(from: text, title: briefing.title)
     }
 
+    /// Answers a follow-up in a briefing thread. For a crypto-price tracker, a
+    /// chart-timeframe question ("show me the 1 year chart") returns a REAL
+    /// historical chart from CoinGecko — not prose. Everything else runs one
+    /// private-route model turn with the delivery's text as context (web search
+    /// on). Private route only, consistent with the app's privacy posture.
+    func answerBriefingFollowUp(question: String, context: String, briefing: Briefing) async -> (text: String?, widget: MessageWidget?) {
+        let trimmedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuestion.isEmpty else { return (nil, nil) }
+
+        // A chart-timeframe ask on a coin tracker → real historical chart.
+        let coinID: String? = {
+            switch briefing.kind {
+            case .ethPrice: return "ethereum"
+            case .cryptoPrice: return briefing.accountID
+            default: return nil
+            }
+        }()
+        if let coinID, !coinID.isEmpty,
+           let timeframe = QuickIntentParser.parseChartTimeframe(trimmedQuestion),
+           let widget = await LiveDataService.cryptoHistoryChartWidget(
+               coinID: coinID,
+               symbol: LiveDataService.symbol(forCoinID: coinID),
+               days: timeframe.days,
+               label: timeframe.label
+           ) {
+            return (nil, widget)
+        }
+
+        guard let conversation = try? await api.createConversation(title: "Briefing follow-up") else {
+            return (nil, nil)
+        }
+        let trimmedContext = context.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prompt: String
+        if trimmedContext.isEmpty {
+            prompt = trimmedQuestion
+        } else {
+            prompt = """
+            Here is a briefing I received:
+
+            \"\"\"
+            \(trimmedContext)
+            \"\"\"
+
+            My follow-up: \(trimmedQuestion)
+
+            Answer concisely. Use web search for anything time-sensitive and cite sources.
+            """
+        }
+        let text = await streamBriefingText(
+            model: Self.defaultModelID,
+            prompt: prompt,
+            conversationID: conversation.id,
+            webSearchEnabled: true
+        )
+        return (text, nil)
+    }
+
     /// Runs a council (several models in the default lineup) on the briefing
     /// prompt, then synthesizes one answer — the scheduled equivalent of the
     /// live Council. Falls back to a single model if fewer than two are usable.
