@@ -363,17 +363,10 @@ struct UserSetupView: View {
                     ForEach(UserSetupStarterPreset.allCases) { preset in
                         SetupExampleChip(
                             preset: preset,
-                            isSelected: profile.useCases == [preset.useCase] && profile.goalText == preset.prompt
+                            isSelected: profile.useCases == [preset.useCase] &&
+                                profile.goalText == preset.setupExampleGoalText
                         ) {
-                            profile.applyStarterPreset(preset)
-                            if preset.wantsIronclaw || preset.wantsCouncil {
-                                profile.experienceMode = .power
-                                showsCapabilitySetup = true
-                            }
-                            editedContextStyle = true
-                            editedDefaultToggles.insert(.web)
-                            editedDefaultToggles.insert(.ironclaw)
-                            editedDefaultToggles.insert(.council)
+                            selectStarterPreset(preset)
                         }
                     }
                 }
@@ -381,15 +374,7 @@ struct UserSetupView: View {
                 Menu {
                     ForEach(UserSetupStarterPreset.allCases) { preset in
                         Button {
-                            profile.applyStarterPreset(preset)
-                            if preset.wantsIronclaw || preset.wantsCouncil {
-                                profile.experienceMode = .power
-                                showsCapabilitySetup = true
-                            }
-                            editedContextStyle = true
-                            editedDefaultToggles.insert(.web)
-                            editedDefaultToggles.insert(.ironclaw)
-                            editedDefaultToggles.insert(.council)
+                            selectStarterPreset(preset)
                         } label: {
                             Label(preset.title, systemImage: preset.symbolName)
                         }
@@ -404,6 +389,17 @@ struct UserSetupView: View {
                 }
             }
         }
+    }
+
+    private func selectStarterPreset(_ preset: UserSetupStarterPreset) {
+        profile.applyStarterPreset(preset)
+        if preset.wantsIronclaw || preset.wantsCouncil {
+            profile.experienceMode = .power
+            showsCapabilitySetup = true
+        }
+        // Starter presets are shortcuts, not manual lock-ins for later use-case changes.
+        editedContextStyle = false
+        editedDefaultToggles.removeAll()
     }
 }
 

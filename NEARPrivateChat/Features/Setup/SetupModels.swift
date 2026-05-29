@@ -74,6 +74,31 @@ enum UserSetupUseCase: String, CaseIterable, Codable, Identifiable, Hashable {
             return "Help me set up this project workspace: what files, links, instructions, and first chat should I add?"
         }
     }
+
+    var workspaceSeed: SetupWorkspaceSeed? {
+        switch self {
+        case .privateChat:
+            return nil
+        case .research:
+            return SetupWorkspaceSeed(
+                title: "Research brief",
+                detail: "Starter prompts ask for dated sources, contradictions, citations, and a concise recommendation.",
+                symbolName: "doc.text.magnifyingglass"
+            )
+        case .buildAgents:
+            return SetupWorkspaceSeed(
+                title: "Repo plan",
+                detail: "Starter prompts ask for a safe patch plan and focused verification before code changes.",
+                symbolName: "terminal"
+            )
+        case .teamProjects:
+            return SetupWorkspaceSeed(
+                title: "Project memory",
+                detail: "Links, files, notes, and reusable instructions stay together inside one active project.",
+                symbolName: "folder.badge.gearshape"
+            )
+        }
+    }
 }
 
 extension Array where Element == UserSetupUseCase {
@@ -200,6 +225,17 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
             return "Start a cited brief with web-ready defaults."
         case .agentMission:
             return "Launch a phone-safe agent planning draft."
+        }
+    }
+
+    var setupExampleGoalText: String {
+        switch self {
+        case .privateQuestion:
+            return "Think through a private question"
+        case .researchBrief:
+            return "Research the latest important AI developments"
+        case .agentMission:
+            return "Plan a phone-launched agent task for a repo or research project"
         }
     }
 
@@ -442,7 +478,13 @@ struct UserSetupProfile: Codable, Hashable {
     }
 
     var firstRunDraft: String? {
+        let orderedUseCases = useCases.setupOrderedUnique
         let goal = normalizedGoalText
+        if orderedUseCases.count > 1,
+           let combinedStarter = combinedStarterSuggestion(for: orderedUseCases, goal: goal) {
+            return combinedStarter.prompt
+        }
+
         if !goal.isEmpty, useCases.contains(.research) {
             return "Create a sourced research brief for this goal: \(goal)"
         }
@@ -486,9 +528,26 @@ struct UserSetupProfile: Codable, Hashable {
     }
 
     var emptyStatePromptSuggestions: [SetupPromptSuggestion] {
+        let orderedUseCases = useCases.setupOrderedUnique
         let goal = normalizedGoalText
+        if orderedUseCases.count > 1 {
+            return combinedPromptSuggestions(for: orderedUseCases, goal: goal)
+        }
 
-        switch useCases.setupPrimaryUseCase {
+        switch orderedUseCases.setupPrimaryUseCase {
+        case .privateChat:
+            return promptSuggestions(for: .privateChat, goal: goal)
+        case .research:
+            return promptSuggestions(for: .research, goal: goal)
+        case .buildAgents:
+            return promptSuggestions(for: .buildAgents, goal: goal)
+        case .teamProjects:
+            return promptSuggestions(for: .teamProjects, goal: goal)
+        }
+    }
+
+    private func promptSuggestions(for useCase: UserSetupUseCase, goal: String) -> [SetupPromptSuggestion] {
+        switch useCase {
         case .privateChat:
             if !goal.isEmpty {
                 return [
@@ -640,8 +699,109 @@ struct UserSetupProfile: Codable, Hashable {
         }
     }
 
+    private func combinedPromptSuggestions(for orderedUseCases: [UserSetupUseCase], goal: String) -> [SetupPromptSuggestion] {
+        let primaryUseCase = orderedUseCases.setupPrimaryUseCase
+        let promptUseCaseOrder = [primaryUseCase] + orderedUseCases.filter { $0 != primaryUseCase }
+        var suggestions: [SetupPromptSuggestion] = []
+        if let combinedStarter = combinedStarterSuggestion(for: orderedUseCases, goal: goal) {
+            suggestions.append(combinedStarter)
+        }
+
+        for useCase in promptUseCaseOrder {
+            if let first = promptSuggestions(for: useCase, goal: goal).first {
+                suggestions.append(first)
+            }
+        }
+
+        for useCase in promptUseCaseOrder {
+            for suggestion in promptSuggestions(for: useCase, goal: goal).dropFirst() {
+                suggestions.append(suggestion)
+                if suggestions.count >= 6 {
+                    break
+                }
+            }
+            if suggestions.count >= 6 {
+                break
+            }
+        }
+
+        var seenPrompts: Set<String> = []
+        var uniqueSuggestions: [SetupPromptSuggestion] = []
+        for suggestion in suggestions {
+            if seenPrompts.insert(suggestion.prompt).inserted {
+                uniqueSuggestions.append(suggestion)
+            }
+        }
+        return Array(uniqueSuggestions.prefix(3))
+    }
+
+    private func combinedStarterSuggestion(for orderedUseCases: [UserSetupUseCase], goal: String) -> SetupPromptSuggestion? {
+        guard orderedUseCases.count > 1 else { return nil }
+
+        let primaryUseCase = orderedUseCases.setupPrimaryUseCase
+        let primaryPrompt: String
+        switch primaryUseCase {
+        case .privateChat:
+            primaryPrompt = goal.isEmpty ? "Help me get started." : "Help me with this goal"
+        case .research:
+            primaryPrompt = goal.isEmpty ? "Create a sourced research brief" : "Create a sourced research brief for this goal"
+        case .buildAgents:
+            primaryPrompt = goal.isEmpty ? "Plan the first repo task" : "Plan the first repo task for this goal"
+        case .teamProjects:
+            primaryPrompt = goal.isEmpty ? "Help me set up this project workspace" : "Help me organize this project and next actions for this goal"
+        }
+
+        var qualifiers: [String] = []
+        if orderedUseCases.contains(.teamProjects) && primaryUseCase != .teamProjects {
+            qualifiers.append("using project files, links, notes, and memory")
+        }
+        if orderedUseCases.contains(.research) && primaryUseCase != .research {
+            qualifiers.append("with current sources and citations")
+        }
+        if orderedUseCases.contains(.buildAgents) && primaryUseCase != .buildAgents {
+            qualifiers.append("including a safe patch and focused verification plan")
+        }
+        if orderedUseCases.contains(.privateChat) && primaryUseCase == .privateChat && goal.isEmpty {
+            qualifiers.append("and keep it private and practical")
+        }
+
+        var prompt = primaryPrompt
+        if !qualifiers.isEmpty {
+            prompt += " " + qualifiers.joined(separator: ", ")
+        }
+        if !goal.isEmpty {
+            prompt += ": \(goal)"
+        } else {
+            prompt += "."
+        }
+
+        return SetupPromptSuggestion(
+            title: combinedStarterTitle(for: primaryUseCase, hasGoal: !goal.isEmpty),
+            symbolName: primaryUseCase.symbolName,
+            prompt: prompt
+        )
+    }
+
+    private func combinedStarterTitle(for useCase: UserSetupUseCase, hasGoal: Bool) -> String {
+        if hasGoal {
+            return "Start goal"
+        }
+        switch useCase {
+        case .privateChat:
+            return "Start chat"
+        case .research:
+            return "Start brief"
+        case .buildAgents:
+            return "Start plan"
+        case .teamProjects:
+            return "Start workspace"
+        }
+    }
+
     var setupWorkspaceSeeds: [SetupWorkspaceSeed] {
         guard let starterProjectName = setupStarterProjectName else { return [] }
+        let orderedUseCases = useCases.setupOrderedUnique
+        let prioritizedUseCases = [orderedUseCases.setupPrimaryUseCase] + orderedUseCases.filter { $0 != orderedUseCases.setupPrimaryUseCase }
 
         var seeds = [
             SetupWorkspaceSeed(
@@ -649,17 +809,23 @@ struct UserSetupProfile: Codable, Hashable {
                 detail: "\(starterProjectName) opens as the active project for your first chats.",
                 symbolName: "folder.badge.plus"
             ),
+        ]
+
+        for useCase in prioritizedUseCases {
+            if let seed = useCase.workspaceSeed {
+                seeds.append(seed)
+            }
+        }
+
+        seeds.append(
             SetupWorkspaceSeed(
-                title: "Instructions",
-                detail: setupInstructionSummary,
-                symbolName: "text.document"
-            ),
-            SetupWorkspaceSeed(
-                title: "Setup guide",
-                detail: "A reusable note keeps next steps visible inside the project.",
+                title: orderedUseCases.count > 1 ? "Shared guide" : "Setup guide",
+                detail: orderedUseCases.count > 1
+                    ? "\(orderedUseCases.count) setup tracks share one reusable guide note and project instructions."
+                    : "A reusable note keeps next steps visible inside the project.",
                 symbolName: "note.text.badge.plus"
             )
-        ]
+        )
 
         let goal = normalizedGoalText
         if !goal.isEmpty {
@@ -672,7 +838,10 @@ struct UserSetupProfile: Codable, Hashable {
             )
         }
 
-        return seeds
+        var seenTitles: Set<String> = []
+        return seeds.filter { seed in
+            seenTitles.insert(seed.title).inserted
+        }
     }
 
     mutating func toggleUseCase(_ useCase: UserSetupUseCase) {
@@ -690,7 +859,7 @@ struct UserSetupProfile: Codable, Hashable {
     mutating func applyStarterPreset(_ preset: UserSetupStarterPreset) {
         useCase = preset.useCase
         useCases = [preset.useCase]
-        goalText = preset.prompt
+        goalText = preset.setupExampleGoalText
         contextStyle = preset.contextStyle
         wantsWeb = preset.wantsWeb
         wantsIronclaw = preset.wantsIronclaw
