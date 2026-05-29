@@ -3179,6 +3179,22 @@ extension PrivateChatCoreTests {
         XCTAssertNil(QuickIntentParser.parse("translate this to spanish"))
     }
 
+    func testQuickIntentParsesUnitConversion() {
+        XCTAssertEqual(QuickIntentParser.parse("5 miles in km"), .unitConvert(value: 5, from: "miles", to: "km"))
+        XCTAssertEqual(QuickIntentParser.parse("convert 100 f to c"), .unitConvert(value: 100, from: "f", to: "c"))
+        XCTAssertEqual(QuickIntentParser.parse("10 kg to lb"), .unitConvert(value: 10, from: "kg", to: "lb"))
+        // Mismatched categories / non-units don't convert.
+        XCTAssertNil(QuickIntentParser.parse("5 km to kg"))
+        XCTAssertNil(QuickIntentParser.parse("5 apples to oranges"))
+    }
+
+    func testUnitConverterMathIsCorrect() throws {
+        XCTAssertEqual(try XCTUnwrap(UnitConverter.convert(value: 100, from: "f", to: "c")).result, 37.7778, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(UnitConverter.convert(value: 1, from: "mi", to: "km")).result, 1.609344, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(UnitConverter.convert(value: 1, from: "kg", to: "lb")).result, 2.2046, accuracy: 0.001)
+        XCTAssertNil(UnitConverter.convert(value: 1, from: "km", to: "kg"))
+    }
+
     func testQuickIntentParsesTracker() throws {
         let intent = QuickIntentParser.parse(
             "create a tracker to tell me the eth price every morning at 8 am using council"

@@ -3773,6 +3773,8 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.worldTimeWidget(query: query)
         case let .fx(amount, from, to):
             return await LiveDataService.fxWidget(amount: amount, from: from, to: to)
+        case let .unitConvert(value, from, to):
+            return await LiveDataService.unitConvertWidget(value: value, from: from, to: to)
         case .createTracker:
             return nil
         }

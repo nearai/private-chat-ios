@@ -33,6 +33,7 @@ enum QuickIntent: Equatable {
     case weather(query: String)
     case worldTime(query: String)
     case fx(amount: Double, from: String, to: String)
+    case unitConvert(value: Double, from: String, to: String)
     case createTracker(TrackerSpec)
 }
 
@@ -90,6 +91,11 @@ enum QuickIntentParser {
         // The currency-code gate keeps "translate X to spanish" out.
         if let fx = parseFX(text) {
             return .fx(amount: fx.amount, from: fx.from, to: fx.to)
+        }
+
+        // 3c) unit conversion ("5 miles in km", "100 f to c", "10 kg to lb").
+        if let unit = parseUnitConversion(text) {
+            return .unitConvert(value: unit.value, from: unit.from, to: unit.to)
         }
 
         // 4) price of a coin (a bare "?" is not enough — it swallows
@@ -291,6 +297,24 @@ enum QuickIntentParser {
         return map[token]
     }
 
+    static func parseUnitConversion(_ text: String) -> (value: Double, from: String, to: String)? {
+        let pattern = #"(-?\d[\d.,]*)\s*(°?[a-z]+)\s+(?:to|in|into|as)\s+(°?[a-z]+)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) else {
+            return nil
+        }
+        func group(_ index: Int) -> String? {
+            Range(match.range(at: index), in: text).map { String(text[$0]) }
+        }
+        guard let valueString = group(1)?.replacingOccurrences(of: ",", with: ""),
+              let value = Double(valueString),
+              let from = group(2), let to = group(3),
+              UnitConverter.convert(value: value, from: from, to: to) != nil else {
+            return nil
+        }
+        return (value, from, to)
+    }
+
     private static func extractSchedule(from text: String) -> BriefingSchedule {
         var hour = 8
         var minute = 0
@@ -332,6 +356,69 @@ extension LiveDataService {
     /// Symbol for a CoinGecko id (for cryptoPrice briefings).
     static func symbol(forCoinID id: String) -> String {
         liveCoin(forID: id)?.symbol ?? id.uppercased()
+    }
+}
+
+/// On-device unit conversion (length / mass / temperature). Linear units carry
+/// a factor to a base unit; temperature is handled by formula.
+enum UnitConverter {
+    private struct LinearUnit { let symbol: String; let category: String; let toBase: Double }
+
+    private static let linear: [String: LinearUnit] = {
+        var map: [String: LinearUnit] = [:]
+        func add(_ aliases: [String], _ symbol: String, _ category: String, _ toBase: Double) {
+            for alias in aliases { map[alias] = LinearUnit(symbol: symbol, category: category, toBase: toBase) }
+        }
+        // length (base: meter)
+        add(["m", "meter", "meters", "metre", "metres"], "m", "length", 1)
+        add(["km", "kilometer", "kilometers", "kilometre", "kilometres"], "km", "length", 1000)
+        add(["cm", "centimeter", "centimeters"], "cm", "length", 0.01)
+        add(["mm", "millimeter", "millimeters"], "mm", "length", 0.001)
+        add(["mi", "mile", "miles"], "mi", "length", 1609.344)
+        add(["ft", "foot", "feet"], "ft", "length", 0.3048)
+        add(["yd", "yard", "yards"], "yd", "length", 0.9144)
+        add(["in", "inch", "inches"], "in", "length", 0.0254)
+        // mass (base: gram)
+        add(["g", "gram", "grams"], "g", "mass", 1)
+        add(["kg", "kilogram", "kilograms", "kilo", "kilos"], "kg", "mass", 1000)
+        add(["mg", "milligram", "milligrams"], "mg", "mass", 0.001)
+        add(["lb", "lbs", "pound", "pounds"], "lb", "mass", 453.59237)
+        add(["oz", "ounce", "ounces"], "oz", "mass", 28.349523)
+        add(["ton", "tonne", "tonnes", "tons"], "t", "mass", 1_000_000)
+        return map
+    }()
+
+    private static func canonicalTemp(_ raw: String) -> String? {
+        switch raw.replacingOccurrences(of: "°", with: "") {
+        case "c", "celsius", "centigrade": return "°C"
+        case "f", "fahrenheit": return "°F"
+        case "k", "kelvin": return "K"
+        default: return nil
+        }
+    }
+
+    static func convert(value: Double, from: String, to: String) -> (result: Double, fromSymbol: String, toSymbol: String)? {
+        let f = from.lowercased(), t = to.lowercased()
+        if let cf = canonicalTemp(f), let ct = canonicalTemp(t) {
+            return (convertTemperature(value, from: cf, to: ct), cf, ct)
+        }
+        let key = { (s: String) in s.replacingOccurrences(of: "°", with: "") }
+        guard let fu = linear[key(f)], let tu = linear[key(t)], fu.category == tu.category else { return nil }
+        return (value * fu.toBase / tu.toBase, fu.symbol, tu.symbol)
+    }
+
+    private static func convertTemperature(_ value: Double, from: String, to: String) -> Double {
+        let celsius: Double
+        switch from {
+        case "°F": celsius = (value - 32) * 5 / 9
+        case "K": celsius = value - 273.15
+        default: celsius = value
+        }
+        switch to {
+        case "°F": return celsius * 9 / 5 + 32
+        case "K": return celsius + 273.15
+        default: return celsius
+        }
     }
 }
 
@@ -619,6 +706,34 @@ enum LiveDataService {
         } catch {
             return nil
         }
+    }
+
+    /// On-device unit conversion → metric widget (no network).
+    static func unitConvertWidget(value: Double, from: String, to: String) async -> MessageWidget? {
+        guard let converted = UnitConverter.convert(value: value, from: from, to: to) else { return nil }
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 4
+        let valueString = formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+        let resultString = formatter.string(from: NSNumber(value: converted.result)) ?? "\(converted.result)"
+        return MessageWidget(
+            kind: .metric,
+            title: "\(converted.fromSymbol) → \(converted.toSymbol)",
+            freshness: .fresh,
+            time: shortCurrentTimeString(),
+            followUp: nil,
+            note: nil,
+            chart: nil,
+            metric: WidgetMetric(
+                label: "\(valueString) \(converted.fromSymbol)",
+                value: "\(resultString) \(converted.toSymbol)",
+                delta: nil,
+                trend: .flat,
+                caption: nil
+            ),
+            comparison: nil,
+            newsBrief: nil
+        )
     }
 
     /// Currency conversion via frankfurter.app (ECB rates, auth-free) → metric.
