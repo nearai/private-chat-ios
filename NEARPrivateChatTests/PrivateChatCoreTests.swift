@@ -4171,6 +4171,14 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(chart.chart?.points, [14_000, 14_800])
         XCTAssertEqual(chart.chart?.value, "$14,800")
         XCTAssertEqual(chart.chart?.trend, .up)
+
+        // Notification body surfaces the value + move (not a generic "ready").
+        let body = TrackerHistory.notificationBody(history: two, fallback: chart)
+        XCTAssertTrue(body.contains("$14,800"))
+        XCTAssertTrue(body.contains("%"))
+        // One sample → just the value; no history → the widget's headline value.
+        XCTAssertEqual(TrackerHistory.notificationBody(history: one, fallback: chart), "$14,000")
+        XCTAssertEqual(TrackerHistory.notificationBody(history: [], fallback: MessageWidget(kind: .metric, metric: WidgetMetric(value: "$2,019"))), "$2,019")
     }
 
     @MainActor

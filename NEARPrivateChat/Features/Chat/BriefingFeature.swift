@@ -151,6 +151,26 @@ enum TrackerHistory {
         return nil
     }
 
+    /// An informative notification body — surfaces the actual value/move instead
+    /// of a generic "ready". "$14,800 (+4.2% since last check)" when there's
+    /// history; otherwise the widget's headline value/headline/note.
+    static func notificationBody(history: [TrackerSample], fallback widget: MessageWidget) -> String {
+        if let last = history.last {
+            if history.count >= 2 {
+                let prev = history[history.count - 2].value
+                if prev != 0 {
+                    let pct = (last.value - prev) / prev * 100
+                    return "\(last.display) (\(String(format: "%+.1f%%", pct)) since last check)"
+                }
+            }
+            return last.display
+        }
+        if let display = sampleDisplay(from: widget) { return display }
+        if let headline = widget.newsBrief?.stories.first?.title, !headline.isEmpty { return headline }
+        if let note = widget.note, !note.isEmpty { return String(note.prefix(140)) }
+        return "Your update is ready."
+    }
+
     /// A chart widget over the samples (oldest → newest), or nil with < 2 points.
     static func chartWidget(title: String, history: [TrackerSample]) -> MessageWidget? {
         guard history.count >= 2, let first = history.first, let last = history.last else { return nil }
@@ -562,7 +582,10 @@ final class BriefingStore: ObservableObject {
             briefings[index].isPaused = true
         }
         save()
-        Self.postBriefingReadyNotification(title: briefings[index].title)
+        Self.postBriefingReadyNotification(
+            title: briefings[index].title,
+            body: TrackerHistory.notificationBody(history: briefings[index].history, fallback: delivered)
+        )
     }
 
     /// Schedules a one-off personal reminder ("remind me to call mom at 5pm") as
@@ -634,13 +657,13 @@ final class BriefingStore: ObservableObject {
 
     /// Posts when a briefing produces a fresh result. iOS suppresses foreground
     /// banners by default, so app-open runs don't spam; background runs surface.
-    nonisolated static func postBriefingReadyNotification(title: String) {
+    nonisolated static func postBriefingReadyNotification(title: String, body: String = "Your briefing is ready.") {
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
             guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
             let content = UNMutableNotificationContent()
             content.title = title
-            content.body = "Your briefing is ready."
+            content.body = body
             center.add(UNNotificationRequest(identifier: "briefing-\(UUID().uuidString)", content: content, trigger: nil))
         }
     }
