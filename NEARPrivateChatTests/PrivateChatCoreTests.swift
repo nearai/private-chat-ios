@@ -3192,6 +3192,15 @@ extension PrivateChatCoreTests {
         XCTAssertNil(QuickIntentParser.parse("translate this to spanish"))
     }
 
+    func testQuickIntentParsesDefinition() {
+        XCTAssertEqual(QuickIntentParser.parse("define serendipity"), .define(word: "serendipity"))
+        XCTAssertEqual(QuickIntentParser.parse("what does ephemeral mean"), .define(word: "ephemeral"))
+        XCTAssertEqual(QuickIntentParser.parse("meaning of zeitgeist"), .define(word: "zeitgeist"))
+        // Not a definition request.
+        XCTAssertNil(QuickIntentParser.parse("define"))
+        XCTAssertNil(QuickIntentParser.parse("tell me a story"))
+    }
+
     func testQuickIntentParsesUnitConversion() {
         XCTAssertEqual(QuickIntentParser.parse("5 miles in km"), .unitConvert(value: 5, from: "miles", to: "km"))
         XCTAssertEqual(QuickIntentParser.parse("convert 100 f to c"), .unitConvert(value: 100, from: "f", to: "c"))

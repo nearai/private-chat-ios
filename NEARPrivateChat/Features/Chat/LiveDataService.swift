@@ -34,6 +34,7 @@ enum QuickIntent: Equatable {
     case worldTime(query: String)
     case fx(amount: Double, from: String, to: String)
     case unitConvert(value: Double, from: String, to: String)
+    case define(word: String)
     case createTracker(TrackerSpec)
 }
 
@@ -78,6 +79,11 @@ enum QuickIntentParser {
         if contains(text, ["time", "clock"]),
            let place = extractLocation(from: text, keywords: ["time", "clock"]) {
             return .worldTime(query: place)
+        }
+
+        // 2d) dictionary definition ("define serendipity", "what does X mean").
+        if let word = parseDefineWord(text) {
+            return .define(word: word)
         }
 
         // 3) NEAR account — named phrases, or a .near token plus a status word.
@@ -313,6 +319,24 @@ enum QuickIntentParser {
             return nil
         }
         return (value, from, to)
+    }
+
+    static func parseDefineWord(_ text: String) -> String? {
+        let prefixes = ["what's the definition of ", "whats the definition of ", "what is the definition of ",
+                        "definition of ", "define the word ", "define ", "meaning of ", "what does "]
+        for prefix in prefixes where text.hasPrefix(prefix) {
+            var rest = String(text.dropFirst(prefix.count))
+            for suffix in [" mean", " means", " defined", " definition"] where rest.hasSuffix(suffix) {
+                rest = String(rest.dropLast(suffix.count))
+            }
+            rest = rest.replacingOccurrences(of: "[?.,!\"']", with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+            // The dictionary API is per-word; take the first token.
+            guard let word = rest.split(separator: " ").first.map(String.init),
+                  word.count >= 2, word.allSatisfy({ $0.isLetter || $0 == "-" }) else { return nil }
+            return word
+        }
+        return nil
     }
 
     private static func extractSchedule(from text: String) -> BriefingSchedule {
@@ -708,6 +732,38 @@ enum LiveDataService {
         }
     }
 
+    /// Dictionary definition (dictionaryapi.dev, auth-free) → generic widget.
+    static func defineWidget(word: String) async -> MessageWidget? {
+        let term = word.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !term.isEmpty,
+              let encoded = term.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+              let url = URL(string: "https://api.dictionaryapi.dev/api/v2/entries/en/\(encoded)") else {
+            return nil
+        }
+        do {
+            let entries = try JSONDecoder().decode([DictionaryEntry].self, from: try await fetchData(from: url))
+            guard let meaning = entries.first?.meanings?.first,
+                  let definition = meaning.definitions?.first?.definition, !definition.isEmpty else {
+                return nil
+            }
+            let partOfSpeech = meaning.partOfSpeech.map { "\($0) · " } ?? ""
+            return MessageWidget(
+                kind: .generic,
+                title: word.capitalized,
+                freshness: .fresh,
+                time: shortCurrentTimeString(),
+                followUp: "Use it in a sentence?",
+                note: "\(partOfSpeech)\(definition)",
+                chart: nil,
+                metric: nil,
+                comparison: nil,
+                newsBrief: nil
+            )
+        } catch {
+            return nil
+        }
+    }
+
     /// On-device unit conversion → metric widget (no network).
     static func unitConvertWidget(value: Double, from: String, to: String) async -> MessageWidget? {
         guard let converted = UnitConverter.convert(value: value, from: from, to: to) else { return nil }
@@ -837,6 +893,20 @@ private extension LiveDataService {
         let amount: Double?
         let base: String?
         let rates: [String: Double]?
+    }
+
+    struct DictionaryEntry: Decodable {
+        let word: String?
+        let meanings: [DictionaryMeaning]?
+    }
+
+    struct DictionaryMeaning: Decodable {
+        let partOfSpeech: String?
+        let definitions: [DictionaryDefinition]?
+    }
+
+    struct DictionaryDefinition: Decodable {
+        let definition: String?
     }
 
     struct CoinGeckoPricePoint: Decodable {
