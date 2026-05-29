@@ -28,6 +28,7 @@ func liveCoin(forID id: String) -> LiveCoin? {
 /// "create a tracker…" commands work without the chat backend.
 enum QuickIntent: Equatable {
     case price(coinID: String, symbol: String)
+    case trendingCrypto
     case nearAccount(account: String?)
     case news
     case weather(query: String)
@@ -148,6 +149,16 @@ enum QuickIntentParser {
         // 2) news
         if contains(text, ["news", "headlines", "what's happening", "whats happening", "top stories", "current events"]) {
             return .news
+        }
+
+        // 2a2) trending crypto — specific phrases only, so it doesn't swallow a
+        // single-coin price question.
+        if contains(text, ["trending coin", "trending coins", "trending crypto", "trending token",
+                            "trending tokens", "trending cryptocurrencies", "what's trending in crypto",
+                            "whats trending in crypto", "what is trending in crypto", "crypto trending",
+                            "what's hot in crypto", "whats hot in crypto", "top trending coins",
+                            "what coins are trending", "what crypto is trending"]) {
+            return .trendingCrypto
         }
 
         // 2b) weather — needs an extractable place ("weather in tokyo",
@@ -285,7 +296,7 @@ enum QuickIntentParser {
     /// cannot, so they never get swept into a compound run.
     private static func isCompoundable(_ intent: QuickIntent) -> Bool {
         switch intent {
-        case .price, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
+        case .price, .trendingCrypto, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
         case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker:
             return false
@@ -924,6 +935,40 @@ enum LiveDataService {
         currencyFormatter(maximumFractionDigits: value < 10 ? 2 : 0).string(from: NSNumber(value: value)) ?? "$\(value)"
     }
 
+    /// Coins trending on CoinGecko right now → a comparison widget (coin ·
+    /// symbol · market-cap rank). Auth-free (`/search/trending`).
+    static func trendingCryptoWidget() async -> MessageWidget? {
+        guard let url = URL(string: "https://api.coingecko.com/api/v3/search/trending") else { return nil }
+        guard let data = try? await fetchData(from: url),
+              let response = try? JSONDecoder().decode(CoinGeckoTrendingResponse.self, from: data),
+              !response.coins.isEmpty else {
+            return nil
+        }
+        let rows = response.coins.prefix(7).map { wrapper -> WidgetComparisonRow in
+            let coin = wrapper.item
+            let rank = coin.marketCapRank.map { "#\($0)" } ?? "—"
+            return WidgetComparisonRow(
+                label: coin.name,
+                cells: [
+                    WidgetComparisonCell(text: coin.symbol.uppercased(), tone: nil),
+                    WidgetComparisonCell(text: rank, tone: nil)
+                ]
+            )
+        }
+        return MessageWidget(
+            kind: .comparison,
+            title: "Trending on CoinGecko",
+            freshness: .fresh,
+            time: shortCurrentTimeString(),
+            followUp: "Want a price on any of these?",
+            note: nil,
+            chart: nil,
+            metric: nil,
+            comparison: WidgetComparison(subtitle: "Trending now", columns: ["Symbol", "Rank"], rows: Array(rows)),
+            newsBrief: nil
+        )
+    }
+
     /// Price + 24h sparkline for any CoinGecko coin id → chart widget.
     /// The sparkline is best-effort: CoinGecko rate-limits the heavier chart
     /// endpoint first, so if it fails we still surface the live price as a
@@ -1321,6 +1366,23 @@ private extension LiveDataService {
 
     struct CoinGeckoMarketChartResponse: Decodable {
         let prices: [CoinGeckoPricePoint]
+    }
+
+    struct CoinGeckoTrendingResponse: Decodable {
+        let coins: [TrendingWrapper]
+
+        struct TrendingWrapper: Decodable { let item: TrendingCoin }
+
+        struct TrendingCoin: Decodable {
+            let name: String
+            let symbol: String
+            let marketCapRank: Int?
+
+            enum CodingKeys: String, CodingKey {
+                case name, symbol
+                case marketCapRank = "market_cap_rank"
+            }
+        }
     }
 
     struct GeocodingResponse: Decodable {

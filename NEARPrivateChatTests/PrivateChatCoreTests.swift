@@ -3537,6 +3537,14 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(reminder.title, "call mom")
     }
 
+    func testQuickIntentParsesTrendingCrypto() {
+        XCTAssertEqual(QuickIntentParser.parse("what's trending in crypto"), .trendingCrypto)
+        XCTAssertEqual(QuickIntentParser.parse("show me trending coins"), .trendingCrypto)
+        XCTAssertEqual(QuickIntentParser.parse("what crypto is trending"), .trendingCrypto)
+        // A single-coin price question is unaffected.
+        XCTAssertEqual(QuickIntentParser.parse("what's the eth price"), .price(coinID: "ethereum", symbol: "ETH"))
+    }
+
     func testQuickIntentParsesActivityLog() {
         XCTAssertEqual(QuickIntentParser.parse("what have you done"), .activityLog)
         XCTAssertEqual(QuickIntentParser.parse("show your activity"), .activityLog)

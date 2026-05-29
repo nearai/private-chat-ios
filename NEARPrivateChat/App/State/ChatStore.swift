@@ -3997,6 +3997,8 @@ final class ChatStore: ObservableObject {
         switch intent {
         case let .price(coinID, symbol):
             return await LiveDataService.cryptoPriceWidget(coinID: coinID, symbol: symbol)
+        case .trendingCrypto:
+            return await LiveDataService.trendingCryptoWidget()
         case let .nearAccount(account):
             return await LiveDataService.nearAccountWidget(account: account ?? "")
         case .news:
