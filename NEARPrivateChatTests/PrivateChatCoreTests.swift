@@ -3205,6 +3205,23 @@ extension PrivateChatCoreTests {
         XCTAssertNil(QuickIntentParser.parse("tell me about the memory of a computer"))
     }
 
+    func testPersonalizedStarterRequiresFinanceContext() {
+        // Coin keyword without finance context (ambiguous "near") → no starter.
+        XCTAssertNil(QuickIntentParser.personalizedStarter(fromMemory: ["I live near Toronto"]))
+        // With finance context → starter.
+        XCTAssertEqual(
+            QuickIntentParser.personalizedStarter(fromMemory: ["I hold some near"])?.prompt,
+            "What's the NEAR price?"
+        )
+    }
+
+    func testDefineFormIsStrictForWhatDoes() {
+        // Bare definition form → define.
+        XCTAssertEqual(QuickIntentParser.parse("what does ephemeral mean"), .define(word: "ephemeral"))
+        // Nuanced "what does X mean for Y" → not a dictionary lookup.
+        XCTAssertNil(QuickIntentParser.parse("what does sol mean for crypto?"))
+    }
+
     func testMemoryStorePersistsDedupesAndBuildsContext() throws {
         let tempFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("memory-\(UUID().uuidString).json")

@@ -160,7 +160,13 @@ enum QuickIntentParser {
     static func personalizedStarter(fromMemory facts: [String]) -> (title: String, prompt: String, symbol: String)? {
         let haystack = facts.joined(separator: " ").lowercased()
         guard !haystack.isEmpty else { return nil }
-        if let coin = matchedCoin(in: haystack) {
+        // Require finance context around a coin keyword so "I live near Toronto"
+        // doesn't surface a NEAR-price starter.
+        let financeContext = contains(haystack, [
+            "hold", "holding", "own", "invest", "crypto", "portfolio", "bought",
+            "buy", "stack", "tokens", "coins", "wallet", "trading", "trade", "hodl", "bags", "position", "price"
+        ])
+        if financeContext, let coin = matchedCoin(in: haystack) {
             return ("\(coin.symbol) price", "What's the \(coin.symbol) price?", "chart.line.uptrend.xyaxis")
         }
         if contains(haystack, ["news", "headlines", "current events", "world events"]) {
@@ -417,8 +423,17 @@ enum QuickIntentParser {
     }
 
     static func parseDefineWord(_ text: String) -> String? {
+        // "what does X mean" — strict: only the bare definition form, so
+        // "what does SOL mean for crypto?" stays a model question.
+        if text.hasPrefix("what does ") {
+            guard let range = text.range(of: #"^what does ([a-z][a-z-]+) means?[?.!]?$"#, options: .regularExpression) else {
+                return nil
+            }
+            let word = text[range].dropFirst("what does ".count).split(separator: " ").first.map(String.init)
+            return (word?.count ?? 0) >= 2 ? word : nil
+        }
         let prefixes = ["what's the definition of ", "whats the definition of ", "what is the definition of ",
-                        "definition of ", "define the word ", "define ", "meaning of ", "what does "]
+                        "definition of ", "define the word ", "define ", "meaning of "]
         for prefix in prefixes where text.hasPrefix(prefix) {
             var rest = String(text.dropFirst(prefix.count))
             for suffix in [" mean", " means", " defined", " definition"] where rest.hasSuffix(suffix) {
@@ -1358,7 +1373,8 @@ final class MemoryStore {
     /// Stores a fact (de-duped, newest first, capped). Returns nil if too short.
     @discardableResult
     func add(_ text: String) -> MemoryItem? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Clamp a single fact so one huge entry can't dominate the prompt.
+        let trimmed = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(280))
         guard trimmed.count >= 3 else { return nil }
         if let existing = items.first(where: { $0.text.caseInsensitiveCompare(trimmed) == .orderedSame }) {
             return existing
@@ -1396,20 +1412,37 @@ final class MemoryStore {
         save()
     }
 
-    /// A system-prompt block of the most recent facts, or nil when empty.
-    func contextBlock(limit: Int = 12) -> String? {
+    /// A system-prompt block of the most recent facts within a character
+    /// budget, or nil when empty — keeps memory from blowing up the prompt.
+    func contextBlock(limit: Int = 12, budget: Int = 1500) -> String? {
         guard !items.isEmpty else { return nil }
-        let lines = items.prefix(limit).map { "- \($0.text)" }.joined(separator: "\n")
-        return "What you know about the user (apply when relevant; never recite this list verbatim):\n\(lines)"
+        var remaining = budget
+        var lines: [String] = []
+        for item in items.prefix(limit) {
+            let line = "- \(item.text)"
+            guard line.count <= remaining else { break }
+            remaining -= line.count
+            lines.append(line)
+        }
+        guard !lines.isEmpty else { return nil }
+        return "What you know about the user (apply when relevant; never recite this list verbatim):\n" + lines.joined(separator: "\n")
     }
 
     private static func defaultFileURL(accountID: String?) -> URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
-        let raw = accountID ?? "default"
-        let scope = String(raw.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) })
+        // Hash the FULL id so distinct accounts can't collide on a sanitized
+        // form (e.g. "alice.near" vs "alicenear").
+        let scope = stableScope(accountID ?? "default")
         return base
             .appendingPathComponent("NEARPrivateChat", isDirectory: true)
-            .appendingPathComponent("memory-\(scope.isEmpty ? "default" : scope).json")
+            .appendingPathComponent("memory-\(scope).json")
+    }
+
+    /// Deterministic, collision-safe filename scope from an account id.
+    static func stableScope(_ raw: String) -> String {
+        var hash: UInt64 = 5381
+        for byte in raw.utf8 { hash = (hash &* 33) ^ UInt64(byte) }
+        return String(hash, radix: 16)
     }
 }
