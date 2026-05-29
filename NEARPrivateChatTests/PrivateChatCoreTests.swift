@@ -4384,6 +4384,20 @@ extension PrivateChatCoreTests {
         XCTAssertNotNil(decoded.snoozedUntil)
     }
 
+    func testThreadTranscriptBuildsMultiTurnContext() {
+        let replies = [
+            ThreadReply(role: .user, text: "why is it up?"),
+            ThreadReply(role: .assistant, text: "Strong ETF inflows this week."),
+            ThreadReply(role: .assistant, text: "", widget: MessageWidget(kind: .chart, title: "1Y"))
+        ]
+        let transcript = ThreadedBriefingView.transcript(of: replies)
+        XCTAssertTrue(transcript.contains("Me: why is it up?"))
+        XCTAssertTrue(transcript.contains("NEAR: Strong ETF inflows this week."))
+        // A widget-only (empty-text) reply is skipped.
+        XCTAssertFalse(transcript.contains("NEAR: \n"))
+        XCTAssertTrue(ThreadedBriefingView.transcript(of: []).isEmpty)
+    }
+
     func testBriefingThreadReplyContextPrefersWidgetNote() {
         // The follow-up the model answers is grounded in the delivery's result.
         let widget = MessageWidget(kind: .generic, title: "Global politics", note: "Top 5 developments: Iran, Lebanon, EU sanctions")

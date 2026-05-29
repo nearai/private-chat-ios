@@ -263,13 +263,19 @@ struct ThreadedBriefingView: View {
     private func sendReply() {
         let text = replyTrimmed
         guard !text.isEmpty, !isReplying, let index = deliveries.indices.last else { return }
+        // Capture the conversation so far BEFORE appending the new question, so
+        // follow-ups are multi-turn (the model remembers what we already discussed).
+        let priorReplies = deliveries[index].thread?.replies ?? []
         appendReply(ThreadReply(role: .user, text: text), at: index, bumpCount: true)
         replyText = ""
         AppHaptics.lightImpact()
 
         // No backend wired (previews) → the user reply is recorded locally only.
         guard let onAskFollowUp else { return }
-        let context = ThreadedBriefingView.replyContext(for: deliveries[index])
+        let context = [
+            ThreadedBriefingView.replyContext(for: deliveries[index]),
+            ThreadedBriefingView.transcript(of: priorReplies)
+        ].filter { !$0.isEmpty }.joined(separator: "\n\n")
         isReplying = true
         Task {
             let answer = await onAskFollowUp(text, context)
@@ -303,6 +309,18 @@ struct ThreadedBriefingView: View {
         delivery.thread = thread
         if bumpCount { delivery.replyCount += 1 }
         deliveries[index] = delivery
+    }
+
+    /// The prior thread turns as a compact transcript, so a follow-up is
+    /// multi-turn (the model sees what we already discussed). Skips widget-only
+    /// replies (no text) and caps at the last 8 turns to bound the prompt.
+    static func transcript(of replies: [ThreadReply]) -> String {
+        let lines = replies.suffix(8).compactMap { reply -> String? in
+            let body = reply.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !body.isEmpty else { return nil }
+            return "\(reply.role == .user ? "Me" : "NEAR"): \(body)"
+        }
+        return lines.isEmpty ? "" : "Conversation so far:\n" + lines.joined(separator: "\n")
     }
 
     /// The text a follow-up is grounded in: the delivery's widget note/summary
