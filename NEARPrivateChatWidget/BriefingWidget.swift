@@ -7,6 +7,8 @@ struct BriefingEntry: TimelineEntry {
     let date: Date
     /// The most-recently-run briefing snapshot, or `nil` when there are none.
     let snapshot: BriefingSnapshot?
+    /// Most-recent briefings (for the systemLarge list), newest first.
+    let recent: [BriefingSnapshot]
     /// Total number of briefings the user has, for the systemMedium footer.
     let totalCount: Int
     /// Drives the redacted placeholder look in the gallery/loading state.
@@ -20,6 +22,11 @@ struct BriefingEntry: TimelineEntry {
             summary: "Top headlines, refreshed every weekday morning.",
             lastRunAt: Date()
         ),
+        recent: [
+            BriefingSnapshot(id: "p1", title: "Daily news brief", summary: "Top headlines, refreshed every weekday morning.", lastRunAt: Date()),
+            BriefingSnapshot(id: "p2", title: "ETH price watcher", summary: "$2,005 · −0.8%", lastRunAt: Date()),
+            BriefingSnapshot(id: "p3", title: "My NEAR account", summary: "2,911.17 NEAR · $7,103", lastRunAt: Date())
+        ],
         totalCount: 3,
         isPlaceholder: true
     )
@@ -27,6 +34,7 @@ struct BriefingEntry: TimelineEntry {
     static let empty = BriefingEntry(
         date: Date(),
         snapshot: nil,
+        recent: [],
         totalCount: 0,
         isPlaceholder: false
     )
@@ -57,9 +65,18 @@ struct BriefingProvider: TimelineProvider {
 
     private func loadEntry() -> BriefingEntry {
         let snapshots = Self.readSnapshots()
+        let sorted = snapshots.sorted { lhs, rhs in
+            switch (lhs.lastRunAt, rhs.lastRunAt) {
+            case let (l?, r?): return l > r
+            case (_?, nil): return true
+            case (nil, _?): return false
+            case (nil, nil): return false
+            }
+        }
         return BriefingEntry(
             date: Date(),
-            snapshot: BriefingSnapshot.mostRecent(in: snapshots),
+            snapshot: sorted.first,
+            recent: Array(sorted.prefix(5)),
             totalCount: snapshots.count,
             isPlaceholder: false
         )
@@ -86,6 +103,8 @@ struct BriefingWidgetEntryView: View {
             switch family {
             case .systemSmall:
                 smallBody
+            case .systemLarge:
+                largeBody
             default:
                 mediumBody
             }
@@ -151,6 +170,41 @@ struct BriefingWidgetEntryView: View {
         }
     }
 
+    @ViewBuilder
+    private var largeBody: some View {
+        if entry.recent.isEmpty {
+            emptyState
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                header
+                ForEach(Array(entry.recent.prefix(4))) { snapshot in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(snapshot.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Text(snapshot.summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if snapshot.id != entry.recent.prefix(4).last?.id {
+                        Divider().opacity(0.4)
+                    }
+                }
+                Spacer(minLength: 0)
+                if entry.totalCount > entry.recent.prefix(4).count {
+                    Text("+\(entry.totalCount - entry.recent.prefix(4).count) more in Private Chat")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .redacted(reason: entry.isPlaceholder ? .placeholder : [])
+        }
+    }
+
     private var header: some View {
         HStack(spacing: 6) {
             Image(systemName: "sparkles")
@@ -195,7 +249,7 @@ struct BriefingWidget: Widget {
         }
         .configurationDisplayName("Today Briefing")
         .description("Your latest scheduled briefing at a glance.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
 
@@ -209,6 +263,13 @@ struct BriefingWidget: Widget {
 }
 
 #Preview("Medium", as: .systemMedium) {
+    BriefingWidget()
+} timeline: {
+    BriefingEntry.placeholder
+    BriefingEntry.empty
+}
+
+#Preview("Large", as: .systemLarge) {
     BriefingWidget()
 } timeline: {
     BriefingEntry.placeholder
