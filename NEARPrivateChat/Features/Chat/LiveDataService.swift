@@ -29,6 +29,7 @@ func liveCoin(forID id: String) -> LiveCoin? {
 enum QuickIntent: Equatable {
     case price(coinID: String, symbol: String)
     case trendingCrypto
+    case cryptoMarket
     case nearAccount(account: String?)
     case news
     case weather(query: String)
@@ -161,6 +162,14 @@ enum QuickIntentParser {
                             "what's hot in crypto", "whats hot in crypto", "top trending coins",
                             "what coins are trending", "what crypto is trending"]) {
             return .trendingCrypto
+        }
+
+        // 2a3) crypto market overview — total cap / dominance.
+        if contains(text, ["crypto market", "how's the crypto market", "hows the crypto market",
+                            "how is the crypto market", "crypto market overview", "total market cap",
+                            "total crypto market cap", "market cap of crypto", "btc dominance",
+                            "bitcoin dominance", "eth dominance", "state of crypto", "state of the crypto market"]) {
+            return .cryptoMarket
         }
 
         // 2b) weather — needs an extractable place ("weather in tokyo",
@@ -319,7 +328,7 @@ enum QuickIntentParser {
     /// cannot, so they never get swept into a compound run.
     private static func isCompoundable(_ intent: QuickIntent) -> Bool {
         switch intent {
-        case .price, .trendingCrypto, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
+        case .price, .trendingCrypto, .cryptoMarket, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
         case .math, .dateMath, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker:
             return false
@@ -1194,6 +1203,49 @@ enum LiveDataService {
         currencyFormatter(maximumFractionDigits: value < 10 ? 2 : 0).string(from: NSNumber(value: value)) ?? "$\(value)"
     }
 
+    /// Compact USD for big figures: "$2.34T", "$58.1B", "$420.0M".
+    static func compactUSD(_ value: Double) -> String {
+        let magnitude = Swift.abs(value)
+        if magnitude >= 1e12 { return String(format: "$%.2fT", value / 1e12) }
+        if magnitude >= 1e9 { return String(format: "$%.1fB", value / 1e9) }
+        if magnitude >= 1e6 { return String(format: "$%.1fM", value / 1e6) }
+        return usdPriceString(value)
+    }
+
+    /// Global crypto market overview (total cap, 24h change, BTC/ETH dominance)
+    /// → comparison widget. Auth-free (`/global`).
+    static func cryptoMarketWidget() async -> MessageWidget? {
+        guard let url = URL(string: "https://api.coingecko.com/api/v3/global") else { return nil }
+        guard let data = try? await fetchData(from: url),
+              let response = try? JSONDecoder().decode(CoinGeckoGlobalResponse.self, from: data),
+              let totalUSD = response.data.totalMarketCap["usd"] else {
+            return nil
+        }
+        let change = response.data.marketCapChangePercentage24HUsd ?? 0
+        var rows: [WidgetComparisonRow] = [
+            WidgetComparisonRow(label: "Total market cap", cells: [WidgetComparisonCell(text: compactUSD(totalUSD), tone: nil)]),
+            WidgetComparisonRow(label: "24h change", cells: [WidgetComparisonCell(text: String(format: "%+.1f%%", change), tone: change >= 0 ? .good : .warn)])
+        ]
+        if let btc = response.data.marketCapPercentage["btc"] {
+            rows.append(WidgetComparisonRow(label: "BTC dominance", cells: [WidgetComparisonCell(text: String(format: "%.1f%%", btc), tone: nil)]))
+        }
+        if let eth = response.data.marketCapPercentage["eth"] {
+            rows.append(WidgetComparisonRow(label: "ETH dominance", cells: [WidgetComparisonCell(text: String(format: "%.1f%%", eth), tone: nil)]))
+        }
+        return MessageWidget(
+            kind: .comparison,
+            title: "Crypto market",
+            freshness: .fresh,
+            time: shortCurrentTimeString(),
+            followUp: "What’s trending?",
+            note: nil,
+            chart: nil,
+            metric: nil,
+            comparison: WidgetComparison(subtitle: "Global overview", columns: ["Value"], rows: rows),
+            newsBrief: nil
+        )
+    }
+
     /// Coins trending on CoinGecko right now → a comparison widget (coin ·
     /// symbol · market-cap rank). Auth-free (`/search/trending`).
     static func trendingCryptoWidget() async -> MessageWidget? {
@@ -1625,6 +1677,22 @@ private extension LiveDataService {
 
     struct CoinGeckoMarketChartResponse: Decodable {
         let prices: [CoinGeckoPricePoint]
+    }
+
+    struct CoinGeckoGlobalResponse: Decodable {
+        let data: GlobalData
+
+        struct GlobalData: Decodable {
+            let totalMarketCap: [String: Double]
+            let marketCapChangePercentage24HUsd: Double?
+            let marketCapPercentage: [String: Double]
+
+            enum CodingKeys: String, CodingKey {
+                case totalMarketCap = "total_market_cap"
+                case marketCapChangePercentage24HUsd = "market_cap_change_percentage_24h_usd"
+                case marketCapPercentage = "market_cap_percentage"
+            }
+        }
     }
 
     struct CoinGeckoTrendingResponse: Decodable {

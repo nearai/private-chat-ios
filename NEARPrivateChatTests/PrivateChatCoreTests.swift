@@ -1938,6 +1938,37 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(store.draft, "Create a sourced research brief for this goal: Map the strongest privacy proof workflow.")
     }
 
+    @MainActor
+    func testApplyingSetupRerunRefreshesSetupGuideWithoutDuplicatingIt() throws {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .buildAgents
+        profile.useCases = [.buildAgents]
+        profile.contextStyle = .project
+        profile.goalText = "Audit the onboarding build path."
+
+        store.applySetupProfile(profile)
+
+        let firstGuide = try XCTUnwrap(store.selectedProjectNotes.first(where: { $0.title == "Setup guide" }))
+        XCTAssertTrue(firstGuide.text.contains("Audit the onboarding build path."))
+
+        store.updateSelectedProjectInstructions("Keep these custom instructions.")
+        store.saveMessageAsProjectNote(makeMessage(id: "setup-note-1", role: .assistant, text: "Remember to keep the first-run notes visible."))
+
+        profile.goalText = "Plan the first simulator-safe patch."
+        store.applySetupProfile(profile)
+
+        let setupGuides = store.selectedProjectNotes.filter { $0.title == "Setup guide" }
+        XCTAssertEqual(setupGuides.count, 1)
+        XCTAssertTrue(setupGuides[0].text.contains("Plan the first simulator-safe patch."))
+        XCTAssertFalse(setupGuides[0].text.contains("Audit the onboarding build path."))
+        XCTAssertEqual(store.selectedProjectInstructions, "Keep these custom instructions.")
+        XCTAssertTrue(store.selectedProjectNotes.contains(where: {
+            $0.title != "Setup guide" && $0.text.contains("Remember to keep the first-run notes visible.")
+        }))
+    }
+
     func testUserSetupExperienceModeDefaultsAndRoundTrips() throws {
         XCTAssertEqual(UserSetupProfile.defaults.experienceMode, .beginner)
 
@@ -3549,6 +3580,14 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(QuickIntentParser.parse("what crypto is trending"), .trendingCrypto)
         // A single-coin price question is unaffected.
         XCTAssertEqual(QuickIntentParser.parse("what's the eth price"), .price(coinID: "ethereum", symbol: "ETH"))
+    }
+
+    func testQuickIntentParsesCryptoMarket() {
+        XCTAssertEqual(QuickIntentParser.parse("how's the crypto market"), .cryptoMarket)
+        XCTAssertEqual(QuickIntentParser.parse("total crypto market cap"), .cryptoMarket)
+        XCTAssertEqual(QuickIntentParser.parse("bitcoin dominance"), .cryptoMarket)
+        // A single-coin price question is unaffected.
+        XCTAssertEqual(QuickIntentParser.parse("what's the btc price"), .price(coinID: "bitcoin", symbol: "BTC"))
     }
 
     func testMathEvaluatorEvaluatesAndRejectsSafely() {

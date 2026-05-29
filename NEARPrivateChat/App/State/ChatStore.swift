@@ -2191,9 +2191,20 @@ final class ChatStore: ObservableObject {
             projects[index].paletteName = style.paletteName
             didChange = true
         }
-        if !projects[index].notes.contains(where: { $0.title == "Setup guide" }) {
+        let setupGuideText = Self.setupGuideNoteText(for: profile)
+        if let noteIndex = projects[index].notes.firstIndex(where: { $0.title == Self.setupGuideNoteTitle }) {
+            var note = projects[index].notes.remove(at: noteIndex)
+            if note.text != setupGuideText {
+                note.text = setupGuideText
+                didChange = true
+            }
+            projects[index].notes.insert(note, at: 0)
+            if noteIndex != 0 {
+                didChange = true
+            }
+        } else {
             projects[index].notes.insert(
-                ProjectNote(title: "Setup guide", text: Self.setupGuideNoteText(for: profile)),
+                ProjectNote(title: Self.setupGuideNoteTitle, text: setupGuideText),
                 at: 0
             )
             projects[index].notes = Array(projects[index].notes.prefix(20))
@@ -2201,6 +2212,8 @@ final class ChatStore: ObservableObject {
         }
         return didChange
     }
+
+    private static let setupGuideNoteTitle = "Setup guide"
 
     private static func setupProjectStyle(for profile: UserSetupProfile) -> (iconName: String, paletteName: String) {
         if profile.useCases.contains(.buildAgents) {
@@ -4005,6 +4018,8 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.cryptoPriceWidget(coinID: coinID, symbol: symbol)
         case .trendingCrypto:
             return await LiveDataService.trendingCryptoWidget()
+        case .cryptoMarket:
+            return await LiveDataService.cryptoMarketWidget()
         case let .nearAccount(account):
             return await LiveDataService.nearAccountWidget(account: account ?? "")
         case .news:
