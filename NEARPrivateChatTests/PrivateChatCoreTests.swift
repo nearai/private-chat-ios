@@ -3549,6 +3549,42 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(QuickIntentParser.parse("what's the eth price"), .price(coinID: "ethereum", symbol: "ETH"))
     }
 
+    func testMathEvaluatorEvaluatesAndRejectsSafely() {
+        XCTAssertEqual(MathEvaluator.evaluate("12*7+3"), 87)
+        XCTAssertEqual(MathEvaluator.evaluate("(2+3)*4"), 20)
+        XCTAssertEqual(MathEvaluator.evaluate("2 plus 3 times 4"), 14) // precedence
+        XCTAssertEqual(try XCTUnwrap(MathEvaluator.evaluate("18% of 85.50")), 15.39, accuracy: 0.0001)
+        XCTAssertEqual(MathEvaluator.evaluate("50% of 200"), 100)
+        // Crash-proof rejection of malformed / non-math input.
+        XCTAssertNil(MathEvaluator.evaluate("100 / 0"))      // div by zero → non-finite
+        XCTAssertNil(MathEvaluator.evaluate("12++"))         // malformed
+        XCTAssertNil(MathEvaluator.evaluate("hello world"))  // prose
+        XCTAssertEqual(MathEvaluator.format(84), "84")
+        XCTAssertEqual(MathEvaluator.format(15.39), "15.39")
+    }
+
+    func testQuickIntentParsesMath() {
+        guard case let .math(_, result) = QuickIntentParser.parse("what's 12*7+3") else {
+            return XCTFail("Expected a math intent.")
+        }
+        XCTAssertEqual(result, "87")
+        if case let .math(_, r)? = QuickIntentParser.parse("18% of 85.50") {
+            XCTAssertEqual(r, "15.39")
+        } else {
+            XCTFail("Expected a math intent for a percentage.")
+        }
+        // Prose isn't math; currency/unit phrases (digits but no operator) keep
+        // their own intents and are not hijacked by the calculator.
+        XCTAssertNil(QuickIntentParser.parse("what is bitcoin"))
+        XCTAssertEqual(QuickIntentParser.parse("5 miles in km"), .unitConvert(value: 5, from: "miles", to: "km"))
+        if case .math? = QuickIntentParser.parse("100 usd to eur") {
+            XCTFail("Currency phrase must not parse as math.")
+        }
+        if case .math? = QuickIntentParser.parse("5 miles in km") {
+            XCTFail("Unit phrase must not parse as math.")
+        }
+    }
+
     func testQuickIntentParsesActivityLog() {
         XCTAssertEqual(QuickIntentParser.parse("what have you done"), .activityLog)
         XCTAssertEqual(QuickIntentParser.parse("show your activity"), .activityLog)

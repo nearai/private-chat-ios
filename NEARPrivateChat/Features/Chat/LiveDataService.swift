@@ -36,6 +36,7 @@ enum QuickIntent: Equatable {
     case fx(amount: Double, from: String, to: String)
     case unitConvert(value: Double, from: String, to: String)
     case define(word: String)
+    case math(expression: String, result: String)
     case remember(text: String)
     case recallMemory
     case forget(text: String?)
@@ -180,6 +181,13 @@ enum QuickIntentParser {
             return .define(word: word)
         }
 
+        // 2e) calculator ("12*7+3", "what's 18% of 85.50"). Gated on a digit +
+        // an operator/percent that actually evaluates, so prose and the
+        // currency/unit phrases ("100 usd to eur") below are untouched.
+        if let math = parseMath(text, original: trimmedRaw) {
+            return .math(expression: math.expression, result: math.result)
+        }
+
         // 3) NEAR account — named phrases, or a .near token plus a status word.
         let account = extractAccount(from: text)
         if contains(text, ["my near account", "near account", "near.com account", "account doing", "account balance", "wallet balance", "my wallet", "my balance"]) ||
@@ -302,7 +310,7 @@ enum QuickIntentParser {
         switch intent {
         case .price, .trendingCrypto, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
-        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker:
+        case .math, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker:
             return false
         }
     }
@@ -780,6 +788,28 @@ enum QuickIntentParser {
         return Array(facts.prefix(3))
     }
 
+    /// Recognizes a calculation and returns the cleaned expression + formatted
+    /// result. Requires a digit AND an operator/percent (literal or spelled) that
+    /// MathEvaluator can actually evaluate — so "what is bitcoin" or "5 apples"
+    /// never become math.
+    static func parseMath(_ text: String, original: String) -> (expression: String, result: String)? {
+        var expr = original
+        let lower = original.lowercased()
+        for lead in ["what's ", "whats ", "what is ", "calculate ", "compute ", "evaluate ", "how much is ", "solve "]
+        where lower.hasPrefix(lead) {
+            expr = String(original.dropFirst(lead.count))
+            break
+        }
+        expr = expr.trimmingCharacters(in: CharacterSet(charactersIn: " ?=."))
+        let low = expr.lowercased()
+        let hasDigit = low.contains { $0.isNumber }
+        let hasOperator = low.range(of: #"[-+*/×÷%]"#, options: .regularExpression) != nil
+            || ["plus", "minus", "times", "divided by", "multiplied by", "% of", " x "].contains { low.contains($0) }
+        guard hasDigit, hasOperator else { return nil }
+        guard let value = MathEvaluator.evaluate(expr) else { return nil }
+        return (expr.trimmingCharacters(in: .whitespaces), MathEvaluator.format(value))
+    }
+
     static func parseDefineWord(_ text: String) -> String? {
         // "what does X mean" — strict: only the bare definition form, so
         // "what does SOL mean for crypto?" stays a model question.
@@ -848,6 +878,123 @@ extension LiveDataService {
     /// Symbol for a CoinGecko id (for cryptoPrice briefings).
     static func symbol(forCoinID id: String) -> String {
         liveCoin(forID: id)?.symbol ?? id.uppercased()
+    }
+}
+
+/// On-device arithmetic evaluator. Hand-rolled tokenizer + recursive-descent
+/// parser (NOT NSExpression(format:), which throws uncatchable ObjC exceptions
+/// on malformed input). Pure, deterministic, crash-proof: any unparseable input
+/// returns nil. Handles + - * / and parentheses, spelled operators ("plus",
+/// "times", "divided by"), ×/÷/x, and percentages ("18% of 85", "50%").
+enum MathEvaluator {
+    static func evaluate(_ raw: String) -> Double? {
+        var s = raw.lowercased()
+        s = s.replacingOccurrences(of: ",", with: "")            // 1,000 → 1000
+        s = s.replacingOccurrences(of: "multiplied by", with: "*")
+        s = s.replacingOccurrences(of: "divided by", with: "/")
+        s = s.replacingOccurrences(of: "divide by", with: "/")
+        s = s.replacingOccurrences(of: "plus", with: "+")
+        s = s.replacingOccurrences(of: "minus", with: "-")
+        s = s.replacingOccurrences(of: "times", with: "*")
+        s = s.replacingOccurrences(of: "÷", with: "/")
+        s = s.replacingOccurrences(of: "×", with: "*")
+        // "x" as multiply, only between numbers/parens (so it can't eat words).
+        s = s.replacingOccurrences(of: #"(?<=[0-9).])\s*x\s*(?=[0-9(.])"#, with: "*", options: .regularExpression)
+        // "18% of 85" → "(18*0.01)*85"; then a standalone "50%" → "(50*0.01)".
+        s = s.replacingOccurrences(of: #"([0-9.]+)\s*%\s*of\s+"#, with: "($1*0.01)*", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"([0-9.]+)\s*%"#, with: "($1*0.01)", options: .regularExpression)
+
+        guard let tokens = tokenize(s) else { return nil }
+        var parser = RecursiveParser(tokens: tokens)
+        guard let value = parser.parseExpression(), parser.isAtEnd, value.isFinite else { return nil }
+        return value
+    }
+
+    /// "84" for integers, trimmed decimals otherwise ("15.39", "0.6667").
+    static func format(_ value: Double) -> String {
+        guard value.isFinite else { return "" }
+        if value == value.rounded(), abs(value) < 1e15 {
+            return String(Int(value))
+        }
+        var s = String(format: "%.4f", value)
+        while s.hasSuffix("0") { s.removeLast() }
+        if s.hasSuffix(".") { s.removeLast() }
+        return s
+    }
+
+    private enum Token: Equatable { case number(Double), plus, minus, mul, div, lParen, rParen }
+
+    private static func tokenize(_ s: String) -> [Token]? {
+        var tokens: [Token] = []
+        let chars = Array(s)
+        var i = 0
+        while i < chars.count {
+            let c = chars[i]
+            if c == " " { i += 1; continue }
+            switch c {
+            case "+": tokens.append(.plus); i += 1
+            case "-": tokens.append(.minus); i += 1
+            case "*": tokens.append(.mul); i += 1
+            case "/": tokens.append(.div); i += 1
+            case "(": tokens.append(.lParen); i += 1
+            case ")": tokens.append(.rParen); i += 1
+            case "0"..."9", ".":
+                var num = ""
+                while i < chars.count, chars[i].isNumber || chars[i] == "." {
+                    num.append(chars[i]); i += 1
+                }
+                guard let value = Double(num) else { return nil }
+                tokens.append(.number(value))
+            default:
+                return nil // any non-math character rejects the whole input
+            }
+        }
+        return tokens
+    }
+
+    /// expr := term (('+'|'-') term)*; term := factor (('*'|'/') factor)*;
+    /// factor := number | '(' expr ')' | ('-'|'+') factor
+    private struct RecursiveParser {
+        let tokens: [Token]
+        var index = 0
+        var isAtEnd: Bool { index >= tokens.count }
+        private func peek() -> Token? { index < tokens.count ? tokens[index] : nil }
+        private mutating func advance() -> Token? { defer { index += 1 }; return peek() }
+
+        mutating func parseExpression() -> Double? {
+            guard var value = parseTerm() else { return nil }
+            while let op = peek(), op == .plus || op == .minus {
+                index += 1
+                guard let rhs = parseTerm() else { return nil }
+                value = (op == .plus) ? value + rhs : value - rhs
+            }
+            return value
+        }
+
+        private mutating func parseTerm() -> Double? {
+            guard var value = parseFactor() else { return nil }
+            while let op = peek(), op == .mul || op == .div {
+                index += 1
+                guard let rhs = parseFactor() else { return nil }
+                value = (op == .mul) ? value * rhs : value / rhs
+            }
+            return value
+        }
+
+        private mutating func parseFactor() -> Double? {
+            switch peek() {
+            case .minus: index += 1; return parseFactor().map { -$0 }
+            case .plus: index += 1; return parseFactor()
+            case let .number(value): index += 1; return value
+            case .lParen:
+                index += 1
+                guard let value = parseExpression(), peek() == .rParen else { return nil }
+                index += 1
+                return value
+            default:
+                return nil
+            }
+        }
     }
 }
 

@@ -3884,6 +3884,9 @@ final class ChatStore: ObservableObject {
             _ = appendAssistant(text: TrackerListFormatter.summary(for: trackersProvider?() ?? []))
         case .capabilities:
             _ = appendAssistant(text: QuickIntentParser.capabilitiesText())
+        case let .math(expression, result):
+            _ = appendAssistant(text: "\(expression) = **\(result)**")
+            AppHaptics.selection()
         case let .searchHistory(query):
             let hits = ConversationHistorySearch.search(
                 query: query,
@@ -4013,7 +4016,7 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.unitConvertWidget(value: value, from: from, to: to)
         case let .define(word):
             return await LiveDataService.defineWidget(word: word)
-        case .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker:
+        case .math, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker:
             // Handled synchronously in handleQuickIntent — never fetched here.
             return nil
         }
