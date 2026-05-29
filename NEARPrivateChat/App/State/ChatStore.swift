@@ -1326,6 +1326,7 @@ final class ChatStore: ObservableObject {
                 conversations = fetchedConversations
             }
             cacheConversations(fetchedConversations)
+            ConversationSpotlightIndex.index(fetchedConversations)
             if let selectedConversation,
                let refreshed = fetchedConversations.first(where: { $0.id == selectedConversation.id }),
                self.selectedConversation != refreshed {
@@ -1496,6 +1497,13 @@ final class ChatStore: ObservableObject {
                 showBanner("Billing unavailable: \(error.localizedDescription)")
             }
         }
+    }
+
+    /// Opens a conversation by id (e.g. from a CoreSpotlight result) if it's in
+    /// the loaded list. No-op otherwise — the app still foregrounds to home.
+    func openConversation(byID id: String) {
+        guard let conversation = conversations.first(where: { $0.id == id }) else { return }
+        selectConversation(conversation)
     }
 
     func selectConversation(_ conversation: ConversationSummary) {

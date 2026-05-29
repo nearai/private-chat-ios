@@ -1,4 +1,39 @@
 import Foundation
+import CoreSpotlight
+import UniformTypeIdentifiers
+
+/// Indexes conversations into CoreSpotlight so they're findable from the iOS
+/// system search. Read-only with respect to the user's data; no permissions.
+enum ConversationSpotlightIndex {
+    static let domainIdentifier = "ai.near.privatechat.conversation"
+
+    static func searchableItems(from conversations: [ConversationSummary]) -> [CSSearchableItem] {
+        conversations.compactMap { conversation in
+            // Only index conversations with a real title — untitled chats fall
+            // back to "New conversation", which isn't worth a Spotlight entry.
+            guard let title = conversation.metadata?.title?
+                .trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else { return nil }
+            let attributes = CSSearchableItemAttributeSet(contentType: .text)
+            attributes.title = title
+            attributes.contentDescription = "Private Chat conversation"
+            return CSSearchableItem(
+                uniqueIdentifier: conversation.id,
+                domainIdentifier: domainIdentifier,
+                attributeSet: attributes
+            )
+        }
+    }
+
+    static func index(_ conversations: [ConversationSummary]) {
+        let items = searchableItems(from: conversations)
+        let index = CSSearchableIndex.default()
+        // Replace the whole domain so deleted/renamed chats don't linger.
+        index.deleteSearchableItems(withDomainIdentifiers: [domainIdentifier]) { _ in
+            guard !items.isEmpty else { return }
+            index.indexSearchableItems(items) { _ in }
+        }
+    }
+}
 
 enum HomeFilter: String, CaseIterable, Identifiable {
     case all

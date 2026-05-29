@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreSpotlight
 
 struct AppLifecycleModifier: ViewModifier {
     @ObservedObject private var sessionStore: SessionStore
@@ -35,6 +36,11 @@ struct AppLifecycleModifier: ViewModifier {
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
                 Task { await consumeSiriCommands() }
+            }
+            .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                if let id = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String {
+                    chatStore.openConversation(byID: id)
+                }
             }
             .onChange(of: sessionStore.session?.token) { _, token in
                 Task {

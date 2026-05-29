@@ -1,6 +1,7 @@
 import XCTest
 import SwiftUI
 import UserNotifications
+import CoreSpotlight
 @testable import NEARPrivateChat
 
 final class PrivateChatCoreTests: XCTestCase {
@@ -594,6 +595,18 @@ final class PrivateChatCoreTests: XCTestCase {
         let memoryMatches = HomeSearchIndex.projectContextMatches(query: "executive summary", projects: [project])
         XCTAssertEqual(memoryMatches.map(\.kind), [.memory])
         XCTAssertEqual(memoryMatches.first?.title, "Memory summary")
+    }
+
+    func testConversationSpotlightItemsCarryIDAndTitle() {
+        let conversations = [
+            ConversationSummary(id: "conv-1", createdAt: 1_700_000_000, metadata: ConversationMetadata(title: "Launch plan")),
+            ConversationSummary(id: "conv-2", createdAt: 1_700_000_100, metadata: ConversationMetadata(title: "   ")) // blank → skipped
+        ]
+        let items = ConversationSpotlightIndex.searchableItems(from: conversations)
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items.first?.uniqueIdentifier, "conv-1")
+        XCTAssertEqual(items.first?.domainIdentifier, ConversationSpotlightIndex.domainIdentifier)
+        XCTAssertEqual(items.first?.attributeSet.title, "Launch plan")
     }
 
     func testHomeSearchConversationGroupsCollapseToChatsSection() {
