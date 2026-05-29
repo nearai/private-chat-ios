@@ -80,11 +80,12 @@ enum QuickIntentParser {
         if contains(text, ["what have you done", "what did you do", "show your activity", "activity log", "what have you been up to", "show what you've done", "your recent activity"]) {
             return .activityLog
         }
-        if contains(text, ["what are you tracking", "what are you watching", "what are you monitoring",
-                            "show my trackers", "list my trackers", "show my alerts", "list my alerts",
-                            "what alerts do i have", "what are my trackers", "my active trackers",
-                            "show my briefings", "list my briefings", "what are you keeping an eye on",
-                            "what's on my today", "whats on my today"]) {
+        // Every needle names a tracker/alert/briefing, so ambiguous phrases like
+        // "what are you watching on tv" can't be mistaken for this.
+        if contains(text, ["what are you tracking", "show my trackers", "list my trackers",
+                            "show my alerts", "list my alerts", "what alerts do i have",
+                            "what are my trackers", "my active trackers", "show my briefings",
+                            "list my briefings", "my trackers and alerts"]) {
             return .listTrackers
         }
         // Capabilities / help — EXACT (punctuation-stripped) match only, so
@@ -96,10 +97,11 @@ enum QuickIntentParser {
         }
         // Passive-memory control — checked before the generic forget/remember so
         // "stop remembering things automatically" isn't read as a fact to store.
-        if contains(text, ["stop learning about me", "stop auto", "disable passive memory", "disable auto memory",
+        if contains(text, ["stop learning about me", "stop auto memory", "stop auto-remember",
+                            "stop auto remembering", "disable passive memory", "disable auto memory",
                             "turn off passive memory", "turn off auto memory", "don't auto-remember",
                             "dont auto-remember", "stop remembering things automatically",
-                            "stop automatically remembering", "stop picking things up"]) {
+                            "stop automatically remembering"]) {
             return .setMemoryCapture(enabled: false)
         }
         if contains(text, ["start learning about me", "enable passive memory", "enable auto memory",
@@ -642,11 +644,16 @@ enum QuickIntentParser {
         if let r = title.range(of: trigger, options: [.caseInsensitive, .anchored]) {
             title.removeSubrange(r)
         }
-        // Drop dangling connectors a removed date left behind ("… at", "… on").
-        title = title.replacingOccurrences(of: #"\b(at|on|by|in|this|next|every)\b\s*$"#,
-                                           with: "", options: [.regularExpression, .caseInsensitive])
         title = title.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .trimmingCharacters(in: CharacterSet(charactersIn: " ,.;:!?-"))
+            .trimmingCharacters(in: .whitespaces)
+        // Drop connectors a removed date left dangling at either end — leading
+        // ("remind me on monday … to take meds" → "take meds") and trailing
+        // ("… call mom at" → "call mom").
+        title = title.replacingOccurrences(of: #"^(?:\b(?:at|on|by|in|this|next|every|and|to)\b[\s,]*)+"#,
+                                           with: "", options: [.regularExpression, .caseInsensitive])
+        title = title.replacingOccurrences(of: #"(?:[\s,]*\b(?:at|on|by|in|this|next|every|and)\b)+$"#,
+                                           with: "", options: [.regularExpression, .caseInsensitive])
+        title = title.trimmingCharacters(in: CharacterSet(charactersIn: " ,.;:!?-"))
         guard title.count >= 2 else { return nil }
 
         // Reminders are in the future; bump a time that already passed to the next day.

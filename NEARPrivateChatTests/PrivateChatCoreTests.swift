@@ -3398,11 +3398,15 @@ extension PrivateChatCoreTests {
     func testQuickIntentParsesPassiveMemoryControls() {
         XCTAssertEqual(QuickIntentParser.parse("stop learning about me"), .setMemoryCapture(enabled: false))
         XCTAssertEqual(QuickIntentParser.parse("turn off auto memory"), .setMemoryCapture(enabled: false))
+        XCTAssertEqual(QuickIntentParser.parse("stop auto memory"), .setMemoryCapture(enabled: false))
         XCTAssertEqual(QuickIntentParser.parse("start learning about me"), .setMemoryCapture(enabled: true))
         XCTAssertEqual(QuickIntentParser.parse("forget what you learned automatically"), .forgetAutoLearned)
         // The controls don't swallow an ordinary remember or a full wipe.
         XCTAssertEqual(QuickIntentParser.parse("remember that I like tea"), .remember(text: "I like tea"))
         XCTAssertEqual(QuickIntentParser.parse("forget everything"), .forget(text: nil))
+        // "stop auto…" of unrelated things must NOT toggle passive memory.
+        XCTAssertNotEqual(QuickIntentParser.parse("stop autocorrect"), .setMemoryCapture(enabled: false))
+        XCTAssertNotEqual(QuickIntentParser.parse("how do I stop automatic updates"), .setMemoryCapture(enabled: false))
     }
 
     func testMemoryStoreRemoveInferredKeepsExplicit() {
@@ -3422,6 +3426,8 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(QuickIntentParser.parse("what are you tracking"), .listTrackers)
         XCTAssertEqual(QuickIntentParser.parse("show my alerts"), .listTrackers)
         XCTAssertEqual(QuickIntentParser.parse("list my trackers"), .listTrackers)
+        // Ambiguous "watching/monitoring" prompts are no longer hijacked.
+        XCTAssertNotEqual(QuickIntentParser.parse("what are you watching on tv tonight"), .listTrackers)
     }
 
     func testTrackerListFormatter() {
@@ -3511,6 +3517,12 @@ extension PrivateChatCoreTests {
         let r2 = QuickIntentParser.parseReminder("set a reminder to submit the report friday at 9am",
                                                  original: "set a reminder to submit the report friday at 9am")
         XCTAssertTrue(r2?.title.contains("submit the report") ?? false)
+
+        // A date between the trigger and the task doesn't garble the title —
+        // leading connectors left by the removed date are stripped.
+        let r3 = QuickIntentParser.parseReminder("remind me at 3pm to email the team",
+                                                 original: "remind me at 3pm to email the team")
+        XCTAssertEqual(r3?.title, "email the team")
 
         // No time → not a scheduled reminder (let the model handle it).
         XCTAssertNil(QuickIntentParser.parseReminder("remind me to stretch", original: "remind me to stretch"))

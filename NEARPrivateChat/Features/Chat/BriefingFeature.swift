@@ -1091,7 +1091,12 @@ struct BriefingEditorSheet: View {
             // Preserve the live kind + account when editing, or the edit would
             // silently revert a live briefing to a custom prompt.
             kind: existingBriefing?.kind ?? .customPrompt,
-            accountID: existingBriefing?.accountID
+            accountID: existingBriefing?.accountID,
+            // Preserve council + condition too — otherwise editing a conditional
+            // alert would silently turn it into a plain recurring price briefing
+            // that fires every cycle.
+            council: existingBriefing?.council ?? false,
+            condition: existingBriefing?.condition
         )
     }
 

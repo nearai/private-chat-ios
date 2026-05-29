@@ -124,6 +124,12 @@ struct ThreadedBriefingView: View {
         runNow()
     }
 
+    /// Re-arms a fired one-shot alert (un-pauses it) so it starts watching again.
+    private func reArm() {
+        guard let store, let briefing = liveBriefing else { return }
+        store.setPaused(briefing, false)
+    }
+
     private var header: some View {
         HStack(spacing: 4) {
             Button(action: onClose) {
@@ -145,6 +151,10 @@ struct ThreadedBriefingView: View {
             Menu {
                 if store != nil, briefingID != nil {
                     Button { runNow() } label: { Label("Run now", systemImage: "arrow.clockwise") }
+                    // A one-shot alert auto-pauses after firing; let the user re-arm it.
+                    if let briefing = liveBriefing, briefing.isConditional, briefing.isPaused {
+                        Button { reArm() } label: { Label("Re-arm alert", systemImage: "bell.badge") }
+                    }
                     if liveBriefing?.kind == .nearAccount {
                         Button {
                             accountInput = liveBriefing?.accountID ?? ""

@@ -328,8 +328,10 @@ enum ConversationHistorySearch {
     /// so they're safe even if case-folding shifted lengths.
     private static func makeSnippet(from text: String, matchOffset: Int, matchLength: Int, window: Int = 60) -> String {
         let count = text.count
-        let lo = max(0, matchOffset - window)
-        let hi = min(count, matchOffset + matchLength + window)
+        // Clamp BOTH ends to [0, count] — an offset past the end (possible only if
+        // case-folding ever shifted lengths) must not crash `index(offsetBy:)`.
+        let lo = min(max(0, matchOffset - window), count)
+        let hi = min(max(lo, matchOffset + matchLength + window), count)
         let start = text.index(text.startIndex, offsetBy: lo)
         let end = text.index(text.startIndex, offsetBy: hi)
         var snippet = String(text[start..<end])
