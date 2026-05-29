@@ -154,6 +154,21 @@ enum QuickIntentParser {
         return intents.count >= 2 ? intents : nil
     }
 
+    /// A proactive starter derived from what the assistant remembers — e.g. if
+    /// memory mentions a coin the user holds, suggest checking its price. Pure
+    /// + deterministic so it's testable; nil when nothing relevant is stored.
+    static func personalizedStarter(fromMemory facts: [String]) -> (title: String, prompt: String, symbol: String)? {
+        let haystack = facts.joined(separator: " ").lowercased()
+        guard !haystack.isEmpty else { return nil }
+        if let coin = matchedCoin(in: haystack) {
+            return ("\(coin.symbol) price", "What's the \(coin.symbol) price?", "chart.line.uptrend.xyaxis")
+        }
+        if contains(haystack, ["news", "headlines", "current events", "world events"]) {
+            return ("Today's news", "Pull today's news", "newspaper")
+        }
+        return nil
+    }
+
     /// Read-only data lookups can be chained; actions (trackers, memory writes)
     /// cannot, so they never get swept into a compound run.
     private static func isCompoundable(_ intent: QuickIntent) -> Bool {

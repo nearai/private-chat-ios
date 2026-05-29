@@ -3252,6 +3252,15 @@ extension PrivateChatCoreTests {
         XCTAssertNil(QuickIntentParser.parse("tell me a story"))
     }
 
+    func testPersonalizedStarterFromMemory() {
+        let bitcoin = QuickIntentParser.personalizedStarter(fromMemory: ["I hold a lot of bitcoin", "I live in Denver"])
+        XCTAssertEqual(bitcoin?.symbol, "chart.line.uptrend.xyaxis")
+        XCTAssertEqual(bitcoin?.prompt, "What's the BTC price?")
+        // Nothing trackable → no personalized starter (defaults are used).
+        XCTAssertNil(QuickIntentParser.personalizedStarter(fromMemory: ["My favorite color is teal"]))
+        XCTAssertNil(QuickIntentParser.personalizedStarter(fromMemory: []))
+    }
+
     func testQuickIntentParsesCompoundQueries() {
         let intents = try? XCTUnwrap(QuickIntentParser.parseCompound("what's the eth price and the weather in tokyo"))
         XCTAssertEqual(intents?.count, 2)

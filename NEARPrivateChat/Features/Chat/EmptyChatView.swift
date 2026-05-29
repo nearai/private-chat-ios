@@ -123,7 +123,7 @@ struct EmptyChatView: View {
         // Default new chat: surface the live-data capability so it's
         // discoverable. Each sends through the local QuickIntent path to a
         // real widget / tracker — no sign-in needed.
-        return [
+        var defaults = [
             EmptyPromptSuggestion(
                 title: "ETH price",
                 symbolName: "chart.line.uptrend.xyaxis",
@@ -155,6 +155,15 @@ struct EmptyChatView: View {
                 prompt: "Create a tracker for the ETH price every morning at 8am"
             )
         ]
+
+        // Proactive personalization: if memory mentions something trackable,
+        // lead with a starter for it (deduped against the defaults).
+        if let starter = QuickIntentParser.personalizedStarter(fromMemory: chatStore.memoryStore.items.map(\.text)) {
+            let suggestion = EmptyPromptSuggestion(title: starter.title, symbolName: starter.symbol, prompt: starter.prompt)
+            defaults.removeAll { $0.title == suggestion.title }
+            defaults.insert(suggestion, at: 0)
+        }
+        return Array(defaults.prefix(6))
     }
 
     private func fillDraft(for suggestion: EmptyPromptSuggestion) {
