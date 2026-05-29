@@ -3796,7 +3796,8 @@ final class ChatStore: ObservableObject {
                 _ = appendAssistant(text: removed > 0 ? "Done — I’ve forgotten that." : "I didn’t have anything matching “\(text)” saved.")
             } else {
                 memoryStore.clear()
-                _ = appendAssistant(text: "Cleared — I’ve forgotten everything stored on this device.")
+                activityLog.clear()
+                _ = appendAssistant(text: "Cleared — I’ve wiped everything stored on this device: all remembered facts and my activity log.")
             }
             AppHaptics.selection()
         case .activityLog:
