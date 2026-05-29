@@ -1,5 +1,6 @@
 import XCTest
 import SwiftUI
+import UserNotifications
 @testable import NEARPrivateChat
 
 final class PrivateChatCoreTests: XCTestCase {
@@ -3087,6 +3088,29 @@ extension PrivateChatCoreTests {
         dict.removeValue(forKey: "council")
         let legacy = try JSONDecoder().decode(Briefing.self, from: JSONSerialization.data(withJSONObject: dict))
         XCTAssertFalse(legacy.council)
+    }
+
+    func testBriefingScheduleProducesRepeatingNotificationTriggers() throws {
+        let daily = BriefingSchedule.daily(hour: 8, minute: 30).notificationTriggers()
+        XCTAssertEqual(daily.count, 1)
+        let dailyTrigger = try XCTUnwrap(daily.first as? UNCalendarNotificationTrigger)
+        XCTAssertTrue(dailyTrigger.repeats)
+        XCTAssertEqual(dailyTrigger.dateComponents.hour, 8)
+        XCTAssertEqual(dailyTrigger.dateComponents.minute, 30)
+
+        // Weekdays expand to one weekly trigger per business day (Mon–Fri = 2…6).
+        let weekdays = BriefingSchedule.weekdays(hour: 7, minute: 0).notificationTriggers()
+        XCTAssertEqual(weekdays.count, 5)
+        let weekdaySet = Set(weekdays.compactMap { ($0 as? UNCalendarNotificationTrigger)?.dateComponents.weekday })
+        XCTAssertEqual(weekdaySet, Set(2...6))
+
+        let weekly = BriefingSchedule.weekly(weekday: 3, hour: 9, minute: 15).notificationTriggers()
+        XCTAssertEqual(try XCTUnwrap(weekly.first as? UNCalendarNotificationTrigger).dateComponents.weekday, 3)
+
+        let hourly = BriefingSchedule.everyNHours(6).notificationTriggers()
+        let hourlyTrigger = try XCTUnwrap(hourly.first as? UNTimeIntervalNotificationTrigger)
+        XCTAssertEqual(hourlyTrigger.timeInterval, 6 * 3600, accuracy: 1)
+        XCTAssertTrue(hourlyTrigger.repeats)
     }
 
     func testBriefingKindDecodesUnknownAsCustomPrompt() throws {

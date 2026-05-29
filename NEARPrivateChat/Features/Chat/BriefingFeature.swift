@@ -192,6 +192,36 @@ enum BriefingSchedule: Codable, Hashable {
         }
     }
 
+    /// Repeating local-notification triggers so a scheduled briefing pings the
+    /// user at its time even if background refresh is throttled. Weekday
+    /// schedules expand to one weekly trigger per business day.
+    func notificationTriggers() -> [UNNotificationTrigger] {
+        switch self {
+        case let .daily(hour, minute):
+            var components = DateComponents()
+            components.hour = clampedHour(hour)
+            components.minute = clampedMinute(minute)
+            return [UNCalendarNotificationTrigger(dateMatching: components, repeats: true)]
+        case let .weekdays(hour, minute):
+            return (2...6).map { weekday in
+                var components = DateComponents()
+                components.weekday = weekday
+                components.hour = clampedHour(hour)
+                components.minute = clampedMinute(minute)
+                return UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+            }
+        case let .weekly(weekday, hour, minute):
+            var components = DateComponents()
+            components.weekday = clampedWeekday(weekday)
+            components.hour = clampedHour(hour)
+            components.minute = clampedMinute(minute)
+            return [UNCalendarNotificationTrigger(dateMatching: components, repeats: true)]
+        case let .everyNHours(interval):
+            let seconds = TimeInterval(max(1, interval) * 3600)
+            return [UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: true)]
+        }
+    }
+
     var scheduleLabel: String {
         switch self {
         case let .daily(hour, minute):
@@ -307,6 +337,7 @@ final class BriefingStore: ObservableObject {
         briefings.sort(by: briefingSort)
         save()
         Self.requestNotificationAuthorizationIfNeeded()
+        Self.scheduleReminderNotifications(for: briefing)
     }
 
     func update(_ briefing: Briefing) {
@@ -317,17 +348,20 @@ final class BriefingStore: ObservableObject {
         briefings[index] = briefing
         briefings.sort(by: briefingSort)
         save()
+        Self.scheduleReminderNotifications(for: briefing)
     }
 
     func remove(_ briefing: Briefing) {
         briefings.removeAll { $0.id == briefing.id }
         save()
+        Self.cancelReminderNotifications(for: briefing.id)
     }
 
     func setPaused(_ briefing: Briefing, _ isPaused: Bool) {
         guard let index = briefings.firstIndex(where: { $0.id == briefing.id }) else { return }
         briefings[index].isPaused = isPaused
         save()
+        Self.scheduleReminderNotifications(for: briefings[index])
     }
 
     func run(_ briefing: Briefing) async {
@@ -350,6 +384,39 @@ final class BriefingStore: ObservableObject {
         center.getNotificationSettings { settings in
             guard settings.authorizationStatus == .notDetermined else { return }
             center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        }
+    }
+
+    /// Schedules repeating local notifications at the briefing's time so it
+    /// surfaces proactively even when background refresh doesn't fire. Replaces
+    /// any previously scheduled reminders for this briefing; paused briefings
+    /// just get their reminders cleared.
+    nonisolated static func scheduleReminderNotifications(for briefing: Briefing) {
+        cancelReminderNotifications(for: briefing.id)
+        guard !briefing.isPaused else { return }
+        let center = UNUserNotificationCenter.current()
+        let triggers = briefing.schedule.notificationTriggers()
+        let title = briefing.title
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
+            for (index, trigger) in triggers.enumerated() {
+                let content = UNMutableNotificationContent()
+                content.title = title
+                content.body = "Your scheduled briefing is ready — tap to open."
+                content.sound = .default
+                let identifier = "briefing-scheduled-\(briefing.id.uuidString)-\(index)"
+                center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: trigger))
+            }
+        }
+    }
+
+    nonisolated static func cancelReminderNotifications(for id: UUID) {
+        let center = UNUserNotificationCenter.current()
+        let prefix = "briefing-scheduled-\(id.uuidString)"
+        center.getPendingNotificationRequests { requests in
+            let identifiers = requests.map(\.identifier).filter { $0.hasPrefix(prefix) }
+            guard !identifiers.isEmpty else { return }
+            center.removePendingNotificationRequests(withIdentifiers: identifiers)
         }
     }
 
