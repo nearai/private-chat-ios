@@ -54,5 +54,9 @@
 	<array>
 		<string>ai.near.privatechat.briefings.refresh</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Private Chat uses the microphone only while you dictate a message. Audio is processed for speech-to-text and never stored.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Private Chat converts your dictation to text so you can compose messages by voice.</string>
 </dict>
 </plist>
