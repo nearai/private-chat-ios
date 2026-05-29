@@ -91,13 +91,24 @@ struct RootView: View {
         // pending acceptance to LegalTermsAcceptanceStore and posts
         // `.legalTermsAcceptanceDidChange`; RootView promotes it for the
         // current account on receipt.
-        if sessionStore.isSignedIn && legalTermsAccepted {
+        if sessionStore.isSignedIn && (legalTermsAccepted || Self.isDebugInteractiveSession) {
             AppShellView {
                 beginSetupRerun()
             }
         } else {
             AuthView()
         }
+    }
+
+    /// DEBUG interactive testing (launched with the env token, no demo flag):
+    /// skip the per-account legal-terms gate so the real app opens straight to
+    /// Home. Never true in a normal build/run.
+    private static var isDebugInteractiveSession: Bool {
+        #if DEBUG
+        return DebugBackend.isEnabled && !DemoCapture.isEnabled
+        #else
+        return false
+        #endif
     }
 
     private var currentSetupProfile: UserSetupProfile {
