@@ -3760,6 +3760,15 @@ final class ChatStore: ObservableObject {
                 let lines = memories.prefix(20).map { "• \($0.text)" }.joined(separator: "\n")
                 _ = appendAssistant(text: "Here’s what I’m keeping on your device:\n\n\(lines)")
             }
+        case let .forget(text):
+            if let text {
+                let removed = memoryStore.remove(matching: text)
+                _ = appendAssistant(text: removed > 0 ? "Done — I’ve forgotten that." : "I didn’t have anything matching “\(text)” saved.")
+            } else {
+                memoryStore.clear()
+                _ = appendAssistant(text: "Cleared — I’ve forgotten everything stored on this device.")
+            }
+            AppHaptics.selection()
         default:
             let id = appendAssistant(text: "", streaming: true)
             currentAssistantMessageID = id
@@ -3804,7 +3813,7 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.unitConvertWidget(value: value, from: from, to: to)
         case let .define(word):
             return await LiveDataService.defineWidget(word: word)
-        case .remember, .recallMemory, .createTracker:
+        case .remember, .recallMemory, .forget, .createTracker:
             // Handled synchronously in handleQuickIntent — never fetched here.
             return nil
         }

@@ -37,6 +37,7 @@ enum QuickIntent: Equatable {
     case define(word: String)
     case remember(text: String)
     case recallMemory
+    case forget(text: String?)
     case createTracker(TrackerSpec)
 }
 
@@ -60,6 +61,12 @@ enum QuickIntentParser {
         // "remember that …" never gets mistaken for a tracker/reminder.
         if contains(text, ["what do you remember", "what do you know about me", "what have you remembered", "what's in your memory", "whats in your memory", "show my memory", "show what you remember"]) {
             return .recallMemory
+        }
+        if contains(text, ["forget everything", "forget it all", "forget all", "clear your memory", "clear my memory", "delete your memory", "wipe your memory", "erase your memory"]) {
+            return .forget(text: nil)
+        }
+        if let toForget = parseForget(text, original: trimmedRaw) {
+            return .forget(text: toForget)
         }
         if let fact = parseRemember(text, original: trimmedRaw) {
             return .remember(text: fact)
@@ -348,6 +355,16 @@ enum QuickIntentParser {
             let dropCount = trigger == "remember my " ? "remember ".count : trigger.count
             let fact = String(original.dropFirst(dropCount)).trimmingCharacters(in: .whitespacesAndNewlines)
             return fact.count >= 3 ? fact : nil
+        }
+        return nil
+    }
+
+    static func parseForget(_ text: String, original: String) -> String? {
+        let triggers = ["forget that ", "forget about ", "forget the ", "forget my ", "forget "]
+        for trigger in triggers where text.hasPrefix(trigger) {
+            let dropCount = trigger == "forget my " ? "forget ".count : trigger.count
+            let fact = String(original.dropFirst(dropCount)).trimmingCharacters(in: .whitespacesAndNewlines)
+            return fact.count >= 2 ? fact : nil
         }
         return nil
     }
@@ -1309,6 +1326,22 @@ final class MemoryStore {
     func remove(id: UUID) {
         items.removeAll { $0.id == id }
         save()
+    }
+
+    /// Removes facts matching a phrase (either contains the other,
+    /// case-insensitive). Returns how many were removed.
+    @discardableResult
+    func remove(matching query: String) -> Int {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !needle.isEmpty else { return 0 }
+        let before = items.count
+        items.removeAll { item in
+            let text = item.text.lowercased()
+            return text.contains(needle) || needle.contains(text)
+        }
+        let removed = before - items.count
+        if removed > 0 { save() }
+        return removed
     }
 
     func clear() {

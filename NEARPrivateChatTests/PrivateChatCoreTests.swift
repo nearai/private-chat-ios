@@ -3225,11 +3225,22 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(reloaded.items.count, 2)
         XCTAssertTrue(reloaded.items.contains { $0.text == "My wife's surname is Dangwal" })
 
+        // Targeted forget removes the matching fact only.
+        XCTAssertEqual(reloaded.remove(matching: "concise answers"), 1)
+        XCTAssertEqual(reloaded.items.count, 1)
+        XCTAssertEqual(reloaded.remove(matching: "nonexistent"), 0)
+
         reloaded.clear()
         XCTAssertTrue(reloaded.items.isEmpty)
         XCTAssertNil(reloaded.contextBlock())
 
         try? FileManager.default.removeItem(at: tempFile)
+    }
+
+    func testQuickIntentParsesForget() {
+        XCTAssertEqual(QuickIntentParser.parse("forget that I prefer concise answers"), .forget(text: "I prefer concise answers"))
+        XCTAssertEqual(QuickIntentParser.parse("forget everything"), .forget(text: nil))
+        XCTAssertEqual(QuickIntentParser.parse("clear your memory"), .forget(text: nil))
     }
 
     func testQuickIntentParsesDefinition() {
