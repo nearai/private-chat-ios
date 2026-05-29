@@ -4288,6 +4288,45 @@ extension PrivateChatCoreTests {
         XCTAssertNil(QuickIntentParser.parseChartTimeframe("how did it do this month")) // no chart cue
     }
 
+    func testStockIntentResolvesTickersAndCompanies() {
+        XCTAssertEqual(QuickIntentParser.parse("AAPL stock price"), .stock(symbol: "AAPL", company: "Apple"))
+        XCTAssertEqual(QuickIntentParser.parse("$TSLA"), .stock(symbol: "TSLA", company: "Tesla"))
+        XCTAssertEqual(QuickIntentParser.parse("Tesla stock"), .stock(symbol: "TSLA", company: "Tesla"))
+        XCTAssertEqual(QuickIntentParser.parse("Nvidia price"), .stock(symbol: "NVDA", company: "Nvidia"))
+        XCTAssertEqual(QuickIntentParser.parse("how's Microsoft stock doing"), .stock(symbol: "MSFT", company: "Microsoft"))
+    }
+
+    func testStockIntentDoesNotHijackProse() {
+        // Common-word company names need an explicit stock cue.
+        XCTAssertNil(QuickIntentParser.parse("apple pie recipe"))
+        XCTAssertNil(QuickIntentParser.parse("how much is an apple"))
+        XCTAssertNil(QuickIntentParser.parse("that's a meta question"))
+        // A company name with no stock/price cue stays a model question.
+        XCTAssertNil(QuickIntentParser.parse("I love Netflix"))
+        // Non-ticker all-caps tokens don't resolve.
+        XCTAssertNil(QuickIntentParser.parse("the USA economy is strong"))
+    }
+
+    func testStockTrackerCreation() throws {
+        guard case let .createTracker(spec) = QuickIntentParser.parse("track Tesla stock every morning") else {
+            return XCTFail("Expected a stock tracker.")
+        }
+        XCTAssertEqual(spec.kind, .stockPrice)
+        XCTAssertEqual(spec.subject, "TSLA")
+        guard case let .createTracker(nvda) = QuickIntentParser.parse("watch $NVDA daily") else {
+            return XCTFail("Expected a stock tracker for $NVDA.")
+        }
+        XCTAssertEqual(nvda.kind, .stockPrice)
+        XCTAssertEqual(nvda.subject, "NVDA")
+    }
+
+    func testYahooRangeMappingForStockHistory() {
+        XCTAssertEqual(LiveDataService.yahooRange(forDays: "7"), "5d")
+        XCTAssertEqual(LiveDataService.yahooRange(forDays: "30"), "1mo")
+        XCTAssertEqual(LiveDataService.yahooRange(forDays: "365"), "1y")
+        XCTAssertEqual(LiveDataService.yahooRange(forDays: "max"), "max")
+    }
+
     func testBriefingThreadReplyContextPrefersWidgetNote() {
         // The follow-up the model answers is grounded in the delivery's result.
         let widget = MessageWidget(kind: .generic, title: "Global politics", note: "Top 5 developments: Iran, Lebanon, EU sanctions")

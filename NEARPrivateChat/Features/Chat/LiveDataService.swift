@@ -28,6 +28,7 @@ func liveCoin(forID id: String) -> LiveCoin? {
 /// "create a tracker…" commands work without the chat backend.
 enum QuickIntent: Equatable {
     case price(coinID: String, symbol: String)
+    case stock(symbol: String, company: String)
     case trendingCrypto
     case cryptoMarket
     case briefMe
@@ -186,7 +187,7 @@ enum QuickIntentParser {
         if parseTrackLast(text) {
             return .trackLast(schedule: extractSchedule(from: text))
         }
-        if (createVerb && trackerNoun) || (startsWithWatchCommand(text) && infoCue),
+        if (createVerb && trackerNoun) || (startsWithWatchCommand(text) && (infoCue || parseStock(text, original: trimmedRaw) != nil)),
            let spec = makeTracker(from: text, original: trimmedRaw) {
             return .createTracker(spec)
         }
@@ -217,6 +218,12 @@ enum QuickIntentParser {
                             "total crypto market cap", "market cap of crypto", "btc dominance",
                             "bitcoin dominance", "eth dominance", "state of crypto", "state of the crypto market"]) {
             return .cryptoMarket
+        }
+
+        // 2a4) stocks — a ticker/company with a stock or price cue ("AAPL price",
+        // "Tesla stock", "$NVDA"). Conservatively gated so prose isn't hijacked.
+        if let stock = parseStock(text, original: trimmedRaw) {
+            return .stock(symbol: stock.symbol, company: stock.company)
         }
 
         // 2b) weather — needs an extractable place ("weather in tokyo",
@@ -387,7 +394,7 @@ enum QuickIntentParser {
     /// cannot, so they never get swept into a compound run.
     private static func isCompoundable(_ intent: QuickIntent) -> Bool {
         switch intent {
-        case .price, .trendingCrypto, .cryptoMarket, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
+        case .price, .stock, .trendingCrypto, .cryptoMarket, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
         case .briefMe, .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .setDocumentPrivacy, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker, .trackLast:
             return false
@@ -473,6 +480,17 @@ enum QuickIntentParser {
                 confirmation: "\(coin.symbol) price · \(label)"
             )
         }
+        if let stock = parseStock(text, original: original) {
+            let title = stock.company.isEmpty ? stock.symbol : stock.company
+            return TrackerSpec(
+                title: "\(title) stock",
+                kind: .stockPrice,
+                subject: stock.symbol,
+                schedule: schedule,
+                council: false,
+                confirmation: "\(stock.symbol) · \(label)"
+            )
+        }
         // Open-ended "track/watch the price/value of <X>" for ANY subject we
         // don't have a built-in feed for (a watch, a stock, a collectible…).
         // Becomes a web-grounded recurring custom-prompt tracker — the agentic-OS
@@ -535,6 +553,60 @@ enum QuickIntentParser {
             }
         }
         return subject.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+    }
+
+    /// Big-cap tickers ↔ company names. `ambiguous` marks names that are common
+    /// English words ("apple", "meta", "visa"), which only resolve with an
+    /// explicit stock cue so we don't hijack "apple pie" or "meta question".
+    static let knownStocks: [(symbol: String, names: [String], ambiguous: Bool)] = [
+        ("AAPL", ["apple"], true), ("MSFT", ["microsoft"], false),
+        ("GOOGL", ["google", "alphabet"], false), ("AMZN", ["amazon"], false),
+        ("TSLA", ["tesla"], false), ("NVDA", ["nvidia"], false),
+        ("META", ["meta", "facebook"], true), ("NFLX", ["netflix"], false),
+        ("AMD", ["amd"], false), ("INTC", ["intel"], false),
+        ("DIS", ["disney"], false), ("BA", ["boeing"], false),
+        ("JPM", ["jpmorgan", "jp morgan"], false), ("V", ["visa"], true),
+        ("WMT", ["walmart"], false), ("KO", ["coca cola", "coca-cola"], false),
+        ("PEP", ["pepsi", "pepsico"], false), ("NKE", ["nike"], false),
+        ("SBUX", ["starbucks"], false), ("UBER", ["uber"], false),
+        ("ABNB", ["airbnb"], false), ("COIN", ["coinbase"], false),
+        ("PLTR", ["palantir"], false), ("SHOP", ["shopify"], false),
+        ("PYPL", ["paypal"], false), ("ORCL", ["oracle"], false),
+        ("CRM", ["salesforce"], false), ("ADBE", ["adobe"], false),
+        ("SPY", ["s&p 500", "s&p500", "sp500", "s and p 500"], false),
+        ("QQQ", ["nasdaq 100", "nasdaq100"], false)
+    ]
+
+    /// Resolves a stock from free text → (ticker, company). Conservative by
+    /// design: a `$TICKER`, a KNOWN all-caps ticker with a cue, or a known
+    /// company name with a stock/price cue (ambiguous names require a stock cue).
+    /// Anything weaker returns nil and falls through (e.g. to the open-ended
+    /// web-search tracker), so prose is never hijacked into a wrong stock card.
+    static func parseStock(_ text: String, original: String) -> (symbol: String, company: String)? {
+        let stockCue = contains(text, ["stock", "stocks", "shares", "share price", "ticker", "nasdaq", "nyse", "equity", "equities"]) || original.contains("$")
+        let priceCue = contains(text, ["price", "worth", "trading", "quote", "how much", "value", "doing"])
+
+        // 1) $TICKER — explicit, always wins.
+        if let r = original.range(of: #"\$([A-Za-z]{1,5})\b"#, options: .regularExpression) {
+            let sym = String(original[r].dropFirst()).uppercased()
+            let company = knownStocks.first { $0.symbol == sym }?.names.first?.capitalized ?? ""
+            return (sym, company)
+        }
+        // 2) A known all-caps ticker token (AAPL, TSLA) with any stock/price cue.
+        if stockCue || priceCue,
+           let r = original.range(of: #"\b[A-Z]{1,5}\b"#, options: .regularExpression),
+           let stock = knownStocks.first(where: { $0.symbol == String(original[r]) }) {
+            return (stock.symbol, stock.names.first?.capitalized ?? "")
+        }
+        // 3) A known company name. Ambiguous names need an explicit stock cue;
+        // others need at least a stock or price cue.
+        for stock in knownStocks {
+            for name in stock.names where wordPresent(name, in: text) {
+                if stock.ambiguous { if stockCue { return (stock.symbol, name.capitalized) } }
+                else if stockCue || priceCue { return (stock.symbol, name.capitalized) }
+            }
+        }
+        return nil
     }
 
     /// Detects a chart/history follow-up with a timeframe and maps it to the
@@ -1714,6 +1786,92 @@ enum LiveDataService {
     /// The sparkline is best-effort: CoinGecko rate-limits the heavier chart
     /// endpoint first, so if it fails we still surface the live price as a
     /// metric widget rather than failing the whole answer.
+    // MARK: - Stocks (Yahoo Finance, auth-free)
+
+    private struct YahooChartResponse: Decodable {
+        struct Chart: Decodable { let result: [Result]? }
+        struct Result: Decodable { let meta: Meta; let indicators: Indicators }
+        struct Meta: Decodable {
+            let symbol: String?
+            let currency: String?
+            let regularMarketPrice: Double?
+            let chartPreviousClose: Double?
+            let previousClose: Double?
+        }
+        struct Indicators: Decodable { let quote: [Quote] }
+        struct Quote: Decodable { let close: [Double?]? }
+        let chart: Chart
+    }
+
+    /// Yahoo's chart endpoint needs a browser UA, and serves both the live price
+    /// and the historical close series for any range — so one call powers both
+    /// the quote widget and history charts.
+    private static func fetchYahooChart(symbol: String, range: String, interval: String) async -> (price: Double, prevClose: Double?, currency: String, closes: [Double])? {
+        let sym = symbol.uppercased()
+        guard let encoded = sym.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+              let url = URL(string: "https://query1.finance.yahoo.com/v8/finance/chart/\(encoded)?range=\(range)&interval=\(interval)") else {
+            return nil
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+        guard let data = try? await fetchData(for: request),
+              let response = try? JSONDecoder().decode(YahooChartResponse.self, from: data),
+              let result = response.chart.result?.first else {
+            return nil
+        }
+        let closes = (result.indicators.quote.first?.close ?? []).compactMap { $0 }
+        guard let price = result.meta.regularMarketPrice ?? closes.last else { return nil }
+        return (price, result.meta.chartPreviousClose ?? result.meta.previousClose, result.meta.currency ?? "USD", closes)
+    }
+
+    private static func stockChartWidget(price: Double, prevClose: Double?, closes: [Double], symbol: String, company: String, caption: String, timeframe: String) -> MessageWidget {
+        let points = downsample(closes, targetCount: timeframe == "1M" ? 30 : 40)
+        let baseline = prevClose ?? closes.first ?? price
+        let change = baseline > 0 ? (price - baseline) / baseline * 100 : 0
+        let valueString = currencyFormatter(maximumFractionDigits: 2).string(from: NSNumber(value: price)) ?? "$\(price)"
+        let deltaString = percentChangeFormatter().string(from: NSNumber(value: change / 100))
+        let title = company.isEmpty ? symbol : company
+        let trend: WidgetTrend = change >= 0 ? .up : .down
+        if points.count >= 2 {
+            return MessageWidget(
+                kind: .chart, title: "\(title) · \(symbol)", freshness: .fresh,
+                time: shortCurrentTimeString(), followUp: "Track \(symbol)", note: nil,
+                chart: WidgetChart(label: "\(symbol) · USD", value: valueString, delta: deltaString, trend: trend, points: points, caption: caption, timeframe: timeframe),
+                metric: nil, comparison: nil, newsBrief: nil
+            )
+        }
+        return MessageWidget(
+            kind: .metric, title: "\(title) · \(symbol)", freshness: .fresh,
+            time: shortCurrentTimeString(), followUp: "Track \(symbol)", note: nil, chart: nil,
+            metric: WidgetMetric(label: "\(symbol) · USD", value: valueString, delta: deltaString, trend: trend, caption: "stock price"),
+            comparison: nil, newsBrief: nil
+        )
+    }
+
+    /// Live stock quote + 1-month sparkline (price, day change vs previous close).
+    static func stockQuoteWidget(symbol: String, company: String) async -> MessageWidget? {
+        guard let q = await fetchYahooChart(symbol: symbol, range: "1mo", interval: "1d") else { return nil }
+        return stockChartWidget(price: q.price, prevClose: q.prevClose, closes: q.closes, symbol: symbol.uppercased(), company: company, caption: "past month", timeframe: "1M")
+    }
+
+    /// Real historical stock chart for a Yahoo range ("5d"/"1mo"/"3mo"/"6mo"/"1y"/"max").
+    static func stockHistoryChartWidget(symbol: String, range: String, label: String) async -> MessageWidget? {
+        guard let q = await fetchYahooChart(symbol: symbol, range: range, interval: "1d"), q.closes.count >= 2 else { return nil }
+        return stockChartWidget(price: q.price, prevClose: q.closes.first, closes: q.closes, symbol: symbol.uppercased(), company: "", caption: "past \(label)", timeframe: label)
+    }
+
+    /// Maps a CoinGecko `days` value (from parseChartTimeframe) to a Yahoo range.
+    static func yahooRange(forDays days: String) -> String {
+        switch days {
+        case "7": return "5d"
+        case "30": return "1mo"
+        case "90": return "3mo"
+        case "180": return "6mo"
+        case "365": return "1y"
+        default: return "max"
+        }
+    }
+
     /// A real historical price chart over `days` (CoinGecko `market_chart`,
     /// auth-free). `days` is "7"/"30"/"90"/"180"/"365"/"max". Powers chart-
     /// timeframe follow-ups in a price tracker thread ("show me the 1y chart").

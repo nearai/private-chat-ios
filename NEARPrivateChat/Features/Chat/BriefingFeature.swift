@@ -18,6 +18,7 @@ enum BriefingKind: String, Codable, Hashable {
     case customPrompt
     case ethPrice
     case cryptoPrice
+    case stockPrice
     case nearAccount
     case dailyNews
     /// Composed client-side from the user's other trackers + a market snapshot.

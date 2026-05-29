@@ -3690,6 +3690,10 @@ final class ChatStore: ObservableObject {
             // default to ETH — that would surface a wrong coin's price as fact.
             guard let id = briefing.accountID, !id.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
             return await LiveDataService.cryptoPriceWidget(coinID: id, symbol: LiveDataService.symbol(forCoinID: id))
+        case .stockPrice:
+            guard let symbol = briefing.accountID, !symbol.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+            let company = briefing.title.replacingOccurrences(of: " stock", with: "", options: .caseInsensitive).trimmingCharacters(in: .whitespaces)
+            return await LiveDataService.stockQuoteWidget(symbol: symbol, company: company)
         case .nearAccount:
             return await LiveDataService.nearAccountWidget(account: briefing.accountID ?? "")
         case .dailyNews:
@@ -3807,6 +3811,17 @@ final class ChatStore: ObservableObject {
     func answerBriefingFollowUp(question: String, context: String, briefing: Briefing) async -> (text: String?, widget: MessageWidget?) {
         let trimmedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuestion.isEmpty else { return (nil, nil) }
+
+        // A chart-timeframe ask on a stock tracker → real historical stock chart.
+        if briefing.kind == .stockPrice, let symbol = briefing.accountID, !symbol.isEmpty,
+           let timeframe = QuickIntentParser.parseChartTimeframe(trimmedQuestion),
+           let widget = await LiveDataService.stockHistoryChartWidget(
+               symbol: symbol,
+               range: LiveDataService.yahooRange(forDays: timeframe.days),
+               label: timeframe.label
+           ) {
+            return (nil, widget)
+        }
 
         // A chart-timeframe ask on a coin tracker → real historical chart.
         let coinID: String? = {
@@ -4164,6 +4179,8 @@ final class ChatStore: ObservableObject {
         switch intent {
         case let .price(coinID, symbol):
             return await LiveDataService.cryptoPriceWidget(coinID: coinID, symbol: symbol)
+        case let .stock(symbol, company):
+            return await LiveDataService.stockQuoteWidget(symbol: symbol, company: company)
         case .trendingCrypto:
             return await LiveDataService.trendingCryptoWidget()
         case .cryptoMarket:
