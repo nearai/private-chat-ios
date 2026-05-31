@@ -665,6 +665,115 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(memoryMatches.first?.title, "Memory summary")
     }
 
+    func testHomeOrchestrationPlannerPromotesLiveBriefingsCouncilAndAgent() {
+        let liveID = UUID()
+        let scheduledID = UUID()
+        let liveBriefing = Briefing(
+            id: liveID,
+            title: "ETH watcher",
+            prompt: "Watch ETH",
+            schedule: .daily(hour: 8, minute: 0),
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            lastRunAt: Date(timeIntervalSince1970: 1_700_010_000),
+            latestResult: MessageWidget(
+                kind: .metric,
+                title: "ETH threshold",
+                time: "8:02am",
+                metric: WidgetMetric(label: "ETH", value: "$3,124", delta: "-2.3%", trend: .down, caption: "Threshold broken")
+            )
+        )
+        let scheduledBriefing = Briefing(
+            id: scheduledID,
+            title: "Weekly market",
+            prompt: "Summarize market",
+            schedule: .weekly(weekday: 2, hour: 7, minute: 0),
+            createdAt: Date(timeIntervalSince1970: 1_699_900_000)
+        )
+
+        let plan = HomeOrchestrationPlanner.make(
+            briefings: [scheduledBriefing, liveBriefing],
+            projects: [],
+            conversations: [],
+            selectedProjectID: nil,
+            isStreaming: false,
+            routeLabel: "Private Council",
+            isCouncilModeEnabled: true,
+            defaultCouncilModelCount: 3,
+            councilModelNames: ["GLM 5.1", "Claude", "Gemini"],
+            hostedAgentAvailable: true,
+            mobileAgentAvailable: true
+        )
+
+        XCTAssertEqual(plan.liveItems.first?.id, "briefing-\(liveID.uuidString)")
+        XCTAssertEqual(plan.liveItems.first?.statusText, "8:02am")
+        XCTAssertEqual(plan.liveItems.first?.action, .openBriefing(liveID))
+        XCTAssertTrue(plan.liveItems.contains { $0.id == "council-room" && $0.action != .useAutoCouncil })
+        XCTAssertTrue(plan.liveItems.contains { $0.id == "agent-builder" })
+        XCTAssertEqual(plan.scheduledItems.map(\.id), [liveID, scheduledID])
+        XCTAssertTrue(plan.commands.contains { $0.title == "Run Council" })
+    }
+
+    func testHomeOrchestrationPlannerStagesAgentWorkFromSelectedProject() {
+        let selected = ChatProject(
+            id: "project-selected",
+            name: "Private Chat iOS",
+            createdAt: Date(timeIntervalSince1970: 1_700_100_000),
+            conversationIDs: [],
+            instructions: "Ship the agentic workboard.",
+            iconName: ProjectIcon.agent.symbolName
+        )
+        let other = ChatProject(
+            id: "project-other",
+            name: "Other",
+            createdAt: Date(timeIntervalSince1970: 1_700_200_000),
+            conversationIDs: []
+        )
+
+        let plan = HomeOrchestrationPlanner.make(
+            briefings: [],
+            projects: [other, selected],
+            conversations: [],
+            selectedProjectID: selected.id,
+            isStreaming: false,
+            routeLabel: "IronClaw",
+            isCouncilModeEnabled: false,
+            defaultCouncilModelCount: 0,
+            councilModelNames: [],
+            hostedAgentAvailable: true,
+            mobileAgentAvailable: false
+        )
+
+        guard case let .stagePrompt(staged)? = plan.liveItems.first(where: { $0.id == "agent-builder" })?.action else {
+            return XCTFail("Expected agent builder to stage a prompt.")
+        }
+        XCTAssertEqual(staged.projectID, selected.id)
+        XCTAssertTrue(staged.prompt.contains("Private Chat iOS"))
+        XCTAssertEqual(plan.liveItems.first(where: { $0.kind == .project })?.id, "project-\(selected.id)")
+        XCTAssertTrue(plan.commands.contains { command in
+            guard case let .stagePrompt(prompt) = command.action else { return false }
+            return command.id == "patch" && prompt.projectID == selected.id
+        })
+    }
+
+    func testHomeOrchestrationPlannerUsesAutoCouncilBeforeCouncilIsEnabled() {
+        let plan = HomeOrchestrationPlanner.make(
+            briefings: [],
+            projects: [],
+            conversations: [],
+            selectedProjectID: nil,
+            isStreaming: false,
+            routeLabel: "NEAR Private",
+            isCouncilModeEnabled: false,
+            defaultCouncilModelCount: 3,
+            councilModelNames: [],
+            hostedAgentAvailable: false,
+            mobileAgentAvailable: false
+        )
+
+        XCTAssertEqual(plan.liveItems.first(where: { $0.id == "council-room" })?.action, .useAutoCouncil)
+        XCTAssertEqual(plan.commands.first(where: { $0.id == "council" })?.action, .useAutoCouncil)
+    }
+
     func testConversationSpotlightItemsCarryIDAndTitle() {
         let conversations = [
             ConversationSummary(id: "conv-1", createdAt: 1_700_000_000, metadata: ConversationMetadata(title: "Launch plan")),

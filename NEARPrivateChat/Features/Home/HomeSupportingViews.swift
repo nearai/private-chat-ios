@@ -1207,7 +1207,7 @@ struct ClaudeHomeTopBar: View {
             }
         }
         .overlay {
-            Text("Chats")
+            Text("Today")
                 .font(.headline)
                 .foregroundStyle(.primary)
                 .lineLimit(1)

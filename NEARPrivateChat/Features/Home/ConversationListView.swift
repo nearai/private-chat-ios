@@ -268,6 +268,23 @@ struct ConversationListView: View {
         !filteredConversations.isEmpty || hasVisibleProjects || hasProjectSearchResults
     }
 
+    private var homeOrchestrationPlan: HomeOrchestrationPlan {
+        HomeOrchestrationPlanner.make(
+            briefings: briefingStore.briefings,
+            projects: chatStore.visibleProjects,
+            conversations: chatStore.visibleConversations,
+            selectedProjectID: chatStore.selectedProjectID,
+            isStreaming: chatStore.isStreaming,
+            routeLabel: chatStore.isCouncilModeEnabled ? chatStore.activeCouncilRouteSummary : chatStore.selectedProviderDisplayName,
+            isCouncilModeEnabled: chatStore.isCouncilModeEnabled,
+            defaultCouncilModelCount: chatStore.defaultCouncilModels.count,
+            councilModelNames: chatStore.councilModelNames,
+            hostedAgentAvailable: chatStore.ironclawRemoteWorkstationAvailable,
+            mobileAgentAvailable: chatStore.agentModels.contains { $0.id == ModelOption.ironclawMobileModelID },
+            setupPlan: savedSetupState?.plan
+        )
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             ClaudeHomeTopBar(
@@ -289,12 +306,10 @@ struct ConversationListView: View {
             ScrollView {
                 LazyVStack(spacing: 14) {
                     if searchQuery.isEmpty, !shouldPrioritizeSetupOverToday {
-                        TodaySection(
-                            store: briefingStore,
-                            onOpenBriefing: { openedBriefing = $0 },
-                            onNewBriefing: { showingNewBriefing = true }
+                        HomeOrchestrationSurface(
+                            plan: homeOrchestrationPlan,
+                            onAction: runHomeOrchestrationAction
                         )
-                        .padding(.horizontal, 16)
                         .padding(.top, 12)
                     }
 
@@ -637,6 +652,48 @@ struct ConversationListView: View {
         }
         chatStore.selectConversation(conversation)
         onOpenChat()
+    }
+
+    private func runHomeOrchestrationAction(_ action: HomeOrchestrationAction) {
+        switch action {
+        case .openBriefing(let briefingID):
+            openedBriefing = briefingStore.briefings.first { $0.id == briefingID }
+        case .openProject(let projectID):
+            guard let project = chatStore.visibleProjects.first(where: { $0.id == projectID }) else { return }
+            openProjectContext(project)
+        case .openConversation(let conversationID):
+            guard let conversation = chatStore.allVisibleConversations.first(where: { $0.id == conversationID }) else { return }
+            openConversation(conversation)
+        case .openAgentSettings:
+            AppHaptics.lightImpact()
+            openAccountSettings(deepLink: .ironclawAgent)
+        case .useAutoCouncil:
+            AppHaptics.selection()
+            chatStore.useDefaultCouncilLineup()
+        case .newBriefing:
+            AppHaptics.selection()
+            showingNewBriefing = true
+        case .stagePrompt(let stagedPrompt):
+            stageHomeOrchestrationPrompt(stagedPrompt)
+        }
+    }
+
+    private func stageHomeOrchestrationPrompt(_ stagedPrompt: HomeStagedPrompt) {
+        guard !chatStore.isStreaming else {
+            chatStore.bannerMessage = "Finish or cancel the current response before staging a new prompt."
+            return
+        }
+
+        if let projectID = stagedPrompt.projectID,
+           let project = chatStore.visibleProjects.first(where: { $0.id == projectID }) {
+            chatStore.selectProject(project)
+        }
+
+        chatStore.startNewConversation()
+        chatStore.draft = stagedPrompt.prompt
+        chatStore.bannerMessage = stagedPrompt.banner
+        AppHaptics.selection()
+        onStartNewChat()
     }
 
     private var filterCounts: [HomeFilter: Int] {
