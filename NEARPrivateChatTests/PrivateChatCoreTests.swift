@@ -228,6 +228,67 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(item.metadata?.authorName, "Alex Rivera")
     }
 
+    func testAppSetupPlanUsesHostedIronclawWhenMobileRuntimeIsUnavailable() {
+        let profile = UserSetupProfile(
+            useCase: .buildAgents,
+            contextStyle: .project,
+            wantsWeb: false,
+            wantsIronclaw: true,
+            wantsCouncil: false,
+            useCases: [.buildAgents],
+            experienceMode: .power
+        )
+        let readiness = AppSetupReadinessSnapshot(
+            modelCatalogLoaded: true,
+            privateModelAvailable: true,
+            defaultCouncilModelCount: 3,
+            ironclawMobileAvailable: false,
+            hostedIronclawAvailable: true,
+            nearCloudKeyConfigured: false
+        )
+
+        let plan = AppSetupPlan(profile: profile, readiness: readiness)
+
+        XCTAssertEqual(plan.modelRoute, .ironclaw)
+        XCTAssertEqual(plan.expectedRouteModelIDs, [ModelOption.ironclawModelID])
+        XCTAssertEqual(plan.expectedFirstAction, "Open hosted agent")
+        XCTAssertEqual(plan.readinessStatus, "Hosted IronClaw is ready; mobile runtime is unavailable.")
+        XCTAssertEqual(plan.routeDetailContent?.summary, "Hosted IronClaw")
+    }
+
+    func testCapabilityNextStepTreatsHostedIronclawAsSatisfiedAgentRoute() {
+        let plan = AppSetupPlan(
+            profile: UserSetupProfile(
+                useCase: .buildAgents,
+                contextStyle: .project,
+                wantsWeb: false,
+                wantsIronclaw: true,
+                wantsCouncil: false,
+                useCases: [.buildAgents],
+                experienceMode: .power
+            ),
+            readiness: AppSetupReadinessSnapshot(
+                modelCatalogLoaded: true,
+                privateModelAvailable: true,
+                defaultCouncilModelCount: 3,
+                ironclawMobileAvailable: false,
+                hostedIronclawAvailable: true,
+                nearCloudKeyConfigured: false
+            )
+        )
+
+        let recommendation = CapabilityNextStepPlanner.recommend(
+            routeBlock: nil,
+            setupPlan: plan,
+            currentRoute: .ironclawHosted,
+            hasFreshPrivateProof: true,
+            hostedIronclawAvailable: true,
+            autoCouncilReady: true
+        )
+
+        XCTAssertEqual(recommendation?.kind, .rerunSetup)
+    }
+
     func testChatMessageAuthorMetadataIsTrimmedForDisplay() {
         let message = ChatMessage(
             id: "msg-1",
@@ -531,6 +592,13 @@ final class PrivateChatCoreTests: XCTestCase {
 
         XCTAssertEqual(nextStep?.kind, .openSecurity)
         XCTAssertEqual(nextStep?.actionTitle, "Open Security")
+    }
+
+    func testAccountSettingsDeepLinkMapsCapabilityRecommendations() {
+        XCTAssertEqual(AccountSettingsDeepLink(capabilityNextStepKind: .openCloud), .nearCloudKeys)
+        XCTAssertEqual(AccountSettingsDeepLink(capabilityNextStepKind: .openAgent), .ironclawAgent)
+        XCTAssertNil(AccountSettingsDeepLink(capabilityNextStepKind: .useAutoCouncil))
+        XCTAssertNil(AccountSettingsDeepLink(capabilityNextStepKind: .openSecurity))
     }
 
     @MainActor
@@ -1402,6 +1470,222 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(profile.firstRunDraft, UserSetupUseCase.research.starterPrompt)
     }
 
+    func testProjectWorkspaceStarterPresetUsesProjectFirstDefaults() {
+        let profile = UserSetupStarterPreset.projectWorkspace.quickStartProfile
+
+        XCTAssertEqual(profile.useCases, [.teamProjects])
+        XCTAssertEqual(profile.contextStyle, .project)
+        XCTAssertEqual(profile.goalText, "")
+        XCTAssertFalse(profile.wantsWeb)
+        XCTAssertFalse(profile.wantsCouncil)
+        XCTAssertFalse(profile.wantsIronclaw)
+        XCTAssertEqual(profile.experienceMode, .beginner)
+        XCTAssertEqual(profile.firstRunDraft, UserSetupUseCase.teamProjects.starterPrompt)
+    }
+
+    func testStarterPresetPreviewPlanUsesCurrentCouncilDefaults() {
+        let routeDefaults = SetupRouteDefaults(
+            privateModelID: "private-model",
+            councilModelIDs: ["council-a", "council-b"],
+            ironclawMobileModelID: ModelOption.ironclawMobileModelID
+        )
+
+        let plan = UserSetupStarterPreset.researchBrief.previewPlan(
+            readiness: .optimistic,
+            routeDefaults: routeDefaults
+        )
+
+        XCTAssertEqual(plan.modelRoute, .council)
+        XCTAssertEqual(plan.expectedFirstAction, "Ask the council")
+        XCTAssertEqual(plan.expectedRouteModelIDs, ["council-a", "council-b"])
+        XCTAssertEqual(plan.routeDetailContent?.title, "Council lineup")
+        XCTAssertEqual(plan.routeDetailContent?.summary, "Council A + Council B")
+        XCTAssertEqual(plan.routeDetailContent?.symbolName, "square.grid.2x2")
+    }
+
+    func testStarterPresetPreviewPlanFallsBackToPrivateRouteWhenIronclawIsUnavailable() {
+        let routeDefaults = SetupRouteDefaults(
+            privateModelID: "private-model",
+            councilModelIDs: ["council-a", "council-b"],
+            ironclawMobileModelID: ModelOption.ironclawMobileModelID
+        )
+        let readiness = AppSetupReadinessSnapshot(
+            modelCatalogLoaded: true,
+            privateModelAvailable: true,
+            defaultCouncilModelCount: 3,
+            ironclawMobileAvailable: false,
+            hostedIronclawAvailable: false,
+            nearCloudKeyConfigured: false
+        )
+
+        let plan = UserSetupStarterPreset.agentMission.previewPlan(
+            readiness: readiness,
+            routeDefaults: routeDefaults
+        )
+
+        XCTAssertEqual(plan.modelRoute, .privateModel)
+        XCTAssertEqual(plan.expectedFirstAction, "Start private chat while agent tools load")
+        XCTAssertEqual(plan.expectedRouteModelIDs, ["private-model"])
+        XCTAssertEqual(plan.routeDetailContent?.title, "Starter model")
+        XCTAssertEqual(plan.routeDetailContent?.summary, "Private Model")
+        XCTAssertEqual(plan.routeDetailContent?.symbolName, "sparkles")
+        XCTAssertEqual(plan.readinessStatus, "IronClaw Mobile is still loading; private chat is ready first.")
+    }
+
+    func testFirstRunCapabilityRecommendationPromptsHostedAgentSetupWhenAgentPresetFallsBack() {
+        let readiness = AppSetupReadinessSnapshot(
+            modelCatalogLoaded: true,
+            privateModelAvailable: true,
+            defaultCouncilModelCount: 3,
+            ironclawMobileAvailable: false,
+            hostedIronclawAvailable: false,
+            nearCloudKeyConfigured: false
+        )
+        let plan = UserSetupStarterPreset.agentMission.previewPlan(
+            readiness: readiness,
+            routeDefaults: SetupRouteDefaults(
+                privateModelID: "private-model",
+                councilModelIDs: ["council-a", "council-b"],
+                ironclawMobileModelID: ModelOption.ironclawMobileModelID
+            )
+        )
+
+        let recommendation = plan.firstRunCapabilityRecommendation(readiness: readiness)
+
+        XCTAssertEqual(recommendation?.title, "Finish agent setup")
+        XCTAssertEqual(recommendation?.actionTitle, "Connect Agent")
+        XCTAssertEqual(recommendation?.kind, .openAgent)
+    }
+
+    func testFirstRunCapabilityRecommendationPromptsCloudSetupWhenResearchPresetLacksCouncilModels() {
+        let readiness = AppSetupReadinessSnapshot(
+            modelCatalogLoaded: true,
+            privateModelAvailable: true,
+            defaultCouncilModelCount: 1,
+            ironclawMobileAvailable: true,
+            hostedIronclawAvailable: false,
+            nearCloudKeyConfigured: false
+        )
+        let plan = UserSetupStarterPreset.researchBrief.previewPlan(
+            readiness: readiness,
+            routeDefaults: SetupRouteDefaults(
+                privateModelID: "private-model",
+                councilModelIDs: ["council-a"],
+                ironclawMobileModelID: ModelOption.ironclawMobileModelID
+            )
+        )
+
+        let recommendation = plan.firstRunCapabilityRecommendation(readiness: readiness)
+
+        XCTAssertEqual(plan.modelRoute, .privateModel)
+        XCTAssertEqual(recommendation?.title, "Unlock a fuller council")
+        XCTAssertEqual(recommendation?.actionTitle, "Connect Cloud")
+        XCTAssertEqual(recommendation?.kind, .openCloud)
+    }
+
+    func testFirstRunCapabilityRecommendationStaysQuietWhenResearchPresetAlreadyHasCloudButNeedsMoreModels() {
+        let readiness = AppSetupReadinessSnapshot(
+            modelCatalogLoaded: true,
+            privateModelAvailable: true,
+            defaultCouncilModelCount: 1,
+            ironclawMobileAvailable: true,
+            hostedIronclawAvailable: false,
+            nearCloudKeyConfigured: true
+        )
+        let plan = UserSetupStarterPreset.researchBrief.previewPlan(
+            readiness: readiness,
+            routeDefaults: SetupRouteDefaults(
+                privateModelID: "private-model",
+                councilModelIDs: ["council-a"],
+                ironclawMobileModelID: ModelOption.ironclawMobileModelID
+            )
+        )
+
+        XCTAssertNil(plan.firstRunCapabilityRecommendation(readiness: readiness))
+    }
+
+    func testFirstRunCapabilityRecommendationPointsToHostedAgentWhenAvailable() {
+        let readiness = AppSetupReadinessSnapshot(
+            modelCatalogLoaded: true,
+            privateModelAvailable: true,
+            defaultCouncilModelCount: 3,
+            ironclawMobileAvailable: false,
+            hostedIronclawAvailable: true,
+            nearCloudKeyConfigured: false
+        )
+        let plan = UserSetupStarterPreset.agentMission.previewPlan(
+            readiness: readiness,
+            routeDefaults: SetupRouteDefaults(
+                privateModelID: "private-model",
+                councilModelIDs: ["council-a", "council-b"],
+                ironclawMobileModelID: ModelOption.ironclawMobileModelID
+            )
+        )
+
+        let recommendation = plan.firstRunCapabilityRecommendation(readiness: readiness)
+
+        XCTAssertEqual(recommendation?.title, "Hosted agent is available")
+        XCTAssertEqual(recommendation?.actionTitle, "Open Agent")
+        XCTAssertEqual(recommendation?.kind, .openAgent)
+    }
+
+    func testAgentQuickStartUsesHostedAgentCTAWhenHostedFallbackIsReady() {
+        let readiness = AppSetupReadinessSnapshot(
+            modelCatalogLoaded: true,
+            privateModelAvailable: true,
+            defaultCouncilModelCount: 3,
+            ironclawMobileAvailable: false,
+            hostedIronclawAvailable: true,
+            nearCloudKeyConfigured: false
+        )
+        let plan = UserSetupStarterPreset.agentMission.previewPlan(
+            readiness: readiness,
+            routeDefaults: SetupRouteDefaults(
+                privateModelID: "private-model",
+                councilModelIDs: ["council-a", "council-b"],
+                ironclawMobileModelID: ModelOption.ironclawMobileModelID
+            )
+        )
+
+        XCTAssertEqual(plan.modelRoute, .ironclaw)
+        XCTAssertEqual(plan.expectedFirstAction, "Open hosted agent")
+        XCTAssertEqual(plan.readinessStatus, "Hosted IronClaw is ready; mobile runtime is unavailable.")
+        XCTAssertEqual(plan.routeDetailContent?.summary, "Hosted IronClaw")
+    }
+
+    func testFirstRunCapabilityRecommendationStaysQuietWhenPresetRouteIsReady() {
+        let plan = UserSetupStarterPreset.researchBrief.previewPlan(
+            readiness: .optimistic,
+            routeDefaults: SetupRouteDefaults(
+                privateModelID: "private-model",
+                councilModelIDs: ["council-a", "council-b"],
+                ironclawMobileModelID: ModelOption.ironclawMobileModelID
+            )
+        )
+
+        XCTAssertNil(plan.firstRunCapabilityRecommendation(readiness: .optimistic))
+    }
+
+    func testProjectWorkspaceStarterPresetPreviewUsesProjectWorkspaceMessaging() {
+        let routeDefaults = SetupRouteDefaults(
+            privateModelID: "private-model",
+            councilModelIDs: ["council-a", "council-b"],
+            ironclawMobileModelID: ModelOption.ironclawMobileModelID
+        )
+
+        let plan = UserSetupStarterPreset.projectWorkspace.previewPlan(
+            readiness: .optimistic,
+            routeDefaults: routeDefaults
+        )
+
+        XCTAssertEqual(plan.modelRoute, .privateModel)
+        XCTAssertEqual(plan.expectedFirstAction, "Create a project workspace")
+        XCTAssertEqual(plan.focusMode, .all)
+        XCTAssertEqual(plan.starterProjectName, "Project Workspace")
+        XCTAssertEqual(plan.expectedRouteModelIDs, ["private-model"])
+        XCTAssertEqual(plan.firstRunDraft, UserSetupUseCase.teamProjects.starterPrompt)
+    }
+
     func testUserSetupCompleteFirstRunQuickStartPersistsPresetDefaults() throws {
         let defaults = try makeIsolatedDefaults()
         let accountID = "user:first-run-quick-start"
@@ -1673,6 +1957,10 @@ final class PrivateChatCoreTests: XCTestCase {
             plan.starterWorkspaceSeeds.dropFirst().first?.detail,
             "Starter prompts ask for a safe patch plan and focused verification before code changes."
         )
+        XCTAssertEqual(
+            plan.starterSkillSuggestions.map(\.id),
+            ["project-setup", "plan-mode", "developer-setup", "coding"]
+        )
         XCTAssertEqual(plan.starterPromptSuggestions.map(\.title), ["Plan repo task", "Safe patch", "Repo checklist"])
         XCTAssertEqual(plan.starterPromptSuggestions.first?.prompt, "Plan the first repo task for this goal: Review the repo and plan the first safe patch.")
     }
@@ -1712,6 +2000,10 @@ final class PrivateChatCoreTests: XCTestCase {
             "Create a sourced research brief for this goal using project files, links, notes, and memory: Map the strongest privacy proof workflow."
         )
         XCTAssertEqual(plan.firstRunDraft, normalized.firstRunDraft)
+        XCTAssertEqual(
+            plan.starterSkillSuggestions.map(\.id),
+            ["llm-council", "plan-mode", "decision-capture", "new-project"]
+        )
         XCTAssertEqual(plan.starterPromptSuggestions.map(\.title), ["Start goal", "Start brief", "Organize project"])
     }
 
@@ -1808,6 +2100,10 @@ final class PrivateChatCoreTests: XCTestCase {
 
         XCTAssertTrue(restoreState.needsRestore)
         XCTAssertEqual(restoreState.summaryText, "Current route changed. Restore saved setup to return to your saved route.")
+        XCTAssertEqual(
+            restoreState.differences,
+            [SetupRestoreDifference(title: "Route", savedValue: "Council", currentValue: "Private model")]
+        )
     }
 
     func testSetupRestorePlannerFlagsContextDriftIncludingWebDefaults() {
@@ -1832,6 +2128,132 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(
             restoreState.summaryText,
             "Context defaults changed. Restore saved setup to recover your saved web, focus, and research defaults."
+        )
+        XCTAssertEqual(
+            restoreState.differences,
+            [SetupRestoreDifference(title: "Web", savedValue: "On", currentValue: "Off")]
+        )
+    }
+
+    func testSetupRestorePlannerFlagsPrivateModelSelectionDrift() {
+        let expectedPrivateModelID = "zai-org/GLM-5.1-FP8"
+        let runtimePrivateModelID = "moonshotai/kimi-k2.6"
+        let plan = AppSetupPlan(
+            profile: .defaults,
+            readiness: .optimistic,
+            routeDefaults: SetupRouteDefaults(
+                privateModelID: expectedPrivateModelID,
+                councilModelIDs: [],
+                ironclawMobileModelID: ModelOption.ironclawMobileModelID
+            )
+        )
+        let runtime = SetupRuntimeSnapshot(
+            modelRoute: plan.modelRoute,
+            focusMode: plan.focusMode,
+            webSearchEnabled: false,
+            researchModeEnabled: false,
+            selectedProjectName: plan.starterProjectName,
+            selectedModelID: runtimePrivateModelID
+        )
+
+        let restoreState = SetupRestorePlanner.evaluate(profile: .defaults, plan: plan, runtime: runtime)
+
+        XCTAssertTrue(restoreState.needsRestore)
+        XCTAssertEqual(
+            restoreState.summaryText,
+            "Current private model changed. Restore saved setup to recover your preferred starter route."
+        )
+        XCTAssertEqual(
+            restoreState.differences,
+            [SetupRestoreDifference(title: "Model", savedValue: "GLM 5.1", currentValue: "Kimi K2.6")]
+        )
+    }
+
+    func testSetupRestorePlannerFlagsCouncilLineupDrift() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .research
+        profile.useCases = [.research]
+        profile.wantsCouncil = true
+
+        let plan = AppSetupPlan(
+            profile: profile,
+            readiness: .optimistic,
+            routeDefaults: SetupRouteDefaults(
+                privateModelID: "zai-org/GLM-5.1-FP8",
+                councilModelIDs: [
+                    "zai-org/GLM-5.1-FP8",
+                    ModelOption.nearCloudQwenMaxModelID
+                ],
+                ironclawMobileModelID: ModelOption.ironclawMobileModelID
+            )
+        )
+        let runtime = SetupRuntimeSnapshot(
+            modelRoute: plan.modelRoute,
+            focusMode: plan.focusMode,
+            webSearchEnabled: profile.wantsWeb,
+            researchModeEnabled: true,
+            selectedProjectName: plan.starterProjectName,
+            selectedModelID: "zai-org/GLM-5.1-FP8",
+            councilModelIDs: [
+                "zai-org/GLM-5.1-FP8",
+                "anthropic/claude-opus-4-7"
+            ]
+        )
+
+        let restoreState = SetupRestorePlanner.evaluate(profile: profile, plan: plan, runtime: runtime)
+
+        XCTAssertTrue(restoreState.needsRestore)
+        XCTAssertEqual(
+            restoreState.summaryText,
+            "Council lineup changed. Restore saved setup to recover your saved model mix."
+        )
+        XCTAssertEqual(
+            restoreState.differences,
+            [
+                SetupRestoreDifference(
+                    title: "Council",
+                    savedValue: "GLM 5.1 + Qwen 3.7 Max",
+                    currentValue: "GLM 5.1 + Claude Opus 4 7"
+                )
+            ]
+        )
+    }
+
+    func testSetupRestorePlannerFlagsHostedIronclawDriftWithinAgentRoute() {
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .buildAgents
+        profile.useCases = [.buildAgents]
+        profile.contextStyle = .project
+        profile.wantsIronclaw = true
+
+        let plan = AppSetupPlan(
+            profile: profile,
+            readiness: .optimistic,
+            routeDefaults: SetupRouteDefaults(
+                privateModelID: "zai-org/GLM-5.1-FP8",
+                councilModelIDs: [],
+                ironclawMobileModelID: ModelOption.ironclawMobileModelID
+            )
+        )
+        let runtime = SetupRuntimeSnapshot(
+            modelRoute: plan.modelRoute,
+            focusMode: plan.focusMode,
+            webSearchEnabled: profile.wantsWeb,
+            researchModeEnabled: false,
+            selectedProjectName: plan.starterProjectName,
+            selectedModelID: ModelOption.ironclawModelID
+        )
+
+        let restoreState = SetupRestorePlanner.evaluate(profile: profile, plan: plan, runtime: runtime)
+
+        XCTAssertTrue(restoreState.needsRestore)
+        XCTAssertEqual(
+            restoreState.summaryText,
+            "Current agent route changed. Restore saved setup to return to IronClaw Mobile."
+        )
+        XCTAssertEqual(
+            restoreState.differences,
+            [SetupRestoreDifference(title: "Agent route", savedValue: "IronClaw Mobile", currentValue: "Hosted IronClaw")]
         )
     }
 
@@ -1858,6 +2280,7 @@ final class PrivateChatCoreTests: XCTestCase {
             restoreState.summaryText,
             "Your saved setup is ready to reopen with the same route and focus defaults."
         )
+        XCTAssertTrue(restoreState.differences.isEmpty)
     }
 
     func testSetupRestorePlannerUsesStarterPromptSummaryWhenGoalExists() {
@@ -1883,6 +2306,7 @@ final class PrivateChatCoreTests: XCTestCase {
             restoreState.summaryText,
             "Your saved setup is ready to reopen with the same route, focus, and starter prompt."
         )
+        XCTAssertTrue(restoreState.differences.isEmpty)
     }
 
     func testSetupCTAIsDerivedFromSinglePlanState() {
@@ -2010,6 +2434,30 @@ final class PrivateChatCoreTests: XCTestCase {
     }
 
     @MainActor
+    func testApplyingSetupSeedsStarterPromptAndSkillNotesInProject() throws {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .buildAgents
+        profile.useCases = [.buildAgents]
+        profile.contextStyle = .project
+        profile.goalText = "Review the repo and plan the first safe patch."
+
+        store.applySetupProfile(profile)
+
+        let notes = store.selectedProjectNotes
+        XCTAssertEqual(Array(notes.prefix(3).map(\.title)), ["Setup guide", "Starter prompts", "IronClaw skills"])
+
+        let promptNote = try XCTUnwrap(notes.first(where: { $0.title == "Starter prompts" }))
+        XCTAssertTrue(promptNote.text.contains("Plan repo task"))
+        XCTAssertTrue(promptNote.text.contains("Plan the first repo task for this goal: Review the repo and plan the first safe patch."))
+
+        let skillsNote = try XCTUnwrap(notes.first(where: { $0.title == "IronClaw skills" }))
+        XCTAssertTrue(skillsNote.text.contains("Project Setup: Turn a repo or new idea into a tracked workspace."))
+        XCTAssertTrue(skillsNote.text.contains("Plan Mode: Break work into concrete, verifiable next steps."))
+    }
+
+    @MainActor
     func testApplyingSetupRerunRefreshesSetupGuideWithoutDuplicatingIt() throws {
         let store = ChatStore(api: PrivateChatAPI(configuration: .production))
 
@@ -2022,7 +2470,11 @@ final class PrivateChatCoreTests: XCTestCase {
         store.applySetupProfile(profile)
 
         let firstGuide = try XCTUnwrap(store.selectedProjectNotes.first(where: { $0.title == "Setup guide" }))
+        let firstPromptNote = try XCTUnwrap(store.selectedProjectNotes.first(where: { $0.title == "Starter prompts" }))
+        let firstSkillsNote = try XCTUnwrap(store.selectedProjectNotes.first(where: { $0.title == "IronClaw skills" }))
         XCTAssertTrue(firstGuide.text.contains("Audit the onboarding build path."))
+        XCTAssertTrue(firstPromptNote.text.contains("Audit the onboarding build path."))
+        XCTAssertTrue(firstSkillsNote.text.contains("Project Setup: Turn a repo or new idea into a tracked workspace."))
 
         store.updateSelectedProjectInstructions("Keep these custom instructions.")
         store.saveMessageAsProjectNote(makeMessage(id: "setup-note-1", role: .assistant, text: "Remember to keep the first-run notes visible.", createdAt: Date()))
@@ -2031,13 +2483,60 @@ final class PrivateChatCoreTests: XCTestCase {
         store.applySetupProfile(profile)
 
         let setupGuides = store.selectedProjectNotes.filter { $0.title == "Setup guide" }
+        let starterPromptNotes = store.selectedProjectNotes.filter { $0.title == "Starter prompts" }
+        let skillNotes = store.selectedProjectNotes.filter { $0.title == "IronClaw skills" }
         XCTAssertEqual(setupGuides.count, 1)
+        XCTAssertEqual(starterPromptNotes.count, 1)
+        XCTAssertEqual(skillNotes.count, 1)
         XCTAssertTrue(setupGuides[0].text.contains("Plan the first simulator-safe patch."))
         XCTAssertFalse(setupGuides[0].text.contains("Audit the onboarding build path."))
+        XCTAssertTrue(starterPromptNotes[0].text.contains("Plan the first simulator-safe patch."))
+        XCTAssertFalse(starterPromptNotes[0].text.contains("Audit the onboarding build path."))
+        XCTAssertTrue(skillNotes[0].text.contains("Project Setup: Turn a repo or new idea into a tracked workspace."))
         XCTAssertEqual(store.selectedProjectInstructions, "Keep these custom instructions.")
         XCTAssertTrue(store.selectedProjectNotes.contains(where: {
             $0.title != "Setup guide" && $0.text.contains("Remember to keep the first-run notes visible.")
         }))
+    }
+
+    @MainActor
+    func testApplyingSetupRestoresSavedPrivateModel() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        store.selectModel("zai-org/GLM-5.1-FP8")
+
+        var profile = UserSetupProfile.defaults
+        profile.routeDefaults = SetupRouteDefaults(
+            privateModelID: "moonshotai/kimi-k2.6",
+            councilModelIDs: [],
+            ironclawMobileModelID: ModelOption.ironclawMobileModelID
+        )
+
+        store.applySetupProfile(profile)
+
+        XCTAssertEqual(store.selectedModel, "moonshotai/kimi-k2.6")
+    }
+
+    @MainActor
+    func testApplyingSetupRestoresSavedCouncilLineup() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .research
+        profile.useCases = [.research]
+        profile.wantsCouncil = true
+        profile.routeDefaults = SetupRouteDefaults(
+            privateModelID: "zai-org/GLM-5.1-FP8",
+            councilModelIDs: [
+                "zai-org/GLM-5.1-FP8",
+                "moonshotai/kimi-k2.6"
+            ],
+            ironclawMobileModelID: ModelOption.ironclawMobileModelID
+        )
+
+        store.applySetupProfile(profile)
+
+        XCTAssertEqual(store.selectedModel, "zai-org/GLM-5.1-FP8")
+        XCTAssertEqual(store.councilModelIDs, ["zai-org/GLM-5.1-FP8", "moonshotai/kimi-k2.6"])
     }
 
     func testUserSetupExperienceModeDefaultsAndRoundTrips() throws {
@@ -2091,6 +2590,39 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(loaded.useCases, [.privateChat])
     }
 
+    func testUserSetupStoragePersistsRouteDefaults() throws {
+        let suiteName = "setup-route-defaults-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let accountID = "user:setup-route-defaults"
+
+        var profile = UserSetupProfile.defaults
+        profile.useCase = .research
+        profile.useCases = [.research]
+        profile.wantsCouncil = true
+        profile.routeDefaults = SetupRouteDefaults(
+            privateModelID: " moonshotai/kimi-k2.6 ",
+            councilModelIDs: [
+                "zai-org/GLM-5.1-FP8",
+                "moonshotai/kimi-k2.6",
+                "zai-org/GLM-5.1-FP8"
+            ],
+            ironclawMobileModelID: " \(ModelOption.ironclawMobileModelID) "
+        )
+
+        UserSetupStorage.save(profile, for: accountID, defaults: defaults)
+
+        let loaded = try XCTUnwrap(UserSetupStorage.load(for: accountID, defaults: defaults))
+        XCTAssertEqual(
+            loaded.routeDefaults,
+            SetupRouteDefaults(
+                privateModelID: "moonshotai/kimi-k2.6",
+                councilModelIDs: ["zai-org/GLM-5.1-FP8", "moonshotai/kimi-k2.6"],
+                ironclawMobileModelID: ModelOption.ironclawMobileModelID
+            )
+        )
+    }
+
     func testAppSetupPlanIDAndSummaryTrackExperienceMode() {
         var profile = UserSetupProfile.defaults
         profile.useCases = [.research, .teamProjects]
@@ -2118,6 +2650,111 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertEqual(skills.map(\.id), ["coding", "local-test", "github-workflow"])
     }
 
+    func testIronclawSkillCatalogIncludesUpstreamSetupSkillsUsedByOnboarding() {
+        let skills = IronclawSkillCatalog.profiles(
+            for: ["developer-setup", "new-project", "plan-mode", "review-readiness"]
+        )
+
+        XCTAssertEqual(skills.map(\.id), ["developer-setup", "new-project", "plan-mode", "review-readiness"])
+    }
+
+    func testIronclawSkillCatalogIncludesUpstreamSkillsReferencedByRouting() {
+        let skills = IronclawSkillCatalog.profiles(
+            for: ["github", "delegation", "review-checklist", "idea-parking", "tech-debt-tracker", "web-ui-test"]
+        )
+
+        XCTAssertEqual(
+            skills.map(\.id),
+            ["github", "delegation", "review-checklist", "idea-parking", "tech-debt-tracker", "web-ui-test"]
+        )
+    }
+
+    func testIronclawSkillCatalogMatchingSkillsOnlyReturnsExactKeywordMatches() {
+        let skills = IronclawSkillCatalog.matchingSkills(
+            for: "Run a security audit with a manual test plan before merge.",
+            limit: 4
+        )
+
+        XCTAssertEqual(skills.map(\.id), ["qa-review", "security-review", "review-readiness"])
+    }
+
+    func testUserSetupBlankGoalKeepsStaticBuildAgentSkillDefaults() {
+        var profile = UserSetupProfile.defaults
+        profile.useCases = [.buildAgents]
+        profile.useCase = .buildAgents
+        profile.contextStyle = .project
+        profile.wantsIronclaw = true
+
+        XCTAssertEqual(profile.setupSkillSuggestions.map(\.id), ["plan-mode", "developer-setup", "project-setup", "coding"])
+    }
+
+    func testUserSetupGoalInjectsMatchingIronclawSkillsIntoOnboarding() {
+        var profile = UserSetupProfile.defaults
+        profile.useCases = [.buildAgents]
+        profile.useCase = .buildAgents
+        profile.contextStyle = .project
+        profile.wantsIronclaw = true
+        profile.goalText = "Run a security audit with a manual test plan before merge."
+
+        XCTAssertEqual(
+            profile.setupSkillSuggestions.map(\.id),
+            ["plan-mode", "developer-setup", "qa-review", "security-review", "review-readiness"]
+        )
+    }
+
+    func testBuildAgentSetupProducesSavedGoalMissionSuggestion() {
+        var profile = UserSetupProfile.defaults
+        profile.useCases = [.buildAgents]
+        profile.useCase = .buildAgents
+        profile.contextStyle = .project
+        profile.wantsIronclaw = true
+        profile.goalText = "Review the repo and plan the first safe patch."
+
+        let suggestion = profile.agentMissionSuggestion
+
+        XCTAssertEqual(suggestion?.title, "Use saved setup goal")
+        XCTAssertEqual(suggestion?.detail, "Saved setup wants agent work for this goal first.")
+        XCTAssertEqual(
+            suggestion?.prompt,
+            "Plan the first build or repo task for this goal: Review the repo and plan the first safe patch."
+        )
+    }
+
+    func testAppSetupPlanCarriesSavedAgentMissionSuggestion() {
+        var profile = UserSetupProfile.defaults
+        profile.useCases = [.buildAgents]
+        profile.useCase = .buildAgents
+        profile.contextStyle = .project
+        profile.wantsIronclaw = true
+        profile.goalText = "Review the repo and plan the first safe patch."
+
+        let plan = AppSetupPlan(profile: profile, readiness: .optimistic)
+
+        XCTAssertEqual(plan.agentMissionSuggestion?.title, "Use saved setup goal")
+        XCTAssertEqual(
+            plan.agentMissionSuggestion?.prompt,
+            "Plan the first build or repo task for this goal: Review the repo and plan the first safe patch."
+        )
+    }
+
+    func testBuildAgentSetupWithoutGoalProducesStarterMissionSuggestion() {
+        var profile = UserSetupProfile.defaults
+        profile.useCases = [.buildAgents]
+        profile.useCase = .buildAgents
+        profile.contextStyle = .project
+        profile.wantsIronclaw = true
+
+        let suggestion = profile.agentMissionSuggestion
+
+        XCTAssertEqual(suggestion?.title, "Use saved agent starter")
+        XCTAssertEqual(suggestion?.detail, "Saved setup keeps repo and agent work ready from day one.")
+        XCTAssertEqual(suggestion?.prompt, UserSetupUseCase.buildAgents.starterPrompt)
+    }
+
+    func testPrivateChatSetupDoesNotProduceAgentMissionSuggestion() {
+        XCTAssertNil(UserSetupProfile.defaults.agentMissionSuggestion)
+    }
+
     func testIronclawSkillMissionPromptUsesProjectContextWhenBlank() throws {
         let skill = try XCTUnwrap(IronclawSkillCatalog.all.first(where: { $0.id == "coding" }))
 
@@ -2139,6 +2776,19 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Use the Verifier project context when it helps."))
         XCTAssertTrue(prompt.contains("Review this code carefully: Review the chat export diff before merging."))
         XCTAssertTrue(prompt.contains("Lead with findings"))
+    }
+
+    func testIronclawSkillMissionPromptSupportsTechDebtTracking() throws {
+        let skill = try XCTUnwrap(IronclawSkillCatalog.all.first(where: { $0.id == "tech-debt-tracker" }))
+
+        let prompt = skill.missionPrompt(
+            seed: "Capture the cleanup we should defer after shipping setup onboarding",
+            projectName: "NEAR Private Chat"
+        )
+
+        XCTAssertTrue(prompt.contains("Use the NEAR Private Chat project context when it helps."))
+        XCTAssertTrue(prompt.contains("Track this technical debt: Capture the cleanup we should defer after shipping setup onboarding."))
+        XCTAssertTrue(prompt.contains("smallest remediation step"))
     }
 
     func testModelOptionCapabilitySignalsDrivePickerFilters() {
@@ -4457,6 +5107,17 @@ extension PrivateChatCoreTests {
         // A widget-only (empty-text) reply is skipped.
         XCTAssertFalse(transcript.contains("NEAR: \n"))
         XCTAssertTrue(ThreadedBriefingView.transcript(of: []).isEmpty)
+    }
+
+    func testWidgetToneDecodesDirectionAliases() throws {
+        func tone(_ s: String) throws -> WidgetTone {
+            try JSONDecoder().decode(WidgetTone.self, from: Data("\"\(s)\"".utf8))
+        }
+        // Cohesion: down/negative map to .bad (red, matching the chart card).
+        XCTAssertEqual(try tone("down"), .bad)
+        XCTAssertEqual(try tone("negative"), .bad)
+        XCTAssertEqual(try tone("up"), .good)
+        XCTAssertEqual(try tone("partial"), .warn)
     }
 
     func testBriefingThreadReplyContextPrefersWidgetNote() {

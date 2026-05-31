@@ -134,6 +134,7 @@ private struct AgentWorkspacePrinciples: View {
 
 private struct AgentMissionControlPanel: View {
     @EnvironmentObject private var chatStore: ChatStore
+    @EnvironmentObject private var sessionStore: SessionStore
     @Environment(\.dismiss) private var dismiss
     @State private var missionBrief = ""
     @State private var showingProjectFiles = false
@@ -271,6 +272,47 @@ private struct AgentMissionControlPanel: View {
 
     private var agentComposer: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if trimmedMissionBrief.isEmpty, let setupMissionSuggestion {
+                Button {
+                    missionBrief = setupMissionSuggestion.prompt
+                } label: {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "sparkles.rectangle.stack")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color.brandBlue)
+                            .frame(width: 28, height: 28)
+                            .background(Color.brandBlue.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(setupMissionSuggestion.title)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.primary)
+                            Text(setupMissionSuggestion.detail)
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(setupMissionSuggestion.prompt)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(Color.primaryAction)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        Image(systemName: "arrow.down.left")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color.primaryAction)
+                            .padding(.top, 2)
+                    }
+                    .padding(12)
+                    .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(setupMissionSuggestion.title)
+                .accessibilityHint("Fills the agent brief from your saved setup without sending.")
+            }
+
             TextField("What should the agent do?", text: $missionBrief, axis: .vertical)
                 .textFieldStyle(.plain)
                 .autocorrectionDisabled()
@@ -356,11 +398,11 @@ private struct AgentMissionControlPanel: View {
     private var quickStartRow: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Text(trimmedMissionBrief.isEmpty ? "Start from a skill" : "Sharpen this mission")
+                Text(skillShelfTitle)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.54))
                 Spacer(minLength: 0)
-                Text("Templates stay editable")
+                Text(skillShelfDetail)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.white.opacity(0.42))
             }
@@ -382,8 +424,40 @@ private struct AgentMissionControlPanel: View {
     }
 
     private var featuredSkills: [IronclawSkillProfile] {
+        if trimmedMissionBrief.isEmpty, !setupSkills.isEmpty {
+            return Array(setupSkills.prefix(5))
+        }
         let limit = trimmedMissionBrief.isEmpty ? 5 : 4
         return IronclawSkillCatalog.suggestedSkills(for: missionBrief, limit: limit)
+    }
+
+    private var setupProfile: UserSetupProfile? {
+        guard let accountID = sessionStore.setupAccountID else { return nil }
+        let storedProfile = UserSetupStorage.load(for: accountID) ?? .defaults
+        return chatStore.setupProfileSnapshot(storedProfile)
+    }
+
+    private var setupMissionSuggestion: SetupAgentMissionSuggestion? {
+        setupProfile?.agentMissionSuggestion
+    }
+
+    private var setupSkills: [IronclawSkillProfile] {
+        setupProfile?.setupSkillSuggestions ?? []
+    }
+
+    private var isUsingSetupSkills: Bool {
+        trimmedMissionBrief.isEmpty && !setupSkills.isEmpty
+    }
+
+    private var skillShelfTitle: String {
+        if isUsingSetupSkills {
+            return "Start from your setup"
+        }
+        return trimmedMissionBrief.isEmpty ? "Start from a skill" : "Sharpen this mission"
+    }
+
+    private var skillShelfDetail: String {
+        isUsingSetupSkills ? "Saved defaults" : "Templates stay editable"
     }
 
     private var agentContextLine: String {
@@ -423,7 +497,10 @@ private struct AgentMissionControlPanel: View {
     }
 
     private var detectedSkills: [IronclawSkillProfile] {
-        IronclawSkillCatalog.suggestedSkills(for: missionBrief, limit: 4)
+        if isUsingSetupSkills {
+            return Array(setupSkills.prefix(4))
+        }
+        return IronclawSkillCatalog.suggestedSkills(for: missionBrief, limit: 4)
     }
 
     private var trimmedMissionBrief: String {

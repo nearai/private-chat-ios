@@ -8,6 +8,7 @@ struct MessageBubble: View {
     @State private var showingSources = false
     @State private var tappedSource: SourceSheetPresentation?
     @State private var editingUserMessage: ChatMessage?
+    @State private var lastInputRequestID: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -46,10 +47,14 @@ struct MessageBubble: View {
 
                 Group {
                     if message.text.isEmpty && message.isStreaming {
-                        HStack(spacing: 8) {
-                            TypingDots()
-                            Text(message.streamingStatusText)
-                                .foregroundStyle(.secondary)
+                        if message.isAgentRouteMessage {
+                            AgentThinkingShimmer(statusText: message.streamingStatusText)
+                        } else {
+                            HStack(spacing: 8) {
+                                TypingDots()
+                                Text(message.streamingStatusText)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     } else if message.role == .assistant {
                         if message.isStreaming {
@@ -198,6 +203,14 @@ struct MessageBubble: View {
             EditUserMessageView(message: userMessage)
                 .environmentObject(chatStore)
         }
+        .onAppear {
+            lastInputRequestID = message.pendingApproval?.id
+        }
+        .onChange(of: message.pendingApproval?.id) { _, newValue in
+            guard let newValue, newValue != lastInputRequestID else { return }
+            lastInputRequestID = newValue
+            AppHaptics.mediumImpact()
+        }
     }
 
     private var statusBadge: String? {
@@ -207,7 +220,7 @@ struct MessageBubble: View {
         case "searching":
             return "Web search"
         case "approval":
-            return "Approval"
+            return "Needs input"
         case "failed":
             return "Failed"
         default:
@@ -298,6 +311,76 @@ struct MessageBubble: View {
                 symbolName: "terminal"
             )
         }
+    }
+}
+
+private struct AgentThinkingShimmer: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var shimmerPhase: CGFloat = 0
+    let statusText: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "terminal")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.brandBlue)
+                    .frame(width: 24, height: 24)
+                    .background(Color.brandBlue.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+                Text(statusText)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Spacer(minLength: 0)
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                shimmerBar(widthFraction: 0.92)
+                shimmerBar(widthFraction: 0.68)
+            }
+            .accessibilityHidden(true)
+        }
+        .padding(12)
+        .frame(maxWidth: 420, alignment: .leading)
+        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.brandBlue.opacity(0.14), lineWidth: 1)
+        }
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.linear(duration: 1.15).repeatForever(autoreverses: false)) {
+                shimmerPhase = 1
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(statusText)
+    }
+
+    private func shimmerBar(widthFraction: CGFloat) -> some View {
+        GeometryReader { proxy in
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Color.appBorder.opacity(0.45))
+                .overlay {
+                    if !reduceMotion {
+                        LinearGradient(
+                            colors: [
+                                Color.clear,
+                                Color.white.opacity(0.58),
+                                Color.clear
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: proxy.size.width * 0.46)
+                        .offset(x: (shimmerPhase * proxy.size.width * 1.65) - proxy.size.width * 0.55)
+                    }
+                }
+                .mask(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        }
+        .frame(height: 9)
+        .frame(maxWidth: widthFraction == 1 ? .infinity : 420 * widthFraction)
     }
 }
 
@@ -572,7 +655,7 @@ private struct AgentRunStatusStrip: View {
             return "No output received"
         }
         if message.pendingApproval != nil || message.status == "approval" {
-            return "Waiting for approval"
+            return "Agent needs input"
         }
         if message.status == "searching" {
             return "Gathering context"
@@ -590,7 +673,7 @@ private struct AgentRunStatusStrip: View {
                 : "The hosted run may have stalled. Retry starts a fresh phone-controlled run."
         }
         if message.pendingApproval != nil || message.status == "approval" {
-            return "Approve or deny the requested tool action to continue."
+            return "Review the tool request below to continue the run."
         }
         return nil
     }
@@ -603,7 +686,7 @@ private struct AgentRunStatusStrip: View {
             return "clock.badge.exclamationmark"
         }
         if message.pendingApproval != nil || message.status == "approval" {
-            return "lock.shield.fill"
+            return "hand.tap.fill"
         }
         return "arrow.triangle.2.circlepath"
     }

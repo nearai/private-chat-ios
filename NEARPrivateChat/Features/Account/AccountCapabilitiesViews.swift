@@ -5,6 +5,7 @@ struct AccountSettingsView: View {
     @EnvironmentObject private var chatStore: ChatStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    let initialDeepLink: AccountSettingsDeepLink?
     let onRunSetupAgain: () -> Void
     @State private var systemPrompt = ""
     @State private var webSearchEnabled = true
@@ -28,7 +29,18 @@ struct AccountSettingsView: View {
     @State private var isImportingChats = false
     @State private var showingSignOutConfirm = false
     @State private var showingDeleteAllConfirm = false
+    @State private var showingIronclawPowerTool = false
+    @State private var showingAPIKeysPowerTool = false
+    @State private var hasOpenedInitialDeepLink = false
     @AppStorage("account.powerToolsExpanded") private var powerToolsExpanded = false
+
+    init(
+        initialDeepLink: AccountSettingsDeepLink? = nil,
+        onRunSetupAgain: @escaping () -> Void
+    ) {
+        self.initialDeepLink = initialDeepLink
+        self.onRunSetupAgain = onRunSetupAgain
+    }
 
     var body: some View {
         NavigationStack {
@@ -58,6 +70,28 @@ struct AccountSettingsView: View {
                 if chatStore.billingSnapshot == nil {
                     Task { await chatStore.refreshBilling() }
                 }
+                openInitialDeepLinkIfNeeded()
+            }
+            .navigationDestination(isPresented: $showingIronclawPowerTool) {
+                PowerToolIronclawView(
+                    ironclawEnabled: $ironclawEnabled,
+                    ironclawEndpoint: $ironclawEndpoint,
+                    ironclawToken: $ironclawToken,
+                    ironclawThreadID: $ironclawThreadID,
+                    onSave: saveIronclawBridge,
+                    onReload: loadIronclawBridge
+                )
+                .environmentObject(chatStore)
+            }
+            .navigationDestination(isPresented: $showingAPIKeysPowerTool) {
+                PowerToolAPIKeysView(
+                    nearCloudAPIKey: $nearCloudAPIKey,
+                    onPaste: pasteNearCloudKeyFromClipboard,
+                    onConnectAccount: connectNearCloudAccount,
+                    onConnect: connectNearCloud,
+                    onOpenCloud: openNearCloudSignup
+                )
+                .environmentObject(chatStore)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -93,7 +127,9 @@ struct AccountSettingsView: View {
             }
             .sheet(isPresented: $showingCapabilities) {
                 CapabilitiesView(
-                    onOpenAccountSettings: {},
+                    onOpenAccountSettings: { deepLink in
+                        openDeepLink(deepLink)
+                    },
                     onOpenSecurity: { showingSecurity = true },
                     onOpenAgentWorkspace: nil,
                     onRunSetupAgain: onRunSetupAgain
@@ -290,32 +326,19 @@ struct AccountSettingsView: View {
     private var powerToolsSection: some View {
         Section {
             DisclosureGroup(isExpanded: $powerToolsExpanded) {
-                NavigationLink {
-                    PowerToolIronclawView(
-                        ironclawEnabled: $ironclawEnabled,
-                        ironclawEndpoint: $ironclawEndpoint,
-                        ironclawToken: $ironclawToken,
-                        ironclawThreadID: $ironclawThreadID,
-                        onSave: saveIronclawBridge,
-                        onReload: loadIronclawBridge
-                    )
-                    .environmentObject(chatStore)
+                Button {
+                    openIronclawPowerTool()
                 } label: {
-                    powerToolSubRow(icon: "sparkles", title: "IronClaw / Agent", subtitle: "Run an agent task")
+                    powerToolButtonRow(icon: "sparkles", title: "IronClaw / Agent", subtitle: "Run an agent task")
                 }
+                .buttonStyle(.plain)
 
-                NavigationLink {
-                    PowerToolAPIKeysView(
-                        nearCloudAPIKey: $nearCloudAPIKey,
-                        onPaste: pasteNearCloudKeyFromClipboard,
-                        onConnectAccount: connectNearCloudAccount,
-                        onConnect: connectNearCloud,
-                        onOpenCloud: openNearCloudSignup
-                    )
-                    .environmentObject(chatStore)
+                Button {
+                    openAPIKeysPowerTool()
                 } label: {
-                    powerToolSubRow(icon: "lock.shield", title: "API keys", subtitle: nil)
+                    powerToolButtonRow(icon: "lock.shield", title: "API keys", subtitle: nil)
                 }
+                .buttonStyle(.plain)
 
                 NavigationLink {
                     PowerToolDiagnosticsView()
@@ -385,6 +408,16 @@ struct AccountSettingsView: View {
             }
             Spacer(minLength: 0)
         }
+    }
+
+    private func powerToolButtonRow(icon: String, title: String, subtitle: String?) -> some View {
+        HStack(spacing: 12) {
+            powerToolSubRow(icon: icon, title: title, subtitle: subtitle)
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.textTertiary)
+        }
+        .contentShape(Rectangle())
     }
 
     // MARK: - 6. About
@@ -519,6 +552,32 @@ struct AccountSettingsView: View {
         ironclawEndpoint = chatStore.ironclawSettings.baseURL
         ironclawThreadID = chatStore.ironclawSettings.threadID
         ironclawToken = ""
+    }
+
+    private func openInitialDeepLinkIfNeeded() {
+        guard !hasOpenedInitialDeepLink, let initialDeepLink else { return }
+        hasOpenedInitialDeepLink = true
+        openDeepLink(initialDeepLink)
+    }
+
+    private func openDeepLink(_ deepLink: AccountSettingsDeepLink) {
+        powerToolsExpanded = true
+        switch deepLink {
+        case .nearCloudKeys:
+            showingAPIKeysPowerTool = true
+        case .ironclawAgent:
+            showingIronclawPowerTool = true
+        }
+    }
+
+    private func openIronclawPowerTool() {
+        powerToolsExpanded = true
+        showingIronclawPowerTool = true
+    }
+
+    private func openAPIKeysPowerTool() {
+        powerToolsExpanded = true
+        showingAPIKeysPowerTool = true
     }
 
     private func saveIronclawBridge() {
@@ -987,7 +1046,7 @@ struct CapabilitiesView: View {
     @EnvironmentObject private var sessionStore: SessionStore
     @Environment(\.dismiss) private var dismiss
 
-    let onOpenAccountSettings: (() -> Void)?
+    let onOpenAccountSettings: ((AccountSettingsDeepLink) -> Void)?
     let onOpenSecurity: (() -> Void)?
     let onOpenAgentWorkspace: (() -> Void)?
     let onRunSetupAgain: (() -> Void)?
@@ -1304,7 +1363,9 @@ struct CapabilitiesView: View {
             systemImage: chatStore.nearCloudKeyConfigured ? "slider.horizontal.3" : "key",
             role: .primary
         ) {
-            dismissThen(onOpenAccountSettings)
+            dismissThen {
+                onOpenAccountSettings(.nearCloudKeys)
+            }
         }
     }
 
@@ -1316,14 +1377,18 @@ struct CapabilitiesView: View {
         }
         guard let onOpenAccountSettings else { return nil }
         return CapabilityCardAction(title: "Connect Agent", systemImage: "point.3.connected.trianglepath.dotted", role: .primary) {
-            dismissThen(onOpenAccountSettings)
+            dismissThen {
+                onOpenAccountSettings(.ironclawAgent)
+            }
         }
     }
 
     private var agentSecondaryAction: CapabilityCardAction? {
         guard chatStore.ironclawRemoteWorkstationAvailable, let onOpenAccountSettings else { return nil }
         return CapabilityCardAction(title: "Manage Endpoint", systemImage: "slider.horizontal.3", role: .secondary) {
-            dismissThen(onOpenAccountSettings)
+            dismissThen {
+                onOpenAccountSettings(.ironclawAgent)
+            }
         }
     }
 
@@ -1344,12 +1409,16 @@ struct CapabilitiesView: View {
         case .openCloud:
             return CapabilityCardAction(title: nextStep.actionTitle, systemImage: "key", role: .primary) {
                 guard let onOpenAccountSettings else { return }
-                dismissThen(onOpenAccountSettings)
+                dismissThen {
+                    onOpenAccountSettings(.nearCloudKeys)
+                }
             }
         case .openAgent:
             return CapabilityCardAction(title: nextStep.actionTitle, systemImage: "point.3.connected.trianglepath.dotted", role: .primary) {
                 guard let onOpenAccountSettings else { return }
-                dismissThen(onOpenAccountSettings)
+                dismissThen {
+                    onOpenAccountSettings(.ironclawAgent)
+                }
             }
         case .useAutoCouncil:
             return CapabilityCardAction(title: nextStep.actionTitle, systemImage: "square.grid.2x2", role: .primary) {

@@ -58,6 +58,7 @@ struct InputBar: View {
     @State private var showingSecurity = false
     @State private var showingAgentWorkspace = false
     @State private var showingAccountSettings = false
+    @State private var accountSettingsDeepLink: AccountSettingsDeepLink?
     @State private var showingCapabilities = false
     @State private var showingModelPicker = false
     @State private var modelPickerOpeningCouncil = false
@@ -225,14 +226,17 @@ struct InputBar: View {
             AgentWorkspaceView()
                 .environmentObject(chatStore)
         }
-        .sheet(isPresented: $showingAccountSettings) {
-            AccountSettingsView(onRunSetupAgain: {})
+        .sheet(isPresented: $showingAccountSettings, onDismiss: {
+            accountSettingsDeepLink = nil
+        }) {
+            AccountSettingsView(initialDeepLink: accountSettingsDeepLink, onRunSetupAgain: {})
                 .environmentObject(chatStore)
                 .environmentObject(sessionStore)
         }
         .sheet(isPresented: $showingCapabilities) {
             CapabilitiesView(
-                onOpenAccountSettings: {
+                onOpenAccountSettings: { deepLink in
+                    accountSettingsDeepLink = deepLink
                     showingAccountSettings = true
                 },
                 onOpenSecurity: {
@@ -599,7 +603,11 @@ struct InputBar: View {
     private func handleRouteReadinessRecovery(_ action: ChatStore.RouteReadinessIssue.RecoveryAction) {
         AppHaptics.selection()
         switch action {
-        case .addNearCloudKey, .configureIronClawEndpoint:
+        case .addNearCloudKey:
+            accountSettingsDeepLink = .nearCloudKeys
+            showingAccountSettings = true
+        case .configureIronClawEndpoint:
+            accountSettingsDeepLink = .ironclawAgent
             showingAccountSettings = true
         case .switchToPrivate, .editCouncilLineup:
             chatStore.performRouteReadinessRecovery(action)

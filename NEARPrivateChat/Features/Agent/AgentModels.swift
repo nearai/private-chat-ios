@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-struct IronclawSkillProfile: Identifiable, Hashable {
+struct IronclawSkillProfile: Codable, Identifiable, Hashable {
     let id: String
     let title: String
     let summary: String
@@ -43,6 +43,12 @@ struct IronclawSkillProfile: Identifiable, Hashable {
                 "Handle this GitHub task",
                 suffix: "Inspect the issue, PR, or CI context first, identify the highest-impact next action, and report the concrete follow-up."
             )
+        case "github":
+            return prompt(
+                "Inspect the linked GitHub context.",
+                "Work from this GitHub context",
+                suffix: "Read the repo, issue, PR, or Actions context first, then summarize the important state, risks, and the next concrete action."
+            )
         case "code-review":
             return prompt(
                 "Review this code for correctness.",
@@ -61,11 +67,41 @@ struct IronclawSkillProfile: Identifiable, Hashable {
                 "Plan QA for this workflow",
                 suffix: "List repro steps, edge cases, expected outcomes, and the smallest evidence set needed to validate the result."
             )
+        case "web-ui-test":
+            return prompt(
+                "Test this web UI flow.",
+                "Test this browser workflow",
+                suffix: "Focus on the critical user path, run the smallest useful browser checks, capture repro-ready failures, and note what still needs manual device QA."
+            )
         case "project-setup":
             return prompt(
                 "Set up this project workspace.",
                 "Turn this into a tracked workspace",
                 suffix: "Identify the files, links, instructions, and first task the project should contain, then suggest the cleanest next action."
+            )
+        case "developer-setup":
+            return prompt(
+                "Set up this developer environment.",
+                "Prepare this repo for development",
+                suffix: "Inspect the stack first, identify the exact setup and run commands, call out required credentials or services, and keep the first run path as small as possible."
+            )
+        case "new-project":
+            return prompt(
+                "Turn this idea into a new project.",
+                "Turn this into a new project",
+                suffix: "Define the scope, starter structure, durable notes, and the first milestone before any broad implementation plan."
+            )
+        case "plan-mode":
+            return prompt(
+                "Break this work into a verifiable plan.",
+                "Plan this carefully",
+                suffix: "Split the work into concrete steps, dependencies, risks, and the next smallest useful action without overbuilding."
+            )
+        case "review-readiness":
+            return prompt(
+                "Check whether this work is ready for review.",
+                "Check review readiness for this",
+                suffix: "Inspect the diff, validation status, and remaining risk, then call out the blockers before anyone else reviews it."
             )
         case "llm-council":
             return prompt(
@@ -85,11 +121,35 @@ struct IronclawSkillProfile: Identifiable, Hashable {
                 "Capture this decision",
                 suffix: "Summarize the decision, rationale, alternatives considered, open questions, and follow-up actions."
             )
+        case "delegation":
+            return prompt(
+                "Turn this into a delegated task.",
+                "Delegate this work clearly",
+                suffix: "Define the assignee-ready brief, expected outcome, dependencies, risks, and the exact follow-up checkpoint."
+            )
+        case "idea-parking":
+            return prompt(
+                "Park this idea without losing it.",
+                "Capture this idea for later",
+                suffix: "Record the core concept, why it matters, the trigger for revisiting it, and what evidence is still missing."
+            )
         case "commitment-triage":
             return prompt(
                 "Extract the commitments from this work.",
                 "Extract commitments from this",
                 suffix: "List owners, deadlines, promised deliverables, risks, and the next follow-up checkpoint."
+            )
+        case "tech-debt-tracker":
+            return prompt(
+                "Capture the technical debt in this work.",
+                "Track this technical debt",
+                suffix: "List the debt item, impact, risk if deferred, suggested owner, and the smallest remediation step."
+            )
+        case "review-checklist":
+            return prompt(
+                "Create a review checklist for this change.",
+                "Create a review checklist for this",
+                suffix: "Call out correctness, test coverage, rollout, docs, and follow-up checks so the handoff is easy to verify."
             )
         case "portfolio":
             return prompt(
@@ -121,14 +181,21 @@ enum IronclawSkillCatalog {
             title: "Local Test",
             summary: "Run focused tests, builds, and smoke checks.",
             symbolName: "checkmark.seal",
-            keywords: ["test", "qa", "smoke", "build", "run", "verify", "regression"]
+            keywords: ["local test", "smoke check", "run tests", "build verification", "regression suite"]
         ),
         IronclawSkillProfile(
             id: "github-workflow",
-            title: "GitHub",
+            title: "GitHub Workflow",
             summary: "Handle issues, PRs, CI failures, and repo handoff.",
             symbolName: "arrow.triangle.branch",
             keywords: ["github", "issue", "pull request", " pr ", "/pull/", "/issues/", "ci", "branch"]
+        ),
+        IronclawSkillProfile(
+            id: "github",
+            title: "GitHub",
+            summary: "Inspect repo, issue, PR, and Actions context before acting.",
+            symbolName: "chevron.left.forwardslash.chevron.right.circle",
+            keywords: ["github repo", "repository", "repo context", "actions", "workflow run", "issue thread", "pr context"]
         ),
         IronclawSkillProfile(
             id: "code-review",
@@ -152,11 +219,46 @@ enum IronclawSkillCatalog {
             keywords: ["qa", "quality", "manual test", "test plan", "browser test", "repro"]
         ),
         IronclawSkillProfile(
+            id: "web-ui-test",
+            title: "Web UI Test",
+            summary: "Run browser-focused QA for critical flows and regressions.",
+            symbolName: "safari",
+            keywords: ["playwright", "browser flow", "ui regression", "web ui", "frontend qa", "e2e"]
+        ),
+        IronclawSkillProfile(
             id: "project-setup",
             title: "Project Setup",
             summary: "Turn a repo or new idea into a tracked workspace.",
             symbolName: "folder.badge.gearshape",
             keywords: ["setup", "set up", "clone", "bootstrap", "new project", "repo"]
+        ),
+        IronclawSkillProfile(
+            id: "developer-setup",
+            title: "Developer Setup",
+            summary: "Map the exact bootstrap, install, and run path for a repo.",
+            symbolName: "hammer",
+            keywords: ["developer setup", "dev environment", "bootstrap repo", "install dependencies", "run locally", "onboard repo"]
+        ),
+        IronclawSkillProfile(
+            id: "new-project",
+            title: "New Project",
+            summary: "Shape a fresh workspace, scope, and first milestone.",
+            symbolName: "sparkles.rectangle.stack",
+            keywords: ["new project", "start a project", "greenfield", "workspace", "organize project"]
+        ),
+        IronclawSkillProfile(
+            id: "plan-mode",
+            title: "Plan Mode",
+            summary: "Break work into concrete, verifiable next steps.",
+            symbolName: "list.bullet.clipboard",
+            keywords: ["plan mode", "break this down", "step by step", "implementation plan", "work plan", "roadmap"]
+        ),
+        IronclawSkillProfile(
+            id: "review-readiness",
+            title: "Review Readiness",
+            summary: "Check whether validation and context are solid before review.",
+            symbolName: "checkmark.message",
+            keywords: ["ready for review", "review readiness", "before merge", "pre review", "handoff"]
         ),
         IronclawSkillProfile(
             id: "llm-council",
@@ -180,11 +282,39 @@ enum IronclawSkillCatalog {
             keywords: ["decision", "decisions", "adr", "capture this", "record", "rationale"]
         ),
         IronclawSkillProfile(
+            id: "delegation",
+            title: "Delegation",
+            summary: "Turn work into a clear assignee-ready brief and follow-up.",
+            symbolName: "person.2.badge.gearshape",
+            keywords: ["delegate", "delegation", "assign this", "handoff", "owner handoff", "handover"]
+        ),
+        IronclawSkillProfile(
+            id: "idea-parking",
+            title: "Idea Parking",
+            summary: "Capture ideas, triggers, and missing evidence without derailing the current task.",
+            symbolName: "lightbulb",
+            keywords: ["idea parking", "park this idea", "later idea", "parking lot", "backlog idea", "save this idea"]
+        ),
+        IronclawSkillProfile(
             id: "commitment-triage",
             title: "Commitment Triage",
             summary: "Extract obligations, owners, deadlines, and next steps.",
             symbolName: "person.crop.circle.badge.checkmark",
             keywords: ["commitment", "follow up", "deadline", "owner", "delegate", "nudge"]
+        ),
+        IronclawSkillProfile(
+            id: "tech-debt-tracker",
+            title: "Tech Debt Tracker",
+            summary: "Capture debt items, impact, and the next remediation step.",
+            symbolName: "wrench.and.screwdriver",
+            keywords: ["tech debt", "technical debt", "cleanup later", "refactor later", "debt item", "deferred fix"]
+        ),
+        IronclawSkillProfile(
+            id: "review-checklist",
+            title: "Review Checklist",
+            summary: "Create a concise ship checklist before review or handoff.",
+            symbolName: "list.clipboard",
+            keywords: ["review checklist", "ship checklist", "merge checklist", "preflight checklist", "release checklist"]
         ),
         IronclawSkillProfile(
             id: "portfolio",
@@ -195,15 +325,11 @@ enum IronclawSkillCatalog {
         )
     ]
 
-    static func suggestedSkills(for text: String, limit: Int = 4) -> [IronclawSkillProfile] {
-        let lowercased = text.lowercased()
-        let scored = all.map { skill -> (skill: IronclawSkillProfile, score: Int) in
-            let score = skill.keywords.reduce(0) { partial, keyword in
-                partial + (lowercased.contains(keyword) ? 1 : 0)
-            }
-            return (skill, score)
-        }
-        let matches = scored
+    static func matchingSkills(for text: String, limit: Int? = nil) -> [IronclawSkillProfile] {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        let matches = scoredMatches(for: trimmed)
             .filter { $0.score > 0 }
             .sorted { lhs, rhs in
                 if lhs.score == rhs.score {
@@ -213,8 +339,21 @@ enum IronclawSkillCatalog {
             }
             .map(\.skill)
 
-        if !matches.isEmpty {
+        if let limit {
             return Array(matches.prefix(limit))
+        }
+        return matches
+    }
+
+    static func matchingSkillIDs(for text: String, limit: Int? = nil) -> [String] {
+        matchingSkills(for: text, limit: limit).map(\.id)
+    }
+
+    static func suggestedSkills(for text: String, limit: Int = 4) -> [IronclawSkillProfile] {
+        let lowercased = text.lowercased()
+        let matches = matchingSkills(for: text, limit: limit)
+        if !matches.isEmpty {
+            return matches
         }
 
         if lowercased.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -222,6 +361,24 @@ enum IronclawSkillCatalog {
         }
 
         return Array(all.filter { ["coding", "local-test", "project-setup"].contains($0.id) }.prefix(limit))
+    }
+
+    static func profiles(for ids: [String], limit: Int? = nil) -> [IronclawSkillProfile] {
+        var seen = Set<String>()
+        var profiles: [IronclawSkillProfile] = []
+
+        for id in ids {
+            guard seen.insert(id).inserted,
+                  let profile = all.first(where: { $0.id == id }) else {
+                continue
+            }
+            profiles.append(profile)
+            if let limit, profiles.count >= limit {
+                break
+            }
+        }
+
+        return profiles
     }
 
     static func promptSection(for text: String) -> String {
@@ -234,6 +391,16 @@ enum IronclawSkillCatalog {
 
         Select the useful skills internally. Do not print the routing unless the user asks how the agent chose its approach.
         """
+    }
+
+    private static func scoredMatches(for text: String) -> [(skill: IronclawSkillProfile, score: Int)] {
+        let lowercased = text.lowercased()
+        return all.map { skill -> (skill: IronclawSkillProfile, score: Int) in
+            let score = skill.keywords.reduce(0) { partial, keyword in
+                partial + (lowercased.contains(keyword) ? 1 : 0)
+            }
+            return (skill, score)
+        }
     }
 }
 

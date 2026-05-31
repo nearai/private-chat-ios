@@ -141,15 +141,17 @@ struct RootView: View {
     }
 
     private func completeSetup(_ profile: UserSetupProfile, for accountID: String) {
-        let normalized = profile.normalizedForDefaults
-        UserSetupStorage.saveWithoutPendingLaunchCard(normalized, for: accountID)
+        let savedProfile = chatStore.setupProfileSnapshot(profile)
+        UserSetupStorage.saveWithoutPendingLaunchCard(savedProfile, for: accountID)
         presentedSetupAccountID = nil
-        recordSetupTelemetry(profile: normalized, outcome: .completed)
-        chatStore.applySetupProfile(normalized)
+        recordSetupTelemetry(profile: savedProfile, outcome: .completed)
+        chatStore.applySetupProfile(savedProfile)
     }
 
     private func skipSetup(for accountID: String) {
-        let profile = UserSetupStorage.presentationProfile(for: accountID, currentDefaults: currentSetupProfile)
+        let profile = chatStore.setupProfileSnapshot(
+            UserSetupStorage.presentationProfile(for: accountID, currentDefaults: currentSetupProfile)
+        )
         UserSetupStorage.saveWithoutPendingLaunchCard(profile, for: accountID)
         presentedSetupAccountID = nil
         recordSetupTelemetry(profile: profile, outcome: .skipped)

@@ -23,6 +23,7 @@ struct AppLifecycleModifier: ViewModifier {
                 }
             }
             .task {
+                briefingStore.setNotificationAuthorizationRequestsEnabled(sessionStore.isSignedIn)
                 await prepareAuthenticatedChatState()
                 chatStore.updateCurrentUser(profile: sessionStore.profile)
                 router.resetForAccountSwitch(sessionStore.setupAccountID)
@@ -44,6 +45,7 @@ struct AppLifecycleModifier: ViewModifier {
             }
             .onChange(of: sessionStore.session?.token) { _, token in
                 Task {
+                    briefingStore.setNotificationAuthorizationRequestsEnabled(token?.isEmpty == false)
                     #if DEBUG
                     if DemoCapture.isEnabled {
                         sessionStore.configureDemoCaptureSession()

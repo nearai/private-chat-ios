@@ -555,6 +555,8 @@ final class BriefingStore: ObservableObject {
     @Published private(set) var briefings: [Briefing]
     var runner: (Briefing) async -> MessageWidget?
 
+    private nonisolated static let notificationAuthorizationGateKey = "briefingNotificationAuthorizationRequestsEnabled"
+
     private let fileURL: URL
 
     init(
@@ -567,6 +569,10 @@ final class BriefingStore: ObservableObject {
         self.briefings = briefings
         self.fileURL = fileURL ?? Self.defaultFileURL()
         self.runner = runner
+    }
+
+    func setNotificationAuthorizationRequestsEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: Self.notificationAuthorizationGateKey)
     }
 
     func load() {
@@ -705,6 +711,7 @@ final class BriefingStore: ObservableObject {
 
     /// Requested contextually when the user creates their first briefing.
     nonisolated static func requestNotificationAuthorizationIfNeeded() {
+        guard UserDefaults.standard.bool(forKey: notificationAuthorizationGateKey) else { return }
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
             guard settings.authorizationStatus == .notDetermined else { return }

@@ -784,6 +784,13 @@ struct SetupPlanPreviewCard: View {
                 SetupPlanLine(symbolName: "person.crop.circle.badge.checkmark", title: "Mode", value: plan.experienceSummary)
                 SetupPlanLine(symbolName: plan.focusMode.symbolName, title: "Focus", value: plan.focusMode.title)
                 SetupPlanLine(symbolName: "checkmark.seal", title: "Readiness", value: plan.readinessStatus)
+                if let routeDetail = plan.routeDetailContent {
+                    SetupPlanLine(
+                        symbolName: routeDetail.symbolName,
+                        title: routeDetail.title,
+                        value: routeDetail.summary
+                    )
+                }
                 if let starterProjectName = plan.starterProjectName {
                     SetupPlanLine(symbolName: "folder.badge.plus", title: "Project", value: starterProjectName)
                 }
@@ -803,6 +810,30 @@ struct SetupPlanPreviewCard: View {
                     ForEach(plan.starterWorkspaceSeeds) { seed in
                         SetupSeedRow(seed: seed)
                     }
+                }
+            }
+
+            if !plan.starterSkillSuggestions.isEmpty {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("IronClaw skills")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    ForEach(plan.starterSkillSuggestions) { skill in
+                        SetupSkillPreviewRow(skill: skill)
+                    }
+                }
+            }
+
+            if let agentMissionSuggestion = plan.agentMissionSuggestion {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Agent mission")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    SetupAgentMissionPreviewRow(suggestion: agentMissionSuggestion)
                 }
             }
 
@@ -853,6 +884,32 @@ private struct SetupSeedRow: View {
     }
 }
 
+private struct SetupSkillPreviewRow: View {
+    let skill: IronclawSkillProfile
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: skill.symbolName)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.brandBlue)
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(skill.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(skill.summary)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(3)
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+}
+
 private struct SetupPromptPreviewRow: View {
     let suggestion: SetupPromptSuggestion
 
@@ -875,6 +932,39 @@ private struct SetupPromptPreviewRow: View {
             }
 
             Spacer(minLength: 0)
+        }
+    }
+}
+
+private struct SetupAgentMissionPreviewRow: View {
+    let suggestion: SetupAgentMissionSuggestion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "terminal")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.brandBlue)
+                    .frame(width: 18, height: 18)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(suggestion.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(suggestion.detail)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            Text(suggestion.prompt)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.leading, 26)
         }
     }
 }

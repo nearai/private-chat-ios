@@ -209,12 +209,32 @@ struct ModelOption: Decodable, Identifiable, Hashable {
         let parts = trimmed.split(separator: "-").map(String.init)
         guard !parts.isEmpty else { return trailing }
         let humanized = parts.enumerated().map { index, part -> String in
+            let lowercasedPart = part.lowercased()
+            let knownAcronyms: Set<String> = ["ai", "api", "glm", "gpt", "llm", "oss", "vl"]
+            if knownAcronyms.contains(lowercasedPart) {
+                return lowercasedPart.uppercased()
+            }
             // Preserve all-caps family acronyms (GLM, GPT, LLM, etc.) and
             // version segments that mix digits + dots (5.1, 4.7, k2).
             if index == 0, part.uppercased() == part, part.count <= 4 {
                 return part
             }
-            if part.contains(".") || part.first?.isLetter == false {
+            if part.first?.isLetter == false {
+                return part
+            }
+            if part.contains("."),
+               let firstLetter = part.firstIndex(where: { $0.isLetter }),
+               let firstDigit = part.firstIndex(where: { $0.isNumber }),
+               firstLetter < firstDigit {
+                let family = String(part[..<firstDigit])
+                let version = String(part[firstDigit...])
+                let familyLabel = family.prefix(1).uppercased() + family.dropFirst()
+                if family.count == 1 {
+                    return familyLabel.uppercased() + version.uppercased()
+                }
+                return "\(familyLabel) \(version.uppercased())"
+            }
+            if part.contains(".") {
                 return part
             }
             // Title-case otherwise.

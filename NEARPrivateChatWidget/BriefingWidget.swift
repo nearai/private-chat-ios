@@ -255,23 +255,17 @@ struct BriefingWidget: Widget {
 
 // MARK: - Previews
 
-#Preview("Small", as: .systemSmall) {
-    BriefingWidget()
-} timeline: {
-    BriefingEntry.placeholder
-    BriefingEntry.empty
-}
+struct BriefingWidget_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            BriefingWidgetEntryView(entry: .placeholder)
+                .previewContext(WidgetPreviewContext(family: .systemSmall))
 
-#Preview("Medium", as: .systemMedium) {
-    BriefingWidget()
-} timeline: {
-    BriefingEntry.placeholder
-    BriefingEntry.empty
-}
+            BriefingWidgetEntryView(entry: .empty)
+                .previewContext(WidgetPreviewContext(family: .systemMedium))
 
-#Preview("Large", as: .systemLarge) {
-    BriefingWidget()
-} timeline: {
-    BriefingEntry.placeholder
-    BriefingEntry.empty
+            BriefingWidgetEntryView(entry: .empty)
+                .previewContext(WidgetPreviewContext(family: .systemLarge))
+        }
+    }
 }

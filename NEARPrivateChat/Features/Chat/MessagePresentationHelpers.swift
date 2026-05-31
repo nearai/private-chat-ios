@@ -9,6 +9,11 @@ extension View {
 }
 
 extension ChatMessage {
+    var isAgentRouteMessage: Bool {
+        model == ModelOption.ironclawModelID ||
+            model == ModelOption.ironclawMobileModelID
+    }
+
     var shouldShowAgentRunStatus: Bool {
         guard role == .assistant, model == ModelOption.ironclawModelID else {
             return false
@@ -60,7 +65,7 @@ extension ChatMessage {
             case "reasoning":
                 return "Running IronClaw agent"
             case "approval":
-                return "Waiting for approval"
+                return "Needs your input"
             case "searching":
                 if let searchQuery, !searchQuery.isEmpty {
                     return "Searching \(searchQuery)"
@@ -84,7 +89,7 @@ extension ChatMessage {
         case "reasoning":
             return "Reasoning"
         case "approval":
-            return "Needs approval"
+            return "Needs input"
         default:
             return "Thinking"
         }

@@ -7,10 +7,40 @@ struct SetupCardRecommendation {
     let actionSymbolName: String
 }
 
+struct SetupRouteDetailCard: View {
+    let detail: AppSetupRouteDetailContent
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: detail.symbolName)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.brandBlue)
+                .frame(width: 30, height: 30)
+                .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(detail.title)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.textSecondary)
+                Text(detail.summary)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
 struct SetupLaunchCard: View {
     let plan: AppSetupPlan
     let recommendation: SetupCardRecommendation?
+    let onSkillSuggestion: ((IronclawSkillProfile) -> Void)?
     let onPrimaryAction: () -> Void
+    let onAgentMission: ((SetupAgentMissionSuggestion) -> Void)?
     let onPromptSuggestion: ((SetupPromptSuggestion) -> Void)?
     let onRecommendationAction: (() -> Void)?
     let onDismiss: () -> Void
@@ -53,6 +83,10 @@ struct SetupLaunchCard: View {
                 .scrollClipDisabled()
             }
 
+            if let routeDetail = plan.routeDetailContent {
+                SetupRouteDetailCard(detail: routeDetail)
+            }
+
             if let firstRunDraft = plan.firstRunDraft {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("First prompt")
@@ -70,6 +104,22 @@ struct SetupLaunchCard: View {
 
             if !plan.starterWorkspaceSeeds.isEmpty {
                 SetupWorkspaceSeedSection(seeds: Array(plan.starterWorkspaceSeeds.prefix(3)))
+            }
+
+            if !plan.starterSkillSuggestions.isEmpty {
+                SetupSkillSuggestionSection(
+                    skills: Array(plan.starterSkillSuggestions.prefix(3)),
+                    onSelect: onSkillSuggestion
+                )
+            }
+
+            if let agentMissionSuggestion = plan.agentMissionSuggestion {
+                SetupAgentMissionSection(
+                    mission: agentMissionSuggestion,
+                    action: onAgentMission.map { select in
+                        { select(agentMissionSuggestion) }
+                    }
+                )
             }
 
             if !plan.starterPromptSuggestions.isEmpty {
@@ -151,9 +201,12 @@ struct SetupLaunchCard: View {
 }
 
 struct FirstRunSetupHomeCard: View {
+    let readiness: AppSetupReadinessSnapshot
+    let routeDefaults: SetupRouteDefaults
     let onStartSetup: () -> Void
     let onStartPrivateChat: () -> Void
     let onQuickStart: (UserSetupStarterPreset) -> Void
+    let onRecommendationAction: (CapabilityNextStep) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -203,9 +256,7 @@ struct FirstRunSetupHomeCard: View {
 
                 VStack(spacing: 8) {
                     ForEach(UserSetupStarterPreset.allCases) { preset in
-                        FirstRunQuickStartButton(preset: preset) {
-                            onQuickStart(preset)
-                        }
+                        quickStartButton(for: preset)
                     }
                 }
             }
@@ -238,44 +289,143 @@ struct FirstRunSetupHomeCard: View {
         }
         .shadow(color: Color.brandBlue.opacity(0.05), radius: 12, y: 6)
     }
+
+    @ViewBuilder
+    private func quickStartButton(for preset: UserSetupStarterPreset) -> some View {
+        let plan = preset.previewPlan(
+            readiness: readiness,
+            routeDefaults: routeDefaults
+        )
+        let capabilityRecommendation = plan.firstRunCapabilityRecommendation(readiness: readiness)
+
+        FirstRunQuickStartButton(
+            preset: preset,
+            plan: plan,
+            recommendation: capabilityRecommendation.map(Self.recommendation),
+            onRecommendationAction: capabilityRecommendation.map { recommendation in
+                { onRecommendationAction(recommendation) }
+            }
+        ) {
+            onQuickStart(preset)
+        }
+    }
+
+    private static func recommendation(from nextStep: CapabilityNextStep) -> SetupCardRecommendation {
+        SetupCardRecommendation(
+            title: nextStep.title,
+            detail: nextStep.detail,
+            actionTitle: nextStep.actionTitle,
+            actionSymbolName: recommendationSymbolName(for: nextStep.kind)
+        )
+    }
+
+    private static func recommendationSymbolName(for kind: CapabilityNextStepKind) -> String {
+        switch kind {
+        case .openCloud:
+            return "key"
+        case .openAgent:
+            return "point.3.connected.trianglepath.dotted"
+        case .useAutoCouncil:
+            return "square.grid.2x2"
+        case .openSecurity:
+            return "checkmark.shield"
+        case .rerunSetup:
+            return "arrow.counterclockwise"
+        }
+    }
 }
 
 private struct FirstRunQuickStartButton: View {
     let preset: UserSetupStarterPreset
+    let plan: AppSetupPlan
+    let recommendation: SetupCardRecommendation?
+    let onRecommendationAction: (() -> Void)?
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: preset.symbolName)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(Color.brandBlue)
-                    .frame(width: 34, height: 34)
-                    .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: action) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: preset.symbolName)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(Color.brandBlue)
+                            .frame(width: 34, height: 34)
+                            .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(preset.title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                    Text(preset.quickStartDetail)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(preset.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
+                            Text(plan.expectedFirstAction)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        Image(systemName: "arrow.up.right")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color.textSecondary)
+                            .padding(.top, 4)
+                    }
+
+                    ChipFlowLayout(spacing: 6, lineSpacing: 6) {
+                        ForEach(plan.launchCardMetadata, id: \.self) { item in
+                            SetupLaunchPill(title: item)
+                        }
+                    }
+
+                    if let routeDetail = plan.routeDetailContent {
+                        FirstRunQuickStartRouteLine(detail: routeDetail)
+                    }
+
+                    Text(plan.readinessStatus)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "arrow.up.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.textSecondary)
-                    .padding(.top, 4)
+                .padding(12)
+                .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .padding(12)
-            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .buttonStyle(.plain)
+            .accessibilityLabel("Quick start \(preset.title)")
+            .accessibilityValue(plan.expectedFirstAction)
+            .accessibilityHint("Applies that setup using the current route readiness and opens a starter draft without sending.")
+
+            if let recommendation {
+                SetupCardRecommendationView(
+                    recommendation: recommendation,
+                    onAction: onRecommendationAction
+                )
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Quick start \(preset.title)")
-        .accessibilityHint("Applies that setup and opens a starter draft without sending.")
+    }
+}
+
+private struct FirstRunQuickStartRouteLine: View {
+    let detail: AppSetupRouteDetailContent
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: detail.symbolName)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.brandBlue)
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(detail.title)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.textSecondary)
+                Text(detail.summary)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
     }
 }
 
@@ -283,7 +433,9 @@ struct SavedSetupHomeCard: View {
     let plan: AppSetupPlan
     let restoreState: SetupRestoreState
     let recommendation: SetupCardRecommendation?
+    let onSkillSuggestion: ((IronclawSkillProfile) -> Void)?
     let onPrimaryAction: () -> Void
+    let onAgentMission: ((SetupAgentMissionSuggestion) -> Void)?
     let onPromptSuggestion: ((SetupPromptSuggestion) -> Void)?
     let onRecommendationAction: (() -> Void)?
     let onChangeSetup: () -> Void
@@ -326,6 +478,14 @@ struct SavedSetupHomeCard: View {
                 .scrollClipDisabled()
             }
 
+            if let routeDetail = plan.routeDetailContent {
+                SetupRouteDetailCard(detail: routeDetail)
+            }
+
+            if restoreState.needsRestore, !restoreState.differences.isEmpty {
+                SetupRestoreDifferenceSection(differences: restoreState.differences)
+            }
+
             if let firstRunDraft = plan.firstRunDraft {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Starter prompt")
@@ -343,6 +503,22 @@ struct SavedSetupHomeCard: View {
 
             if !plan.starterWorkspaceSeeds.isEmpty {
                 SetupWorkspaceSeedSection(seeds: Array(plan.starterWorkspaceSeeds.prefix(3)))
+            }
+
+            if !plan.starterSkillSuggestions.isEmpty {
+                SetupSkillSuggestionSection(
+                    skills: Array(plan.starterSkillSuggestions.prefix(3)),
+                    onSelect: onSkillSuggestion
+                )
+            }
+
+            if let agentMissionSuggestion = plan.agentMissionSuggestion {
+                SetupAgentMissionSection(
+                    mission: agentMissionSuggestion,
+                    action: onAgentMission.map { select in
+                        { select(agentMissionSuggestion) }
+                    }
+                )
             }
 
             if !plan.starterPromptSuggestions.isEmpty {
@@ -426,6 +602,42 @@ struct SavedSetupHomeCard: View {
         case .privateModel:
             return "arrow.right"
         }
+    }
+}
+
+private struct SetupRestoreDifferenceSection: View {
+    let differences: [SetupRestoreDifference]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Changed since setup")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.primaryAction)
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(differences) { difference in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(difference.title)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(Color.textSecondary)
+                        Text("Saved: \(difference.savedValue)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("Current: \(difference.currentValue)")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if difference.id != differences.last?.id {
+                        Divider()
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -519,6 +731,130 @@ private struct SetupWorkspaceSeedRow: View {
             }
 
             Spacer(minLength: 0)
+        }
+    }
+}
+
+private struct SetupSkillSuggestionSection: View {
+    let skills: [IronclawSkillProfile]
+    let onSelect: ((IronclawSkillProfile) -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("IronClaw skills")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.textSecondary)
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(skills) { skill in
+                    SetupSkillSuggestionRow(
+                        skill: skill,
+                        action: onSelect.map { select in
+                            { select(skill) }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+private struct SetupSkillSuggestionRow: View {
+    let skill: IronclawSkillProfile
+    let action: (() -> Void)?
+
+    var body: some View {
+        Group {
+            if let action {
+                Button(action: action) {
+                    rowLabel
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Use setup skill, \(skill.title)")
+                .accessibilityHint("Stages an IronClaw prompt from this saved setup skill without sending.")
+            } else {
+                rowLabel
+            }
+        }
+    }
+
+    private var rowLabel: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: skill.symbolName)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.brandBlue)
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(skill.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(skill.summary)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(3)
+            }
+
+            Spacer(minLength: 0)
+
+            if action != nil {
+                Label("Use skill", systemImage: "arrow.up.right")
+                    .font(.caption2.weight(.bold))
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(Color.primaryAction)
+                    .padding(.horizontal, 8)
+                    .frame(height: 28)
+                    .background(Color.secondarySurface, in: Capsule())
+            }
+        }
+        .padding(12)
+        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct SetupAgentMissionSection: View {
+    let mission: SetupAgentMissionSuggestion
+    let action: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Agent mission")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.textSecondary)
+
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(mission.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(mission.detail)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Text(mission.prompt)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(4)
+
+                if let action {
+                    Button(action: action) {
+                        Label("Use mission", systemImage: "terminal")
+                            .font(.caption.weight(.bold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 36)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.primaryAction)
+                    .background(Color.secondarySurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .accessibilityHint("Reopens setup defaults and fills the saved agent mission without sending.")
+                }
+            }
+            .padding(12)
+            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
     }
 }

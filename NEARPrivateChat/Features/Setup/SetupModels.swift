@@ -99,6 +99,19 @@ enum UserSetupUseCase: String, CaseIterable, Codable, Identifiable, Hashable {
             )
         }
     }
+
+    var starterSkillIDs: [String] {
+        switch self {
+        case .privateChat:
+            return []
+        case .research:
+            return ["llm-council", "plan-mode", "decision-capture"]
+        case .buildAgents:
+            return ["project-setup", "plan-mode", "developer-setup", "coding", "local-test", "review-readiness", "github-workflow"]
+        case .teamProjects:
+            return ["new-project", "project-setup", "decision-capture", "commitment-triage"]
+        }
+    }
 }
 
 extension Array where Element == UserSetupUseCase {
@@ -206,6 +219,7 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
     case privateQuestion
     case researchBrief
     case agentMission
+    case projectWorkspace
 
     var id: String { rawValue }
 
@@ -214,6 +228,7 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
         case .privateQuestion: "Private question"
         case .researchBrief: "Research brief"
         case .agentMission: "Agent mission"
+        case .projectWorkspace: "Project workspace"
         }
     }
 
@@ -225,6 +240,8 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
             return "Start a cited brief with web-ready defaults."
         case .agentMission:
             return "Launch a phone-safe agent planning draft."
+        case .projectWorkspace:
+            return "Open a project-first workspace draft with saved context."
         }
     }
 
@@ -236,6 +253,8 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
             return "Research the latest important AI developments"
         case .agentMission:
             return "Plan a phone-launched agent task for a repo or research project"
+        case .projectWorkspace:
+            return "Set up a shared project workspace with files, links, and reusable instructions"
         }
     }
 
@@ -244,6 +263,7 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
         case .privateQuestion: "Help me think through a private question."
         case .researchBrief: "Create a sourced brief on the latest developments in AI."
         case .agentMission: "Plan a phone-launched agent task for a repo or research project."
+        case .projectWorkspace: "Help me set up this project workspace: what files, links, instructions, and first chat should I add?"
         }
     }
 
@@ -252,6 +272,7 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
         case .privateQuestion: "lock.shield"
         case .researchBrief: "text.magnifyingglass"
         case .agentMission: "terminal"
+        case .projectWorkspace: "folder.badge.gearshape"
         }
     }
 
@@ -260,13 +281,14 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
         case .privateQuestion: .privateChat
         case .researchBrief: .research
         case .agentMission: .buildAgents
+        case .projectWorkspace: .teamProjects
         }
     }
 
     var contextStyle: UserSetupContextStyle {
         switch self {
         case .privateQuestion: .simple
-        case .researchBrief, .agentMission: .project
+        case .researchBrief, .agentMission, .projectWorkspace: .project
         }
     }
 
@@ -294,6 +316,17 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
             experienceMode: wantsIronclaw || wantsCouncil ? .power : .beginner
         )
     }
+
+    func previewPlan(
+        readiness: AppSetupReadinessSnapshot,
+        routeDefaults: SetupRouteDefaults = .empty
+    ) -> AppSetupPlan {
+        AppSetupPlan(
+            profile: quickStartProfile,
+            readiness: readiness,
+            routeDefaults: routeDefaults
+        )
+    }
 }
 
 struct SetupPromptSuggestion: Codable, Identifiable, Hashable {
@@ -316,6 +349,12 @@ struct SetupWorkspaceSeed: Codable, Identifiable, Hashable {
     }
 }
 
+struct SetupAgentMissionSuggestion: Codable, Hashable {
+    let title: String
+    let detail: String
+    let prompt: String
+}
+
 struct UserSetupProfile: Codable, Hashable {
     var useCase: UserSetupUseCase {
         didSet {
@@ -330,6 +369,7 @@ struct UserSetupProfile: Codable, Hashable {
     var wantsIronclaw: Bool
     var wantsCouncil: Bool
     var experienceMode: UserSetupExperienceMode
+    var routeDefaults: SetupRouteDefaults
 
     init(
         useCase: UserSetupUseCase,
@@ -339,7 +379,8 @@ struct UserSetupProfile: Codable, Hashable {
         wantsCouncil: Bool,
         useCases: [UserSetupUseCase]? = nil,
         goalText: String = "",
-        experienceMode: UserSetupExperienceMode = .beginner
+        experienceMode: UserSetupExperienceMode = .beginner,
+        routeDefaults: SetupRouteDefaults = .empty
     ) {
         let normalizedUseCases = (useCases ?? [useCase]).setupOrderedUnique
         self.useCases = normalizedUseCases
@@ -350,6 +391,7 @@ struct UserSetupProfile: Codable, Hashable {
         self.wantsIronclaw = wantsIronclaw
         self.wantsCouncil = wantsCouncil
         self.experienceMode = experienceMode
+        self.routeDefaults = routeDefaults.normalized
     }
 
     enum CodingKeys: String, CodingKey {
@@ -361,6 +403,7 @@ struct UserSetupProfile: Codable, Hashable {
         case wantsIronclaw
         case wantsCouncil
         case experienceMode
+        case routeDefaults
     }
 
     init(from decoder: Decoder) throws {
@@ -376,6 +419,7 @@ struct UserSetupProfile: Codable, Hashable {
         wantsIronclaw = try container.decodeIfPresent(Bool.self, forKey: .wantsIronclaw) ?? false
         wantsCouncil = try container.decodeIfPresent(Bool.self, forKey: .wantsCouncil) ?? false
         experienceMode = try container.decodeIfPresent(UserSetupExperienceMode.self, forKey: .experienceMode) ?? .beginner
+        routeDefaults = (try container.decodeIfPresent(SetupRouteDefaults.self, forKey: .routeDefaults) ?? .empty).normalized
     }
 
     func encode(to encoder: Encoder) throws {
@@ -388,6 +432,7 @@ struct UserSetupProfile: Codable, Hashable {
         try container.encode(wantsIronclaw, forKey: .wantsIronclaw)
         try container.encode(wantsCouncil, forKey: .wantsCouncil)
         try container.encode(experienceMode, forKey: .experienceMode)
+        try container.encode(routeDefaults.normalized, forKey: .routeDefaults)
     }
 
     var normalizedForDefaults: UserSetupProfile {
@@ -395,6 +440,7 @@ struct UserSetupProfile: Codable, Hashable {
         profile.useCases = useCases.setupOrderedUnique
         profile.useCase = profile.useCases.setupPrimaryUseCase
         profile.goalText = normalizedGoalText
+        profile.routeDefaults = routeDefaults.normalized
         return profile
     }
 
@@ -475,6 +521,26 @@ struct UserSetupProfile: Codable, Hashable {
             return "\(orderedUseCases.count) setup tracks are combined into shared project instructions."
         }
         return lead
+    }
+
+    var agentMissionSuggestion: SetupAgentMissionSuggestion? {
+        let orderedUseCases = useCases.setupOrderedUnique
+        guard wantsIronclaw || orderedUseCases.contains(.buildAgents) else { return nil }
+
+        let goal = normalizedGoalText
+        if !goal.isEmpty {
+            return SetupAgentMissionSuggestion(
+                title: "Use saved setup goal",
+                detail: "Saved setup wants agent work for this goal first.",
+                prompt: "Plan the first build or repo task for this goal: \(goal)"
+            )
+        }
+
+        return SetupAgentMissionSuggestion(
+            title: "Use saved agent starter",
+            detail: "Saved setup keeps repo and agent work ready from day one.",
+            prompt: UserSetupUseCase.buildAgents.starterPrompt
+        )
     }
 
     var firstRunDraft: String? {
@@ -844,6 +910,37 @@ struct UserSetupProfile: Codable, Hashable {
         }
     }
 
+    var setupSkillSuggestions: [IronclawSkillProfile] {
+        let orderedUseCases = useCases.setupOrderedUnique
+        var coreSkillIDs: [String] = []
+        let goalMatchedSkillIDs = IronclawSkillCatalog.matchingSkillIDs(
+            for: normalizedGoalText,
+            limit: orderedUseCases.contains(.buildAgents) || wantsIronclaw ? 3 : 2
+        )
+
+        if wantsCouncil {
+            coreSkillIDs.append("llm-council")
+        }
+        if wantsIronclaw {
+            coreSkillIDs.append(contentsOf: ["plan-mode", "developer-setup"])
+        }
+
+        let prioritizedUseCases = [orderedUseCases.setupPrimaryUseCase] + orderedUseCases.filter { $0 != orderedUseCases.setupPrimaryUseCase }
+        var useCaseSkillIDs: [String] = []
+        for useCase in prioritizedUseCases {
+            useCaseSkillIDs.append(contentsOf: useCase.starterSkillIDs)
+        }
+
+        let skillIDs = (wantsIronclaw || wantsCouncil)
+            ? coreSkillIDs + goalMatchedSkillIDs + useCaseSkillIDs
+            : useCaseSkillIDs + goalMatchedSkillIDs
+        guard !skillIDs.isEmpty else { return [] }
+        let limit = !goalMatchedSkillIDs.isEmpty && (wantsIronclaw || wantsCouncil)
+            ? 5
+            : (wantsIronclaw || orderedUseCases.contains(.buildAgents) || orderedUseCases.count > 1 ? 4 : 3)
+        return IronclawSkillCatalog.profiles(for: skillIDs, limit: limit)
+    }
+
     mutating func toggleUseCase(_ useCase: UserSetupUseCase) {
         var next = useCases.setupOrderedUnique
         if next.contains(useCase) {
@@ -922,6 +1019,61 @@ struct AppSetupReadinessSnapshot: Codable, Hashable {
     )
 }
 
+struct SetupRouteDefaults: Codable, Hashable {
+    var privateModelID: String?
+    var councilModelIDs: [String]
+    var ironclawMobileModelID: String?
+
+    static let empty = SetupRouteDefaults(
+        privateModelID: nil,
+        councilModelIDs: [],
+        ironclawMobileModelID: nil
+    )
+
+    var isEmpty: Bool {
+        normalized == .empty
+    }
+
+    var normalized: SetupRouteDefaults {
+        SetupRouteDefaults(
+            privateModelID: Self.normalizedID(privateModelID),
+            councilModelIDs: Self.normalizedIDs(councilModelIDs),
+            ironclawMobileModelID: Self.normalizedID(ironclawMobileModelID)
+        )
+    }
+
+    func preferredIronclawModelID(readiness: AppSetupReadinessSnapshot) -> String? {
+        if readiness.ironclawMobileAvailable {
+            return normalized.ironclawMobileModelID ?? ModelOption.ironclawMobileModelID
+        }
+        if readiness.hostedIronclawAvailable {
+            return ModelOption.ironclawModelID
+        }
+        return nil
+    }
+
+    private static func normalizedID(_ id: String?) -> String? {
+        guard let trimmed = id?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
+    }
+
+    private static func normalizedIDs(_ ids: [String]) -> [String] {
+        var seen = Set<String>()
+        var normalized: [String] = []
+        for modelID in ids {
+            guard let trimmed = normalizedID(modelID),
+                  seen.insert(trimmed.lowercased()).inserted else {
+                continue
+            }
+            normalized.append(trimmed)
+        }
+        return normalized
+    }
+}
+
 struct AppSetupPlan: Codable, Hashable, Identifiable {
     var id: String
     var modelRoute: AppSetupModelRoute
@@ -933,10 +1085,13 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
     var expectedFirstAction: String
     var goalText: String
     var firstRunDraft: String?
+    var agentMissionSuggestion: SetupAgentMissionSuggestion?
     var readinessStatus: String
     var experienceSummary: String
     var starterWorkspaceSeeds: [SetupWorkspaceSeed]
+    var starterSkillSuggestions: [IronclawSkillProfile]
     var starterPromptSuggestions: [SetupPromptSuggestion]
+    var expectedRouteModelIDs: [String]
 
     var launchCardTitle: String {
         expectedFirstAction
@@ -958,9 +1113,15 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
         return items
     }
 
-    init(profile: UserSetupProfile, readiness: AppSetupReadinessSnapshot = .optimistic) {
+    init(
+        profile: UserSetupProfile,
+        readiness: AppSetupReadinessSnapshot = .optimistic,
+        routeDefaults: SetupRouteDefaults = .empty
+    ) {
         let profile = profile.normalizedForDefaults
-        let usesIronclaw = profile.wantsIronclaw && readiness.ironclawMobileAvailable
+        let routeDefaults = (routeDefaults.isEmpty ? profile.routeDefaults : routeDefaults).normalized
+        let preferredIronclawModelID = routeDefaults.preferredIronclawModelID(readiness: readiness)
+        let usesIronclaw = profile.wantsIronclaw && preferredIronclawModelID != nil
         let usesCouncil = !usesIronclaw && profile.wantsCouncil && readiness.councilReady
         modelRoute = usesIronclaw ? .ironclaw : (usesCouncil ? .council : .privateModel)
         focusMode = profile.contextStyle.sourceMode
@@ -971,12 +1132,19 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
         expectedFirstAction = Self.expectedFirstAction(for: profile, readiness: readiness, modelRoute: modelRoute)
         goalText = profile.goalText
         firstRunDraft = profile.firstRunDraft
+        agentMissionSuggestion = profile.agentMissionSuggestion
         readinessStatus = Self.readinessStatus(for: profile, readiness: readiness, modelRoute: modelRoute)
         experienceSummary = profile.experienceMode == .power
             ? "Power mode keeps advanced routes visible."
             : "Beginner mode starts simple; power routes remain available later."
         starterWorkspaceSeeds = profile.setupWorkspaceSeeds
+        starterSkillSuggestions = profile.setupSkillSuggestions
         starterPromptSuggestions = Array(profile.emptyStatePromptSuggestions.prefix(3))
+        expectedRouteModelIDs = Self.expectedRouteModelIDs(
+            for: modelRoute,
+            readiness: readiness,
+            routeDefaults: routeDefaults
+        )
         id = [
             profile.useCases.map(\.rawValue).joined(separator: "+"),
             profile.experienceMode.rawValue,
@@ -984,7 +1152,8 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
             profile.wantsWeb ? "web" : "noweb",
             profile.wantsIronclaw ? "agent" : "noagent",
             profile.wantsCouncil ? "council" : "nocouncil",
-            modelRoute.rawValue
+            modelRoute.rawValue,
+            expectedRouteModelIDs.joined(separator: "+")
         ].joined(separator: "-")
     }
 
@@ -1037,6 +1206,11 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
         if !goal.isEmpty {
             return "Start from your goal"
         }
+        if modelRoute == .ironclaw,
+           !readiness.ironclawMobileAvailable,
+           readiness.hostedIronclawAvailable {
+            return "Open hosted agent"
+        }
         if profile.wantsIronclaw, !readiness.ironclawMobileAvailable {
             return "Start private chat while agent tools load"
         }
@@ -1065,8 +1239,15 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
         readiness: AppSetupReadinessSnapshot,
         modelRoute: AppSetupModelRoute
     ) -> String {
-        if profile.wantsIronclaw, !readiness.ironclawMobileAvailable {
+        if profile.wantsIronclaw,
+           !readiness.ironclawMobileAvailable,
+           !readiness.hostedIronclawAvailable {
             return "IronClaw Mobile is still loading; private chat is ready first."
+        }
+        if modelRoute == .ironclaw,
+           !readiness.ironclawMobileAvailable,
+           readiness.hostedIronclawAvailable {
+            return "Hosted IronClaw is ready; mobile runtime is unavailable."
         }
         if profile.wantsCouncil {
             if !readiness.modelCatalogLoaded {
@@ -1081,6 +1262,114 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
         }
         return "Ready: \(modelRoute.title)"
     }
+
+    private static func expectedRouteModelIDs(
+        for modelRoute: AppSetupModelRoute,
+        readiness: AppSetupReadinessSnapshot,
+        routeDefaults: SetupRouteDefaults
+    ) -> [String] {
+        switch modelRoute {
+        case .privateModel:
+            return normalizedRouteModelIDs([routeDefaults.privateModelID].compactMap { $0 })
+        case .council:
+            return normalizedRouteModelIDs(routeDefaults.councilModelIDs)
+        case .ironclaw:
+            return normalizedRouteModelIDs(
+                [routeDefaults.preferredIronclawModelID(readiness: readiness)].compactMap { $0 }
+            )
+        }
+    }
+
+    private static func normalizedRouteModelIDs(_ ids: [String]) -> [String] {
+        var seen = Set<String>()
+        var normalized: [String] = []
+        for modelID in ids {
+            let trimmed = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, seen.insert(trimmed.lowercased()).inserted else {
+                continue
+            }
+            normalized.append(trimmed)
+        }
+        return normalized
+    }
+}
+
+struct AppSetupRouteDetailContent: Codable, Hashable {
+    let title: String
+    let summary: String
+    let symbolName: String
+}
+
+extension AppSetupPlan {
+    var routeDetailContent: AppSetupRouteDetailContent? {
+        let labels = expectedRouteModelIDs.map(Self.setupRouteModelLabel)
+
+        switch modelRoute {
+        case .privateModel:
+            guard let label = labels.first else { return nil }
+            return AppSetupRouteDetailContent(
+                title: "Starter model",
+                summary: label,
+                symbolName: "sparkles"
+            )
+        case .council:
+            guard !labels.isEmpty else { return nil }
+            return AppSetupRouteDetailContent(
+                title: labels.count > 2 ? "Council lineup (\(labels.count))" : "Council lineup",
+                summary: labels.joined(separator: " + "),
+                symbolName: "square.grid.2x2"
+            )
+        case .ironclaw:
+            return AppSetupRouteDetailContent(
+                title: "Starter runtime",
+                summary: labels.first ?? "IronClaw Mobile",
+                symbolName: "terminal"
+            )
+        }
+    }
+
+    private static func setupRouteModelLabel(_ modelID: String) -> String {
+        switch modelID {
+        case ModelOption.ironclawModelID:
+            return "Hosted IronClaw"
+        case ModelOption.ironclawMobileModelID:
+            return "IronClaw Mobile"
+        default:
+            return ModelOption.humanize(modelID: modelID)
+        }
+    }
+
+    func firstRunCapabilityRecommendation(readiness: AppSetupReadinessSnapshot) -> CapabilityNextStep? {
+        if councilEnabled, modelRoute != .council {
+            guard readiness.modelCatalogLoaded, !readiness.nearCloudKeyConfigured else { return nil }
+            return CapabilityNextStep(
+                title: "Unlock a fuller council",
+                detail: "This quick start opens private chat first because fewer than two council models are ready. Connect NEAR AI Cloud to add more models for research comparison.",
+                actionTitle: "Connect Cloud",
+                kind: .openCloud
+            )
+        }
+
+        guard agentEnabled else { return nil }
+
+        if !readiness.ironclawMobileAvailable, readiness.hostedIronclawAvailable {
+            return CapabilityNextStep(
+                title: "Hosted agent is available",
+                detail: "This quick start opens private chat first because IronClaw Mobile is unavailable. Open the hosted agent when you need repo, shell, or approval-gated work.",
+                actionTitle: "Open Agent",
+                kind: .openAgent
+            )
+        }
+
+        guard modelRoute != .ironclaw else { return nil }
+
+        return CapabilityNextStep(
+            title: "Finish agent setup",
+            detail: "This quick start opens private chat first. Connect a hosted IronClaw endpoint to use repo, shell, or approval-gated agent work.",
+            actionTitle: "Connect Agent",
+            kind: .openAgent
+        )
+    }
 }
 
 struct SetupRuntimeSnapshot: Equatable {
@@ -1089,11 +1378,24 @@ struct SetupRuntimeSnapshot: Equatable {
     var webSearchEnabled: Bool
     var researchModeEnabled: Bool
     var selectedProjectName: String?
+    var selectedModelID: String? = nil
+    var councilModelIDs: [String] = []
+}
+
+struct SetupRestoreDifference: Equatable, Hashable, Identifiable {
+    let title: String
+    let savedValue: String
+    let currentValue: String
+
+    var id: String {
+        "\(title)-\(savedValue)-\(currentValue)"
+    }
 }
 
 struct SetupRestoreState: Equatable {
     let needsRestore: Bool
     let summaryText: String
+    let differences: [SetupRestoreDifference]
 }
 
 enum SetupRestorePlanner {
@@ -1105,17 +1407,57 @@ enum SetupRestorePlanner {
         if runtime.modelRoute != plan.modelRoute {
             return SetupRestoreState(
                 needsRestore: true,
-                summaryText: "Current route changed. Restore saved setup to return to your saved route."
+                summaryText: "Current route changed. Restore saved setup to return to your saved route.",
+                differences: [
+                    SetupRestoreDifference(
+                        title: "Route",
+                        savedValue: routeDifferenceLabel(for: plan.modelRoute),
+                        currentValue: runtime.modelRoute.title
+                    )
+                ]
             )
+        }
+
+        if let routeSelectionDrift = routeSelectionDrift(profile: profile, plan: plan, runtime: runtime) {
+            return routeSelectionDrift
         }
 
         let expectedResearchMode = profile.useCases.contains(.research) && plan.modelRoute != .ironclaw
         if runtime.focusMode != plan.focusMode ||
             runtime.webSearchEnabled != profile.wantsWeb ||
             runtime.researchModeEnabled != expectedResearchMode {
+            var differences: [SetupRestoreDifference] = []
+            if runtime.focusMode != plan.focusMode {
+                differences.append(
+                    SetupRestoreDifference(
+                        title: "Focus",
+                        savedValue: plan.focusMode.title,
+                        currentValue: runtime.focusMode.title
+                    )
+                )
+            }
+            if runtime.webSearchEnabled != profile.wantsWeb {
+                differences.append(
+                    SetupRestoreDifference(
+                        title: "Web",
+                        savedValue: enabledLabel(profile.wantsWeb),
+                        currentValue: enabledLabel(runtime.webSearchEnabled)
+                    )
+                )
+            }
+            if runtime.researchModeEnabled != expectedResearchMode {
+                differences.append(
+                    SetupRestoreDifference(
+                        title: "Research",
+                        savedValue: enabledLabel(expectedResearchMode),
+                        currentValue: enabledLabel(runtime.researchModeEnabled)
+                    )
+                )
+            }
             return SetupRestoreState(
                 needsRestore: true,
-                summaryText: "Context defaults changed. Restore saved setup to recover your saved web, focus, and research defaults."
+                summaryText: "Context defaults changed. Restore saved setup to recover your saved web, focus, and research defaults.",
+                differences: differences
             )
         }
 
@@ -1123,22 +1465,148 @@ enum SetupRestorePlanner {
             if runtime.selectedProjectName != starterProjectName {
                 return SetupRestoreState(
                     needsRestore: true,
-                    summaryText: "\"\(starterProjectName)\" is not active right now. Restore saved setup to reopen that workspace."
+                    summaryText: "\"\(starterProjectName)\" is not active right now. Restore saved setup to reopen that workspace.",
+                    differences: [
+                        SetupRestoreDifference(
+                            title: "Workspace",
+                            savedValue: starterProjectName,
+                            currentValue: runtime.selectedProjectName ?? "No active project"
+                        )
+                    ]
                 )
             }
         } else if runtime.selectedProjectName != nil && profile.contextStyle == .simple {
             return SetupRestoreState(
                 needsRestore: true,
-                summaryText: "A project is active, but your saved setup starts without project memory."
+                summaryText: "A project is active, but your saved setup starts without project memory.",
+                differences: [
+                    SetupRestoreDifference(
+                        title: "Workspace",
+                        savedValue: "No active project",
+                        currentValue: runtime.selectedProjectName ?? "No active project"
+                    )
+                ]
             )
         }
 
         return SetupRestoreState(
             needsRestore: false,
-            summaryText: plan.firstRunDraft == nil
+            summaryText: profile.normalizedGoalText.isEmpty
                 ? "Your saved setup is ready to reopen with the same route and focus defaults."
-                : "Your saved setup is ready to reopen with the same route, focus, and starter prompt."
+                : "Your saved setup is ready to reopen with the same route, focus, and starter prompt.",
+            differences: []
         )
+    }
+
+    private static func routeSelectionDrift(
+        profile: UserSetupProfile,
+        plan: AppSetupPlan,
+        runtime: SetupRuntimeSnapshot
+    ) -> SetupRestoreState? {
+        let expectedModelIDs = normalizedRouteModelIDs(plan.expectedRouteModelIDs)
+        guard !expectedModelIDs.isEmpty else { return nil }
+
+        switch plan.modelRoute {
+        case .privateModel:
+            let currentModelID = runtime.selectedModelID?.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard currentModelID?.isEmpty == false,
+                  currentModelID?.caseInsensitiveCompare(expectedModelIDs[0]) != .orderedSame else {
+                return nil
+            }
+            return SetupRestoreState(
+                needsRestore: true,
+                summaryText: profile.useCases.contains(.research)
+                    ? "Current research model changed. Restore saved setup to recover your preferred starter route."
+                    : "Current private model changed. Restore saved setup to recover your preferred starter route.",
+                differences: [
+                    SetupRestoreDifference(
+                        title: profile.useCases.contains(.research) ? "Research model" : "Model",
+                        savedValue: modelLabel(for: expectedModelIDs[0]),
+                        currentValue: modelLabel(for: currentModelID)
+                    )
+                ]
+            )
+        case .council:
+            let currentCouncilModelIDs = normalizedRouteModelIDs(runtime.councilModelIDs)
+            guard currentCouncilModelIDs != expectedModelIDs else { return nil }
+            return SetupRestoreState(
+                needsRestore: true,
+                summaryText: "Council lineup changed. Restore saved setup to recover your saved model mix.",
+                differences: [
+                    SetupRestoreDifference(
+                        title: "Council",
+                        savedValue: lineupLabel(for: expectedModelIDs),
+                        currentValue: lineupLabel(for: currentCouncilModelIDs)
+                    )
+                ]
+            )
+        case .ironclaw:
+            let currentModelID = runtime.selectedModelID?.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard currentModelID?.isEmpty == false,
+                  currentModelID?.caseInsensitiveCompare(expectedModelIDs[0]) != .orderedSame else {
+                return nil
+            }
+            let expectedAgentRoute = expectedModelIDs[0].caseInsensitiveCompare(ModelOption.ironclawModelID) == .orderedSame
+                ? "Hosted IronClaw"
+                : "IronClaw Mobile"
+            return SetupRestoreState(
+                needsRestore: true,
+                summaryText: "Current agent route changed. Restore saved setup to return to \(expectedAgentRoute).",
+                differences: [
+                    SetupRestoreDifference(
+                        title: "Agent route",
+                        savedValue: modelLabel(for: expectedModelIDs[0]),
+                        currentValue: modelLabel(for: currentModelID)
+                    )
+                ]
+            )
+        }
+    }
+
+    private static func enabledLabel(_ value: Bool) -> String {
+        value ? "On" : "Off"
+    }
+
+    private static func routeDifferenceLabel(for route: AppSetupModelRoute) -> String {
+        switch route {
+        case .council:
+            return "Council"
+        case .privateModel, .ironclaw:
+            return route.title
+        }
+    }
+
+    private static func lineupLabel(for ids: [String]) -> String {
+        let labels = ids.map(modelLabel(for:))
+        return labels.isEmpty ? "No saved lineup" : labels.joined(separator: " + ")
+    }
+
+    private static func modelLabel(for modelID: String?) -> String {
+        guard let trimmed = modelID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return "Unavailable"
+        }
+        switch trimmed {
+        case ModelOption.ironclawModelID:
+            return "Hosted IronClaw"
+        case ModelOption.ironclawMobileModelID:
+            return "IronClaw Mobile"
+        default:
+            return ModelOption.humanize(modelID: trimmed)
+        }
+    }
+
+    private static func normalizedRouteModelIDs(_ ids: [String]) -> [String] {
+        var seen = Set<String>()
+        var normalized: [String] = []
+        for modelID in ids {
+            let trimmed = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, seen.insert(trimmed.lowercased()).inserted else {
+                continue
+            }
+            normalized.append(trimmed)
+        }
+        return normalized
     }
 }
 
@@ -1154,6 +1622,22 @@ enum CapabilityNextStepKind: String, Codable, Equatable, Sendable {
     case openAgent
     case useAutoCouncil
     case rerunSetup
+}
+
+enum AccountSettingsDeepLink: String, Codable, Equatable, Hashable, Sendable {
+    case nearCloudKeys
+    case ironclawAgent
+
+    init?(capabilityNextStepKind: CapabilityNextStepKind) {
+        switch capabilityNextStepKind {
+        case .openCloud:
+            self = .nearCloudKeys
+        case .openAgent:
+            self = .ironclawAgent
+        case .openSecurity, .useAutoCouncil, .rerunSetup:
+            return nil
+        }
+    }
 }
 
 struct CapabilityNextStep: Codable, Equatable, Sendable {
@@ -1200,7 +1684,7 @@ enum CapabilityNextStepPlanner {
             break
         }
 
-        if setupPlan.agentEnabled && currentRoute != .ironclawMobile && !hostedIronclawAvailable {
+        if setupPlan.agentEnabled && !currentRoute.isIronclawRoute && !hostedIronclawAvailable {
             return CapabilityNextStep(
                 title: "Finish agent setup",
                 detail: "Your defaults expect agent work. Connect a hosted workstation when you need repo, shell, or approval-gated tasks.",

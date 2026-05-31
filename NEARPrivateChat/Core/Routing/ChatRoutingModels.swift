@@ -153,14 +153,7 @@ struct ChatSourceRoutingSemantics: Hashable {
     private static func webPolicy(for focus: ChatFocusState, webSearchEnabled: Bool) -> ChatWebUsePolicy {
         switch focus {
         case .auto:
-            // Was: `webSearchEnabled ? .whenHelpful : .whenFreshRequested`
-            // — which silently gated sources behind a UI toggle, so GLM
-            // private route returned no `web_search` tool block and the
-            // chat thread rendered without source cards or numbered
-            // citations. Auto mode now means "search when the prompt
-            // benefits OR explicitly asks for fresh facts" regardless of
-            // the toggle, so GLM behaves consistently with Council.
-            return .whenHelpful
+            return webSearchEnabled ? .whenHelpful : .whenFreshRequested
         case .web, .project, .research:
             return .always
         case .links:

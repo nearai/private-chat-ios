@@ -9,6 +9,7 @@ struct ConversationListView: View {
     @State private var showingNewProject = false
     @State private var showingProjectFiles = false
     @State private var showingAccountSettings = false
+    @State private var accountSettingsDeepLink: AccountSettingsDeepLink?
     @State private var showingSecurity = false
     @State private var isSearchVisible = false
     @State private var editingProject: ChatProject?
@@ -83,7 +84,9 @@ struct ConversationListView: View {
             focusMode: chatStore.sourceMode,
             webSearchEnabled: chatStore.webSearchEnabled,
             researchModeEnabled: chatStore.researchModeEnabled,
-            selectedProjectName: chatStore.selectedProject?.name
+            selectedProjectName: chatStore.selectedProject?.name,
+            selectedModelID: chatStore.selectedModel,
+            councilModelIDs: chatStore.councilModelIDs
         )
     }
 
@@ -102,7 +105,11 @@ struct ConversationListView: View {
               let profile = UserSetupStorage.load(for: accountID) else {
             return nil
         }
-        let plan = AppSetupPlan(profile: profile, readiness: setupReadinessSnapshot)
+        let plan = AppSetupPlan(
+            profile: profile,
+            readiness: setupReadinessSnapshot,
+            routeDefaults: profile.routeDefaults.isEmpty ? chatStore.setupRouteDefaults : profile.routeDefaults
+        )
         return SetupLaunchCardState(
             accountID: accountID,
             profile: profile,
@@ -141,6 +148,10 @@ struct ConversationListView: View {
 
     private var shouldShowHomeTrustCard: Bool {
         selectedHomeFilter == .all && searchQuery.isEmpty && filteredConversations.isEmpty
+    }
+
+    private var shouldPrioritizeSetupOverToday: Bool {
+        pendingSetupLaunchCard != nil || emptyHomeSetupState != nil || shouldShowFirstRunSetupCard
     }
 
     private var homeTrustCardViewModel: ProofCapsuleViewModel {
@@ -245,12 +256,24 @@ struct ConversationListView: View {
         )
     }
 
+    private var hasProjectSearchResults: Bool {
+        !filteredProjectContextMatches.isEmpty
+    }
+
+    private var hasVisibleProjects: Bool {
+        !filteredProjects.isEmpty
+    }
+
+    private var allHomeHasVisibleContent: Bool {
+        !filteredConversations.isEmpty || hasVisibleProjects || hasProjectSearchResults
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             ClaudeHomeTopBar(
                 displayName: sessionStore.displayName,
                 isSearchVisible: isSearchVisible,
-                onAccount: { showingAccountSettings = true },
+                onAccount: { openAccountSettings() },
                 onSearch: toggleSearch,
                 onNewChat: openNewChat
             )
@@ -265,7 +288,7 @@ struct ConversationListView: View {
 
             ScrollView {
                 LazyVStack(spacing: 14) {
-                    if selectedHomeFilter == .all, searchQuery.isEmpty {
+                    if searchQuery.isEmpty, !shouldPrioritizeSetupOverToday {
                         TodaySection(
                             store: briefingStore,
                             onOpenBriefing: { openedBriefing = $0 },
@@ -275,12 +298,18 @@ struct ConversationListView: View {
                         .padding(.top, 12)
                     }
 
-                    if let pendingSetupLaunchCard, selectedHomeFilter == .all, searchQuery.isEmpty {
+                    if let pendingSetupLaunchCard, searchQuery.isEmpty {
                         SetupLaunchCard(
                             plan: pendingSetupLaunchCard.plan,
                             recommendation: setupCardRecommendation(for: pendingSetupLaunchCard.plan),
+                            onSkillSuggestion: { skill in
+                                openSetupSkillSuggestion(skill, from: pendingSetupLaunchCard, clearsPendingCard: true)
+                            },
                             onPrimaryAction: {
                                 openPendingSetupLaunchCard(pendingSetupLaunchCard)
+                            },
+                            onAgentMission: { suggestion in
+                                openSetupAgentMissionSuggestion(suggestion, from: pendingSetupLaunchCard, clearsPendingCard: true)
                             },
                             onPromptSuggestion: { suggestion in
                                 openSetupPromptSuggestion(suggestion, from: pendingSetupLaunchCard, clearsPendingCard: true)
@@ -297,6 +326,89 @@ struct ConversationListView: View {
                         .padding(.top, 12)
                     }
 
+                    if hasProjectSearchResults {
+                        VStack(spacing: 8) {
+                            HomeSectionHeader(title: "Project context")
+
+                            LazyVStack(spacing: 0) {
+                                ForEach(filteredProjectContextMatches) { match in
+                                    Button {
+                                        openProjectContext(match.project)
+                                    } label: {
+                                        ProjectContextSearchRow(match: match)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(Color.appBorder, lineWidth: 1)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.top, pendingSetupLaunchCard == nil ? 12 : 0)
+                    }
+
+                    if hasVisibleProjects {
+                        VStack(spacing: 8) {
+                            HomeSectionHeader(
+                                title: searchQuery.isEmpty ? "Projects" : "Project matches",
+                                actionTitle: searchQuery.isEmpty ? "New" : nil,
+                                actionSymbolName: searchQuery.isEmpty ? "plus" : nil,
+                                action: searchQuery.isEmpty ? { showingNewProject = true } : nil
+                            )
+
+                            LazyVStack(spacing: 0) {
+                                ForEach(Array(filteredProjects.enumerated()), id: \.element.id) { index, project in
+                                    Button {
+                                        openProjectContext(project)
+                                    } label: {
+                                        ProjectRow(
+                                            title: project.name,
+                                            subtitle: projectSubtitle(project),
+                                            symbolName: project.projectIconName,
+                                            isSelected: chatStore.selectedProjectID == project.id,
+                                            tintColor: project.tintColor,
+                                            tintBackground: project.tintBackgroundColor
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .contextMenu {
+                                        Button {
+                                            openProjectContext(project)
+                                        } label: {
+                                            Label("Open Context", systemImage: "folder")
+                                        }
+                                        Button {
+                                            editingProject = project
+                                        } label: {
+                                            Label("Edit", systemImage: "pencil")
+                                        }
+                                        Button {
+                                            chatStore.archiveProject(project)
+                                        } label: {
+                                            Label("Archive", systemImage: "archivebox")
+                                        }
+                                    }
+
+                                    if index != filteredProjects.count - 1 {
+                                        Divider()
+                                            .padding(.leading, 54)
+                                    }
+                                }
+                            }
+                            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(Color.appBorder, lineWidth: 1)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                    }
+
                     if filteredConversations.isEmpty {
                         if let emptyHomeSetupState {
                             VStack(spacing: 14) {
@@ -304,8 +416,14 @@ struct ConversationListView: View {
                                     plan: emptyHomeSetupState.plan,
                                     restoreState: emptyHomeSetupState.restoreState,
                                     recommendation: setupCardRecommendation(for: emptyHomeSetupState.plan),
+                                    onSkillSuggestion: { skill in
+                                        openSetupSkillSuggestion(skill, from: emptyHomeSetupState, clearsPendingCard: false)
+                                    },
                                     onPrimaryAction: {
                                         reopenSavedSetup(emptyHomeSetupState)
+                                    },
+                                    onAgentMission: { suggestion in
+                                        openSetupAgentMissionSuggestion(suggestion, from: emptyHomeSetupState, clearsPendingCard: false)
                                     },
                                     onPromptSuggestion: { suggestion in
                                         openSetupPromptSuggestion(suggestion, from: emptyHomeSetupState, clearsPendingCard: false)
@@ -324,17 +442,20 @@ struct ConversationListView: View {
                             .padding(.top, pendingSetupLaunchCard == nil ? 12 : 0)
                         } else if shouldShowFirstRunSetupCard {
                             FirstRunSetupHomeCard(
+                                readiness: setupReadinessSnapshot,
+                                routeDefaults: chatStore.setupRouteDefaults,
                                 onStartSetup: onRunSetupAgain,
                                 onStartPrivateChat: startPrivateChatFromFirstRun,
-                                onQuickStart: startQuickStartFromFirstRun
+                                onQuickStart: startQuickStartFromFirstRun,
+                                onRecommendationAction: runFirstRunRecommendation
                             )
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 16)
                             .padding(.top, 12)
-                        } else {
+                        } else if !allHomeHasVisibleContent {
                             VStack(spacing: 14) {
                                 ClaudeHomeEmptyState(
-                                    title: searchQuery.isEmpty ? "Verifiably Yours." : "No matching chats",
+                                    title: searchQuery.isEmpty ? "Verifiably Yours." : "No matching chats or projects",
                                     showsAction: searchQuery.isEmpty,
                                     action: openNewChat
                                 )
@@ -345,7 +466,14 @@ struct ConversationListView: View {
                                 // lives inside the chat thread, not on Home.
                             }
                         }
-                    } else {
+                    }
+
+                    if !filteredConversations.isEmpty {
+                        if hasVisibleProjects || hasProjectSearchResults {
+                            HomeSectionHeader(title: searchQuery.isEmpty ? "Chats" : "Chat matches")
+                                .padding(.horizontal, 16)
+                        }
+
                         LazyVStack(spacing: 0) {
                             ForEach(Array(filteredConversations.enumerated()), id: \.element.id) { index, conversation in
                                 Button {
@@ -378,6 +506,12 @@ struct ConversationListView: View {
                             }
                         }
                         .padding(.top, pendingSetupLaunchCard == nil ? 0 : 4)
+                        .padding(.horizontal, 16)
+                        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.appBorder, lineWidth: 1)
+                        }
                         .padding(.bottom, 28)
                     }
                 }
@@ -400,8 +534,10 @@ struct ConversationListView: View {
             EditProjectView(project: project)
                 .environmentObject(chatStore)
         }
-        .sheet(isPresented: $showingAccountSettings) {
-            AccountSettingsView(onRunSetupAgain: onRunSetupAgain)
+        .sheet(isPresented: $showingAccountSettings, onDismiss: {
+            accountSettingsDeepLink = nil
+        }) {
+            AccountSettingsView(initialDeepLink: accountSettingsDeepLink, onRunSetupAgain: onRunSetupAgain)
                 .environmentObject(sessionStore)
                 .environmentObject(chatStore)
         }
@@ -454,7 +590,10 @@ struct ConversationListView: View {
 
         if let accountID = sessionStore.setupAccountID,
            UserSetupStorage.needsFirstRunSetup(for: accountID) {
-            let profile = UserSetupStorage.completeFirstRunPrivateChat(for: accountID)
+            let profile = chatStore.setupProfileSnapshot(
+                UserSetupStorage.completeFirstRunPrivateChat(for: accountID)
+            )
+            UserSetupStorage.saveWithoutPendingLaunchCard(profile, for: accountID)
             chatStore.applySetupProfile(profile)
         }
 
@@ -472,9 +611,12 @@ struct ConversationListView: View {
         let profile: UserSetupProfile
         if let accountID = sessionStore.setupAccountID,
            UserSetupStorage.needsFirstRunSetup(for: accountID) {
-            profile = UserSetupStorage.completeFirstRunQuickStart(for: accountID, preset: preset)
+            profile = chatStore.setupProfileSnapshot(
+                UserSetupStorage.completeFirstRunQuickStart(for: accountID, preset: preset)
+            )
+            UserSetupStorage.saveWithoutPendingLaunchCard(profile, for: accountID)
         } else {
-            profile = preset.quickStartProfile
+            profile = chatStore.setupProfileSnapshot(preset.quickStartProfile)
         }
 
         chatStore.applySetupProfile(profile)
@@ -608,6 +750,10 @@ struct ConversationListView: View {
 
     private func setupCardRecommendation(for plan: AppSetupPlan) -> SetupCardRecommendation? {
         guard let recommendation = setupCardNextStep(for: plan) else { return nil }
+        return setupCardRecommendation(from: recommendation)
+    }
+
+    private func setupCardRecommendation(from recommendation: CapabilityNextStep) -> SetupCardRecommendation {
         return SetupCardRecommendation(
             title: recommendation.title,
             detail: recommendation.detail,
@@ -633,16 +779,29 @@ struct ConversationListView: View {
 
     private func runSetupCardRecommendation(for plan: AppSetupPlan) {
         guard let recommendation = setupCardNextStep(for: plan) else { return }
+        runRecommendation(recommendation)
+    }
+
+    private func runFirstRunRecommendation(_ recommendation: CapabilityNextStep) {
+        runRecommendation(recommendation)
+    }
+
+    private func runRecommendation(_ recommendation: CapabilityNextStep) {
         switch recommendation.kind {
         case .openCloud, .openAgent:
             AppHaptics.lightImpact()
-            showingAccountSettings = true
+            openAccountSettings(deepLink: AccountSettingsDeepLink(capabilityNextStepKind: recommendation.kind))
         case .useAutoCouncil:
             AppHaptics.selection()
             chatStore.useDefaultCouncilLineup()
         case .openSecurity, .rerunSetup:
             break
         }
+    }
+
+    private func openAccountSettings(deepLink: AccountSettingsDeepLink? = nil) {
+        accountSettingsDeepLink = deepLink
+        showingAccountSettings = true
     }
 
     private func reopenSavedSetup(_ state: SetupLaunchCardState) {
@@ -678,6 +837,59 @@ struct ConversationListView: View {
 
         chatStore.draft = suggestion.prompt
         chatStore.bannerMessage = "Starter prompt ready."
+    }
+
+    private func openSetupAgentMissionSuggestion(
+        _ suggestion: SetupAgentMissionSuggestion,
+        from state: SetupLaunchCardState,
+        clearsPendingCard: Bool
+    ) {
+        if clearsPendingCard {
+            UserSetupStorage.clearPendingLaunchCard(for: state.accountID)
+        }
+
+        AppHaptics.selection()
+
+        let profileWillOpenDraft = state.restoreState.needsRestore && state.plan.firstRunDraft != nil
+        if state.restoreState.needsRestore {
+            chatStore.applySetupProfile(state.profile)
+        }
+
+        if !profileWillOpenDraft {
+            chatStore.startNewConversation()
+            onStartNewChat()
+        }
+
+        chatStore.draft = suggestion.prompt
+        chatStore.bannerMessage = "Agent mission ready."
+    }
+
+    private func openSetupSkillSuggestion(
+        _ skill: IronclawSkillProfile,
+        from state: SetupLaunchCardState,
+        clearsPendingCard: Bool
+    ) {
+        if clearsPendingCard {
+            UserSetupStorage.clearPendingLaunchCard(for: state.accountID)
+        }
+
+        AppHaptics.selection()
+
+        let profileWillOpenDraft = state.restoreState.needsRestore && state.plan.firstRunDraft != nil
+        if state.restoreState.needsRestore {
+            chatStore.applySetupProfile(state.profile)
+        }
+
+        if !profileWillOpenDraft {
+            chatStore.startNewConversation()
+            onStartNewChat()
+        }
+
+        chatStore.draft = skill.missionPrompt(
+            seed: state.plan.goalText,
+            projectName: state.plan.starterProjectName ?? chatStore.selectedProject?.name
+        )
+        chatStore.bannerMessage = "\(skill.title) prompt ready."
     }
 
     private func openHomeTrustFlow() {

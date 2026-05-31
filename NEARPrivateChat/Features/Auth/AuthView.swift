@@ -49,13 +49,12 @@ struct AuthView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .accessibilityHidden(true)
 
-                Text("Private AI. Verifiably Yours.")
-                    .font(.system(size: 26, weight: .semibold))
-                    .tracking(-0.5)
+                Text("Private AI.\nVerifiably Yours.")
+                    .font(.system(size: 33, weight: .bold, design: .serif))
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
-                    .lineSpacing(32 - 26)
-                    .frame(maxWidth: 280)
+                    .lineSpacing(4)
+                    .frame(maxWidth: 300)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, 56)
@@ -252,13 +251,12 @@ struct AuthHeroCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .accessibilityHidden(true)
 
-            Text("Private AI. Verifiably Yours.")
-                .font(.system(size: 26, weight: .semibold))
-                .tracking(-0.5)
+            Text("Private AI.\nVerifiably Yours.")
+                .font(.system(size: 33, weight: .bold, design: .serif))
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(.center)
-                .lineSpacing(32 - 26)
-                .frame(maxWidth: 280)
+                .lineSpacing(4)
+                .frame(maxWidth: 300)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
@@ -278,8 +276,7 @@ private struct TermsRowCard: View {
                 CheckBox(isOn: isAccepted)
 
                 Text("I agree to the Terms and Privacy Policy")
-                    .font(.footnote)
-                    .fontWeight(.regular)
+                    .font(.system(.footnote, design: .rounded).weight(.regular))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -287,8 +284,7 @@ private struct TermsRowCard: View {
 
                 Button(action: onReadTerms) {
                     Text("Read terms")
-                        .font(.footnote)
-                        .fontWeight(.medium)
+                        .font(.system(.footnote, design: .rounded).weight(.medium))
                         .foregroundStyle(Color.actionPrimary)
                         .lineLimit(1)
                 }
@@ -349,8 +345,7 @@ private struct AuthProviderButton: View {
                     .frame(width: 20, height: 20)
 
                 Text(provider.title)
-                    .font(.callout)
-                    .fontWeight(.semibold)
+                    .font(.system(.callout, design: .rounded).weight(.semibold))
                     .frame(maxWidth: .infinity)
 
                 // Right-side spacer matches glyph width + leading gap so the

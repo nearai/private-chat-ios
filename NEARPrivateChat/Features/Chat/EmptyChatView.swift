@@ -7,6 +7,7 @@ import SwiftUI
 /// the chat surface.
 struct EmptyChatView: View {
     @EnvironmentObject private var chatStore: ChatStore
+    @EnvironmentObject private var sessionStore: SessionStore
 
     private struct EmptyPromptSuggestion: Identifiable {
         var id: String { title }
@@ -24,10 +25,14 @@ struct EmptyChatView: View {
                 .lineSpacing(24 - 17)
                 .foregroundStyle(Color.textTertiary)
 
+            Text(emptyStateSubtitle)
+                .font(.footnote.weight(.medium))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Color.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 24)
+
             if !emptyPromptSuggestions.isEmpty {
-                // Two chips per row so descriptive titles ("Today's news")
-                // stay readable instead of truncating to "To…". Still centered,
-                // still no scrolling.
                 VStack(spacing: 8) {
                     ForEach(suggestionRows, id: \.first?.id) { row in
                         HStack(spacing: 8) {
@@ -71,9 +76,41 @@ struct EmptyChatView: View {
         }
     }
 
+    private var savedSetupProfile: UserSetupProfile? {
+        guard let accountID = sessionStore.setupAccountID else {
+            return nil
+        }
+        return UserSetupStorage.load(for: accountID)?.normalizedForDefaults
+    }
+
+    private var inferredSetupProfile: UserSetupProfile {
+        UserSetupProfile.inferredCurrentDefaults(
+            webSearchEnabled: chatStore.webSearchEnabled,
+            sourceMode: chatStore.sourceMode,
+            selectedModelID: chatStore.selectedModel,
+            hasSelectedProject: chatStore.selectedProject != nil,
+            isCouncilModeEnabled: chatStore.isCouncilModeEnabled,
+            researchModeEnabled: chatStore.researchModeEnabled
+        ).normalizedForDefaults
+    }
+
+    private var resolvedSetupProfile: UserSetupProfile {
+        savedSetupProfile ?? inferredSetupProfile
+    }
+
+    private var emptyStateSubtitle: String {
+        if let project = chatStore.selectedProject {
+            return "Use \(project.name)'s files, links, and notes to move the work forward."
+        }
+
+        if chatStore.isCouncilModeEnabled {
+            return "Compare multiple model perspectives, then act on the synthesis."
+        }
+
+        return resolvedSetupProfile.emptyStateSubtitle
+    }
+
     private var emptyPromptSuggestions: [EmptyPromptSuggestion] {
-        // Context-aware suggestions remain, but stripped of setup/capability
-        // recovery patterns. These are conversation starters, not setup CTAs.
         if let project = chatStore.selectedProject {
             let projectName = project.name
             return [
@@ -120,50 +157,34 @@ struct EmptyChatView: View {
             ]
         }
 
-        // Default new chat: surface the live-data capability so it's
-        // discoverable. Each sends through the local QuickIntent path to a
-        // real widget / tracker — no sign-in needed.
-        var defaults = [
+        let suggestions = resolvedSetupProfile.emptyStatePromptSuggestions.map {
             EmptyPromptSuggestion(
-                title: "ETH price",
-                symbolName: "chart.line.uptrend.xyaxis",
-                prompt: "What's the ETH price?"
+                title: $0.title,
+                symbolName: $0.symbolName,
+                prompt: $0.prompt
+            )
+        }
+        if !suggestions.isEmpty {
+            return Array(suggestions.prefix(6))
+        }
+
+        return [
+            EmptyPromptSuggestion(
+                title: "Private question",
+                symbolName: "lock.shield",
+                prompt: "Help me think through a private question."
             ),
             EmptyPromptSuggestion(
-                title: "Weather",
-                symbolName: "cloud.sun",
-                prompt: "What's the weather in New York?"
+                title: "Research brief",
+                symbolName: "doc.text.magnifyingglass",
+                prompt: "Create a sourced brief on the latest developments in AI."
             ),
             EmptyPromptSuggestion(
-                title: "My NEAR",
-                symbolName: "person.crop.circle",
-                prompt: "How is my NEAR account doing?"
-            ),
-            EmptyPromptSuggestion(
-                title: "Today's news",
-                symbolName: "newspaper",
-                prompt: "Pull today's news"
-            ),
-            EmptyPromptSuggestion(
-                title: "Convert",
-                symbolName: "arrow.left.arrow.right",
-                prompt: "Convert 100 USD to EUR"
-            ),
-            EmptyPromptSuggestion(
-                title: "Daily tracker",
-                symbolName: "bell",
-                prompt: "Create a tracker for the ETH price every morning at 8am"
+                title: "Repo plan",
+                symbolName: "chevron.left.forwardslash.chevron.right",
+                prompt: "Plan the first repo task: what to inspect, what to change, and which focused tests should run."
             )
         ]
-
-        // Proactive personalization: if memory mentions something trackable,
-        // lead with a starter for it (deduped against the defaults).
-        if let starter = QuickIntentParser.personalizedStarter(fromMemory: chatStore.memoryStore.items.map(\.text)) {
-            let suggestion = EmptyPromptSuggestion(title: starter.title, symbolName: starter.symbol, prompt: starter.prompt)
-            defaults.removeAll { $0.title == suggestion.title }
-            defaults.insert(suggestion, at: 0)
-        }
-        return Array(defaults.prefix(6))
     }
 
     private func fillDraft(for suggestion: EmptyPromptSuggestion) {

@@ -686,6 +686,16 @@ final class ChatStore: ObservableObject {
         normalizedCouncilModels(from: defaultCouncilModelIDs())
     }
 
+    var setupRouteDefaults: SetupRouteDefaults {
+        SetupRouteDefaults(
+            privateModelID: usablePrivateSetupModelID(from: selectedModel) ?? preferredAvailableModel() ?? Self.defaultModelID,
+            councilModelIDs: isCouncilModeEnabled ? normalizedCouncilModelIDs(councilModelIDs) : defaultCouncilModelIDs(),
+            ironclawMobileModelID: agentModels.contains { $0.id == ModelOption.ironclawMobileModelID }
+                ? ModelOption.ironclawMobileModelID
+                : nil
+        ).normalized
+    }
+
     var councilPresets: [CouncilPresetOption] {
         [
             councilPreset(
@@ -1057,8 +1067,10 @@ final class ChatStore: ObservableObject {
     }
 
     func canUseInCouncil(_ modelID: String) -> Bool {
-        guard let model = chatModels.first(where: { $0.id == modelID }) else {
-            return false
+        let trimmed = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        guard let model = chatModels.first(where: { $0.id == trimmed }) else {
+            return canPreserveCouncilModelID(trimmed)
         }
         return isCouncilEligible(model)
     }
@@ -1581,8 +1593,8 @@ final class ChatStore: ObservableObject {
     /// UserDefaults keys an App Intent (Siri/Shortcuts) writes; the app consumes
     /// them on activation. The intents run in-process (main-target App Intents),
     /// so plain UserDefaults is shared — no App Group needed.
-    static let pendingSiriPromptKey = "pendingSiriPrompt"
-    static let pendingRunBriefingsKey = "pendingRunBriefings"
+    nonisolated static let pendingSiriPromptKey = "pendingSiriPrompt"
+    nonisolated static let pendingRunBriefingsKey = "pendingRunBriefings"
 
     /// Stages a Siri-supplied question into the composer (not auto-sent — the
     /// user reviews it, matching the deep-link "staged but not sent" contract).
@@ -2104,36 +2116,40 @@ final class ChatStore: ObservableObject {
         transitionDraftScopeToCurrentSelection(loadDraft: true)
     }
 
+    func setupProfileSnapshot(_ rawProfile: UserSetupProfile) -> UserSetupProfile {
+        var profile = rawProfile.normalizedForDefaults
+        profile.routeDefaults = resolvedSetupRouteDefaults(for: profile)
+        return profile
+    }
+
     func applySetupProfile(_ rawProfile: UserSetupProfile) {
-        let profile = rawProfile.normalizedForDefaults
+        let profile = setupProfileSnapshot(rawProfile)
+        let routeDefaults = resolvedSetupRouteDefaults(for: profile)
         let readiness = AppSetupReadinessSnapshot(
-            modelCatalogLoaded: !models.isEmpty,
+            modelCatalogLoaded: !models.isEmpty || routeDefaults.councilModelIDs.count > 1,
             privateModelAvailable: pickerModels.contains { !$0.isExternalModel },
-            defaultCouncilModelCount: defaultCouncilModels.count,
+            defaultCouncilModelCount: max(defaultCouncilModels.count, routeDefaults.councilModelIDs.count),
             ironclawMobileAvailable: agentModels.contains { $0.id == ModelOption.ironclawMobileModelID },
             hostedIronclawAvailable: ironclawRemoteWorkstationAvailable,
             nearCloudKeyConfigured: nearCloudKeyConfigured
         )
-        let plan = AppSetupPlan(profile: profile, readiness: readiness)
+        let plan = AppSetupPlan(profile: profile, readiness: readiness, routeDefaults: routeDefaults)
         webSearchEnabled = profile.wantsWeb
         sourceMode = plan.focusMode
         researchModeEnabled = profile.useCases.contains(.research) && plan.modelRoute != .ironclaw
 
-        let requestedCouncilModelIDs = plan.modelRoute == .council ? defaultCouncilModelIDs() : []
+        let requestedCouncilModelIDs = plan.modelRoute == .council ? routeDefaults.councilModelIDs : []
         switch plan.modelRoute {
         case .ironclaw:
-            selectedModel = ModelOption.ironclawMobileModelID
+            selectedModel = routeDefaults.preferredIronclawModelID(readiness: readiness) ?? ModelOption.ironclawMobileModelID
             councilModelIDs = []
         case .council:
             councilModelIDs = requestedCouncilModelIDs
             selectedModel = requestedCouncilModelIDs.first ?? preferredAvailableModel() ?? Self.defaultModelID
         case .privateModel:
-            let selectedModelIsUsablePrivateModel =
-                pickerModels.contains(where: { $0.id == selectedModel && !$0.isExternalModel }) &&
-                Self.routeKind(forModelID: selectedModel) == .nearPrivate
-            if !selectedModelIsUsablePrivateModel {
-                selectedModel = preferredAvailableModel() ?? Self.defaultModelID
-            }
+            selectedModel = usablePrivateSetupModelID(from: routeDefaults.privateModelID) ??
+                preferredAvailableModel() ??
+                Self.defaultModelID
             councilModelIDs = canUseInCouncil(selectedModel) ? [selectedModel] : []
         }
 
@@ -2147,7 +2163,11 @@ final class ChatStore: ObservableObject {
                     projects[index].instructions = instructions
                     didChangeProject = true
                 }
-                didChangeProject = seedSetupProjectMetadata(projectIndex: index, profile: profile) || didChangeProject
+                didChangeProject = seedSetupProjectMetadata(
+                    projectIndex: index,
+                    profile: profile,
+                    plan: plan
+                ) || didChangeProject
                 if didChangeProject {
                     saveProjects()
                 }
@@ -2165,6 +2185,58 @@ final class ChatStore: ObservableObject {
         } else {
             showBanner(setupAppliedBanner(for: plan, profile: profile, openedDraft: false))
         }
+    }
+
+    private func resolvedSetupRouteDefaults(for profile: UserSetupProfile) -> SetupRouteDefaults {
+        let stored = profile.routeDefaults.normalized
+        let fallback = setupRouteDefaults
+        let privateModelID = usablePrivateSetupModelID(from: stored.privateModelID) ??
+            usablePrivateSetupModelID(from: fallback.privateModelID) ??
+            preferredAvailableModel() ??
+            Self.defaultModelID
+        let councilIDs = setupCouncilRouteModelIDs(
+            stored.councilModelIDs.isEmpty ? fallback.councilModelIDs : stored.councilModelIDs
+        )
+        let ironclawMobileModelID =
+            stored.ironclawMobileModelID == ModelOption.ironclawMobileModelID &&
+            agentModels.contains { $0.id == ModelOption.ironclawMobileModelID }
+            ? ModelOption.ironclawMobileModelID
+            : fallback.ironclawMobileModelID
+
+        return SetupRouteDefaults(
+            privateModelID: privateModelID,
+            councilModelIDs: councilIDs,
+            ironclawMobileModelID: ironclawMobileModelID
+        ).normalized
+    }
+
+    private func usablePrivateSetupModelID(from modelID: String?) -> String? {
+        guard let trimmed = modelID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty,
+              Self.routeKind(forModelID: trimmed) == .nearPrivate else {
+            return nil
+        }
+        return trimmed
+    }
+
+    private func setupCouncilRouteModelIDs(_ ids: [String]) -> [String] {
+        var seen = Set<String>()
+        var normalized: [String] = []
+        for modelID in ids {
+            let trimmed = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.lowercased()
+            guard !trimmed.isEmpty,
+                  Self.routeKind(forModelID: trimmed) != .ironclawHosted,
+                  Self.routeKind(forModelID: trimmed) != .ironclawMobile,
+                  seen.insert(key).inserted else {
+                continue
+            }
+            normalized.append(trimmed)
+            if normalized.count == Self.maxCouncilModels {
+                break
+            }
+        }
+        return normalized
     }
 
     private func setupAppliedBanner(for plan: AppSetupPlan, profile: UserSetupProfile, openedDraft: Bool) -> String {
@@ -2200,7 +2272,11 @@ final class ChatStore: ObservableObject {
         return messages.isEmpty
     }
 
-    private func seedSetupProjectMetadata(projectIndex index: Int, profile: UserSetupProfile) -> Bool {
+    private func seedSetupProjectMetadata(
+        projectIndex index: Int,
+        profile: UserSetupProfile,
+        plan: AppSetupPlan
+    ) -> Bool {
         guard projects.indices.contains(index) else { return false }
         var didChange = false
         let style = Self.setupProjectStyle(for: profile)
@@ -2212,29 +2288,50 @@ final class ChatStore: ObservableObject {
             projects[index].paletteName = style.paletteName
             didChange = true
         }
-        let setupGuideText = Self.setupGuideNoteText(for: profile)
-        if let noteIndex = projects[index].notes.firstIndex(where: { $0.title == Self.setupGuideNoteTitle }) {
-            var note = projects[index].notes.remove(at: noteIndex)
-            if note.text != setupGuideText {
-                note.text = setupGuideText
+        let managedTitles = Set([
+            Self.setupGuideNoteTitle,
+            Self.setupPromptNoteTitle,
+            Self.setupSkillsNoteTitle
+        ])
+        let existingManagedNotes = projects[index].notes.reduce(into: [String: ProjectNote]()) { result, note in
+            guard managedTitles.contains(note.title), result[note.title] == nil else { return }
+            result[note.title] = note
+        }
+        let userNotes = projects[index].notes.filter { !managedTitles.contains($0.title) }
+        let desiredManagedNotes = [
+            (Self.setupGuideNoteTitle, Self.setupGuideNoteText(for: profile)),
+            (Self.setupPromptNoteTitle, Self.setupPromptNoteText(for: plan)),
+            (Self.setupSkillsNoteTitle, Self.setupSkillsNoteText(for: plan))
+        ].compactMap { title, text -> ProjectNote? in
+            guard let text else { return nil }
+            if var note = existingManagedNotes[title] {
+                note.text = text
+                return note
+            }
+            return ProjectNote(title: title, text: text)
+        }
+
+        for note in desiredManagedNotes {
+            if existingManagedNotes[note.title]?.text != note.text {
                 didChange = true
             }
-            projects[index].notes.insert(note, at: 0)
-            if noteIndex != 0 {
-                didChange = true
-            }
-        } else {
-            projects[index].notes.insert(
-                ProjectNote(title: Self.setupGuideNoteTitle, text: setupGuideText),
-                at: 0
-            )
-            projects[index].notes = Array(projects[index].notes.prefix(20))
+        }
+        let removedManagedTitles = Set(existingManagedNotes.keys).subtracting(desiredManagedNotes.map(\.title))
+        if !removedManagedTitles.isEmpty {
+            didChange = true
+        }
+
+        let updatedNotes = Array((desiredManagedNotes + userNotes).prefix(20))
+        if projects[index].notes != updatedNotes {
+            projects[index].notes = updatedNotes
             didChange = true
         }
         return didChange
     }
 
     private static let setupGuideNoteTitle = "Setup guide"
+    private static let setupPromptNoteTitle = "Starter prompts"
+    private static let setupSkillsNoteTitle = "IronClaw skills"
 
     private static func setupProjectStyle(for profile: UserSetupProfile) -> (iconName: String, paletteName: String) {
         if profile.useCases.contains(.buildAgents) {
@@ -2272,6 +2369,30 @@ final class ChatStore: ObservableObject {
             lines.append("")
             lines.append("Setup goal: \(goal)")
         }
+        return lines.joined(separator: "\n")
+    }
+
+    private static func setupPromptNoteText(for plan: AppSetupPlan) -> String? {
+        let prompts = Array(plan.starterPromptSuggestions.prefix(3))
+        guard !prompts.isEmpty else { return nil }
+
+        var lines = [
+            "Use these starter prompts from setup when you want a fast first turn.",
+            ""
+        ]
+        lines.append(contentsOf: prompts.map { "- \($0.title): \($0.prompt)" })
+        return lines.joined(separator: "\n")
+    }
+
+    private static func setupSkillsNoteText(for plan: AppSetupPlan) -> String? {
+        let skills = Array(plan.starterSkillSuggestions.prefix(4))
+        guard !skills.isEmpty else { return nil }
+
+        var lines = [
+            "Suggested IronClaw skills for this workspace:",
+            ""
+        ]
+        lines.append(contentsOf: skills.map { "- \($0.title): \($0.summary)" })
         return lines.joined(separator: "\n")
     }
 
@@ -4139,7 +4260,7 @@ final class ChatStore: ObservableObject {
             status: "completed", responseID: nil, isStreaming: false
         ))
         let pendingID = "local-assistant-\(UUID().uuidString)"
-        var pending = ChatMessage(
+        let pending = ChatMessage(
             id: pendingID, role: .assistant, text: "Working on \(intents.count) lookups…",
             model: model, createdAt: Date(), status: "searching", responseID: nil, isStreaming: true
         )
@@ -4308,7 +4429,7 @@ final class ChatStore: ObservableObject {
             editAndResend(message, replacementText: replacementText)
         case let .directSend(text, attachments, previousResponseIDOverride, initiator, appendUserMessage):
             streamTask = Task { [weak self] in
-                await self?.send(
+                _ = await self?.send(
                     text,
                     attachments: attachments,
                     previousResponseIDOverride: previousResponseIDOverride,
@@ -4572,7 +4693,7 @@ final class ChatStore: ObservableObject {
         messages.removeSubrange(assistantIndex..<messages.endIndex)
         showBanner("Regenerating response.")
         streamTask = Task { [weak self] in
-            await self?.send(
+            _ = await self?.send(
                 userMessage.text,
                 attachments: attachments,
                 previousResponseIDOverride: parentResponseID,
@@ -4611,7 +4732,7 @@ final class ChatStore: ObservableObject {
         messages.removeSubrange(userIndex..<messages.endIndex)
         showBanner("Branching from edited prompt.")
         streamTask = Task { [weak self] in
-            await self?.send(
+            _ = await self?.send(
                 text,
                 attachments: attachments,
                 previousResponseIDOverride: parentResponseID,
@@ -4621,7 +4742,6 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    @discardableResult
     /// Prepends a "relevant excerpts" block from any attached PDF whose text we
     /// staged on-device, ranked against the user's question. No-op when there's
     /// no staged doc, no question, or nothing relevant — so it never disturbs a
@@ -7371,7 +7491,7 @@ final class ChatStore: ObservableObject {
             case .researchToCode:
                 return "Use the IronClaw coding, github-workflow, and web research behavior when available."
             case .githubTriage:
-                return "Use the IronClaw github, github-workflow, delegation, and review skill behavior when available."
+                return "Use the IronClaw github, github-workflow, delegation, and review-checklist skill behavior when available."
             case .codeReview:
                 return "Use the IronClaw code-review and review-readiness skill behavior when available."
             case .securityReview:
@@ -7383,7 +7503,7 @@ final class ChatStore: ObservableObject {
             case .productPrioritization:
                 return "Use the IronClaw product-prioritization skill behavior when available."
             case .decisionCapture:
-                return "Use the IronClaw decision-capture, commitment, idea-parking, and tech-debt-tracker skill behavior when available."
+                return "Use the IronClaw decision-capture, commitment-triage, idea-parking, and tech-debt-tracker skill behavior when available."
             }
         }
     }
@@ -7511,7 +7631,11 @@ final class ChatStore: ObservableObject {
     private func normalizedCouncilModels(from ids: [String]) -> [ModelOption] {
         let normalizedIDs = normalizedCouncilModelIDs(ids)
         return normalizedIDs.compactMap { modelID in
-            chatModels.first(where: { $0.id == modelID && isCouncilEligible($0) })
+            if let model = chatModels.first(where: { $0.id == modelID && isCouncilEligible($0) }) {
+                return model
+            }
+            guard canPreserveCouncilModelID(modelID) else { return nil }
+            return ModelOption(modelID: modelID, publicModel: true, metadata: nil)
         }
     }
 
@@ -7519,16 +7643,24 @@ final class ChatStore: ObservableObject {
         var seen = Set<String>()
         var normalized: [String] = []
         let eligibleIDs = Set(chatModels.filter(isCouncilEligible).map(\.id))
-        for modelID in ids where !seen.contains(modelID) {
-            if eligibleIDs.isEmpty || eligibleIDs.contains(modelID) {
-                normalized.append(modelID)
-                seen.insert(modelID)
+        for modelID in ids {
+            let trimmed = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, seen.insert(trimmed.lowercased()).inserted else {
+                continue
+            }
+            if eligibleIDs.isEmpty || eligibleIDs.contains(trimmed) || canPreserveCouncilModelID(trimmed) {
+                normalized.append(trimmed)
             }
             if normalized.count == Self.maxCouncilModels {
                 break
             }
         }
         return normalized
+    }
+
+    private func canPreserveCouncilModelID(_ modelID: String) -> Bool {
+        let route = Self.routeKind(forModelID: modelID)
+        return route == .nearPrivate || route == .nearCloud
     }
 
     private func normalizeCouncilSelection() {
