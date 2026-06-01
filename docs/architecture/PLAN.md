@@ -2,235 +2,508 @@
 
 ## Goal
 
-Turn current monolithic SwiftUI app into feature-first iOS app that is easy to debug, scale, test, and hand to parallel agents.
+Turn current repo from "feature folders around a god object" into feature-owned SwiftUI app with narrow stores, protocol-backed services, and tests that prove each extracted seam.
 
-## Migration Status
+Primary objective: delete `ChatStore` responsibilities phase by phase. Do not polish it. Remove jobs from it until no feature depends on it as global state.
 
-As of 2026-05-26:
+## Ground Rules
 
-- Phase 0 baseline docs exist in `docs/architecture` and `CONTEXT.md`.
-- Phase 1 app shell/routing foundation is complete: root lifecycle, setup, legal gate, status banner, and route/sheet models have moved into `App/`, `Features/Setup/`, and `Core/Routing/`.
-- Phase 2 design-system/shared extraction is complete: haptics, design tokens, brand marks, clipboard, chip layout, view extensions, and markdown rendering now live under `Core/DesignSystem` or `Shared`.
-- Phase 3 feature ownership is materially complete for file placement: Auth, Home, Chat, ModelCatalog, Sharing, Projects, Files, Account, Security, Agent, and Setup now have feature folders.
-- The app shell split is complete enough for continued work: `AppShellView.swift` is down to root navigation/dialog coordination, while `ConversationListView`, shared conversation UI, and `EmptyChatView` live in their owning features.
-- Phase 12 model-file split is complete as a mechanical first pass: the former monolithic `Models.swift` has been replaced by domain model files.
-- Phases 4-8 now have first-pass service/store owners: `ComposerState`, `MessageTimelineStore`, `RoutePlanner`, `MessageStreamService`, `CouncilStreamService`, `ModelCatalogStore`, `ProjectStore`, `FileStore`, and `ShareStore`.
-- Next phase: continue reducing `ChatStore` beyond the compatibility facade, starting with route mutation, Council fan-out, project persistence, file cache, and sharing API calls.
-
-## Guardrails
-
-- Preserve behavior while moving code.
-- Keep app phone-first.
-- Keep hosted API contracts unchanged.
+- Preserve user-visible behavior.
+- No DB migrations.
+- No localhost app runs.
 - Use `pnpm` only for JS verifier work.
-- Do not run or create DB migrations.
-- Do not run localhost app.
-- Do not build for tiny docs/style-only edits unless needed.
+- Do not create branches with `codex/` prefix.
+- New Swift files must be added to Xcode project target membership.
+- No docs-only build.
+- For Swift file moves/service extraction, build/test according to risk.
+- Do not add new behavior to `ChatStore` except temporary forwarding deleted in same phase.
 
-## Phase 0: Baseline Map
+## Current Baseline
 
-- Record current file ownership and line counts.
-- Create feature map from existing `AppShellView.swift`, `ChatStore.swift`, `Models.swift`, and API files.
-- Identify public behaviors that must not change for each feature.
-- Create first smoke checklist for manual verification.
+Hard blockers:
 
-Exit:
+- `ChatStore.swift` is 11878 lines and owns too many domains.
+- `PrivateChatCoreTests.swift` is 8352 lines and blocks targeted test ownership.
+- Chat/Home/Setup UI files exceed 1000 lines in multiple places.
+- `PrivateChatAPI` is still one concrete client for many domains.
+- persistence keys/caches live inside app-wide state.
+- existing feature stores are mostly read-model helpers, not true behavior owners.
 
-- `ARCHITECTURE.md` defines target folders, routing, state ownership, service seams.
-- `CONTEXT.md` defines product terms.
-- Each future extraction has owner feature.
+Good foundation already present:
 
-## Phases 4-8 Shipment
+- feature folders exist
+- route/sheet enums exist
+- stream parser/service files exist
+- model catalog/project/file/share first-pass stores exist
+- app has a composition point
+- Xcode project/schemes are discoverable with Build iOS Apps tooling
 
-Detailed execution plan: `docs/architecture/PHASE_4_8_SHIPPING_PLAN.md`.
+## Phase 0: Freeze And Map
 
-Shipping rule: phases 4-8 move behavior out of `ChatStore` in service/store chunks, not by changing the app's user-facing flow. Each phase must build, test, simulator-smoke, and update docs before being pushed.
+Purpose: stop more architecture drift before moving code.
 
-## Phase 1: App Shell And Routing
+Actions:
 
-- Create `App/RootView.swift`.
-- Create `App/StatusBanner.swift`.
-- Create `Features/Setup/UserSetupView.swift`.
-- Create `Features/Setup/LegalTermsRequiredView.swift`.
-- Create `Core/Routing/AppRoute.swift`.
-- Create `Core/Routing/AppSheet.swift`.
-- Create `Core/Routing/AppRouter.swift`.
-- Add all new Swift files to `NEARPrivateChat.xcodeproj/project.pbxproj`.
-- Move root auth/setup/legal/banner routing out of `NEARPrivateChatApp.swift`.
-- Convert `AppRouter` as `ObservableObject` for Phase 1 and inject with current `EnvironmentObject` style.
-- Remove `private` from moved Swift declarations only when another file must reference them.
-- Keep `ChatStore` as compatibility facade for this phase.
-- Keep existing `SessionStore` name; do not rename auth state in this phase.
-
-Exit:
-
-- Navigation and sheets have one route model.
-- `NEARPrivateChatApp.swift` no longer contains root setup/legal/banner view declarations.
-- Feature-specific nested `NavigationStack` and sheets may remain local until their feature extraction.
-- Sign-in, sign-out, deep links, setup rerun still route correctly.
-- Simulator build succeeds after Swift file/project changes.
-
-## Phase 2: Design System Extraction
-
-- Move colors, typography helpers, haptics, toolbar icons, chips, cards, rows, empty states, and loading rows into `Core/DesignSystem` and `Shared/Components`.
-- Move markdown renderer into `Shared/Components/Markdown`.
-- Keep visuals unchanged.
+- Add an ownership checklist to PR/review habit: "Which feature owns this?"
+- Record top 20 largest Swift files before each phase.
+- Mark `ChatStore` as legacy compatibility facade in comments.
+- Create a `ChatStoreDebtMap.md` or section in this plan listing responsibility buckets and target owner.
+- Do not move code yet.
 
 Exit:
 
-- `AppShellView.swift` no longer owns reusable visual primitives.
-- Feature screens compose shared primitives.
+- every `ChatStore` responsibility has target owner
+- no new feature starts from `ChatStore`
+- next phase can remove one responsibility bucket without behavior guessing
 
-Status: complete on 2026-05-26.
+Validation:
 
-## Phase 3: Home Feature
+- docs only, no build
 
-- Create `Features/Home`.
-- Move conversation list, search/filter, project rows, recent cards, and home actions.
-- Introduce `HomeStore` only if local state and derived values exceed view-local state.
-- Keep data backed by existing facade until conversation/project stores exist.
+## Phase 1: Test Split First
 
-Exit:
+Purpose: make later refactors reviewable.
 
-- Home feature can be debugged without opening chat/composer/sharing code.
+Actions:
 
-Status: partial/structural complete on 2026-05-26. UI ownership moved; `HomeStore` intentionally deferred until `ChatStore` facade is reduced.
-
-## Phase 4: Chat Feature
-
-- Create `Features/Chat`.
-- Move `ChatView`, toolbar, transcript list, message bubbles, composer, attachments strip, source strip, response variants, inline actions.
-- Create `MessageTimelineStore` for visible messages and stream application.
-- Create `ComposerState` for draft, source mode display, prompt attachments, and route readiness display.
-
-Exit:
-
-- Chat UI no longer depends on home/project/account UI code.
-- Message timeline changes test without rendering SwiftUI.
-
-Status: first-pass complete on 2026-05-26. Chat UI files moved; `MessageTimelineStore` owns visible transcript grouping and `ComposerState` owns sendability state.
-
-## Phase 5: Streaming And Route Services
-
-- Create `Core/Streaming/MessageStreamService`.
-- Create `Core/Streaming/CouncilStreamService`.
-- Create `Core/Routing/RoutePlanner`.
-- Move fallback, visible-output timeout, cancellation, Council fan-out, and synthesis out of `ChatStore`.
+- Split `PrivateChatCoreTests.swift` into focused XCTest files by current ownership:
+  - Auth
+  - Routing
+  - Streaming
+  - ModelCatalog
+  - Projects
+  - Files
+  - Sharing
+  - Setup
+  - Security
+  - Export
+  - Agent
+  - Chat
+- Move helper factories into test support files.
+- Add new test files to Xcode project.
+- Keep test bodies unchanged except imports/helper access.
 
 Exit:
 
-- Response streaming bugs have one owner.
-- Route decisions test without UI.
+- no test file over 1000 lines unless temporarily justified
+- changed test groups can run independently
+- no production behavior changed
 
-Status: first-pass complete on 2026-05-26. `RoutePlanner` owns route classification/readiness/source-routing forwarding, `MessageStreamService` owns visible-output timeout policy, and `CouncilStreamService` owns the Council concurrency limit. Deeper streaming mutation/fan-out extraction remains follow-up.
+Validation:
 
-## Phase 6: Model Catalog And Source Routing
+- targeted test run
+- simulator build if project file changes are manual
 
-- Create `Features/ModelCatalog`.
-- Move model picker, capability filters, pinned models, council picker, reasoning effort UI.
-- Move source-mode semantics into `Core/Routing/SourceRouting`.
-- Split API model DTOs from UI display models.
+## Phase 2: API Client Split
 
-Exit:
+Purpose: stop feature code depending on one concrete mega-client.
 
-- Model catalog and route readiness are independent from chat screen layout.
+Actions:
 
-Status: first-pass complete on 2026-05-26. `ModelCatalogStore` owns cloud route models, external models, picker models, pinned picker derivation, and ranking. Source-routing semantics remain in `ChatRoutingModels.swift` with `RoutePlanner` forwarding.
-
-## Phase 7: Projects And Files
-
-- Create `Features/Projects`.
-- Create `Features/Files`.
-- Move project CRUD, project context, notes, links, reusable files, remote file list/preview, attachment upload.
-- Create storage adapters for project cache, file cache, and drafts.
-
-Exit:
-
-- Project context and file library can evolve without touching composer internals except explicit interfaces.
-
-Status: first-pass complete on 2026-05-26. `ProjectStore` owns selected-project conversation scoping and visible/archived filtering. `FileStore` owns prompt/project attachment limit decisions. Project persistence/file cache/upload are still bridged through `ChatStore`.
-
-## Phase 8: Sharing
-
-- Create `Features/Sharing`.
-- Move share sheet, public link preview, direct/org/group shares, shared-with-me, shared preview/open/copy flows.
-- Create `ShareStore` backed by `ShareAPI`.
+- Extract `APIClient` request core from `PrivateChatAPI`.
+- Create protocols and concrete clients:
+  - `AuthAPI`
+  - `ConversationAPI`
+  - `MessageAPI`
+  - `ModelAPI`
+  - `FileAPI`
+  - `ShareAPI`
+  - `SettingsAPI`
+  - `BillingAPI`
+  - `AttestationAPI`
+- Keep endpoint behavior byte-for-byte equivalent.
+- Inject clients through `AppEnvironment`.
+- Keep `PrivateChatAPI` as temporary facade only if needed by untouched code.
 
 Exit:
 
-- Sharing permission bugs have small surface and fakeable API tests.
+- new feature services depend on protocols
+- auth tests hit `AuthAPI`
+- sharing tests can fake `ShareAPI`
+- files tests can fake `FileAPI`
 
-Status: first-pass complete on 2026-05-26. `ShareStore` owns shared-author visibility state. Share API mutation and sheet state are still bridged through `ChatStore`.
+Validation:
 
-## Phase 9: Security And Attestation
+- API/request tests
+- simulator build
 
-- Create `Features/Security`.
-- Move attestation state display, proof capsule, security rows, diagnostics rows, local verification state.
-- Keep language strict: attestation unless proof chain actually verified.
+## Phase 3: Persistence Split
 
-Exit:
+Purpose: remove storage keys, filenames, account scoping, and migration from app-wide state.
 
-- Privacy/security copy and state model reviewable in one feature.
+Actions:
 
-## Phase 10: Agent And Account
-
-- Create `Features/Agent`.
-- Move IronClaw Mobile UI, hosted handoff, approval/credential gates, tool-call status.
-- Create `Features/Account`.
-- Move settings, billing, imports, integration checks, diagnostics entry.
-
-Exit:
-
-- Power-user surfaces no longer expand chat/home files.
-
-## Phase 11: API Split
-
-- Split `PrivateChatAPI` into protocol-backed API clients by domain.
-- Keep shared request/response plumbing in `Core/API`.
-- Add fakes for tests.
+- Extract adapters:
+  - `SessionPersistence`
+  - `SettingsPersistence`
+  - `ConversationCache`
+  - `MessageCache`
+  - `ProjectPersistence`
+  - `DraftPersistence`
+  - `FileCache`
+  - `AgentThreadPersistence`
+- Move account-scope helpers out of `ChatStore`.
+- Make adapters small and fakeable.
+- Do not change stored key formats unless migration test exists.
 
 Exit:
 
-- Tests can target each API domain.
-- Feature services depend on protocols, not concrete mega-client.
+- `ChatStore` has no direct defaults/keychain/file cache helpers except temporary forwarding
+- persistence tests own migration and fallback scope behavior
 
-## Phase 12: Model Split
+Validation:
 
-- Split `Models.swift` into domain files:
-  - `Core/Auth/AuthModels.swift`
-  - `Core/API/APIError.swift`
-  - `Features/Chat/ChatModels.swift`
-  - `Features/ModelCatalog/ModelCatalogModels.swift`
-  - `Features/Projects/ProjectModels.swift`
-  - `Features/Sharing/SharingModels.swift`
-  - `Features/Security/AttestationModels.swift`
-  - `Features/Agent/AgentModels.swift`
-- Move UI-only extensions/components out of model files.
+- persistence tests
+- simulator build
 
-Exit:
+## Phase 4: Sharing Full Extraction
 
-- No model file mixes API DTOs, storage helpers, view components, and design constants.
+Purpose: prove real feature ownership on a bounded domain.
 
-Status: complete as a mechanical first pass on 2026-05-26. Follow-up cleanup should refine ownership if a type is found in the wrong first-pass file.
+Actions:
 
-## Phase 13: Cleanup Gates
-
-- Remove compatibility facade methods that have no callers.
-- Add `MARK` only where useful during transition.
-- Keep public feature imports clean.
-- Update docs when architecture changes.
+- Create `SharingService` backed by `ShareAPI`.
+- Turn `ShareStore` into `@MainActor ObservableObject`.
+- Move share state out of `ChatStore`:
+  - share info
+  - shared-with-me
+  - share groups
+  - shared preview
+  - loading flags
+  - public/direct/org/group mutations
+- Update sharing views to use `ShareStore`, not `ChatStore`.
+- Leave only a temporary forwarding bridge where chat toolbar still opens sharing UI.
 
 Exit:
 
-- `AppShellView.swift`, `ChatStore.swift`, and `Models.swift` stop being default edit targets.
-- New feature work starts inside feature folder.
+- sharing tests do not instantiate `ChatStore`
+- sharing UI no longer needs `EnvironmentObject ChatStore`
+- all share mutations have one owner
 
-## First Extraction Candidate
+Validation:
 
-Start with Home or Sharing.
+- sharing tests
+- simulator build
+- manual smoke by user if needed
 
-Recommended: Sharing first if risk focus is correctness. It has clear API boundary and fewer layout dependencies than Chat.
+## Phase 5: Files And Attachments Extraction
 
-Recommended: Home first if goal is fast visible file-size reduction. It gives quick win but less architectural proof.
+Purpose: separate document/file behavior from chat send flow.
 
-My pick: Sharing first.
+Actions:
+
+- Create `FileService` backed by `FileAPI` and `FileCache`.
+- Turn `FileStore` into owning observable store.
+- Move remote file list, preview, delete, upload, attach-to-project, attach-to-prompt.
+- Extract local document text staging and large paste attachment into `AttachmentStagingStore`.
+- Keep chat composer consuming a typed `PromptAttachmentDraft`.
+
+Exit:
+
+- file tests do not instantiate `ChatStore`
+- composer does not know remote file API details
+- document privacy mode has explicit owner
+
+Validation:
+
+- files tests
+- attachment staging tests
+- simulator build
+
+## Phase 6: Projects Extraction
+
+Purpose: move project mutation and persistence to project owner.
+
+Actions:
+
+- Turn `ProjectStore` into observable owning store.
+- Add `ProjectService` using `ProjectPersistence`.
+- Move project CRUD, archive, note/link/instruction/memory mutation, assignment, selected project.
+- Expose read models for Home and Chat:
+  - selected project summary
+  - prompt context
+  - membership state
+  - project-scoped conversations
+- Agent tools must call project service actions, not mutate chat arrays.
+
+Exit:
+
+- project tests do not instantiate `ChatStore`
+- `ChatStore` no longer persists projects
+- Home and Chat read project state through narrow models
+
+Validation:
+
+- project tests
+- agent-project mutation tests
+- simulator build
+
+## Phase 7: Conversation And Message Cache Extraction
+
+Purpose: isolate conversation lifecycle from chat UI.
+
+Actions:
+
+- Create `ConversationStore`.
+- Move conversation list, selected conversation, archive/pin/rename/delete/clone, cached previews.
+- Create `MessageRepository` for load/save local/remote messages.
+- Move selected response variant tracking into chat/message owner.
+- Define one source of truth for current conversation.
+
+Exit:
+
+- Home reads `ConversationStore`
+- Chat reads selected conversation/message repository
+- delete/archive/pin/rename no longer live in `ChatStore`
+
+Validation:
+
+- conversation tests
+- message repository tests
+- simulator build
+
+## Phase 8: Chat Send Pipeline Extraction
+
+Purpose: remove highest-risk logic from god object into explicit transaction.
+
+Actions:
+
+- Create `ChatSendCoordinator`.
+- Move send flow:
+  - draft snapshot
+  - attachment resolution
+  - route readiness
+  - conversation creation
+  - user message append
+  - stream start/cancel
+  - retry/regenerate/edit-and-resend
+- `ChatFeatureStore` owns transcript/composer state and delegates to coordinator.
+- Use `MessageTimelineStore` for event application.
+
+Exit:
+
+- `sendDraft`, `send`, retry/regenerate/edit flow no longer live in `ChatStore`
+- send tests can fake route planner, message API, stream service, repository
+- stream cancellation is testable without SwiftUI
+
+Validation:
+
+- chat send tests
+- streaming tests
+- simulator build
+- simulator smoke recommended
+
+## Phase 9: Council And Model Routing Extraction
+
+Purpose: separate model choice from chat screen and global state.
+
+Actions:
+
+- Move council selection, default lineup, presets, eligibility, plan locks into `ModelCatalogStore`.
+- Move council fan-out/synthesis into `CouncilConversationService`.
+- Keep `RoutePlanner` pure and tested.
+- Chat asks model/catalog services for send-ready route.
+
+Exit:
+
+- council logic does not depend on `ChatStore`
+- route readiness tests hit route/model services directly
+- model picker views use `ModelCatalogStore`
+
+Validation:
+
+- model catalog tests
+- council tests
+- route planner tests
+- simulator build
+
+## Phase 10: Home Refactor
+
+Purpose: remove home as second mega-screen.
+
+Actions:
+
+- Create `HomeStore` for home-only state and actions.
+- Split `ConversationListView.swift` into:
+  - `HomeScreen`
+  - `HomeSidebar`
+  - `HomeInboxSection`
+  - `HomeProjectSection`
+  - `HomeLaunchComposer`
+  - `HomeSetupSurface`
+  - `HomeTrustSurface`
+- Split `HomeSupportingViews.swift` by setup cards, rows, toolbar, backgrounds.
+- Split `HomeOrchestrationSurface.swift` into planner models, planner, views.
+
+Exit:
+
+- no Home Swift file over 500 lines
+- `HomeScreen` does not import chat internals
+- home actions emit intents or call stores, not global state
+
+Validation:
+
+- home planner/search tests
+- simulator build
+
+## Phase 11: Setup Split
+
+Purpose: stop setup model/planner growth from leaking everywhere.
+
+Actions:
+
+- Split `SetupModels.swift` into:
+  - route defaults
+  - use cases
+  - setup plan
+  - restore planner
+  - starter presets
+  - capability recommendations
+- Create `SetupStore` only for persisted/interactive setup state.
+- Keep pure planner logic testable without stores.
+
+Exit:
+
+- no setup model/planner file over 500 lines
+- setup tests target planner/store files
+- Home consumes setup read models, not raw setup internals
+
+Validation:
+
+- setup tests
+- simulator build
+
+## Phase 12: Chat UI Split
+
+Purpose: make SwiftUI screens readable after state is narrower.
+
+Actions:
+
+- Split `ChatInputBar.swift` into:
+  - composer bar
+  - source mode menu
+  - attachment shelf
+  - media picker bridge
+  - dictation service
+  - route readiness banner
+- Split `ChatScreenView.swift` into:
+  - transcript screen
+  - toolbar
+  - export menu
+  - council room launcher
+  - project save sheet
+- Split `ChatMessageViews.swift` into:
+  - message bubble
+  - message actions
+  - source carousel
+  - proof footer
+  - artifact preview
+  - edit/resend sheet
+
+Exit:
+
+- no chat view file over 500 lines
+- views depend on `ChatFeatureStore` or explicit values/actions
+- view body reads like UI, not controller logic
+
+Validation:
+
+- simulator build
+- UI smoke when user wants
+
+## Phase 13: Agent And Account Split
+
+Purpose: isolate power-user surfaces from chat.
+
+Actions:
+
+- Create `AgentService` and `AgentStore`.
+- Move phone-safe runtime dispatch, hosted handoff, approvals, credentials, tool result rendering.
+- Create `AccountStore`.
+- Move billing, integration checks, diagnostics entry, settings mutations.
+- Agent calls project/file/conversation services through protocols.
+
+Exit:
+
+- agent tool execution no longer mutates `ChatStore`
+- account settings no longer depend on chat state
+- diagnostic checks own one service
+
+Validation:
+
+- agent tests
+- account/settings tests
+- simulator build
+
+## Phase 14: Security And Export Cleanup
+
+Purpose: keep trust/proof language correct and isolated.
+
+Actions:
+
+- Move attestation snapshot/loading/errors to `SecurityStore`.
+- Make proof copy models pure.
+- Keep signed transcript export using captured message metadata, not current route state.
+- Ensure "verified" appears only when local proof coverage exists.
+
+Exit:
+
+- security UI does not depend on chat state except selected message context
+- export tests remain focused
+
+Validation:
+
+- security tests
+- export tests
+- simulator build
+
+## Phase 15: Delete Or Crush `ChatStore`
+
+Purpose: finish reset.
+
+Actions:
+
+- Remove all unused forwarding methods.
+- Move remaining global reset into app composition/state.
+- Replace `EnvironmentObject ChatStore` callsites.
+- Delete `ChatStore` if no longer needed.
+- If temporary facade remains, keep under 300 lines with explicit deletion TODO.
+
+Exit:
+
+- no feature behavior owned by `ChatStore`
+- new work starts in feature folders by default
+- no god files over 1000 lines in app target
+
+Validation:
+
+- full test suite
+- simulator build
+- simulator smoke
+
+## Phase Order Rationale
+
+Order matters.
+
+1. Tests split first because current test file blocks safe movement.
+2. API and persistence split next because every feature extraction needs fakeable seams.
+3. Sharing/files/projects before chat send because boundaries are clearer and reduce `ChatStore` surface.
+4. Conversation/message cache before send pipeline because send needs one owner for selected conversation and messages.
+5. Chat send/council after dependencies are narrow.
+6. UI file splits after state ownership improves, otherwise views keep depending on global state.
+7. Final phase deletes compatibility facade.
+
+## Architecture Review Bar
+
+Block changes that:
+
+- add new unrelated methods to `ChatStore`
+- push any Swift file over 1000 lines
+- add feature-specific branches to shared/core code
+- add storage keys outside persistence adapters
+- add API methods only to the mega-client without domain protocol
+- pass full feature stores into small subviews when explicit values/actions suffice
+- introduce optional/cast-heavy state where invariant can be explicit
+- move code without deleting concepts or improving ownership
+
+Preferred move: delete a responsibility from the wrong owner and give it one canonical home.
