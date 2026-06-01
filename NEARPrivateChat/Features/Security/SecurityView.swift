@@ -82,7 +82,7 @@ struct SecurityView: View {
             return ProofCapsuleViewModel(
                 state: .proxied,
                 title: "Privacy proxy",
-                detail: "NEAR AI Cloud anonymizes your prompt before forwarding to the provider. A NEAR Private proof report is not attached to this route.",
+                detail: "NEAR AI Cloud anonymizes your prompt before forwarding to the provider. This route carries no NEAR Private proof report.",
                 badge: "Privacy proxy",
                 symbolName: "eye.slash"
             )
@@ -240,7 +240,7 @@ struct SecurityView: View {
 
     private var whatLeftPhoneDisclosure: String {
         if chatStore.selectedRouteKind == .ironclawHosted {
-            return "Your prompt plus approved handoff context goes to the hosted agent."
+            return "Your prompt plus approved handoff context goes to Hosted IronClaw."
         }
         if chatStore.selectedRouteUsesNearCloud || (chatStore.isCouncilModeEnabled && chatStore.activeCouncilHasNearCloudRoutes) {
             return "Your prompt is proxied through NEAR AI Cloud before the model provider sees it."
@@ -255,7 +255,7 @@ struct SecurityView: View {
         if chatStore.selectedRouteKind == .nearPrivate && !chatStore.selectedRouteUsesNearCloud {
             return "Web pages, uploaded files, and model claims are not magically true; verify sources before sharing."
         }
-        return "External cloud or hosted-agent execution is outside the NEAR Private proof report."
+        return "External cloud or Hosted IronClaw execution is outside the NEAR Private proof report."
     }
 
     private var verificationDetailCard: some View {
@@ -892,7 +892,7 @@ struct SecurityView: View {
             ProofFactRow(
                 title: "Runtime",
                 value: proofRuntimeEvidencePhrase(snapshot),
-                detail: "Proof covers route/model evidence when present. It does not prove answer truthfulness.",
+                detail: "Proof covers route/model evidence when present.",
                 symbolName: "lock.shield"
             )
             ProofFactRow(
@@ -978,7 +978,7 @@ struct SecurityView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Privacy proxy route")
                         .font(.headline)
-                    Text("NEAR AI Cloud anonymizes your prompt before forwarding to the provider. A NEAR Private proof report is not attached to this route.")
+                    Text("NEAR AI Cloud anonymizes your prompt before forwarding to the provider. This route carries no NEAR Private proof report.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

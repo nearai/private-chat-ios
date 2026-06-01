@@ -225,7 +225,7 @@ struct FirstRunSetupHomeCard: View {
                         .font(.headline.weight(.bold))
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("Setup picks your route, context, and starter prompt for private chat, research, agents, or project work.")
+                    Text("Setup picks your route, context, and starter prompt for private chat, research, Agent, or Project work.")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -244,7 +244,7 @@ struct FirstRunSetupHomeCard: View {
             }
             .scrollClipDisabled()
 
-            Text("You can skip advanced routes now and change everything later from Account.")
+            Text("Skip advanced routes now and change everything later from Account.")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

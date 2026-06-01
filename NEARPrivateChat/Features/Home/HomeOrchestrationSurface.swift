@@ -236,12 +236,12 @@ enum HomeOrchestrationPlanner {
             kind: .agent,
             title: "Active run",
             subtitle: routeLabel,
-            detail: "The current agent turn is still working.",
+            detail: "Agent turn is still running.",
             statusText: "running",
             symbolName: "waveform.path.ecg",
             tone: .green,
             action: .stagePrompt(HomeStagedPrompt(
-                prompt: "After the current run finishes, summarize what changed, what still needs input, and the safest next action.",
+                prompt: "When the run finishes, summarize what changed, what needs input, and the safest next action.",
                 banner: "Follow-up staged after the run."
             ))
         )
@@ -254,7 +254,7 @@ enum HomeOrchestrationPlanner {
             kind: .briefing,
             title: briefing.title,
             subtitle: widget?.title?.nilIfBlank ?? "Live briefing",
-            detail: widgetSummary(widget) ?? "Open the threaded brief and ask a follow-up.",
+            detail: widgetSummary(widget) ?? "Open the brief and ask a follow-up.",
             statusText: widget?.time?.nilIfBlank ?? "live",
             symbolName: symbolName(for: widget?.kind),
             tone: tone(for: widget),
@@ -278,7 +278,7 @@ enum HomeOrchestrationPlanner {
 
         let action: HomeOrchestrationAction = isEnabled
             ? .stagePrompt(HomeStagedPrompt(
-                prompt: "Run a Council pass on the current decision. Ask each model to state agreement, dissent, risk, and the recommended next move, then synthesize.",
+                prompt: "Run a Council pass on this decision. Have each model state agreement, dissent, risk, and a recommended move, then synthesize.",
                 banner: "Council prompt ready."
             ))
             : .useAutoCouncil
@@ -288,7 +288,7 @@ enum HomeOrchestrationPlanner {
             kind: .council,
             title: isEnabled ? "Council room" : "Recommended Council",
             subtitle: subtitle,
-            detail: isEnabled ? "Compare model perspectives before committing." : "Enable the default multi-model lineup.",
+            detail: isEnabled ? "Compare model views before committing." : "Enable the default multi-model lineup.",
             statusText: isEnabled ? "enabled" : "available",
             symbolName: "person.3.fill",
             tone: .violet,
@@ -301,12 +301,12 @@ enum HomeOrchestrationPlanner {
         mobileAvailable: Bool,
         selectedProject: ChatProject?
     ) -> HomeOrchestrationItem {
-        let route = hostedAvailable ? "Hosted Agent" : "Phone Agent"
+        let route = hostedAvailable ? "Hosted IronClaw" : "Phone Agent"
         let projectName = selectedProject?.name.nilIfBlank
-        let detail = projectName.map { "Plan work from \($0) context." } ?? "Plan code, research, and tool work without sending yet."
+        let detail = projectName.map { "Plan work from \($0) context." } ?? "Plan code, research, and tool work before sending."
         let prompt = projectName.map {
-            "Use the \($0) project context to plan the next agent task. Include goal, files or sources to inspect, risks, and focused verification."
-        } ?? "Plan the next agent task. Include goal, context to inspect, risks, and focused verification."
+            "Use \($0) context to plan the next Agent task: goal, files or sources to inspect, risks, and verification."
+        } ?? "Plan the next Agent task: goal, context to inspect, risks, and verification."
 
         return HomeOrchestrationItem(
             id: "agent-builder",
@@ -368,7 +368,7 @@ enum HomeOrchestrationPlanner {
             kind: .chat,
             title: conversation.title,
             subtitle: "Recent chat",
-            detail: "Open the thread and continue from the latest turn.",
+            detail: "Open the thread and continue from the last turn.",
             statusText: timestampText(for: conversation.createdAt),
             symbolName: "bubble.left.and.bubble.right",
             tone: .neutral,
@@ -382,12 +382,12 @@ enum HomeOrchestrationPlanner {
             kind: .setup,
             title: "Action scan",
             subtitle: "Track, remind, schedule, brief",
-            detail: "Turn loose context into actions you can approve.",
+            detail: "Turn loose context into actions to approve.",
             statusText: "new",
             symbolName: "sparkles.rectangle.stack",
             tone: .blue,
             action: .stagePrompt(HomeStagedPrompt(
-                prompt: "Turn the current context into useful next moves. Surface trackers, reminders, calendar-worthy items, decisions, risks, open questions, and the first action to stage.",
+                prompt: "Turn this context into next moves: trackers, reminders, calendar items, decisions, risks, open questions, and the first action to stage.",
                 banner: "Action scan prompt ready."
             ))
         )
@@ -419,8 +419,8 @@ enum HomeOrchestrationPlanner {
                 symbolName: "checklist",
                 action: .stagePrompt(HomeStagedPrompt(
                     prompt: selectedProject.map {
-                        "Use the \($0.name) project context to surface actionable next moves: trackers, reminders, calendar-worthy items, decisions, risks, open questions, and things I should care about. Include structured fields where known (source, date, time, recurrence, timezone, attendees, confidence), missing_fields, and exact commands. Emit a near-widget action_plan when helpful. Preview before creating anything."
-                    } ?? "Surface actionable next moves from the current context: trackers, reminders, calendar-worthy items, decisions, risks, open questions, and things I should care about. Include structured fields where known (source, date, time, recurrence, timezone, attendees, confidence), missing_fields, and exact commands. Emit a near-widget action_plan when helpful. Preview before creating anything.",
+                        "Use \($0.name) context to surface next moves: trackers, reminders, calendar items, decisions, risks, open questions, and things I should care about. Include structured fields where known (source, date, time, recurrence, timezone, attendees, confidence), missing_fields, and exact commands. Emit a near-widget action_plan when helpful. Preview before creating anything."
+                    } ?? "Surface next moves from this context: trackers, reminders, calendar items, decisions, risks, open questions, and things I should care about. Include structured fields where known (source, date, time, recurrence, timezone, attendees, confidence), missing_fields, and exact commands. Emit a near-widget action_plan when helpful. Preview before creating anything.",
                     projectID: selectedProject?.id,
                     banner: "Action scan prompt ready."
                 ))
@@ -447,8 +447,8 @@ enum HomeOrchestrationPlanner {
                 symbolName: "hammer",
                 action: .stagePrompt(HomeStagedPrompt(
                     prompt: selectedProject.map {
-                        "Use the \($0.name) project context to plan a safe patch. Identify files to inspect, likely changes, tests, and risks before editing."
-                    } ?? "Plan a safe patch. Identify context to inspect, likely changes, tests, and risks before editing.",
+                        "Use \($0.name) context to plan a safe patch: files to inspect, likely changes, tests, and risks before editing."
+                    } ?? "Plan a safe patch: context to inspect, likely changes, tests, and risks before editing.",
                     projectID: selectedProject?.id,
                     banner: "Patch plan ready."
                 ))
@@ -474,7 +474,7 @@ enum HomeOrchestrationPlanner {
                     title: "Run Council",
                     symbolName: "person.3.fill",
                     action: .stagePrompt(HomeStagedPrompt(
-                        prompt: "Run a Council comparison on this. Ask for agreement, dissent, risk, and a recommended decision.",
+                        prompt: "Run a Council comparison on this: agreement, dissent, risk, and a recommended decision.",
                         projectID: selectedProject?.id,
                         banner: "Council prompt ready."
                     ))
@@ -499,8 +499,8 @@ enum HomeOrchestrationPlanner {
                     symbolName: "terminal",
                     action: .stagePrompt(HomeStagedPrompt(
                         prompt: selectedProject.map {
-                            "Use the \($0.name) project context to define the next agent task, expected output, and verification path."
-                        } ?? "Define the next agent task, expected output, and verification path.",
+                            "Use \($0.name) context to define the next Agent task, expected output, and verification path."
+                        } ?? "Define the next Agent task, expected output, and verification path.",
                         projectID: selectedProject?.id,
                         banner: "Agent prompt ready."
                     ))
@@ -565,7 +565,7 @@ enum HomeOrchestrationPlanner {
         if isAgentAvailable {
             parts.append("Agent")
         }
-        return parts.isEmpty ? "Stage the next useful run" : parts.joined(separator: " / ")
+        return parts.isEmpty ? "Stage the next run" : parts.joined(separator: " / ")
     }
 
     private static func widgetSummary(_ widget: MessageWidget?) -> String? {
@@ -968,7 +968,7 @@ private struct HomeOrchestrationCard: View {
         case .briefing, .project, .chat:
             return "Opens this item."
         case .council, .agent, .setup:
-            return "Stages or prepares this agentic action without sending."
+            return "Stages this action without sending."
         }
     }
 }

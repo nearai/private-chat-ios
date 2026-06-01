@@ -51,6 +51,76 @@ final class PrivateChatCoreTests: XCTestCase {
         }
     }
 
+    func testAuthenticatedRequestsRejectWhitespaceSessionTokenBeforeNetwork() async {
+        let api = PrivateChatAPI(configuration: AppConfiguration.production)
+        api.authToken = "   \n\t"
+
+        do {
+            _ = try await api.fetchModels()
+            XCTFail("Expected whitespace-only auth tokens to be rejected before a request is sent.")
+        } catch APIError.unauthenticated {
+            // Expected: no Authorization header should be attempted with an empty credential.
+        } catch {
+            XCTFail("Expected unauthenticated error, got \(error).")
+        }
+    }
+
+    func testNearCloudModelListRequiresNonBlankAPIKeyBeforeNetwork() async {
+        let api = PrivateChatAPI(configuration: AppConfiguration.production)
+
+        do {
+            _ = try await api.fetchNearCloudModels(apiKey: "   \n\t")
+            XCTFail("Expected whitespace-only Cloud keys to be rejected before a request is sent.")
+        } catch APIError.status(let code, let message) {
+            XCTAssertEqual(code, 401)
+            XCTAssertTrue(message.contains("Connect NEAR AI Cloud"), message)
+            XCTAssertFalse(message.contains("Missing Authorization header"), message)
+        } catch {
+            XCTFail("Expected Cloud auth status error, got \(error).")
+        }
+    }
+
+    func testNearCloudChatCompletionRequiresNonBlankAPIKeyBeforeNetwork() async {
+        let api = PrivateChatAPI(configuration: AppConfiguration.production)
+
+        do {
+            _ = try await api.fetchNearCloudChatCompletion(
+                apiKey: "   \n\t",
+                model: "qwen/qwen3.5-122b-a10b",
+                prompt: "hello",
+                systemPrompt: ""
+            )
+            XCTFail("Expected whitespace-only Cloud keys to be rejected before a request is sent.")
+        } catch APIError.status(let code, let message) {
+            XCTAssertEqual(code, 401)
+            XCTAssertTrue(message.contains("Connect NEAR AI Cloud"), message)
+            XCTAssertFalse(message.contains("Missing Authorization header"), message)
+        } catch {
+            XCTFail("Expected Cloud auth status error, got \(error).")
+        }
+    }
+
+    func testNearCloudAPIKeyNormalizerAcceptsCopiedBearerHeader() {
+        XCTAssertEqual(
+            PrivateChatAPI.normalizedNearCloudAPIKey("Authorization: Bearer near-cloud-key-123 \n"),
+            "near-cloud-key-123"
+        )
+        XCTAssertEqual(
+            PrivateChatAPI.normalizedNearCloudAPIKey("Bearer near-cloud-key-123"),
+            "near-cloud-key-123"
+        )
+    }
+
+    func testStatusErrorsDoNotExposeRawAuthorizationHeaderFailures() {
+        let missingHeader = APIError.status(401, "HTTP 401 — Missing authorization header").errorDescription ?? ""
+        XCTAssertFalse(missingHeader.localizedCaseInsensitiveContains("Missing authorization header"))
+        XCTAssertTrue(missingHeader.contains("Authentication is missing or expired"), missingHeader)
+
+        let expired = APIError.status(401, "HTTP 401 — Invalid or expired authentication token").errorDescription ?? ""
+        XCTAssertFalse(expired.localizedCaseInsensitiveContains("Invalid or expired authentication token"))
+        XCTAssertTrue(expired.contains("Authentication is missing or expired"), expired)
+    }
+
     func testAuthCallbackToleratesDuplicateStateValues() throws {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
         let url = URL(string: "nearprivatechat://auth?state=provider-state&code=auth-code-1&state=nonce-1")!
@@ -276,9 +346,9 @@ final class PrivateChatCoreTests: XCTestCase {
 
         XCTAssertEqual(plan.modelRoute, .ironclaw)
         XCTAssertEqual(plan.expectedRouteModelIDs, [ModelOption.ironclawModelID])
-        XCTAssertEqual(plan.expectedFirstAction, "Open hosted agent")
+        XCTAssertEqual(plan.expectedFirstAction, "Open Hosted IronClaw")
         XCTAssertEqual(plan.readinessStatus, "Hosted IronClaw is ready; mobile runtime is unavailable.")
-        XCTAssertEqual(plan.routeDetailContent?.summary, "Hosted IronClaw · Hosted Agent connection sends work outside this phone.")
+        XCTAssertEqual(plan.routeDetailContent?.summary, "Hosted IronClaw · sends work outside this phone.")
     }
 
     func testCapabilityNextStepTreatsHostedIronclawAsSatisfiedAgentRoute() {
@@ -427,7 +497,7 @@ final class PrivateChatCoreTests: XCTestCase {
 
         XCTAssertEqual(issue?.route, .nearCloud)
         XCTAssertEqual(issue?.recoveryAction, .addNearCloudKey)
-        XCTAssertTrue(issue?.message.contains("draft and attachments were kept") == true)
+        XCTAssertTrue(issue?.message.contains("draft and attachments are kept") == true)
     }
 
     func testRoutePlannerClassifiesModelRoutesOutsideChatStore() {
@@ -545,7 +615,7 @@ final class PrivateChatCoreTests: XCTestCase {
 
         XCTAssertEqual(store.routeReadinessIssue?.route, .hostedIronclaw)
         XCTAssertEqual(store.routeReadinessIssue?.recoveryAction, .configureIronClawEndpoint)
-        XCTAssertTrue(store.routeReadinessIssue?.message.contains("Turn on Hosted Agent") == true)
+        XCTAssertTrue(store.routeReadinessIssue?.message.contains("Turn on Hosted IronClaw") == true)
         XCTAssertEqual(store.draft, "Run the repo tests")
         XCTAssertFalse(store.isStreaming)
     }
@@ -678,16 +748,16 @@ final class PrivateChatCoreTests: XCTestCase {
     }
 
     @MainActor
-    func testSelectingSingleModelClearsExistingCouncilLineup() {
+    func testSelectingSingleModelKeepsCouncilOffWithoutCompleteLineup() {
         let store = ChatStore(api: PrivateChatAPI(configuration: .production))
         store.useDefaultCouncilLineup()
-        XCTAssertTrue(store.isCouncilModeEnabled)
+        XCTAssertFalse(store.isCouncilModeEnabled)
 
-        let cloudModelID = ModelOption.nearCloudModelID(for: "anthropic/claude-opus-4-7")
-        store.selectModel(cloudModelID)
+        let modelID = ChatStore.defaultModelID
+        store.selectModel(modelID)
 
-        XCTAssertEqual(store.selectedModel, cloudModelID)
-        XCTAssertEqual(store.councilModelIDs, [cloudModelID])
+        XCTAssertEqual(store.selectedModel, modelID)
+        XCTAssertEqual(store.councilModelIDs, [modelID])
         XCTAssertFalse(store.isCouncilModeEnabled)
     }
 
@@ -1373,7 +1443,7 @@ final class PrivateChatCoreTests: XCTestCase {
         )
         XCTAssertEqual(
             FileStore.projectAttachmentLimit(projectAttachmentCount: 12, maxProjectAttachments: 12),
-            .blocked(message: "Keep project context to twelve files or fewer.")
+            .blocked(message: "A Project holds up to twelve files.")
         )
     }
 
@@ -1985,7 +2055,7 @@ final class PrivateChatCoreTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.modelRoute, .council)
-        XCTAssertEqual(plan.expectedFirstAction, "Ask the council")
+        XCTAssertEqual(plan.expectedFirstAction, "Ask the Council")
         XCTAssertEqual(plan.expectedRouteModelIDs, ["council-a", "council-b"])
         XCTAssertEqual(plan.routeDetailContent?.title, "Council lineup")
         XCTAssertEqual(plan.routeDetailContent?.summary, "Council A + Council B · proof depends on the selected models.")
@@ -2013,7 +2083,7 @@ final class PrivateChatCoreTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.modelRoute, .privateModel)
-        XCTAssertEqual(plan.expectedFirstAction, "Start private chat while agent tools load")
+        XCTAssertEqual(plan.expectedFirstAction, "Start private chat while Agent tools load")
         XCTAssertEqual(plan.expectedRouteModelIDs, ["private-model"])
         XCTAssertEqual(plan.routeDetailContent?.title, "NEAR Private route")
         XCTAssertEqual(plan.routeDetailContent?.summary, "Private Model · attested when proof is fresh.")
@@ -2041,7 +2111,7 @@ final class PrivateChatCoreTests: XCTestCase {
 
         let recommendation = plan.firstRunCapabilityRecommendation(readiness: readiness)
 
-        XCTAssertEqual(recommendation?.title, "Finish agent setup")
+        XCTAssertEqual(recommendation?.title, "Finish Agent setup")
         XCTAssertEqual(recommendation?.actionTitle, "Connect Agent")
         XCTAssertEqual(recommendation?.kind, .openAgent)
     }
@@ -2137,9 +2207,9 @@ final class PrivateChatCoreTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.modelRoute, .ironclaw)
-        XCTAssertEqual(plan.expectedFirstAction, "Open hosted agent")
+        XCTAssertEqual(plan.expectedFirstAction, "Open Hosted IronClaw")
         XCTAssertEqual(plan.readinessStatus, "Hosted IronClaw is ready; mobile runtime is unavailable.")
-        XCTAssertEqual(plan.routeDetailContent?.summary, "Hosted IronClaw · Hosted Agent connection sends work outside this phone.")
+        XCTAssertEqual(plan.routeDetailContent?.summary, "Hosted IronClaw · sends work outside this phone.")
     }
 
     func testFirstRunCapabilityRecommendationStaysQuietWhenPresetRouteIsReady() {
@@ -2292,7 +2362,7 @@ final class PrivateChatCoreTests: XCTestCase {
 
         XCTAssertEqual(plan.modelRoute, .ironclaw)
         XCTAssertEqual(plan.expectedRouteModelIDs, [ModelOption.ironclawMobileModelID])
-        XCTAssertTrue(summary.contains("phone agent route"))
+        XCTAssertTrue(summary.contains("Phone Agent route"))
         XCTAssertTrue(summary.contains("outside NEAR Private proof"))
         XCTAssertFalse(summary.localizedCaseInsensitiveContains("hosted bridge"))
         XCTAssertFalse(summary.localizedCaseInsensitiveContains("endpoint"))
@@ -2380,7 +2450,7 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertFalse(plan.agentEnabled)
         XCTAssertTrue(plan.councilEnabled)
         XCTAssertEqual(plan.focusMode, .auto)
-        XCTAssertEqual(plan.expectedFirstAction, "Ask the council")
+        XCTAssertEqual(plan.expectedFirstAction, "Ask the Council")
     }
 
     func testAppSetupPlanFallsBackWhenCouncilIsNotReady() {
@@ -2423,7 +2493,7 @@ final class PrivateChatCoreTests: XCTestCase {
 
         XCTAssertEqual(plan.modelRoute, .privateModel)
         XCTAssertTrue(plan.agentEnabled)
-        XCTAssertEqual(plan.expectedFirstAction, "Start private chat while agent tools load")
+        XCTAssertEqual(plan.expectedFirstAction, "Start private chat while Agent tools load")
         XCTAssertEqual(plan.readinessStatus, "IronClaw Mobile is still loading; private chat is ready first.")
     }
 
@@ -2437,7 +2507,7 @@ final class PrivateChatCoreTests: XCTestCase {
         let normalized = profile.normalizedForDefaults
         let plan = AppSetupPlan(profile: normalized, readiness: .optimistic)
 
-        XCTAssertEqual(normalized.firstRunDraft, "Create a sourced research brief for this goal: Map the strongest privacy proof workflow.")
+        XCTAssertEqual(normalized.firstRunDraft, "Write a sourced brief for this goal: Map the strongest privacy proof workflow.")
         XCTAssertTrue(normalized.setupProjectInstructions.contains("Setup goal: Map the strongest privacy proof workflow."))
         XCTAssertEqual(plan.firstRunDraft, normalized.firstRunDraft)
         XCTAssertEqual(plan.expectedFirstAction, "Start from your goal")
@@ -2454,7 +2524,7 @@ final class PrivateChatCoreTests: XCTestCase {
 
         XCTAssertTrue(instructions.contains("This Project was configured for: Research with sources, Work in a Project."))
         XCTAssertTrue(instructions.contains("Research with sources: Prioritize dated sources, citations, contradictions, and a concise recommendation. Save strong outputs as Project notes."))
-        XCTAssertTrue(instructions.contains("Work in a Project: Use Project files, saved source links, notes, and saved outputs before broad web. Keep context tidy and ask only when a missing source blocks progress."))
+        XCTAssertTrue(instructions.contains("Work in a Project: Use Project files, saved links, notes, and outputs before broad web. Keep context tidy; ask only when a missing source blocks progress."))
         XCTAssertTrue(instructions.contains("Setup goal: Keep project context tidy for a cited brief."))
     }
 
@@ -2482,7 +2552,7 @@ final class PrivateChatCoreTests: XCTestCase {
 
         XCTAssertEqual(normalized.emptyStateSubtitle, "Goal ready: Map the strongest privacy proof workflow.")
         XCTAssertEqual(suggestions.map(\.title), ["Start brief", "Find sources", "Recommend next step"])
-        XCTAssertEqual(suggestions.first?.prompt, "Create a sourced research brief for this goal: Map the strongest privacy proof workflow.")
+        XCTAssertEqual(suggestions.first?.prompt, "Write a sourced brief for this goal: Map the strongest privacy proof workflow.")
     }
 
     func testAppSetupPlanExposesStarterWorkspaceAndPromptPreview() {
@@ -2535,12 +2605,12 @@ final class PrivateChatCoreTests: XCTestCase {
 
         XCTAssertEqual(
             normalized.firstRunDraft,
-            "Create a sourced research brief for this goal using project files, links, notes, and memory: Map the strongest privacy proof workflow."
+            "Write a sourced brief for this goal using project files, links, notes, and memory: Map the strongest privacy proof workflow."
         )
         XCTAssertEqual(suggestions.map(\.title), ["Start goal", "Start brief", "Organize project"])
         XCTAssertEqual(
             suggestions.first?.prompt,
-            "Create a sourced research brief for this goal using project files, links, notes, and memory: Map the strongest privacy proof workflow."
+            "Write a sourced brief for this goal using project files, links, notes, and memory: Map the strongest privacy proof workflow."
         )
         XCTAssertEqual(plan.firstRunDraft, normalized.firstRunDraft)
         XCTAssertEqual(
@@ -2604,11 +2674,11 @@ final class PrivateChatCoreTests: XCTestCase {
 
         XCTAssertEqual(
             researchProfile.normalizedForDefaults.firstRunDraft,
-            "Create a sourced research brief on the latest important AI developments, with dates, citations, and a short recommendation."
+            "Write a sourced brief on the latest AI developments, with dates, citations, and a short recommendation."
         )
         XCTAssertEqual(
             projectProfile.normalizedForDefaults.firstRunDraft,
-            "Help me set up this Project: what files, links, instructions, and first chat should I add?"
+            "Set up this Project: what files, links, instructions, and first chat to add?"
         )
     }
 
@@ -2755,7 +2825,7 @@ final class PrivateChatCoreTests: XCTestCase {
             [
                 SetupRestoreDifference(
                     title: "Council",
-                    savedValue: "GLM 5.1 + Qwen 3.7 Max",
+                    savedValue: "GLM 5.1 + Current Model",
                     currentValue: "GLM 5.1 + Claude Opus 4 7"
                 )
             ]
@@ -2909,7 +2979,7 @@ final class PrivateChatCoreTests: XCTestCase {
         let plan = AppSetupPlan(profile: profile, readiness: .optimistic)
 
         XCTAssertEqual(plan.modelRoute, .council)
-        XCTAssertEqual(plan.expectedFirstAction, "Ask the council")
+        XCTAssertEqual(plan.expectedFirstAction, "Ask the Council")
     }
 
     func testStarterPresetsPrefillExampleGoalAndKeepCTAStateDerived() {
@@ -2973,7 +3043,133 @@ final class PrivateChatCoreTests: XCTestCase {
 
         store.applySetupProfile(profile)
 
-        XCTAssertEqual(store.draft, "Create a sourced research brief for this goal: Map the strongest privacy proof workflow.")
+        XCTAssertEqual(store.draft, "Write a sourced brief for this goal: Map the strongest privacy proof workflow.")
+    }
+
+    @MainActor
+    func testSoulMarkdownIdentityAndRulesArePrivateRouteOnly() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        store.soulMarkdown = """
+        # soul.md
+
+        ## Identity -- who you are
+        Call me Sam Example. My account email is sam@example.com.
+
+        ## Intent -- what I use this for
+        Legal memos and contract review.
+
+        ## Voice & Format -- how to talk and respond
+        Lead with the answer. No filler.
+
+        ## Rules -- conditional
+        <important if="legal">Flag uncertainty before drafting final language.</important>
+        """
+
+        let privatePrompt = store.activeSystemPromptForTesting(model: ModelOption.nearPrivateDefaultModelID)
+        XCTAssertTrue(privatePrompt.contains("About the user / Response preferences"))
+        XCTAssertTrue(privatePrompt.contains("Identity (private route only):"))
+        XCTAssertTrue(privatePrompt.contains("Sam Example"))
+        XCTAssertTrue(privatePrompt.contains("sam@example.com"))
+        XCTAssertTrue(privatePrompt.contains("Legal memos and contract review."))
+        XCTAssertTrue(privatePrompt.contains("Rules (private route only):"))
+        XCTAssertTrue(privatePrompt.contains("Flag uncertainty"))
+        XCTAssertTrue(privatePrompt.contains("Format contract:"))
+
+        let cloudPrompt = store.activeSystemPromptForTesting(model: ModelOption.nearCloudModelID(for: "provider/current-model"))
+        XCTAssertFalse(cloudPrompt.contains("Sam Example"))
+        XCTAssertFalse(cloudPrompt.contains("sam@example.com"))
+        XCTAssertFalse(cloudPrompt.contains("Identity (private route only):"))
+        XCTAssertFalse(cloudPrompt.contains("Rules (private route only):"))
+        XCTAssertFalse(cloudPrompt.contains("Flag uncertainty"))
+        XCTAssertTrue(cloudPrompt.contains("Legal memos and contract review."))
+        XCTAssertTrue(cloudPrompt.contains("Lead with the answer. No filler."))
+
+        let mobilePrompt = store.activeSystemPromptForTesting(model: ModelOption.ironclawMobileModelID)
+        XCTAssertFalse(mobilePrompt.contains("Sam Example"))
+        XCTAssertFalse(mobilePrompt.contains("sam@example.com"))
+        XCTAssertFalse(mobilePrompt.contains("Flag uncertainty"))
+        XCTAssertTrue(mobilePrompt.contains("Legal memos and contract review."))
+    }
+
+    func testSoulPromptComposerParsesSectionsWithoutChatStore() {
+        let profile = SoulPromptComposer.Profile.parse("""
+        # soul.md
+
+        ## Identity
+        Call me Riley.
+
+        ## Intent
+        Draft product briefs.
+
+        ## Voice & Format
+        Be direct.
+        """)
+
+        XCTAssertEqual(profile.identity, "Call me Riley.")
+        XCTAssertEqual(profile.intent, "Draft product briefs.")
+        XCTAssertEqual(profile.voiceAndFormat, "Be direct.")
+
+        let externalPrompt = SoulPromptComposer.promptBlock(profile: profile, route: .nearCloud)
+        XCTAssertFalse(externalPrompt.contains("Riley"))
+        XCTAssertTrue(externalPrompt.contains("Draft product briefs."))
+        XCTAssertTrue(externalPrompt.contains("Be direct."))
+    }
+
+    @MainActor
+    func testActiveSystemPromptIncludesFormatContractWithoutSoulMarkdown() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        store.systemPrompt = "Prefer short answers."
+
+        let prompt = store.activeSystemPromptForTesting(model: ModelOption.nearPrivateDefaultModelID)
+
+        XCTAssertTrue(prompt.contains("Format contract:"))
+        XCTAssertTrue(prompt.contains("GitHub-flavored tables"))
+        XCTAssertTrue(prompt.contains("fenced code blocks with language tags"))
+        XCTAssertTrue(prompt.contains("Prefer short answers."))
+        XCTAssertFalse(prompt.contains("About the user / Response preferences"))
+    }
+
+    @MainActor
+    func testApplyingSetupSeedsLocalSoulMarkdownForSimpleChats() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+
+        var profile = UserSetupProfile.defaults
+        profile.goalText = "Map the strongest privacy proof workflow."
+        profile.contextStyle = .simple
+
+        store.applySetupProfile(profile)
+
+        XCTAssertNil(store.selectedProjectID)
+        XCTAssertTrue(store.soulMarkdown.contains("# soul.md"))
+        XCTAssertTrue(store.soulMarkdown.contains("## Intent"))
+        XCTAssertTrue(store.soulMarkdown.contains("Ask privately"))
+        XCTAssertTrue(store.soulMarkdown.contains("## Voice & Format"))
+
+        let privatePrompt = store.activeSystemPromptForTesting(model: ModelOption.nearPrivateDefaultModelID)
+        XCTAssertTrue(privatePrompt.contains("Map the strongest privacy proof workflow."))
+
+        let cloudPrompt = store.activeSystemPromptForTesting(model: ModelOption.nearCloudModelID(for: "provider/current-model"))
+        XCTAssertFalse(cloudPrompt.contains("Map the strongest privacy proof workflow."))
+        XCTAssertTrue(cloudPrompt.contains("Ask privately"))
+    }
+
+    @MainActor
+    func testApplyingSetupDoesNotOverwriteExistingSoulMarkdown() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        let existing = """
+        # soul.md
+
+        ## Voice & Format
+        Keep the existing voice profile.
+        """
+        store.soulMarkdown = existing
+
+        var profile = UserSetupProfile.defaults
+        profile.goalText = "Replace this if setup overwrites user text."
+
+        store.applySetupProfile(profile)
+
+        XCTAssertEqual(store.soulMarkdown, existing)
     }
 
     @MainActor
@@ -3322,7 +3518,7 @@ final class PrivateChatCoreTests: XCTestCase {
         XCTAssertNotEqual(beginnerPlan.id, powerPlan.id)
         XCTAssertTrue(beginnerPlan.id.contains("beginner"))
         XCTAssertTrue(powerPlan.id.contains("power"))
-        XCTAssertEqual(beginnerPlan.experienceSummary, "Beginner mode starts simple; power routes remain available later.")
+        XCTAssertEqual(beginnerPlan.experienceSummary, "Beginner mode starts simple; power routes stay available later.")
         XCTAssertEqual(powerPlan.experienceSummary, "Power mode keeps advanced routes visible.")
         XCTAssertEqual(powerPlan.modelRoute, .council)
     }
@@ -3396,7 +3592,7 @@ final class PrivateChatCoreTests: XCTestCase {
         let suggestion = profile.agentMissionSuggestion
 
         XCTAssertEqual(suggestion?.title, "Use saved setup goal")
-        XCTAssertEqual(suggestion?.detail, "Saved setup wants agent work for this goal first.")
+        XCTAssertEqual(suggestion?.detail, "Saved setup runs Agent work for this goal first.")
         XCTAssertEqual(
             suggestion?.prompt,
             "Plan the first build or repo task for this goal: Review the repo and plan the first safe patch."
@@ -3429,8 +3625,8 @@ final class PrivateChatCoreTests: XCTestCase {
 
         let suggestion = profile.agentMissionSuggestion
 
-        XCTAssertEqual(suggestion?.title, "Use saved agent starter")
-        XCTAssertEqual(suggestion?.detail, "Saved setup keeps repo and agent work ready from day one.")
+        XCTAssertEqual(suggestion?.title, "Use saved Agent starter")
+        XCTAssertEqual(suggestion?.detail, "Saved setup keeps repo and Agent work ready from day one.")
         XCTAssertEqual(suggestion?.prompt, UserSetupUseCase.buildAgents.starterPrompt)
     }
 
@@ -3605,9 +3801,9 @@ final class PrivateChatCoreTests: XCTestCase {
             "openai/o3"
         ].map { ModelOption(modelID: ModelOption.nearCloudModelID(for: $0), publicModel: true, metadata: nil) }
         let visibleCloud = [
-            "qwen/qwen3.7-max",
-            "moonshotai/kimi-k2.6",
-            "google/gemini-3.5-flash",
+            "qwen/qwen3-235b-a22b-thinking-2507",
+            "moonshotai/kimi-k2-instruct",
+            "zai-org/glm-4.5",
             "openai/gpt-oss-120b"
         ].map { ModelOption(modelID: ModelOption.nearCloudModelID(for: $0), publicModel: true, metadata: nil) }
 
@@ -4114,9 +4310,9 @@ final class PrivateChatCoreTests: XCTestCase {
             .joined(separator: " ")
             .lowercased()
 
-        XCTAssertTrue(allCopy.contains("proof, not a promise"))
-        XCTAssertTrue(allCopy.contains("does not"))
-        XCTAssertTrue(allCopy.contains("truthfulness"))
+        XCTAssertTrue(allCopy.contains("how proof works"))
+        XCTAssertTrue(allCopy.contains("can't confirm"))
+        XCTAssertTrue(allCopy.contains("answer is true"))
         XCTAssertFalse(allCopy.contains("guarantees truth"))
         XCTAssertFalse(allCopy.contains("verifies truth"))
     }
@@ -5071,6 +5267,63 @@ extension PrivateChatCoreTests {
         )
     }
 
+    @MainActor
+    func testEmptyChatStarterPrepareProjectRequestsPickerWhenNoProjectIsSelected() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        let suggestion = EmptyChatStarterSuggestion(
+            title: "Files to actions",
+            symbolName: "folder.badge.gearshape",
+            prompt: "Use attached files or a Project and turn this into actions: ",
+            action: .project
+        )
+        var openedProjectPicker = false
+
+        let ready = EmptyChatStarterCoordinator.prepare(
+            suggestion,
+            to: store,
+            onOpenProject: { openedProjectPicker = true }
+        )
+
+        XCTAssertFalse(ready)
+        XCTAssertTrue(openedProjectPicker)
+        XCTAssertEqual(store.sourceMode, .files)
+    }
+
+    @MainActor
+    func testEmptyChatStarterPrepareProjectUsesProjectContextWhenAvailable() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        store.createProject(named: "Launch")
+        let suggestion = EmptyChatStarterSuggestion(
+            title: "Files to actions",
+            symbolName: "folder.badge.gearshape",
+            prompt: "Use attached files or a Project and turn this into actions: ",
+            action: .project
+        )
+
+        let ready = EmptyChatStarterCoordinator.prepare(suggestion, to: store)
+
+        XCTAssertTrue(ready)
+        XCTAssertEqual(store.selectedProject?.name, "Launch")
+        XCTAssertEqual(store.sourceMode, .all)
+    }
+
+    func testEmptyChatStarterStagesPromptWithSeparatorAndWithoutDuplicatePrefix() {
+        XCTAssertEqual(
+            EmptyChatStarterCoordinator.stagedPrompt(
+                "Research this with sources: ",
+                existingDraft: "token liquidity"
+            ),
+            "Research this with sources: token liquidity"
+        )
+        XCTAssertEqual(
+            EmptyChatStarterCoordinator.stagedPrompt(
+                "Research this with sources: ",
+                existingDraft: "Research this with sources: token liquidity"
+            ),
+            "Research this with sources: token liquidity"
+        )
+    }
+
     func testDefineFormIsStrictForWhatDoes() {
         // Bare definition form → define.
         XCTAssertEqual(QuickIntentParser.parse("what does ephemeral mean"), .define(word: "ephemeral"))
@@ -5287,7 +5540,7 @@ extension PrivateChatCoreTests {
     }
 
     func testTrackerListFormatter() {
-        XCTAssertTrue(TrackerListFormatter.summary(for: []).contains("any trackers yet"))
+        XCTAssertTrue(TrackerListFormatter.summary(for: []).contains("any automations yet"))
 
         let alert = Briefing(title: "ETH alert", prompt: "", schedule: .everyNHours(3),
                              kind: .cryptoPrice, accountID: "ethereum",
@@ -5336,7 +5589,7 @@ extension PrivateChatCoreTests {
     func testUnauthenticatedCopyFramesGeneralAssistantHonestly() {
         XCTAssertEqual(
             APIError.unauthenticated.errorDescription,
-            "Sign in to chat about anything with the general assistant."
+            "Sign in to start chatting."
         )
     }
 
@@ -5897,6 +6150,9 @@ extension PrivateChatCoreTests {
             XCTAssertTrue(instructions.contains("Project progress"), instructions)
             XCTAssertTrue(instructions.contains("Open risks"), instructions)
         }
+        XCTAssertTrue(webInstructions.contains("GitHub-flavored tables"))
+        XCTAssertTrue(privateInstructions.contains("fenced code blocks with language tags"))
+        XCTAssertTrue(privateInstructions.contains("raw JSON outside the sanctioned near-widget block"))
     }
 
     func testSpreadsheetExtractorPreservesSheetAndSupplementRows() throws {
@@ -7982,7 +8238,7 @@ extension PrivateChatCoreTests {
             ]
         )
         XCTAssertEqual(suggestions[3].action, .trust)
-        XCTAssertTrue(suggestions[3].prompt.contains("does not carry NEAR Private proof"))
+        XCTAssertTrue(suggestions[3].prompt.contains("carries no NEAR Private proof"))
         XCTAssertTrue(suggestions[3].prompt.contains("Alpha"))
     }
 

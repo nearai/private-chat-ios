@@ -318,7 +318,7 @@ enum AttestationStatus: Codable, Equatable, Sendable {
             let freshnessText = freshness(at: now)?.shortLabel ?? "fresh"
             return AttestationStatusCopy(
                 title: "Proof report checked",
-                detail: "Checked on this device against signed proof from TEE-supported infrastructure. Proof does not judge answer quality or truth.",
+                detail: "Checked on this device against signed proof from TEE-supported infrastructure.",
                 badge: "Proof \(freshnessText)"
             )
         case .stale:
@@ -351,7 +351,7 @@ enum AttestationStatus: Codable, Equatable, Sendable {
             case .routeNotSupported:
                 return AttestationStatusCopy(
                     title: "Privacy proxy route",
-                    detail: "This route uses NEAR AI Cloud privacy proxy forwarding, so a NEAR Private proof report is not attached. Use a private model when proof matters.",
+                    detail: "This route uses NEAR AI Cloud privacy proxy forwarding, so it carries no NEAR Private proof report. Use a private model when proof matters.",
                     badge: "Privacy proxy"
                 )
             case .serviceUnavailable:
@@ -434,7 +434,7 @@ struct AttestationEducation: Codable, Equatable, Sendable {
     let sections: [AttestationEducationSection]
 
     static let standard = AttestationEducation(
-        headline: "Proof, not a promise.",
+        headline: "How proof works",
         summary: "Checked on this device against signed proof from TEE-supported infrastructure.",
         sections: [
             AttestationEducationSection(
@@ -443,7 +443,7 @@ struct AttestationEducation: Codable, Equatable, Sendable {
             ),
             AttestationEducationSection(
                 title: "What proof does not cover",
-                body: "Proof does not judge the truthfulness, safety, reasoning quality, or completeness of the model's answer."
+                body: "Proof shows where a request ran. It can't confirm the answer is true."
             ),
             AttestationEducationSection(
                 title: "Stale or unavailable",

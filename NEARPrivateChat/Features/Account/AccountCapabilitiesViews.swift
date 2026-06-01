@@ -302,7 +302,7 @@ struct AccountSettingsView: View {
                 .onChange(of: webSearchEnabled) { _, _ in
                     Task { await saveChatSettings() }
                 }
-            Text("Web search is explicit by default for private chat; research setup can turn current-source search on.")
+            Text("Web search is off by default for private chat; research setup can turn current-source search on.")
                 .font(.caption)
                 .foregroundStyle(Color.textSecondary)
         }
@@ -372,7 +372,7 @@ struct AccountSettingsView: View {
         } header: {
             Text("Capabilities")
         } footer: {
-            Text("Private chat works now. Connect Cloud or Agent capabilities only when a task needs them.")
+            Text("Private chat works now. Connect Cloud or Agent only when a task needs them.")
                 .font(.footnote)
                 .fontWeight(.regular)
                 .foregroundStyle(Color.textSecondary)
@@ -526,7 +526,7 @@ struct AccountSettingsView: View {
         #endif
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            chatStore.bannerMessage = "Clipboard does not contain a NEAR AI Cloud key."
+            chatStore.bannerMessage = "Clipboard has no NEAR AI Cloud key."
             return
         }
         nearCloudAPIKey = trimmed
@@ -696,7 +696,7 @@ private struct DynamicTypeDetailView: View {
                     Text("iOS Settings").foregroundStyle(Color.textSecondary)
                 }
             } footer: {
-                Text("This app respects the Dynamic Type size set in iOS Settings → Display & Brightness → Text Size.")
+                Text("Respects the Dynamic Type size set in iOS Settings → Display & Brightness → Text Size.")
                     .foregroundStyle(Color.textSecondary)
             }
         }
@@ -826,7 +826,7 @@ private struct PowerToolIronclawView: View {
                     Spacer()
                     Text(chatStore.ironclawStatusText).foregroundStyle(Color.textSecondary)
                 }
-                Toggle("Enable Hosted Agent", isOn: $ironclawEnabled)
+                Toggle("Enable Hosted IronClaw", isOn: $ironclawEnabled)
             }
 
             Section("Readiness") {
@@ -847,7 +847,7 @@ private struct PowerToolIronclawView: View {
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
                 SecureField(chatStore.ironclawTokenConfigured ? "Token saved" : "Bearer token", text: $ironclawToken)
-                TextField("Optional thread id", text: $ironclawThreadID)
+                TextField("Optional thread ID", text: $ironclawThreadID)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             }
@@ -1085,7 +1085,7 @@ struct CapabilitiesView: View {
                         status: privateStatus,
                         statusColor: privateStatusColor,
                         summary: "Private chat works immediately on iPhone and can attach proof when the selected route supports it.",
-                        trustLine: "Trust boundary: proof reports cover route evidence, not whether an answer is true.",
+                        trustLine: "Trust boundary: proof reports cover route evidence.",
                         detail: privateDetail,
                         primaryAction: privatePrimaryAction,
                         secondaryAction: nil
@@ -1109,7 +1109,7 @@ struct CapabilitiesView: View {
                         status: agentStatus,
                         statusColor: agentStatusColor,
                         summary: "Use phone-safe Agent skills now, then hand off repo, shell, and code tasks when Hosted IronClaw is connected.",
-                        trustLine: "Trust boundary: hosted IronClaw receives prompt text plus file metadata unless source excerpts are included.",
+                        trustLine: "Trust boundary: Hosted IronClaw receives prompt text plus file metadata unless source excerpts are included.",
                         detail: agentDetail,
                         primaryAction: agentPrimaryAction,
                         secondaryAction: agentSecondaryAction
@@ -1161,7 +1161,7 @@ struct CapabilitiesView: View {
 
     private var capabilityHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Chat about anything. The app starts private, then adds Web, Cloud, Agent, or Council when the task needs them.")
+            Text("Chat about anything. Starts private, then adds Web, Cloud, Agent, or Council when the task needs it.")
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1685,7 +1685,7 @@ private struct IronclawBridgeReadinessCard: View {
             return "Checking shell and git"
         }
         if lastVerifiedAt != nil {
-            return toolNames.isEmpty ? "Shell and git checked" : "Shell, git, files, and agent tools checked"
+            return toolNames.isEmpty ? "Shell and git checked" : "Shell, git, files, and Agent tools checked"
         }
         if !toolNames.isEmpty {
             return "Tool catalog available; check shell/git before running"

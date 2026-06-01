@@ -158,7 +158,7 @@ final class SessionStore: NSObject, ObservableObject {
         Task {
             if let session {
                 if session.sessionID.isEmpty {
-                    showBanner("Signed out locally. No server session id was available to revoke.")
+                    showBanner("Signed out on this device. No server session to revoke.")
                 } else {
                     do {
                         try await api.signOut(sessionID: session.sessionID)

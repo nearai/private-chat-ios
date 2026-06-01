@@ -291,7 +291,7 @@ enum IronclawSkillCatalog {
         IronclawSkillProfile(
             id: "idea-parking",
             title: "Idea Parking",
-            summary: "Capture ideas, triggers, and missing evidence without derailing the current task.",
+            summary: "Capture ideas, triggers, and missing evidence without derailing the task.",
             symbolName: "lightbulb",
             keywords: ["idea parking", "park this idea", "later idea", "parking lot", "backlog idea", "save this idea"]
         ),
@@ -498,7 +498,7 @@ struct IronclawPendingGate: Codable, Hashable, Identifiable {
 
     var alwaysUnavailableReason: String? {
         guard allowsAlways, isHighRiskAlwaysApproval else { return nil }
-        return "Always is disabled on phone for powerful hosted tools. Approve each run so command, network, file, and credential access stays scoped."
+        return "Always is off on phone for powerful hosted tools. Approve each run so command, network, file, and credential access stays scoped."
     }
 
     private static func redactedParameterPreview(_ parameters: String) -> String {
@@ -806,7 +806,7 @@ struct IronclawSettings: Codable, Hashable {
             return "Enter a valid Hosted IronClaw HTTPS URL."
         }
         if Self.retiredLocalDefaults.contains(trimmed) || !URLSecurity.isPublicHost(host) {
-            return "Use a Hosted IronClaw HTTPS URL. LAN gateways are local development only."
+            return "Use a Hosted IronClaw HTTPS URL. LAN gateways are for local development only."
         }
         guard scheme == "https" else {
             return "IronClaw on iPhone requires HTTPS, not a local HTTP gateway."

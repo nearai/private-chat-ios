@@ -134,9 +134,9 @@ final class IronclawMobileRuntime {
         - Use NEAR Private inference for the actual model call.
         - Use the app-side live web source pack when supplied; otherwise use web search when enabled by the app and the user asks for current information.
         - Use attached files and active project context when present.
-        - Produce action-oriented answers with clear formatting, headings only when useful, and concise source-aware reasoning.
+        - Produce action-oriented answers with the app-supported Markdown subset: concise headings, lists, tables, fenced code, links, bold, italic, and blockquotes when useful.
         - Lead with the answer. Then add dated evidence, tradeoffs, and next actions only when they help.
-        - Never emit fake tool calls, XML tool tags, raw JSON tool requests, or capability disclaimers after the app has supplied sources.
+        - Never emit fake tool calls, XML tool tags, HTML, Mermaid, LaTeX/math-only markup, raw JSON tool requests, or capability disclaimers after the app has supplied sources.
 
         Available mobile capabilities:
         - NEAR Private chat model execution.

@@ -86,6 +86,12 @@ final class ChatStore: ObservableObject {
             saveProtectedText(systemPrompt, filename: Self.systemPromptCacheFilename, legacyDefaultsKey: scopedDefaultsKey(Self.systemPromptDefaultsKey))
         }
     }
+    @Published var soulMarkdown: String {
+        didSet {
+            soulPromptProfile = SoulPromptComposer.Profile.parse(soulMarkdown)
+            saveProtectedText(soulMarkdown, filename: Self.soulMarkdownCacheFilename, legacyDefaultsKey: scopedDefaultsKey(Self.soulMarkdownDefaultsKey))
+        }
+    }
     @Published var largeTextAsFileEnabled: Bool = true {
         didSet {
             UserDefaults.standard.set(largeTextAsFileEnabled, forKey: scopedDefaultsKey(Self.largeTextAsFileDefaultsKey))
@@ -177,6 +183,7 @@ final class ChatStore: ObservableObject {
     /// On-device transparency log of what the assistant did (briefing runs,
     /// trackers created). Account-scoped, never leaves the device.
     let activityLog = AgentActivityLog()
+    private var soulPromptProfile = SoulPromptComposer.Profile.empty
     /// User control over passive memory (auto-learning durable facts from chat).
     /// A single user-level preference, persisted in UserDefaults; default on.
     var passiveMemoryEnabled: Bool {
@@ -266,6 +273,8 @@ final class ChatStore: ObservableObject {
     private static let researchModeDefaultsKey = "researchModeEnabled"
     private static let systemPromptDefaultsKey = "systemPrompt"
     private static let systemPromptCacheFilename = "system-prompt.txt"
+    private static let soulMarkdownDefaultsKey = "soulMarkdown"
+    private static let soulMarkdownCacheFilename = "soul.md"
     private static let draftCacheDirectoryName = "drafts"
     private static let draftStateCacheDirectoryName = "draft-state"
     private static let largeTextAsFileDefaultsKey = "largeTextAsFileEnabled"
@@ -886,7 +895,7 @@ final class ChatStore: ObservableObject {
                 state: viewModel.state,
                 title: viewModel.state == .verified ? "Proof captured with answer" : viewModel.title,
                 detail: viewModel.state == .verified
-                    ? "A fresh proof report covering this route/model was available on this device when the answer was generated. It does not prove the answer is true."
+                    ? "A fresh proof report covering this route/model was available on this device when the answer was generated."
                     : viewModel.detail,
                 badge: viewModel.badge,
                 symbolName: viewModel.symbolName,
@@ -1049,7 +1058,7 @@ final class ChatStore: ObservableObject {
 
     var inputPlaceholder: String {
         if isCouncilModeEnabled {
-            return effectiveWebSearchEnabled ? "Ask the council with sources" : "Ask the council"
+            return effectiveWebSearchEnabled ? "Ask the Council with sources" : "Ask the Council"
         }
         if researchModeEnabled && !selectedRouteUsesNearCloud {
             return "Ask for a researched answer"
@@ -1300,6 +1309,7 @@ final class ChatStore: ObservableObject {
         researchModeEnabled = false
         advancedModelParams = .defaults
         systemPrompt = ""
+        soulMarkdown = ""
     }
 
     func bootstrap() async {
@@ -1947,7 +1957,7 @@ final class ChatStore: ObservableObject {
     }
 
     func saveNearCloudAPIKey(_ apiKey: String) {
-        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedKey = PrivateChatAPI.normalizedNearCloudAPIKey(apiKey)
         guard !trimmedKey.isEmpty else {
             showBanner("Paste a NEAR AI Cloud key first.")
             return
@@ -1969,7 +1979,8 @@ final class ChatStore: ObservableObject {
 
         do {
             let response = try await api.connectNearCloudAccount()
-            guard let apiKey = response.apiKey?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty else {
+            let apiKey = PrivateChatAPI.normalizedNearCloudAPIKey(response.apiKey)
+            guard !apiKey.isEmpty else {
                 let message = response.message?.trimmingCharacters(in: .whitespacesAndNewlines)
                 showBanner(message?.isEmpty == false ? message! : "Cloud auto-connect is not available yet. Open Cloud, create a key, then paste it here.")
                 return false
@@ -1995,7 +2006,7 @@ final class ChatStore: ObservableObject {
     }
 
     func connectNearCloudAPIKey(_ apiKey: String) async -> Bool {
-        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedKey = PrivateChatAPI.normalizedNearCloudAPIKey(apiKey)
         guard !trimmedKey.isEmpty else {
             showBanner("Paste a NEAR AI Cloud key first.")
             return false
@@ -2219,6 +2230,9 @@ final class ChatStore: ObservableObject {
         webSearchEnabled = profile.wantsWeb
         sourceMode = plan.focusMode
         researchModeEnabled = profile.useCases.contains(.research) && plan.modelRoute != .ironclaw
+        if soulMarkdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            soulMarkdown = SetupSoulPromptBuilder.markdown(for: profile)
+        }
 
         let requestedCouncilModelIDs = plan.modelRoute == .council ? routeDefaults.councilModelIDs : []
         switch plan.modelRoute {
@@ -2324,8 +2338,8 @@ final class ChatStore: ObservableObject {
     private func setupAppliedBanner(for plan: AppSetupPlan, profile: UserSetupProfile, openedDraft: Bool) -> String {
         if profile.wantsIronclaw, plan.modelRoute != .ironclaw {
             return openedDraft
-                ? "Setup applied. Private prompt ready while agent tools stay unavailable."
-                : "Setup applied. Private route is ready while agent tools stay unavailable."
+                ? "Setup applied. Private prompt ready while Agent tools stay unavailable."
+                : "Setup applied. Private route is ready while Agent tools stay unavailable."
         }
         if profile.wantsCouncil, plan.modelRoute != .council {
             return openedDraft
@@ -5589,7 +5603,7 @@ final class ChatStore: ObservableObject {
             attachmentFingerprint,
             projectFingerprint
         ].joined(separator: "|~|")
-        let host = URL(string: ironclawSettings.normalizedBaseURL)?.host ?? "hosted IronClaw"
+        let host = URL(string: ironclawSettings.normalizedBaseURL)?.host ?? "Hosted IronClaw"
         return HostedIronclawHandoffPreflight(
             fingerprint: String(rawFingerprint.hashValue),
             destinationHost: host,
@@ -5628,7 +5642,7 @@ final class ChatStore: ObservableObject {
 
     private var hostedIronclawReadinessMessage: String? {
         if ironclawSettings.hasUsableHostedEndpoint, !ironclawSettings.isEnabled {
-            return "Turn on Hosted Agent in Account before sending."
+            return "Turn on Hosted IronClaw in Account before sending."
         }
         return ironclawSettings.endpointValidationMessage
     }
@@ -5829,7 +5843,7 @@ final class ChatStore: ObservableObject {
         }
         let needsHosted = modelIDs.contains { $0 == ModelOption.ironclawModelID }
         if needsHosted, !ironclawRemoteWorkstationAvailable {
-            showBanner(hostedIronclawReadinessMessage ?? "Configure Hosted Agent before asking that Council model.")
+            showBanner(hostedIronclawReadinessMessage ?? "Configure Hosted IronClaw before asking that Council model.")
             return false
         }
         return true
@@ -7048,7 +7062,7 @@ final class ChatStore: ObservableObject {
             let settings = ironclawSettingsForConversation(conversationID)
             guard settings.isEnabled, settings.hasUsableHostedEndpoint else {
                 let message = settings.hasUsableHostedEndpoint
-                    ? "Turn on Hosted Agent in Account before sending."
+                    ? "Turn on Hosted IronClaw in Account before sending."
                     : settings.endpointValidationMessage ?? "Add a Hosted IronClaw URL first."
                 throw APIError.status(0, message)
             }
@@ -7109,7 +7123,7 @@ final class ChatStore: ObservableObject {
             apiKey: apiKey,
             model: cloudModelID,
             prompt: nearCloudPrompt(for: text, attachments: attachments, webContext: webContext),
-            systemPrompt: nearCloudSystemPrompt(modelDisplayName: modelDisplayName(for: modelID), hasWebContext: webContext != nil),
+            systemPrompt: nearCloudSystemPrompt(modelID: modelID, modelDisplayName: modelDisplayName(for: modelID), hasWebContext: webContext != nil),
             advancedParams: advancedModelParams
         )
         await apply(streamEvent: .textDelta(Self.cleanedNearCloudResponse(response)), conversationID: conversationID, assistantMessageID: assistantMessageID)
@@ -7191,7 +7205,7 @@ final class ChatStore: ObservableObject {
                     conversationID: conversationID,
                     previousResponseID: previousResponseID,
                     webSearchEnabled: webContext == nil && shouldEnableModelNativeWebTool(model: ModelOption.ironclawMobileModelID, prompt: text),
-                    systemPrompt: activeSystemPrompt(),
+                    systemPrompt: activeSystemPrompt(memoryForModel: ModelOption.ironclawMobileModelID),
                     toolResults: toolResults,
                     webContext: webContext
                 ) { [weak self] event in
@@ -8034,6 +8048,7 @@ final class ChatStore: ObservableObject {
         researchModeEnabled = UserDefaults.standard.bool(forKey: scopedDefaultsKey(Self.researchModeDefaultsKey))
         advancedModelParams = loadAdvancedModelParams()
         systemPrompt = loadProtectedText(filename: Self.systemPromptCacheFilename, legacyDefaultsKey: scopedDefaultsKey(Self.systemPromptDefaultsKey))
+        soulMarkdown = loadProtectedText(filename: Self.soulMarkdownCacheFilename, legacyDefaultsKey: scopedDefaultsKey(Self.soulMarkdownDefaultsKey))
         conversations = loadCachedConversations()
         projects = loadProjects()
         selectedResponseVariantByConversationID = [:]
@@ -8178,6 +8193,7 @@ final class ChatStore: ObservableObject {
             sourceModeDefaultsKey,
             researchModeDefaultsKey,
             systemPromptDefaultsKey,
+            soulMarkdownDefaultsKey,
             largeTextAsFileDefaultsKey,
             advancedModelParamsDefaultsKey,
             ironclawSettingsDefaultsKey
@@ -8193,6 +8209,8 @@ final class ChatStore: ObservableObject {
         }
 
         let fileCaches: [(filename: String, legacyKey: String)] = [
+            (systemPromptCacheFilename, systemPromptDefaultsKey),
+            (soulMarkdownCacheFilename, soulMarkdownDefaultsKey),
             (conversationsCacheFilename, conversationsCacheKey),
             (projectsCacheFilename, projectsDefaultsKey),
             (localMessagesCacheFilename, localMessagesDefaultsKey),
@@ -8698,7 +8716,7 @@ final class ChatStore: ObservableObject {
             "remote workstation",
             "hosted workstation",
             "agent mission:",
-            "phone agent:",
+            "Phone Agent:",
             "run tests",
             "run the tests",
             "git status",
@@ -9376,7 +9394,7 @@ final class ChatStore: ObservableObject {
             if hostedRoutedModel != selectedModel {
                 selectedModel = hostedRoutedModel
                 clearAttestationState()
-                showBanner("Switched to IronClaw because this prompt needs hosted agent tools.")
+                showBanner("Switched to IronClaw because this prompt needs Hosted IronClaw tools.")
                 return
             }
         }
@@ -10543,7 +10561,7 @@ final class ChatStore: ObservableObject {
         }
 
         if lowercased.contains("chat route needs a valid ironclaw token") {
-            return "Hosted IronClaw is reachable, but the Agent token is missing or invalid. Open Account and test the Agent connection."
+            return "Hosted IronClaw is reachable. The Agent token is missing or invalid. Open Account and test the Agent connection."
         }
 
         if lowercased.contains("tool 'http' failed") &&
@@ -10561,7 +10579,7 @@ final class ChatStore: ObservableObject {
         }
 
         if lowercased.contains("not authenticated") || lowercased.contains("unauthorized") {
-            return "Sign in to chat about anything with the general assistant."
+            return "Sign in to start chatting."
         }
 
         return trimmed.isEmpty ? "The request failed." : trimmed
@@ -10607,18 +10625,26 @@ final class ChatStore: ObservableObject {
             )
     }
 
+    func activeSystemPromptForTesting(model: String? = nil) -> String {
+        activeSystemPrompt(memoryForModel: model)
+    }
+
     private func activeSystemPrompt(memoryForModel model: String? = nil) -> String {
+        let route = model.map(RoutePlanner.routeKind(forModelID:)) ?? .nearCloud
+        let soulPrompt = SoulPromptComposer.promptBlock(profile: soulPromptProfile, route: route)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let formatPrompt = SoulPromptComposer.markdownFormatContract.trimmingCharacters(in: .whitespacesAndNewlines)
         let userPrompt = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let modePrompt = sourceModeInstructions().trimmingCharacters(in: .whitespacesAndNewlines)
         // Personal memory is injected ONLY for the private near.ai route — never
         // cloud, council cloud legs, or hosted/IronClaw routes — so on-device
         // facts never leave for a third-party cloud.
-        let memoryAllowed = model.map { RoutePlanner.routeKind(forModelID: $0) == .nearPrivate } ?? false
+        let memoryAllowed = route == .nearPrivate
         let memoryPrompt = memoryAllowed
             ? (memoryStore.contextBlock()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
             : ""
         let requestedPrompt = researchModeEnabled ? Self.researchModeInstructions(appendingTo: userPrompt) : userPrompt
-        let basePrompt = [memoryPrompt, requestedPrompt, modePrompt]
+        let basePrompt = [soulPrompt, formatPrompt, memoryPrompt, requestedPrompt, modePrompt]
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")
@@ -10849,8 +10875,8 @@ final class ChatStore: ObservableObject {
         """
     }
 
-    private func nearCloudSystemPrompt(modelDisplayName: String, hasWebContext: Bool) -> String {
-        let userPrompt = activeSystemPrompt()
+    private func nearCloudSystemPrompt(modelID: String, modelDisplayName: String, hasWebContext: Bool) -> String {
+        let userPrompt = activeSystemPrompt(memoryForModel: modelID)
         let base: String
         if hasWebContext {
             base = """
@@ -10858,14 +10884,14 @@ final class ChatStore: ObservableObject {
             Do not emit tool-call markup, XML tool tags, JSON tool calls, or fake function calls.
             The iOS app has already performed web search and included live web context in the user message. Use that context directly, cite source titles or domains, and never claim that you cannot browse.
             Use any project instructions, saved links, notes, attachment summaries, or extracted text included by the app.
-            Format answers cleanly with concise headings and bullets when useful.
+            Format answers with the app-supported Markdown subset: concise headings, lists, tables, fenced code, links, bold, italic, and blockquotes when useful.
             """
         } else {
             base = """
             You are \(modelDisplayName) running through NEAR AI Cloud inside an iOS chat app.
             Do not emit tool-call markup, XML tool tags, JSON tool calls, or fake function calls.
             Use any project instructions, saved links, notes, attachment summaries, or extracted text included by the app. If no live web context was supplied and current facts are essential, say what context is missing and answer from what is available.
-            Format answers cleanly with concise headings and bullets when useful.
+            Format answers with the app-supported Markdown subset: concise headings, lists, tables, fenced code, links, bold, italic, and blockquotes when useful.
             """
         }
         guard !userPrompt.isEmpty else { return base }
@@ -11273,6 +11299,7 @@ final class ChatStore: ObservableObject {
         researchModeEnabled = false
         advancedModelParams = .defaults
         systemPrompt = ""
+        soulMarkdown = ""
 
         switch screen {
         case .onboarding:
@@ -11773,7 +11800,7 @@ final class ChatStore: ObservableObject {
             demoModel(demoIndependentModelA, displayName: "Independent model A", description: "Cloud model through NEAR Cloud privacy proxy.", verifiable: false),
             demoModel(demoIndependentModelB, displayName: "Independent model B", description: "Cloud model through NEAR Cloud privacy proxy.", verifiable: false),
             demoModel(ModelOption.ironclawMobileModelID, displayName: "IronClaw Mobile", description: "Phone-safe agent runtime.", verifiable: false),
-            demoModel(ModelOption.ironclawModelID, displayName: "Hosted IronClaw", description: "Connected hosted Agent.", verifiable: false)
+            demoModel(ModelOption.ironclawModelID, displayName: "Hosted IronClaw", description: "Connected Hosted IronClaw.", verifiable: false)
         ]
         let nearCloudModels = models.filter { $0.isNearCloudModel }
         let attestation = AttestationSnapshot(

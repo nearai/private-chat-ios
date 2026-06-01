@@ -240,7 +240,7 @@ struct ProjectFilesView: View {
                         Text("Choose a Project first")
                             .font(.title3.weight(.semibold))
                             .foregroundStyle(Color.textPrimary)
-                        Text("Project context keeps files, links, notes, and action drafts together so chat can turn arbitrary inputs into next moves.")
+                        Text("Project context keeps files, links, notes, and action drafts together so chat can turn any input into next moves.")
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(Color.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -266,7 +266,7 @@ struct ProjectFilesView: View {
                 }
 
                 if chatStore.visibleProjects.isEmpty {
-                    Text("No existing Projects yet. Create one to attach files, save links, keep notes, and route project-aware prompts from chat.")
+                    Text("No Projects yet. Create one to attach files, save links, keep notes, and route Project-aware prompts from chat.")
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -465,7 +465,7 @@ struct ProjectFilesView: View {
                 .padding(.horizontal, 16)
 
             if conversations.isEmpty {
-                Text("New conversations started inside this Project will appear here.")
+                Text("New conversations in this Project will appear here.")
                     .font(.footnote)
                     .foregroundStyle(Color.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1494,7 +1494,7 @@ struct ArchivedChatsView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("\(chatStore.archivedConversations.count) archived conversations")
                                 .font(.headline)
-                            Text("Restore chats when you need them back, or delete them permanently.")
+                            Text("Restore chats when you need them, or delete them permanently.")
                                 .font(.footnote)
                                 .foregroundStyle(Color.textSecondary)
                         }

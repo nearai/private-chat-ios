@@ -53,7 +53,7 @@ struct RoutePlanner {
             return ChatRouteReadinessIssue(
                 route: .council,
                 title: "Council needs two models",
-                message: "Choose at least two usable Council models, or switch to a single private model. Your draft and attachments were kept.",
+                message: "Pick at least two usable Council models, or switch to a single private model. Your draft and attachments are kept.",
                 recoveryAction: .editCouncilLineup,
                 recoveryTitle: "Edit Council"
             )
@@ -64,7 +64,7 @@ struct RoutePlanner {
             return ChatRouteReadinessIssue(
                 route: .nearCloud,
                 title: "Connect NEAR AI Cloud",
-                message: "Connect NEAR AI Cloud in Account before sending with this route. Your draft and attachments were kept.",
+                message: "Connect NEAR AI Cloud in Account to send on this route. Your draft and attachments are kept.",
                 recoveryAction: .addNearCloudKey,
                 recoveryTitle: "Add Key"
             )
@@ -72,11 +72,11 @@ struct RoutePlanner {
 
         if modelIDs.contains(where: { routeKind(forModelID: $0) == .ironclawHosted }), !hostedIronclawEndpointUsable {
             let endpointMessage = hostedIronclawEndpointMessage?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let detail = endpointMessage?.isEmpty == false ? endpointMessage! : "Add a Hosted IronClaw URL in Account before sending."
+            let detail = endpointMessage?.isEmpty == false ? endpointMessage! : "Add a Hosted IronClaw URL in Account to send."
             return ChatRouteReadinessIssue(
                 route: .hostedIronclaw,
                 title: "Hosted IronClaw connection required",
-                message: "\(detail) Your draft and attachments were kept.",
+                message: "\(detail) Your draft and attachments are kept.",
                 recoveryAction: .configureIronClawEndpoint,
                 recoveryTitle: "Connect Agent"
             )

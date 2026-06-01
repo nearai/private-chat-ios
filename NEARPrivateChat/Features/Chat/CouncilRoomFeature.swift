@@ -384,7 +384,7 @@ struct CouncilMessageRow: View {
                         HStack(spacing: 8) {
                             ProgressView()
                                 .controlSize(.small)
-                            Text("reasoning...")
+                            Text("reasoning…")
                                 .foregroundStyle(Color.textSecondary)
                         }
                     } else {
@@ -492,7 +492,7 @@ struct CouncilStanceBadge: View {
         case .dissents:
             return "Likely differs"
         case .reasoning:
-            return "reasoning..."
+            return "reasoning…"
         case .neutral:
             return nil
         }
@@ -617,7 +617,7 @@ struct CouncilComposerBar: View {
                     staticTargetPill
                 }
 
-                TextField(supportsTargetedSend ? "Ask the council" : "Stage a follow-up", text: $draft, axis: .vertical)
+                TextField(supportsTargetedSend ? "Ask the Council" : "Stage a follow-up", text: $draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...4)
                     .padding(.horizontal, 11)

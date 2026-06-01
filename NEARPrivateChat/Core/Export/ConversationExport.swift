@@ -724,11 +724,11 @@ enum ConversationExportError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .answerNotFound:
-            return "The selected answer could not be found."
+            return "Selected answer not found."
         case .selectedMessageIsNotAnswer:
-            return "Only assistant answers can be exported with the selected-answer exporter."
+            return "Only assistant answers can be exported this way."
         case let .unsupportedSelectedAnswerFormat(fileExtension):
-            return "Selected-answer export is not available for .\(fileExtension)."
+            return "Selected-answer export is not available as .\(fileExtension)."
         }
     }
 }

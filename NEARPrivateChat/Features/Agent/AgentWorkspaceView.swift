@@ -87,7 +87,7 @@ private struct AgentWorkspaceSetupPanel: View {
             Label("Connect Agent", systemImage: "server.rack")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.primary)
-            Text("Add a Hosted IronClaw URL and token in Account settings. Local LAN gateways are not shown as phone-ready routes.")
+            Text("Add a Hosted IronClaw URL and token in Account. LAN gateways are not phone-ready routes.")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -119,9 +119,9 @@ private struct AgentWorkspacePrinciples: View {
     }
 
     private let rows: [Principle] = [
-        Principle(title: "Ask", symbolName: "text.badge.plus", detail: "If a repo, issue, or task brief is missing, the agent asks before mutating anything."),
+        Principle(title: "Ask", symbolName: "text.badge.plus", detail: "If a repo, issue, or task brief is missing, the Agent asks before changing anything."),
         Principle(title: "Inspect", symbolName: "magnifyingglass", detail: "Hosted IronClaw checks files, git status, stack, and safe test commands first."),
-        Principle(title: "Report", symbolName: "doc.text", detail: "Every run should return commands, changed files, tests, and remaining risk.")
+        Principle(title: "Report", symbolName: "doc.text", detail: "Every run returns commands, changed files, tests, and remaining risk.")
     ]
 
     var body: some View {
@@ -278,7 +278,7 @@ private struct AgentMissionControlPanel: View {
                         .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Open project context")
+                .accessibilityLabel("Open Project context")
             }
         }
         .padding(12)
@@ -332,7 +332,7 @@ private struct AgentMissionControlPanel: View {
                 .accessibilityHint("Fills the agent brief from your saved setup without sending.")
             }
 
-            TextField("What should the agent do?", text: $missionBrief, axis: .vertical)
+            TextField("What should the Agent do?", text: $missionBrief, axis: .vertical)
                 .textFieldStyle(.plain)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.sentences)

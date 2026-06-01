@@ -1579,7 +1579,7 @@ struct BriefingEditorSheet: View {
 
     private var briefingBuilderComposer: some View {
         HStack(alignment: .bottom, spacing: 10) {
-            TextField("Paste a row, source, note, or goal...", text: $builderInput, axis: .vertical)
+            TextField("Paste a row, source, note, or goal…", text: $builderInput, axis: .vertical)
                 .lineLimit(1...4)
                 .font(.body)
                 .textFieldStyle(.plain)

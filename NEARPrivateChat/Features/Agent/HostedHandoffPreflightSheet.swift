@@ -19,7 +19,7 @@ struct HostedHandoffPreflightSheet: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Run on Hosted IronClaw?")
                                 .font(.title3.weight(.semibold))
-                            Text("This sends the prompt and selected phone context to \(preflight.destinationHost).")
+                            Text("Sends the prompt and selected phone context to \(preflight.destinationHost).")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -180,7 +180,7 @@ struct IronclawApprovalCard: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This only applies to the Hosted IronClaw scope returned by the Agent connection. Powerful command, file, network, and credential tools still require per-run approval on phone.")
+            Text("Applies only to the Hosted IronClaw scope from the Agent connection. Command, file, network, and credential tools still need per-run approval on phone.")
         }
         .confirmationDialog(
             "Open external site?",

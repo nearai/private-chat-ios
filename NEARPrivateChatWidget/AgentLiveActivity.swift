@@ -86,14 +86,14 @@ private struct AgentLiveActivityStatus {
         if text.contains("ironclaw mobile") || text.contains("phone") || text.contains("mobile") {
             return AgentLiveActivityStatus(
                 primaryText: "Running on phone",
-                trustText: "Phone route - no NEAR proof",
+                trustText: "Phone route · outside proof",
                 symbolName: "iphone"
             )
         }
 
         return AgentLiveActivityStatus(
             primaryText: "Current route",
-            trustText: "Proof shown when route supports it",
+            trustText: "Proof when the route supports it",
             symbolName: "message"
         )
     }

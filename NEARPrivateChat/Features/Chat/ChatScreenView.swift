@@ -371,7 +371,7 @@ private struct SaveOutputToProjectSheet: View {
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Create project")
+                        Text("Create Project")
                             .font(.caption.weight(.semibold))
                             .textCase(.uppercase)
                             .foregroundStyle(Color.textSecondary)
@@ -414,7 +414,7 @@ private struct SaveOutputToProjectSheet: View {
 
                     if !chatStore.visibleProjects.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("Existing projects")
+                            Text("Existing Projects")
                                 .font(.caption.weight(.semibold))
                                 .textCase(.uppercase)
                                 .foregroundStyle(Color.textSecondary)
@@ -1045,7 +1045,7 @@ private struct ChatToolbar: View {
             case .ironclawMobile:
                 parts.append("Phone agent route")
             case .ironclawHosted:
-                parts.append("Hosted agent route")
+                parts.append("Hosted IronClaw route")
             }
         }
 
@@ -1112,7 +1112,7 @@ private struct ChatToolbar: View {
         case .ironclawMobile:
             return "Phone Agent"
         case .ironclawHosted:
-            return "Hosted Agent"
+            return "Hosted IronClaw"
         case .nearPrivate, .nearCloud:
             return "Agent"
         }
@@ -1195,7 +1195,7 @@ private struct ChatToolbar: View {
                         ? "Agent mission: "
                         : "Agent mission: \(chatStore.draft)"
                 } label: {
-                    Label("Run as agent", systemImage: "terminal")
+                    Label("Run as Agent", systemImage: "terminal")
                 }
             }
             Button {

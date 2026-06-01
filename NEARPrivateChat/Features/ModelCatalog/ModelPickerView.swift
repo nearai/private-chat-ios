@@ -152,10 +152,10 @@ struct ModelPickerView: View {
     private var activeRouteSummary: (title: String, detail: String, badges: [String], symbolName: String, tint: Color) {
         if chatStore.isCouncilModeEnabled {
             let count = max(chatStore.activeCouncilModels.count, chatStore.defaultCouncilModels.count)
-            let proof = chatStore.activeCouncilHasExternalRoutes ? "Mixed proof boundary" : "Private proof when fetched"
+            let proof = chatStore.activeCouncilHasExternalRoutes ? "Mixed proof" : "Proof when fetched"
             return (
                 "Council",
-                "\(max(count, 2)) models answer independently, then the app synthesizes the result.",
+                "\(max(count, 2)) models answer independently. The app synthesizes one result.",
                 ["Multiple models", proof],
                 "person.3.fill",
                 Color.brandBlue
@@ -166,7 +166,7 @@ struct ModelPickerView: View {
         case .nearPrivate:
             return (
                 "NEAR Private",
-                "Private route. A proof report can cover route and model evidence when fetched for the current model.",
+                "Private route. Fetch a proof report to see route and model Attestation for this model.",
                 ["Proof when fetched", "Private route"],
                 "lock.shield.fill",
                 Color.proofVerified
@@ -174,7 +174,7 @@ struct ModelPickerView: View {
         case .nearCloud:
             return (
                 "NEAR AI Cloud",
-                "External model route through NEAR AI Cloud with privacy proxy forwarding.",
+                "External model. Routed through NEAR AI Cloud over the privacy proxy.",
                 ["Privacy proxy", "External model"],
                 "cloud.fill",
                 Color.brandBlue
@@ -182,7 +182,7 @@ struct ModelPickerView: View {
         case .ironclawMobile:
             return (
                 "IronClaw Mobile",
-                "On-device Agent route for bounded local tasks. It sits outside NEAR Private proof.",
+                "On-device Agent for small local tasks. Outside NEAR Private proof.",
                 ["IronClaw Mobile", "Outside proof"],
                 "iphone",
                 Color.brandBlue
@@ -190,8 +190,8 @@ struct ModelPickerView: View {
         case .ironclawHosted:
             return (
                 "Hosted IronClaw",
-                "Hosted Agent route. Prompt text leaves the phone; file bytes are not sent unless excerpts are included.",
-                ["Hosted Agent", "File names only"],
+                "Hosted IronClaw. Prompt text leaves the phone. File bytes stay unless you include excerpts.",
+                ["Hosted IronClaw", "File names only"],
                 "terminal.fill",
                 Color.proofStale
             )
@@ -208,7 +208,7 @@ struct ModelPickerView: View {
 	                        symbolName: "cpu",
 	                        symbolColor: Color.actionPrimary,
 	                        title: model.displayName,
-	                        subtitle: "Private inference with proof when fetched",
+	                        subtitle: "Private inference. Proof when fetched.",
                         badges: model.routeDisclosureBadges,
                         trailing: .checkmark,
                         isSelected: model.id == chatStore.selectedModel && !chatStore.isCouncilModeEnabled,
@@ -228,7 +228,7 @@ struct ModelPickerView: View {
                             title: index == 0 ? "Expert" : "Heavy",
                             subtitle: index == 0
                                 ? "Multi-step reasoning, slower"
-                                : "Deep analysis for complex prompts",
+                                : "Deepest analysis. Slowest.",
                             badges: model.routeDisclosureBadges,
                             trailing: model.id == chatStore.selectedModel && !chatStore.isCouncilModeEnabled
                                 ? .checkmark
@@ -246,10 +246,10 @@ struct ModelPickerView: View {
                 ModelSpecRow(
                     symbolName: chatStore.nearCloudKeyConfigured ? "cloud.fill" : "cloud",
                     symbolColor: Color.textSecondary,
-	                    title: chatStore.nearCloudKeyConfigured ? "NEAR AI Cloud connected" : "Connect NEAR AI Cloud",
+	                    title: chatStore.nearCloudKeyConfigured ? "Connected" : "Connect NEAR AI Cloud",
 	                    subtitle: chatStore.nearCloudKeyConfigured
-	                        ? "Refresh NEAR AI Cloud catalog or open account"
-	                        : "Use external models via your NEAR AI Cloud key",
+	                        ? "Refresh catalog or open account"
+	                        : "Add your key to use external models",
                     badges: ["Privacy proxy", "External models"],
                     trailing: .chevron,
                     isSelected: false,
@@ -283,7 +283,7 @@ struct ModelPickerView: View {
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(Color.textSecondary)
                         .padding(.horizontal, 16)
-	                    Text("Connect NEAR AI Cloud to browse external models available on your account.")
+	                    Text("Connect NEAR AI Cloud to browse external models on your account.")
                         .font(.subheadline)
                         .foregroundStyle(Color.textTertiary)
                         .multilineTextAlignment(.center)
@@ -314,7 +314,7 @@ struct ModelPickerView: View {
                         symbolName: "person.3",
                         symbolColor: Color.textSecondary,
 	                        title: "Council unavailable",
-	                        subtitle: "Need at least two eligible chat models",
+	                        subtitle: "Needs two or more chat models",
 	                        badges: ["2-3 models", "Route varies"],
                         trailing: .none,
                         isSelected: false,
@@ -357,14 +357,14 @@ struct ModelPickerView: View {
 	            councilCandidatesSection
 
 	            if !chatStore.councilPresets.isEmpty {
-                ModelSpecSection(title: "Preset Combos") {
+                ModelSpecSection(title: "Presets") {
                     let presets = chatStore.councilPresets
                     ForEach(Array(presets.enumerated()), id: \.element.id) { index, preset in
                         ModelSpecRow(
                             symbolName: presetSymbol(for: preset),
                             symbolColor: preset.isAvailable ? Color.textSecondary : Color.textTertiary,
                             title: preset.title,
-                            subtitle: preset.isAvailable ? preset.previewNames : "Needs available models",
+                            subtitle: preset.isAvailable ? preset.previewNames : "Some models unavailable",
 	                            badges: ["Council", "Route varies"],
                             trailing: .chevron,
                             isSelected: false,
@@ -451,9 +451,9 @@ struct ModelPickerView: View {
             return "Council slot \(index)"
         }
         if chatStore.activeCouncilModels.count >= chatStore.maxCouncilModelCount {
-            return "Remove another model to add this one"
+            return "Remove a model to add this one"
         }
-        return "Tap to add to Council"
+        return "Add to Council"
     }
 
     private var councilSelectionStatusText: String {

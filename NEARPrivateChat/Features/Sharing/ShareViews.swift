@@ -96,7 +96,7 @@ struct ShareConversationView: View {
                     if chatStore.isLoadingShareInfo || isWorking {
                         HStack(spacing: 10) {
                             ProgressView()
-                            Text("Updating share settings")
+                            Text("Updating share")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
@@ -143,15 +143,15 @@ struct ShareConversationView: View {
                 isPresented: $showingDisablePublicLinkConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("Disable Public Link", role: .destructive) {
+                Button("Disable link", role: .destructive) {
                     Task { await disablePublicShare() }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("People with the public URL will lose read-only access.")
+                Text("Anyone with the URL loses access.")
             }
             .confirmationDialog(
-                "Confirm shared access",
+                "Confirm access",
                 isPresented: Binding(
                     get: { pendingSensitiveShareGrant != nil },
                     set: { if !$0 { pendingSensitiveShareGrant = nil } }
@@ -170,7 +170,7 @@ struct ShareConversationView: View {
                 Text(shareGrantConfirmationMessage)
             }
             .confirmationDialog(
-                "Signed export identity",
+                "Signed export",
                 isPresented: $showingSignedExportNotice,
                 titleVisibility: .visible
             ) {
@@ -179,7 +179,7 @@ struct ShareConversationView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Signed JSON includes the transcript and route metadata, sealed with a stable on-device Keychain identity. Repeated exports from this device can be linked by the signing key id.")
+                Text("Signs the transcript and route metadata with a stable on-device key. Repeated exports from this device share one signing key id and can be linked.")
             }
             .fileExporter(
                 isPresented: $showingVerifiedExporter,
@@ -223,7 +223,7 @@ struct ShareConversationView: View {
                 Text(conversation.title)
                     .font(.headline)
                     .lineLimit(2)
-                Text(chatStore.shareInfo?.canShare == false ? "View existing access." : "Invite people, organizations, or publish a read-only link.")
+                Text(chatStore.shareInfo?.canShare == false ? "View existing access." : "Invite people or publish a read-only link.")
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -248,7 +248,7 @@ struct ShareConversationView: View {
                     .foregroundStyle(publicShareEnabled ? Color.brandBlue : .secondary)
             }
 
-            Text("Public links are read-only, off by default, and expose this conversation to anyone with the URL until disabled.")
+            Text("Read-only. Anyone with the URL can read this Conversation until you disable the link.")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -285,7 +285,7 @@ struct ShareConversationView: View {
                 Button {
                     showingPublicLinkPreview = true
                 } label: {
-                    Label("Review Public Link", systemImage: "eye")
+                    Label("Review link", systemImage: "eye")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -314,7 +314,7 @@ struct ShareConversationView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Signed export")
                         .font(.footnote.weight(.semibold))
-                    Text("Signed JSON includes the transcript, route metadata, and what proof was available. The proof report alone does not include the conversation.")
+                    Text("Signed JSON includes the transcript, route metadata, and the Attestation that was available. The proof report omits the transcript.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -362,7 +362,7 @@ struct ShareConversationView: View {
         }
         .buttonStyle(.bordered)
         .disabled(proofJSONExportUnavailableReason != nil)
-        .accessibilityHint(proofJSONExportUnavailableReason ?? "Exports only the cached proof report JSON.")
+        .accessibilityHint(proofJSONExportUnavailableReason ?? "Exports the cached proof report.")
     }
 
     private func proofExportUnavailableText(_ text: String) -> some View {
@@ -428,7 +428,7 @@ struct ShareConversationView: View {
                 Button {
                     requestShareGrant(.organization)
                 } label: {
-                    Label("Share Organization", systemImage: "building.2.crop.circle")
+                    Label("Share org", systemImage: "building.2.crop.circle")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -447,7 +447,7 @@ struct ShareConversationView: View {
     private var accessListSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("People With Access", systemImage: "person.2")
+                Label("People with access", systemImage: "person.2")
                     .font(.footnote.weight(.semibold))
                 Spacer()
                 Text("\(accessShares.count)")
@@ -456,7 +456,7 @@ struct ShareConversationView: View {
             }
 
             if accessShares.isEmpty {
-                Text("Only you can access this conversation unless the public link is enabled.")
+                Text("Only you, until you invite people or enable the public link.")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -492,7 +492,7 @@ struct ShareConversationView: View {
                         .foregroundStyle(.secondary)
                 }
             } else if chatStore.shareGroups.isEmpty {
-                Text("Create a reusable group for frequent collaborators.")
+                Text("Create a reusable group for people you share with often.")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
             } else {
@@ -663,9 +663,9 @@ struct ShareConversationView: View {
     private var shareGrantConfirmationMessage: String {
         let target = pendingSensitiveShareGrant?.label ?? "this target"
         if permission == .write {
-            return "\(target.capitalized) can reply in this conversation. Confirm this is intended."
+            return "\(target.capitalized) can reply in this Conversation."
         }
-        return "Organization sharing can grant access broadly. Confirm the domain and permission before continuing."
+        return "Org sharing grants access to a whole domain. Check the domain and permission."
     }
 
     private func requestShareGrant(_ grant: SensitiveShareGrant) {
@@ -752,20 +752,20 @@ struct ShareConversationView: View {
 
     private var verifiedJSONExportUnavailableReason: String? {
         if chatStore.selectedConversation?.id != conversation.id {
-            return "Open this conversation before exporting Signed JSON."
+            return "Open this Conversation to export Signed JSON."
         }
         if exportMessages.isEmpty {
-            return "No transcript messages to export."
+            return "No messages to export."
         }
         return nil
     }
 
     private var proofJSONExportUnavailableReason: String? {
         guard chatStore.attestationSnapshot != nil else {
-            return "No cached proof report is available. Open Proof and fetch proof first."
+            return "No proof report cached. Open Proof and fetch it first."
         }
         guard chatStore.currentAttestationStatus.effectiveState() == .valid else {
-            return "Proof report is stale or not current for this private route. Open Proof and refresh proof first."
+            return "Proof report is stale for this route. Open Proof and refresh it."
         }
         return nil
     }
@@ -799,7 +799,7 @@ struct ShareConversationView: View {
             return
         }
         guard let snapshot = chatStore.attestationSnapshot else {
-            chatStore.bannerMessage = "No cached proof report is available."
+            chatStore.bannerMessage = "No proof report cached."
             return
         }
         proofReportDocument = ConversationExportDocument(data: Data(snapshot.prettyJSON.utf8))
@@ -912,7 +912,7 @@ private struct PublicLinkPreviewView: View {
                                 Text(conversation.title)
                                     .font(.headline)
                                     .lineLimit(2)
-                                Text("Anyone with the URL can read this conversation until you disable the link.")
+                                Text("Anyone with the URL can read this Conversation until you disable the link.")
                                     .font(.footnote.weight(.medium))
                                     .foregroundStyle(Color.textSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -928,7 +928,7 @@ private struct PublicLinkPreviewView: View {
                     SharePreviewRow(title: "Permission", value: "Read-only", symbolName: "eye")
                     SharePreviewRow(title: "Messages", value: "\(messageCount)", symbolName: "bubble.left.and.bubble.right")
                     SharePreviewRow(title: "Sources", value: sourceCount == 0 ? "None attached" : "\(sourceCount)", symbolName: "link")
-                    SharePreviewRow(title: "Account metadata", value: "Owner identity is not added to the link preview.", symbolName: "person.crop.circle.badge.xmark")
+                    SharePreviewRow(title: "Account metadata", value: "Owner identity stays off the link preview.", symbolName: "person.crop.circle.badge.xmark")
                 }
 
                 Section {
@@ -938,7 +938,7 @@ private struct PublicLinkPreviewView: View {
                             dismiss()
                         }
                     } label: {
-                        Label("Create Public Link", systemImage: "link.badge.plus")
+                        Label("Create link", systemImage: "link.badge.plus")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -948,7 +948,7 @@ private struct PublicLinkPreviewView: View {
             }
             .scrollContentBackground(.hidden)
             .background(Color.surface)
-            .navigationTitle("Public Link Preview")
+            .navigationTitle("Public link")
             .platformInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -1009,7 +1009,7 @@ struct ShareGroupsView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Share Groups")
                                 .font(.headline)
-                            Text("Reusable collaborator sets for conversation sharing.")
+                            Text("Reusable groups for people you share with.")
                                 .font(.footnote.weight(.medium))
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -1242,7 +1242,7 @@ struct NewProjectView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     ProjectIdentityPreview(
                         title: trimmedName.isEmpty ? "Untitled Project" : trimmedName,
-                        subtitle: instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Sources, files, instructions, and notes" : "Instructions ready",
+                        subtitle: instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Sources, files, and instructions" : "Instructions ready",
                         symbolName: selectedIcon.symbolName,
                         tintColor: selectedPalette.tintColor,
                         backgroundColor: selectedPalette.backgroundColor
@@ -1319,7 +1319,7 @@ struct NewProjectView: View {
                             .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
                     }
 
-                    Text("Project sources, instructions, notes, and saved outputs stay available to chats in this Project.")
+                    Text("Sources, instructions, and saved outputs stay available to chats in this Project.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

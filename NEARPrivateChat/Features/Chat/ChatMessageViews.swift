@@ -612,7 +612,7 @@ private struct EditUserMessageView: View {
                 } header: {
                     Text("Edit Prompt")
                 } footer: {
-                    Text("This starts a new branch from the original turn.")
+                    Text("Starts a new branch from the original turn.")
                 }
 
                 if !message.attachments.isEmpty {
@@ -2113,7 +2113,7 @@ private struct WidgetSystemActionSection: View {
                     .buttonStyle(.plain)
                     .disabled(isSaving)
                 } else {
-                    Label("Needs an exact date/time before it can be added to iOS.", systemImage: "exclamationmark.triangle")
+                    Label("Needs an exact date and time before adding to iOS.", systemImage: "exclamationmark.triangle")
                         .font(.footnote)
                         .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)

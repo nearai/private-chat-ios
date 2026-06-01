@@ -1,5 +1,10 @@
 import SwiftUI
 
+private enum HomeLaunchFollowUp {
+    case project
+    case council
+}
+
 struct ConversationListView: View {
     @EnvironmentObject private var chatStore: ChatStore
     @EnvironmentObject private var sessionStore: SessionStore
@@ -17,6 +22,10 @@ struct ConversationListView: View {
     @State private var openedBriefing: Briefing?
     @State private var homeLaunchDraft = ""
     @State private var selectedHomeLaunchSuggestionID: String?
+    @State private var pendingHomeLaunchSuggestion: EmptyChatStarterSuggestion?
+    @State private var pendingHomeLaunchDraft = ""
+    @State private var pendingHomeLaunchFollowUp: HomeLaunchFollowUp?
+    @State private var showingHomeCouncilPicker = false
     let onOpenChat: () -> Void
     let onStartNewChat: () -> Void
     let onRunSetupAgain: () -> Void
@@ -155,7 +164,7 @@ struct ConversationListView: View {
         if chatStore.selectedModelOption?.isIronclawHostedModel == true {
             return ProofCapsuleViewModel(
                 state: .unknown,
-                title: "Hosted agent route",
+                title: "Hosted IronClaw route",
                 detail: "Hosted IronClaw uses its own trust boundary. Open Proof report when you need the current route summary before handing work off.",
                 badge: "Hosted route",
                 symbolName: "terminal"
@@ -563,7 +572,9 @@ struct ConversationListView: View {
             NewProjectView()
                 .environmentObject(chatStore)
         }
-        .sheet(isPresented: $showingProjectFiles) {
+        .sheet(isPresented: $showingProjectFiles, onDismiss: {
+            resumePendingHomeLaunchIfPossible(after: .project)
+        }) {
             ProjectFilesView(
                 onOpenConversation: { conversation in
                     showingProjectFiles = false
@@ -579,6 +590,12 @@ struct ConversationListView: View {
                 }
             )
             .environmentObject(chatStore)
+        }
+        .sheet(isPresented: $showingHomeCouncilPicker, onDismiss: {
+            resumePendingHomeLaunchIfPossible(after: .council)
+        }) {
+            ModelPickerView(openingCouncil: true)
+                .environmentObject(chatStore)
         }
         .sheet(item: $editingProject) { project in
             EditProjectView(project: project)
@@ -897,7 +914,7 @@ struct ConversationListView: View {
         } else if homeInboxSectionPlan.showsArchivedEmptyState {
             HomeInboxEmptyState(
                 title: searchQuery.isEmpty ? "No archived items" : "No archived matches",
-                subtitle: searchQuery.isEmpty ? "Archived chats and projects will collect here." : "Try another search or switch filters.",
+                subtitle: searchQuery.isEmpty ? "Archived chats and Projects will collect here." : "Try another search or switch filters.",
                 symbolName: "archivebox"
             )
             .padding(.horizontal, 16)
@@ -939,7 +956,7 @@ struct ConversationListView: View {
 
     private func openNewChat() {
         guard !chatStore.isStreaming else {
-            chatStore.bannerMessage = "Finish or cancel the current response before starting a new chat."
+            chatStore.bannerMessage = "Finish or cancel the current response before starting a chat."
             return
         }
         chatStore.startNewConversation()
@@ -948,7 +965,7 @@ struct ConversationListView: View {
 
     private func startPrivateChatFromFirstRun() {
         guard !chatStore.isStreaming else {
-            chatStore.bannerMessage = "Finish or cancel the current response before starting a new chat."
+            chatStore.bannerMessage = "Finish or cancel the current response before starting a chat."
             return
         }
 
@@ -968,7 +985,7 @@ struct ConversationListView: View {
 
     private func startQuickStartFromFirstRun(_ preset: UserSetupStarterPreset) {
         guard !chatStore.isStreaming else {
-            chatStore.bannerMessage = "Finish or cancel the current response before starting a new chat."
+            chatStore.bannerMessage = "Finish or cancel the current response before starting a chat."
             return
         }
 
@@ -1032,7 +1049,7 @@ struct ConversationListView: View {
 
     private func stageHomeOrchestrationPrompt(_ stagedPrompt: HomeStagedPrompt) {
         guard !chatStore.isStreaming else {
-            chatStore.bannerMessage = "Finish or cancel the current response before staging a new prompt."
+            chatStore.bannerMessage = "Finish or cancel the current response before staging a prompt."
             return
         }
 
@@ -1050,7 +1067,7 @@ struct ConversationListView: View {
 
     private func stageProjectPrompt(_ prompt: String) {
         guard !chatStore.isStreaming else {
-            chatStore.bannerMessage = "Finish or cancel the current response before staging a project prompt."
+            chatStore.bannerMessage = "Finish or cancel the current response before staging a Project prompt."
             return
         }
 
@@ -1072,7 +1089,7 @@ struct ConversationListView: View {
 
     private func runHomeLaunchPrompt() {
         guard !chatStore.isStreaming else {
-            chatStore.bannerMessage = "Finish or cancel the current response before staging a new prompt."
+            chatStore.bannerMessage = "Finish or cancel the current response before staging a prompt."
             return
         }
 
@@ -1080,66 +1097,90 @@ struct ConversationListView: View {
         let suggestion = selectedHomeLaunchSuggestion
         guard suggestion != nil || !trimmedDraft.isEmpty else { return }
 
-        if let suggestion, !prepareHomeLaunchIntent(suggestion) {
+        if let suggestion {
+            let readyToLaunch = EmptyChatStarterCoordinator.prepare(
+                suggestion,
+                to: chatStore,
+                onOpenProject: {
+                    queuePendingHomeLaunch(
+                        suggestion: suggestion,
+                        draft: trimmedDraft,
+                        followUp: .project
+                    )
+                    showingProjectFiles = true
+                    chatStore.bannerMessage = "Choose a Project; the prompt will open in chat."
+                },
+                onOpenCouncil: {
+                    queuePendingHomeLaunch(
+                        suggestion: suggestion,
+                        draft: trimmedDraft,
+                        followUp: .council
+                    )
+                    showingHomeCouncilPicker = true
+                    chatStore.bannerMessage = "Adjust the Council lineup; the prompt will open in chat."
+                }
+            )
+            guard readyToLaunch else { return }
+        }
+
+        commitHomeLaunchPrompt(
+            prefix: suggestion?.prompt,
+            draft: trimmedDraft,
+            banner: suggestion.map { "\($0.title) prompt ready." } ?? "Prompt ready."
+        )
+    }
+
+    private func queuePendingHomeLaunch(
+        suggestion: EmptyChatStarterSuggestion,
+        draft: String,
+        followUp: HomeLaunchFollowUp
+    ) {
+        pendingHomeLaunchSuggestion = suggestion
+        pendingHomeLaunchDraft = draft
+        pendingHomeLaunchFollowUp = followUp
+    }
+
+    private func resumePendingHomeLaunchIfPossible(after followUp: HomeLaunchFollowUp) {
+        guard pendingHomeLaunchFollowUp == followUp,
+              let suggestion = pendingHomeLaunchSuggestion else {
             return
         }
 
+        switch followUp {
+        case .project:
+            guard chatStore.selectedProject != nil else {
+                clearPendingHomeLaunch()
+                return
+            }
+        case .council:
+            guard chatStore.isCouncilModeEnabled else {
+                clearPendingHomeLaunch()
+                return
+            }
+        }
+
+        commitHomeLaunchPrompt(
+            prefix: suggestion.prompt,
+            draft: pendingHomeLaunchDraft,
+            banner: "\(suggestion.title) prompt ready."
+        )
+    }
+
+    private func commitHomeLaunchPrompt(prefix: String?, draft: String, banner: String) {
         chatStore.startNewConversation()
-        chatStore.draft = stagedHomeLaunchPrompt(prefix: suggestion?.prompt, draft: trimmedDraft)
-        chatStore.bannerMessage = suggestion.map { "\($0.title) prompt ready." } ?? "Prompt ready."
+        chatStore.draft = EmptyChatStarterCoordinator.stagedPrompt(prefix ?? "", existingDraft: draft)
+        chatStore.bannerMessage = banner
         homeLaunchDraft = ""
         selectedHomeLaunchSuggestionID = nil
+        clearPendingHomeLaunch()
         AppHaptics.selection()
         onStartNewChat()
     }
 
-    private func prepareHomeLaunchIntent(_ suggestion: EmptyChatStarterSuggestion) -> Bool {
-        switch suggestion.action {
-        case .draft:
-            return true
-        case .research:
-            chatStore.selectSourceMode(.web)
-            if !chatStore.selectedRouteUsesNearCloud, !chatStore.researchModeEnabled {
-                chatStore.toggleResearchMode()
-            }
-            return true
-        case .project:
-            chatStore.selectSourceMode(chatStore.selectedProject == nil ? .files : .all)
-            guard chatStore.selectedProject != nil else {
-                showingProjectFiles = true
-                chatStore.bannerMessage = "Choose files or a Project, then prepare the prompt."
-                return false
-            }
-            return true
-        case .council:
-            chatStore.useDefaultCouncilLineup()
-            return true
-        case .agent:
-            if chatStore.agentModels.contains(where: { $0.id == ModelOption.ironclawMobileModelID }) {
-                chatStore.selectModel(ModelOption.ironclawMobileModelID)
-            } else if chatStore.ironclawRemoteWorkstationAvailable {
-                chatStore.selectModel(ModelOption.ironclawModelID)
-            }
-            return true
-        case .trust:
-            if chatStore.selectedProject != nil {
-                chatStore.selectSourceMode(.all)
-            } else {
-                chatStore.selectSourceMode(.web)
-                if !chatStore.selectedRouteUsesNearCloud, !chatStore.researchModeEnabled {
-                    chatStore.toggleResearchMode()
-                }
-            }
-            return true
-        }
-    }
-
-    private func stagedHomeLaunchPrompt(prefix: String?, draft: String) -> String {
-        let trimmedPrefix = prefix?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmedPrefix.isEmpty else { return draft }
-        guard !draft.isEmpty else { return trimmedPrefix }
-        guard !draft.hasPrefix(trimmedPrefix) else { return draft }
-        return "\(trimmedPrefix) \(draft)"
+    private func clearPendingHomeLaunch() {
+        pendingHomeLaunchSuggestion = nil
+        pendingHomeLaunchDraft = ""
+        pendingHomeLaunchFollowUp = nil
     }
 
     private var filterCounts: [HomeFilter: Int] {
@@ -1213,7 +1254,7 @@ struct ConversationListView: View {
 
     private func dismissPendingSetupLaunchCard(_ state: SetupLaunchCardState) {
         UserSetupStorage.clearPendingLaunchCard(for: state.accountID)
-        chatStore.bannerMessage = "Setup saved. Start from Home whenever you're ready."
+        chatStore.bannerMessage = "Setup saved. Start from Home anytime."
     }
 
     private var setupRouteBlock: CapabilityRouteBlock? {

@@ -22,7 +22,7 @@ final class ShareViewController: SLComposeServiceViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        placeholder = "Add a note before opening NEAR Private Chat..."
+        placeholder = "Add a note (optional)"
         applyAddOpenCopy()
         loadSharedContent()
     }

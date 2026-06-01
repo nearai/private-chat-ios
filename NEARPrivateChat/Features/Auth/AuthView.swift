@@ -52,7 +52,7 @@ struct AuthView: View {
                 ProductWordmark(alignment: .center, scale: 0.9)
                     .frame(maxWidth: 280)
 
-                Text("Sign in to chat about anything: write, code, research, summarize files, analyze ideas, and turn messy context into actions.")
+                Text("Sign in to start private chat: write, code, research, summarize files, and turn messy context into actions.")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)

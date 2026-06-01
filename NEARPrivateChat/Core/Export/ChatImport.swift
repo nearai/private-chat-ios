@@ -273,7 +273,7 @@ enum ChatImportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidFormat:
-            "Invalid chat import JSON. Use a NEAR Private Chat export or legacy Private Chat history file."
+            "Invalid import file. Use a NEAR Private Chat export or legacy Private Chat history file."
         case let .tooLarge(message):
             message
         }

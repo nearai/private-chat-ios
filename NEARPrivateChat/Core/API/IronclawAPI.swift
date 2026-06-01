@@ -24,7 +24,7 @@ final class IronclawAPI {
             guard (200..<300).contains(http.statusCode) else {
                 let body = String(data: data, encoding: .utf8) ?? "Status \(http.statusCode)"
                 if [401, 403].contains(http.statusCode) {
-                    throw APIError.status(http.statusCode, "Hosted IronClaw is reachable, but the chat route needs a valid Agent token.")
+                    throw APIError.status(http.statusCode, "Hosted IronClaw is reachable. The chat route needs a valid Agent token.")
                 }
                 throw APIError.status(http.statusCode, body)
             }
@@ -98,7 +98,7 @@ final class IronclawAPI {
         }
 
         if let pendingGate {
-            return "Hosted IronClaw reached, waiting for \(pendingGate.toolName) approval."
+            return "Hosted IronClaw reached. Waiting for \(pendingGate.toolName) approval."
         }
 
         let normalized = output
@@ -111,7 +111,7 @@ final class IronclawAPI {
             throw APIError.status(0, failure)
         }
         if !normalized.isEmpty {
-            return "Hosted IronClaw answered, but shell/git were not checked: \(Self.shortDiagnostic(normalized))"
+            return "Hosted IronClaw answered. Shell/git not checked: \(Self.shortDiagnostic(normalized))"
         }
         throw APIError.status(0, "Hosted IronClaw preflight returned no visible output.")
     }
@@ -490,7 +490,7 @@ final class IronclawAPI {
                     if requiresToolUse || !turn.toolCalls.isEmpty {
                         return .needsContinuation(Self.toolCallDiagnostic(from: turn))
                     }
-                    await onEvent(.failed("IronClaw produced an empty final answer. Retry the turn or check the hosted gateway logs."))
+                    await onEvent(.failed("IronClaw returned an empty answer. Retry, or check the hosted gateway logs."))
                     return .failed
                 }
                 if let toolFailure = Self.toolFailureMessage(from: response) {
@@ -503,7 +503,7 @@ final class IronclawAPI {
                         await onEvent(.reasoningStarted)
                         continue
                     }
-                    await onEvent(.failed("IronClaw completed the turn, but Hosted IronClaw did not return final answer text. Check the Agent connection logs, then retry."))
+                    await onEvent(.failed("IronClaw finished but returned no answer text. Check the Agent connection logs, then retry."))
                     return .failed
                 } else {
                     await onEvent(.itemDone(text: response))
@@ -519,7 +519,7 @@ final class IronclawAPI {
                         return .needsContinuation(Self.toolCallDiagnostic(from: turn))
                     }
                     let message = Self.toolFailureMessage(from: response) ??
-                        "IronClaw failed while running this turn: \(response)"
+                        "IronClaw failed on this turn: \(response)"
                     await onEvent(.failed(message))
                     return .failed
                 }
@@ -535,7 +535,7 @@ final class IronclawAPI {
                     await onEvent(.reasoningStarted)
                     continue
                 }
-                await onEvent(.failed("IronClaw failed while running this turn. Check Hosted IronClaw logs and model credentials, then retry."))
+                await onEvent(.failed("IronClaw failed on this turn. Check Hosted IronClaw logs and model credentials, then retry."))
                 return .failed
             }
             failedStateAttempts = 0
@@ -543,7 +543,7 @@ final class IronclawAPI {
             await onEvent(.reasoningStarted)
         }
 
-        await onEvent(.failed("IronClaw is still running and did not return output within six minutes. Check Hosted IronClaw, then retry the turn."))
+        await onEvent(.failed("IronClaw returned no output within six minutes. Check Hosted IronClaw, then retry."))
         return .failed
     }
 
@@ -623,12 +623,12 @@ final class IronclawAPI {
 
     private static func emptyFinalAnswerFailure(_ diagnostic: String) -> String {
         """
-        IronClaw ran hosted tools, but the hosted runtime did not produce a visible final answer after retrying.
+        IronClaw ran hosted tools but produced no answer after retrying.
 
         Tool trace:
         \(diagnostic)
 
-        Retry with a smaller task or check the hosted IronClaw logs for the empty-response fallback.
+        Retry with a smaller task, or check the hosted IronClaw logs.
         """
     }
 

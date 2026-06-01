@@ -223,7 +223,7 @@ struct BriefingWidgetEntryView: View {
             Text("No automations yet")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
-            Text("Create an automation in Private Chat to see its latest result here.")
+            Text("Create an automation in Private Chat to see its result here.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(4)

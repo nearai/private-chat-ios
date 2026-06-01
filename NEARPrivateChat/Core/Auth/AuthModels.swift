@@ -173,15 +173,15 @@ enum LegalTerms {
     static let nearAIPrivacyPolicyURL = URL(string: "https://near.ai/privacy-policy")!
     static let ironclawRepositoryURL = URL(string: "https://github.com/nearai/ironclaw")!
 
-    static let acceptanceText = "I confirm that I am at least 18, I agree to the NEAR Private Chat iOS Terms, NEAR AI Services Terms, NEAR AI Cloud Terms, Acceptable Use Policy, and applicable IronClaw or third-party terms, and I understand that networked models, web search, files, and agents can send selected content off this device."
-    static let acceptancePrompt = "Review the current terms, then confirm acceptance before signing in or continuing."
-    static let acceptanceCheckboxText = "I reviewed version \(version) and accept the current terms for this app and its connected NEAR AI routes."
+    static let acceptanceText = "I am 18 or older. I agree to the NEAR Private Chat iOS Terms, NEAR AI Services Terms, NEAR AI Cloud Terms, Acceptable Use Policy, and applicable IronClaw or third-party terms. I understand that networked models, web search, files, and Agents can send selected content off this device."
+    static let acceptancePrompt = "Review the terms, then accept to continue."
+    static let acceptanceCheckboxText = "I reviewed version \(version) and accept the terms for this app and its connected NEAR AI routes."
 
     static let signupSummary = [
-        "Required before account access.",
+        "Required before you get account access.",
         "Applies to private chat, NEAR AI Cloud, LLM Council, files, sharing, web, and IronClaw.",
         "Cloud premium models use a privacy proxy and do not carry NEAR Private proof.",
-        "Proof covers serving environment evidence, not whether an answer is true.",
+        "Proof shows where a request ran. It can't confirm the answer is true.",
         "Agent actions and connected keys remain your responsibility."
     ]
 
@@ -208,7 +208,7 @@ enum LegalTerms {
         ),
         LegalTermsSection(
             title: "Agent Capabilities",
-            body: "IronClaw Mobile and Hosted IronClaw can inspect or modify files, interact with repositories, run commands and tests, call tools, browse, use configured credentials, or operate through a hosted Agent connection. You are responsible for every instruction, approval, connected permission, credential, repository, connection, and resulting action."
+            body: "IronClaw Mobile and Hosted IronClaw can inspect or modify files, interact with repositories, run commands and tests, call tools, browse, use configured credentials, or operate through a Hosted IronClaw connection. You are responsible for every instruction, approval, connected permission, credential, repository, connection, and resulting action."
         ),
         LegalTermsSection(
             title: "Acceptable Use",

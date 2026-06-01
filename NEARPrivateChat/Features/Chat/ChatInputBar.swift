@@ -703,7 +703,7 @@ struct InputBar: View {
             SlashCommandSuggestion(
                 command: "/project",
                 title: "Project",
-                subtitle: "Open project context",
+                subtitle: "Open Project context",
                 symbolName: "folder.badge.gearshape",
                 action: .project
             ),

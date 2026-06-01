@@ -79,9 +79,9 @@ enum ChatRouteKind: String, Hashable {
         case .nearPrivate:
             return "Proof when fetched"
         case .nearCloud:
-            return "External API · no NEAR proof"
+            return "External API · outside proof"
         case .ironclawMobile:
-            return "IronClaw Mobile · no NEAR proof"
+            return "IronClaw Mobile · outside proof"
         case .ironclawHosted:
             return "Agent connection"
         }

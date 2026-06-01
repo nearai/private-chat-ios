@@ -16,7 +16,7 @@ struct FileStore {
             return .blocked(message: "Attach up to five files at once.")
         }
         guard pendingCount + projectContextCount < maxContextAttachments else {
-            return .blocked(message: "This prompt already has enough file context.")
+            return .blocked(message: "This prompt is at its file-context limit.")
         }
         return .allowed
     }
@@ -26,7 +26,7 @@ struct FileStore {
         maxProjectAttachments: Int
     ) -> AttachmentLimit {
         guard projectAttachmentCount < maxProjectAttachments else {
-            return .blocked(message: "Keep project context to twelve files or fewer.")
+            return .blocked(message: "A Project holds up to twelve files.")
         }
         return .allowed
     }

@@ -15,7 +15,7 @@ struct SharedConversationSnapshot: Identifiable, Hashable {
     }
 
     var accessDescription: String {
-        canWrite ? "You can continue this chat in place or fork it into your own copy." : "Read-only chats cannot be edited. Copy and Continue starts your own draft."
+        canWrite ? "Continue in place, or fork your own copy." : "Read-only. Copy and Continue starts your own draft."
     }
 
     var sourceBadgeTitle: String {

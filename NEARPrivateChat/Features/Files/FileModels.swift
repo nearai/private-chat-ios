@@ -263,10 +263,10 @@ struct RemoteFilePreview: Identifiable, Hashable {
             text = decoded
         } else if data.prefix(4).elementsEqual([0x25, 0x50, 0x44, 0x46]) {
             isText = false
-            text = "PDF binary loaded. Add it to a prompt or project so the model can use it as file context."
+            text = "PDF loaded. Add it to a prompt or Project to use it as file context."
         } else {
             isText = false
-            text = "Binary preview unavailable. Add it to a prompt or project so the model can use it as file context."
+            text = "No preview for this file. Add it to a prompt or Project to use it as file context."
         }
     }
 }

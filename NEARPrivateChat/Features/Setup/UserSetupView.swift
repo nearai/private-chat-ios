@@ -126,7 +126,7 @@ struct UserSetupView: View {
                     Text("Tune defaults for new chats")
                         .font(.title2.weight(.bold))
                         .foregroundStyle(.white)
-                    Text("Set source behavior, model route, and optional capabilities. Home stays ready either way.")
+                    Text("Set source behavior, model route, and optional capabilities. Home stays ready.")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.68))
                         .fixedSize(horizontal: false, vertical: true)
@@ -218,7 +218,7 @@ struct UserSetupView: View {
 
                     setupAdvancedRoutesContent
 
-                    Text("You can change these defaults later from Account without resetting chats.")
+                    Text("Change these defaults later from Account without resetting chats.")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -534,7 +534,7 @@ private struct SetupGoalField: View {
             Label("Default goal or workflow", systemImage: "text.badge.plus")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.textSecondary)
-            TextField("Research, build agents, write code, manage projects...", text: $text, axis: .vertical)
+            TextField("Research, build agents, write code, manage projects…", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(2...4)
                 .tokenInputTraits()

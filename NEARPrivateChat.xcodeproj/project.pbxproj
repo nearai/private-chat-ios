@@ -91,6 +91,8 @@
 		F10000000000000000000014 /* ShareStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000014 /* ShareStore.swift */; };
 		F10000000000000000000015 /* MessageStreamService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000015 /* MessageStreamService.swift */; };
 		F10000000000000000000016 /* CouncilStreamService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000016 /* CouncilStreamService.swift */; };
+		F10000000000000000000017 /* SoulPromptComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000017 /* SoulPromptComposer.swift */; };
+		F10000000000000000000018 /* SetupSoulPromptBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000018 /* SetupSoulPromptBuilder.swift */; };
 		9100000000000000000000A1 /* BriefingSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A1 /* BriefingSnapshot.swift */; };
 		9100000000000000000000A3 /* AgentActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A3 /* AgentActivityAttributes.swift */; };
 		9100000000000000000000B1 /* BriefingSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A1 /* BriefingSnapshot.swift */; };
@@ -224,6 +226,8 @@
 		F20000000000000000000014 /* ShareStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareStore.swift; sourceTree = "<group>"; };
 		F20000000000000000000015 /* MessageStreamService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageStreamService.swift; sourceTree = "<group>"; };
 		F20000000000000000000016 /* CouncilStreamService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilStreamService.swift; sourceTree = "<group>"; };
+		F20000000000000000000017 /* SoulPromptComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulPromptComposer.swift; sourceTree = "<group>"; };
+		F20000000000000000000018 /* SetupSoulPromptBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupSoulPromptBuilder.swift; sourceTree = "<group>"; };
 		9200000000000000000000A1 /* BriefingSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingSnapshot.swift; sourceTree = "<group>"; };
 		9200000000000000000000A3 /* AgentActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActivityAttributes.swift; sourceTree = "<group>"; };
 		9200000000000000000000A2 /* NEARPrivateChat.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NEARPrivateChat.entitlements; sourceTree = "<group>"; };
@@ -442,6 +446,7 @@
 		E40000000000000000000015 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				F20000000000000000000017 /* SoulPromptComposer.swift */,
 				A20000000000000000000010 /* WebGroundingService.swift */,
 			);
 			path = Services;
@@ -477,6 +482,7 @@
 			isa = PBXGroup;
 			children = (
 				F2000000000000000000000A /* SetupModels.swift */,
+				F20000000000000000000018 /* SetupSoulPromptBuilder.swift */,
 				D20000000000000000000009 /* UserSetupView.swift */,
 			);
 			path = Setup;
@@ -933,6 +939,8 @@
 				F10000000000000000000014 /* ShareStore.swift in Sources */,
 				F10000000000000000000015 /* MessageStreamService.swift in Sources */,
 				F10000000000000000000016 /* CouncilStreamService.swift in Sources */,
+				F10000000000000000000017 /* SoulPromptComposer.swift in Sources */,
+				F10000000000000000000018 /* SetupSoulPromptBuilder.swift in Sources */,
 				C1000000000000000000000F /* MessageTimelineStore.swift in Sources */,
 				C10000000000000000000010 /* ComposerState.swift in Sources */,
 				C10000000000000000000011 /* ModelCatalogStore.swift in Sources */,

@@ -313,7 +313,7 @@ struct SharedWithMeRow: View {
             parts.append(error)
         }
         if parts.isEmpty {
-            return item.canWrite ? "Open in place or fork a private copy." : "Copy and Continue makes a private draft."
+            return item.canWrite ? "Open in place, or fork a private copy." : "Copy and Continue makes a private draft."
         }
         return parts.joined(separator: " · ")
     }
@@ -374,7 +374,7 @@ struct SharedAccessSummaryCard: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Shared with you")
                         .font(.headline)
-                    Text("Read-only chats stay locked. Editable shares open in place when the owner granted write access.")
+                    Text("Read-only chats stay locked. Editable shares open in place when the owner grants write access.")
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)

@@ -64,7 +64,7 @@ final class PrivateChatAPI {
         }
         let values = Self.callbackValues(from: components)
         guard let expectedState, !expectedState.isEmpty else {
-            throw APIError.status(401, "Sign-in callbacks must originate from an active app sign-in request.")
+            throw APIError.status(401, "Sign-in must start from an active app request.")
         }
         let callbackStates = values["state", default: []].filter { !$0.isEmpty }
         let hasExpectedState = callbackStates.contains(expectedState)
@@ -229,16 +229,18 @@ let response: ModelListResponse = try await request("/v1/model/list", method: "G
     }
 
     func fetchNearCloudModels(apiKey: String? = nil) async throws -> [ModelOption] {
-guard let url = URL(string: "https://cloud-api.near.ai/v1/model/list") else {
+        let trimmedAPIKey = Self.normalizedNearCloudAPIKey(apiKey)
+        guard !trimmedAPIKey.isEmpty else {
+            throw APIError.status(401, "Connect NEAR AI Cloud in Account before loading Cloud models.")
+        }
+        guard let url = URL(string: "https://cloud-api.near.ai/v1/model/list") else {
             throw APIError.invalidURL
         }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = Self.streamTimeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let apiKey = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty {
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        }
+        request.setValue("Bearer \(trimmedAPIKey)", forHTTPHeaderField: "Authorization")
         let response: ModelListResponse = try await perform(request)
         return response.models
     }
@@ -674,7 +676,7 @@ let promptText = text.isEmpty && !attachments.isEmpty
                         break
                     }
                 }
-                throw APIError.status(502, "The response stream ended before the server sent response.completed.")
+                throw APIError.status(502, "The response stream ended early.")
             }
 
             if let visibleOutputTimeout {
@@ -708,6 +710,10 @@ let promptText = text.isEmpty && !attachments.isEmpty
         systemPrompt: String,
         advancedParams: AdvancedModelParams = .defaults
     ) async throws -> String {
+        let trimmedAPIKey = Self.normalizedNearCloudAPIKey(apiKey)
+        guard !trimmedAPIKey.isEmpty else {
+            throw APIError.status(401, "Connect NEAR AI Cloud in Account before sending with this route.")
+        }
         guard let url = URL(string: "https://cloud-api.near.ai/v1/chat/completions") else {
             throw APIError.invalidURL
         }
@@ -730,7 +736,7 @@ let promptText = text.isEmpty && !attachments.isEmpty
         request.timeoutInterval = Self.streamTimeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(trimmedAPIKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = try encoder.encode(payload)
 
         let response: CloudChatCompletionResponse = try await perform(request)
@@ -739,6 +745,20 @@ let promptText = text.isEmpty && !attachments.isEmpty
             throw APIError.emptyResponse
         }
         return content
+    }
+
+    static func normalizedNearCloudAPIKey(_ apiKey: String?) -> String {
+        var trimmed = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let lowercased = trimmed.lowercased()
+        if lowercased.hasPrefix("authorization:") {
+            trimmed = String(trimmed.dropFirst("authorization:".count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if trimmed.lowercased().hasPrefix("bearer ") {
+            trimmed = String(trimmed.dropFirst("bearer ".count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return trimmed
     }
 
     private func request<T: Decodable, B: Encodable>(
@@ -762,7 +782,8 @@ let promptText = text.isEmpty && !attachments.isEmpty
     }
 
     private func readableRequest<T: Decodable>(_ path: String) async throws -> T {
-        guard authToken?.isEmpty == false else {
+        let trimmedToken = authToken?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedToken.isEmpty else {
             return try await request(path, method: "GET", authenticated: false)
         }
 
@@ -814,8 +835,8 @@ let promptText = text.isEmpty && !attachments.isEmpty
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("1000", forHTTPHeaderField: "ngrok-skip-browser-warning")
         if authenticated {
-            guard let authToken, !authToken.isEmpty else { throw APIError.unauthenticated }
-            let trimmedToken = authToken.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedToken = authToken?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !trimmedToken.isEmpty else { throw APIError.unauthenticated }
             // NEAR backend uses cookie-based session auth — the live cookie
             // header is `nearai-prod_crabshack_session=<hex>`. OAuth-issued
             // JWTs go through `Authorization: Bearer …`. Send both so
@@ -1177,10 +1198,11 @@ let promptText = text.isEmpty && !attachments.isEmpty
 
             Answer contract:
             - Lead with the direct answer in 1-3 tight sentences.
-            - Use polished Markdown with short headings only when they improve scanning.
+            - Use the app-supported Markdown subset: headings, ordered and unordered lists, nested lists, GitHub-flavored tables, fenced code blocks with language tags, links, bold, italic, and blockquotes.
+            - Keep tables compact enough to read on a phone; prefer a list when a table would be too wide.
             - Prefer concrete dates, names, numbers, and named sources.
             - Separate facts, inference, and recommended next actions when the topic is ambiguous.
-            - Avoid generic caveats, fake tool calls, XML, raw JSON, and emoji headings.
+            - Avoid generic caveats, fake tool calls, XML, HTML, Mermaid, LaTeX/math-only markup, raw JSON outside the sanctioned near-widget block, and emoji headings.
             - Treat attached files as user-provided project context and cite filenames when helpful.\(Self.widgetInstruction)\(userInstruction)
             """
         }
@@ -1190,10 +1212,11 @@ let promptText = text.isEmpty && !attachments.isEmpty
 
         Answer contract:
         - Lead with the direct answer in 1-3 tight sentences.
-        - Use polished Markdown with short headings only when they improve scanning.
+        - Use the app-supported Markdown subset: headings, ordered and unordered lists, nested lists, GitHub-flavored tables, fenced code blocks with language tags, links, bold, italic, and blockquotes.
+        - Keep tables compact enough to read on a phone; prefer a list when a table would be too wide.
         - Prefer concrete dates, names, and numbers.
         - Separate facts, inference, and recommended next actions when the topic is ambiguous.
-        - Avoid generic caveats, fake tool calls, XML, raw JSON, and emoji headings.
+        - Avoid generic caveats, fake tool calls, XML, HTML, Mermaid, LaTeX/math-only markup, raw JSON outside the sanctioned near-widget block, and emoji headings.
         - Treat attached files as user-provided project context and cite filenames when helpful.
         - Be explicit when an answer may require current information.\(Self.widgetInstruction)\(userInstruction)
         """
@@ -1317,7 +1340,7 @@ let promptText = text.isEmpty && !attachments.isEmpty
         #if canImport(UIKit)
         guard let image = UIImage(data: data),
               let jpegData = image.jpegData(compressionQuality: 0.92) else {
-            throw APIError.status(415, "Could not convert this HEIC/TIFF image to JPEG for native vision upload.")
+            throw APIError.status(415, "Could not convert this HEIC/TIFF image to JPEG.")
         }
         return (
             jpegData,

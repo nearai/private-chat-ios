@@ -52,26 +52,26 @@ enum UserSetupUseCase: String, CaseIterable, Codable, Identifiable, Hashable {
     var starterInstructions: String {
         switch self {
         case .privateChat:
-            return "Keep answers direct, private, and practical. Use live web only when the question depends on current facts."
+            return "Keep answers direct, private, and practical. Use live web only when the question needs current facts."
         case .research:
             return "Prioritize dated sources, citations, contradictions, and a concise recommendation. Save strong outputs as Project notes."
         case .buildAgents:
-            return "Use Project files, pull requests, issues, and source links to plan careful code work. Do not suggest destructive changes unless explicitly requested."
+            return "Use Project files, pull requests, issues, and source links to plan careful code work. Suggest destructive changes only when asked."
         case .teamProjects:
-            return "Use Project files, saved source links, notes, and saved outputs before broad web. Keep context tidy and ask only when a missing source blocks progress."
+            return "Use Project files, saved links, notes, and outputs before broad web. Keep context tidy; ask only when a missing source blocks progress."
         }
     }
 
     var starterPrompt: String {
         switch self {
         case .privateChat:
-            return "Help me think through the most important question I should ask first."
+            return "Think through the most important question to ask first."
         case .research:
-            return "Create a sourced research brief on the latest important AI developments, with dates, citations, and a short recommendation."
+            return "Write a sourced brief on the latest AI developments, with dates, citations, and a short recommendation."
         case .buildAgents:
             return "Plan the first repo task: what to inspect, what to change, and which focused tests should run."
         case .teamProjects:
-            return "Help me set up this Project: what files, links, instructions, and first chat should I add?"
+            return "Set up this Project: what files, links, instructions, and first chat to add?"
         }
     }
 
@@ -202,7 +202,7 @@ enum UserSetupExperienceMode: String, CaseIterable, Codable, Identifiable, Hasha
 
     var subtitle: String {
         switch self {
-        case .beginner: "Start with private chat, sources, and proof display. Optional capabilities stay available later."
+        case .beginner: "Start with private chat, sources, and proof. Other capabilities stay available later."
         case .power: "Show agents, Council, Cloud models, and developer controls from day one."
         }
     }
@@ -239,7 +239,7 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
         case .researchBrief:
             return "Start a cited brief with web-ready defaults."
         case .agentMission:
-            return "Launch a phone-safe agent planning draft."
+            return "Launch a phone-safe Agent planning draft."
         case .projectWorkspace:
             return "Open a project-first draft with saved context."
         }
@@ -250,7 +250,7 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
         case .privateQuestion:
             return "Think through a private question"
         case .researchBrief:
-            return "Research the latest important AI developments"
+            return "Research the latest AI developments"
         case .agentMission:
             return "Plan a phone-launched agent task for a repo or research project"
         case .projectWorkspace:
@@ -260,10 +260,10 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
 
     var prompt: String {
         switch self {
-        case .privateQuestion: "Help me think through a private question."
-        case .researchBrief: "Create a sourced brief on the latest developments in AI."
+        case .privateQuestion: "Think through a private question."
+        case .researchBrief: "Write a sourced brief on the latest AI developments."
         case .agentMission: "Plan a phone-launched agent task for a repo or research project."
-        case .projectWorkspace: "Help me set up this Project: what files, links, instructions, and first chat should I add?"
+        case .projectWorkspace: "Set up this Project: what files, links, instructions, and first chat to add?"
         }
     }
 
@@ -531,14 +531,14 @@ struct UserSetupProfile: Codable, Hashable {
         if !goal.isEmpty {
             return SetupAgentMissionSuggestion(
                 title: "Use saved setup goal",
-                detail: "Saved setup wants agent work for this goal first.",
+                detail: "Saved setup runs Agent work for this goal first.",
                 prompt: "Plan the first build or repo task for this goal: \(goal)"
             )
         }
 
         return SetupAgentMissionSuggestion(
-            title: "Use saved agent starter",
-            detail: "Saved setup keeps repo and agent work ready from day one.",
+            title: "Use saved Agent starter",
+            detail: "Saved setup keeps repo and Agent work ready from day one.",
             prompt: UserSetupUseCase.buildAgents.starterPrompt
         )
     }
@@ -552,16 +552,16 @@ struct UserSetupProfile: Codable, Hashable {
         }
 
         if !goal.isEmpty, useCases.contains(.research) {
-            return "Create a sourced research brief for this goal: \(goal)"
+            return "Write a sourced brief for this goal: \(goal)"
         }
         if !goal.isEmpty, useCases.contains(.buildAgents) {
             return "Plan the first build or repo task for this goal: \(goal)"
         }
         if !goal.isEmpty, useCases.contains(.teamProjects) || contextStyle != .simple {
-            return "Help me organize this project and next actions for this goal: \(goal)"
+            return "Organize this Project and next actions for this goal: \(goal)"
         }
         if !goal.isEmpty {
-            return "Help me with this goal: \(goal)"
+            return "Work on this goal: \(goal)"
         }
         if useCases.contains(.buildAgents) {
             return UserSetupUseCase.buildAgents.starterPrompt
@@ -620,17 +620,17 @@ struct UserSetupProfile: Codable, Hashable {
                     SetupPromptSuggestion(
                         title: "Start goal",
                         symbolName: "lock.shield",
-                        prompt: "Help me with this goal: \(goal)"
+                        prompt: "Work on this goal: \(goal)"
                     ),
                     SetupPromptSuggestion(
                         title: "Break into steps",
                         symbolName: "list.bullet.clipboard",
-                        prompt: "Break this goal into the next private steps I should take: \(goal)"
+                        prompt: "Break this goal into the next private steps: \(goal)"
                     ),
                     SetupPromptSuggestion(
                         title: "Best first question",
                         symbolName: "questionmark.bubble",
-                        prompt: "What is the most important first question I should ask for this goal: \(goal)"
+                        prompt: "The most important first question to ask for this goal: \(goal)"
                     )
                 ]
             }
@@ -638,17 +638,17 @@ struct UserSetupProfile: Codable, Hashable {
                 SetupPromptSuggestion(
                     title: "Private question",
                     symbolName: "lock.shield",
-                    prompt: "Help me think through a private question."
+                    prompt: "Think through a private question."
                 ),
                 SetupPromptSuggestion(
                     title: "Pressure-test",
                     symbolName: "scale.3d",
-                    prompt: "Pressure-test this decision and show me the strongest risks and tradeoffs: "
+                    prompt: "Pressure-test this decision; show the strongest risks and tradeoffs: "
                 ),
                 SetupPromptSuggestion(
                     title: "Draft message",
                     symbolName: "text.bubble",
-                    prompt: "Draft a clear message I can send about this situation: "
+                    prompt: "Draft a clear message about this situation: "
                 )
             ]
         case .research:
@@ -657,7 +657,7 @@ struct UserSetupProfile: Codable, Hashable {
                     SetupPromptSuggestion(
                         title: "Start brief",
                         symbolName: "doc.text.magnifyingglass",
-                        prompt: "Create a sourced research brief for this goal: \(goal)"
+                        prompt: "Write a sourced brief for this goal: \(goal)"
                     ),
                     SetupPromptSuggestion(
                         title: "Find sources",
@@ -667,7 +667,7 @@ struct UserSetupProfile: Codable, Hashable {
                     SetupPromptSuggestion(
                         title: "Recommend next step",
                         symbolName: "arrow.forward.circle",
-                        prompt: "Turn this research goal into a concise recommendation with citations: \(goal)"
+                        prompt: "Turn this goal into a concise recommendation with citations: \(goal)"
                     )
                 ]
             }
@@ -675,7 +675,7 @@ struct UserSetupProfile: Codable, Hashable {
                 SetupPromptSuggestion(
                     title: "Research brief",
                     symbolName: "doc.text.magnifyingglass",
-                    prompt: "Create a sourced brief on the latest developments in AI."
+                    prompt: "Write a sourced brief on the latest AI developments."
                 ),
                 SetupPromptSuggestion(
                     title: "Compare sources",
@@ -699,12 +699,12 @@ struct UserSetupProfile: Codable, Hashable {
                     SetupPromptSuggestion(
                         title: "Safe patch",
                         symbolName: "wrench.and.screwdriver",
-                        prompt: "Turn this goal into a safe patch plan with focused verification steps: \(goal)"
+                        prompt: "Turn this goal into a safe patch plan with focused verification: \(goal)"
                     ),
                     SetupPromptSuggestion(
                         title: "Repo checklist",
                         symbolName: "checklist",
-                        prompt: "Create a repo inspection checklist for this goal before any code changes: \(goal)"
+                        prompt: "Make a repo inspection checklist for this goal before any code changes: \(goal)"
                     )
                 ]
             }
@@ -717,12 +717,12 @@ struct UserSetupProfile: Codable, Hashable {
                 SetupPromptSuggestion(
                     title: "Review repo",
                     symbolName: "chevron.left.forwardslash.chevron.right",
-                    prompt: "Review this repo and identify the highest-impact safe fix to make first: "
+                    prompt: "Review this repo for the highest-impact safe fix to make first: "
                 ),
                 SetupPromptSuggestion(
                     title: "Focused tests",
                     symbolName: "checkmark.seal",
-                    prompt: "List the focused tests and verification steps I should run for this change: "
+                    prompt: "List the focused tests and verification steps for this change: "
                 )
             ]
         case .teamProjects:
@@ -731,17 +731,17 @@ struct UserSetupProfile: Codable, Hashable {
                     SetupPromptSuggestion(
                         title: "Organize project",
                         symbolName: "folder.badge.gearshape",
-                        prompt: "Help me organize this project and next actions for this goal: \(goal)"
+                        prompt: "Organize this Project and next actions for this goal: \(goal)"
                     ),
                     SetupPromptSuggestion(
                         title: "Add context",
                         symbolName: "paperclip",
-                        prompt: "What files, links, notes, or instructions should I add first for this goal: \(goal)"
+                        prompt: "What files, links, notes, or instructions to add first for this goal: \(goal)"
                     ),
                     SetupPromptSuggestion(
                         title: "First Project chat",
                         symbolName: "bubble.left.and.bubble.right",
-                        prompt: "Draft the best first project chat prompt for this goal: \(goal)"
+                        prompt: "Draft the best first Project chat prompt for this goal: \(goal)"
                     )
                 ]
             }
@@ -749,17 +749,17 @@ struct UserSetupProfile: Codable, Hashable {
                 SetupPromptSuggestion(
                     title: "Project setup",
                     symbolName: "folder.badge.gearshape",
-                    prompt: "Help me set up this Project: what files, links, instructions, and first chat should I add?"
+                    prompt: "Set up this Project: what files, links, instructions, and first chat to add?"
                 ),
                 SetupPromptSuggestion(
                     title: "Find missing context",
                     symbolName: "magnifyingglass",
-                    prompt: "Look at this project context and tell me what is missing before I start work: "
+                    prompt: "Tell me what's missing in this Project context before I start work: "
                 ),
                 SetupPromptSuggestion(
                     title: "Next-step plan",
                     symbolName: "arrow.forward.circle",
-                    prompt: "Turn this project context into a concise next-step plan I can act on."
+                    prompt: "Turn this Project context into a concise next-step plan."
                 )
             ]
         }
@@ -808,13 +808,13 @@ struct UserSetupProfile: Codable, Hashable {
         let primaryPrompt: String
         switch primaryUseCase {
         case .privateChat:
-            primaryPrompt = goal.isEmpty ? "Help me get started." : "Help me with this goal"
+            primaryPrompt = goal.isEmpty ? "Get me started." : "Work on this goal"
         case .research:
-            primaryPrompt = goal.isEmpty ? "Create a sourced research brief" : "Create a sourced research brief for this goal"
+            primaryPrompt = goal.isEmpty ? "Write a sourced brief" : "Write a sourced brief for this goal"
         case .buildAgents:
             primaryPrompt = goal.isEmpty ? "Plan the first repo task" : "Plan the first repo task for this goal"
         case .teamProjects:
-            primaryPrompt = goal.isEmpty ? "Help me set up this Project" : "Help me organize this Project and next actions for this goal"
+            primaryPrompt = goal.isEmpty ? "Set up this Project" : "Organize this Project and next actions for this goal"
         }
 
         var qualifiers: [String] = []
@@ -1162,7 +1162,7 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
         readinessStatus = Self.readinessStatus(for: profile, readiness: readiness, modelRoute: modelRoute)
         experienceSummary = profile.experienceMode == .power
             ? "Power mode keeps advanced routes visible."
-            : "Beginner mode starts simple; power routes remain available later."
+            : "Beginner mode starts simple; power routes stay available later."
         starterWorkspaceSeeds = profile.setupWorkspaceSeeds
         starterSkillSuggestions = profile.setupSkillSuggestions
         starterPromptSuggestions = Array(profile.emptyStatePromptSuggestions.prefix(3))
@@ -1235,10 +1235,10 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
         if modelRoute == .ironclaw,
            !readiness.ironclawMobileAvailable,
            readiness.hostedIronclawAvailable {
-            return "Open hosted agent"
+            return "Open Hosted IronClaw"
         }
         if profile.wantsIronclaw, !readiness.ironclawMobileAvailable {
-            return "Start private chat while agent tools load"
+            return "Start private chat while Agent tools load"
         }
         if profile.wantsCouncil, !readiness.councilReady {
             return readiness.modelCatalogLoaded
@@ -1246,7 +1246,7 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
                 : "Start private chat while models load"
         }
         if modelRoute == .council {
-            return "Ask the council"
+            return "Ask the Council"
         }
         switch profile.useCase {
         case .privateChat:
@@ -1360,8 +1360,8 @@ extension AppSetupPlan {
             return AppSetupRouteDetailContent(
                 title: "IronClaw route",
                 summary: usesHosted
-                    ? "\(label) · Hosted Agent connection sends work outside this phone."
-                    : "\(label) · phone agent route, outside NEAR Private proof.",
+                    ? "\(label) · sends work outside this phone."
+                    : "\(label) · Phone Agent route, outside NEAR Private proof.",
                 symbolName: "terminal"
             )
         }
@@ -1394,7 +1394,7 @@ extension AppSetupPlan {
         if !readiness.ironclawMobileAvailable, readiness.hostedIronclawAvailable {
             return CapabilityNextStep(
                 title: "Hosted agent is available",
-                detail: "This quick start opens private chat first because IronClaw Mobile is unavailable. Open the hosted agent when you need repo, shell, or approval-gated work.",
+                detail: "This quick start opens private chat first because IronClaw Mobile is unavailable. Open Hosted IronClaw for repo, shell, or approval-gated work.",
                 actionTitle: "Open Agent",
                 kind: .openAgent
             )
@@ -1403,7 +1403,7 @@ extension AppSetupPlan {
         guard modelRoute != .ironclaw else { return nil }
 
         return CapabilityNextStep(
-            title: "Finish agent setup",
+            title: "Finish Agent setup",
             detail: "This quick start opens private chat first. Connect Hosted IronClaw to use repo, shell, or approval-gated Agent work.",
             actionTitle: "Connect Agent",
             kind: .openAgent
@@ -1705,8 +1705,8 @@ enum CapabilityNextStepPlanner {
             )
         case .hostedIronclawEndpointRequired:
             return CapabilityNextStep(
-                title: "Connect hosted agent",
-                detail: "Phone-safe Agent skills are ready, but hosted Agent routes need a Hosted IronClaw URL.",
+                title: "Connect Hosted IronClaw",
+                detail: "Phone-safe Agent skills are ready. Hosted IronClaw routes need a Hosted IronClaw URL.",
                 actionTitle: "Connect Agent",
                 kind: .openAgent
             )
@@ -1714,7 +1714,7 @@ enum CapabilityNextStepPlanner {
             if autoCouncilReady {
                 return CapabilityNextStep(
                     title: "Restore the Council lineup",
-                    detail: "Recommended Council can repopulate a working lineup so you can compare models without rebuilding it by hand.",
+                    detail: "Recommended Council rebuilds a working lineup so you can compare models without rebuilding it by hand.",
                     actionTitle: "Use recommended Council",
                     kind: .useAutoCouncil
                 )
@@ -1725,7 +1725,7 @@ enum CapabilityNextStepPlanner {
 
         if setupPlan.agentEnabled && !currentRoute.isIronclawRoute && !hostedIronclawAvailable {
             return CapabilityNextStep(
-                title: "Finish agent setup",
+                title: "Finish Agent setup",
                 detail: "Your defaults expect Agent work. Connect Hosted IronClaw when you need repo, shell, or approval-gated tasks.",
                 actionTitle: "Connect Agent",
                 kind: .openAgent

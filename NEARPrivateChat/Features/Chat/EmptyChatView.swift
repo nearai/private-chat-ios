@@ -39,22 +39,22 @@ enum EmptyChatStarterPlanner {
                 EmptyChatStarterSuggestion(
                     title: "Compare",
                     symbolName: "square.grid.2x2",
-                    prompt: "Compare the council's answers on this task: "
+                    prompt: "Compare the Council's answers on this task: "
                 ),
                 EmptyChatStarterSuggestion(
                     title: "Disagreements",
                     symbolName: "arrow.triangle.branch",
-                    prompt: "Show me where the council agrees and disagrees on: "
+                    prompt: "Show where the Council agrees and disagrees on: "
                 ),
                 EmptyChatStarterSuggestion(
                     title: "Validate",
                     symbolName: "checkmark.shield",
-                    prompt: "Have each council model fact-check this claim and flag what's uncertain: "
+                    prompt: "Have each Council model check this claim and flag what's uncertain: "
                 ),
                 EmptyChatStarterSuggestion(
                     title: "Decide",
                     symbolName: "arrow.left.arrow.right.circle",
-                    prompt: "Ask the council which option they'd recommend and why for: "
+                    prompt: "Ask the Council which option to pick and why for: "
                 )
             ]
         }
@@ -63,7 +63,7 @@ enum EmptyChatStarterPlanner {
             EmptyChatStarterSuggestion(
                 title: "Next actions",
                 symbolName: "checklist",
-                prompt: "Turn this into actionable next moves: trackers, reminders, calendar-worthy items, risks, decisions, and exact commands. Preview before creating anything: "
+                prompt: "Turn this into next moves: trackers, reminders, calendar items, risks, decisions, and exact commands. Preview before creating anything: "
             ),
             EmptyChatStarterSuggestion(
                 title: "Draft trackers",
@@ -79,7 +79,7 @@ enum EmptyChatStarterPlanner {
             EmptyChatStarterSuggestion(
                 title: "Files to actions",
                 symbolName: "folder.badge.gearshape",
-                prompt: "Use attached files or a Project and turn this into actions, trackers, reminders, risks, decisions, and missing facts. Preview before creating anything: ",
+                prompt: "Use attached files or a Project to turn this into actions, trackers, reminders, risks, decisions, and missing facts. Preview before creating anything: ",
                 action: .project
             ),
             EmptyChatStarterSuggestion(
@@ -95,7 +95,7 @@ enum EmptyChatStarterPlanner {
                 EmptyChatStarterSuggestion(
                     title: "Handoff to Agent",
                     symbolName: "terminal",
-                    prompt: "Agent mission: define the goal, context to inspect, tools to use, risks, and focused verification for this task: ",
+                    prompt: "Agent mission: define the goal, context to inspect, tools, risks, and verification for this task: ",
                     action: .agent
                 )
             )
@@ -123,7 +123,7 @@ enum EmptyChatStarterPlanner {
             EmptyChatStarterSuggestion(
                 title: "Brief project",
                 symbolName: "folder.badge.gearshape",
-                prompt: "Use \(projectName)'s files, links, and notes to brief me on the next best move."
+                prompt: "Use \(projectName)'s files, links, and notes to brief the next best move."
             ),
             EmptyChatStarterSuggestion(
                 title: "Context to actions",
@@ -148,7 +148,7 @@ enum EmptyChatStarterPlanner {
                 EmptyChatStarterSuggestion(
                     title: "Handoff to Agent",
                     symbolName: "terminal",
-                    prompt: "Use \(projectName)'s context to define an agent mission with goal, files or links to inspect, risks, and focused verification.",
+                    prompt: "Use \(projectName)'s context to define an Agent mission: goal, files or links to inspect, risks, and verification.",
                     action: .agent
                 )
             )
@@ -157,7 +157,7 @@ enum EmptyChatStarterPlanner {
                 EmptyChatStarterSuggestion(
                     title: "Review with Council",
                     symbolName: "square.grid.2x2",
-                    prompt: "Use \(projectName)'s context and compare the council's answers on the next decision: ",
+                    prompt: "Use \(projectName)'s context to compare the Council's answers on the next decision: ",
                     action: .council
                 )
             )
@@ -166,7 +166,7 @@ enum EmptyChatStarterPlanner {
                 EmptyChatStarterSuggestion(
                     title: "Find blockers",
                     symbolName: "exclamationmark.triangle",
-                    prompt: "Review \(projectName)'s context and identify the highest-risk blockers, missing facts, and next checks."
+                    prompt: "Review \(projectName)'s context for the highest-risk blockers, missing facts, and next checks."
                 )
             )
         }
@@ -181,13 +181,13 @@ enum EmptyChatStarterPlanner {
 
         switch routeKind {
         case .nearPrivate:
-            return "\(subject) what the current NEAR Private route can prove, whether the proof report is fresh, and what still depends on source quality or trust: "
+            return "\(subject) what the NEAR Private route can prove, whether the proof report is fresh, and what still depends on source quality: "
         case .nearCloud:
-            return "\(subject) why this NEAR AI Cloud route does not carry NEAR Private proof, what the trust boundary is instead, and which sources matter most: "
+            return "\(subject) why the NEAR AI Cloud route carries no NEAR Private proof, what the trust boundary is, and which sources matter most: "
         case .ironclawMobile:
-            return "\(subject) what stays on-device with IronClaw Mobile, what is not covered by NEAR Private proof, and where the cited sources came from: "
+            return "\(subject) what stays on-device with IronClaw Mobile, what NEAR Private proof does not cover, and where the cited sources came from: "
         case .ironclawHosted:
-            return "\(subject) the hosted-agent trust boundary, what is not covered by NEAR Private proof, and where the cited sources came from: "
+            return "\(subject) the Hosted IronClaw trust boundary, what NEAR Private proof does not cover, and where the cited sources came from: "
         }
     }
 }
@@ -220,40 +220,42 @@ enum EmptyChatStarterCoordinator {
     }
 
     @discardableResult
-    static func apply(
+    static func prepare(
         _ suggestion: EmptyChatStarterSuggestion,
         to chatStore: ChatStore,
         onOpenProject: (() -> Void)? = nil,
         onOpenCouncil: (() -> Void)? = nil
     ) -> Bool {
-        var shouldFocusComposer = true
-
         switch suggestion.action {
         case .draft:
-            break
+            return true
         case .research:
             chatStore.selectSourceMode(.web)
             if !chatStore.researchModeEnabled {
                 chatStore.toggleResearchMode()
             }
+            return true
         case .project:
             chatStore.selectSourceMode(chatStore.selectedProject == nil ? .files : .all)
-            if chatStore.selectedProject == nil {
+            guard chatStore.selectedProject != nil else {
                 onOpenProject?()
-                shouldFocusComposer = false
+                return false
             }
+            return true
         case .council:
             chatStore.useDefaultCouncilLineup()
             if let onOpenCouncil {
                 onOpenCouncil()
-                shouldFocusComposer = false
+                return false
             }
+            return true
         case .agent:
             if chatStore.agentModels.contains(where: { $0.id == ModelOption.ironclawMobileModelID }) {
                 chatStore.selectModel(ModelOption.ironclawMobileModelID)
             } else if chatStore.ironclawRemoteWorkstationAvailable {
                 chatStore.selectModel(ModelOption.ironclawModelID)
             }
+            return true
         case .trust:
             if chatStore.selectedProject != nil {
                 chatStore.selectSourceMode(.all)
@@ -263,22 +265,35 @@ enum EmptyChatStarterCoordinator {
                     chatStore.toggleResearchMode()
                 }
             }
+            return true
         }
-
-        chatStore.draft = stagedPrompt(
-            suggestion.prompt,
-            existingDraft: chatStore.draft
-        )
-        return shouldFocusComposer
     }
 
-    private static func stagedPrompt(_ prompt: String, existingDraft: String) -> String {
+    nonisolated static func stagedPrompt(_ prompt: String, existingDraft: String) -> String {
         let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDraft = existingDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedPrompt.isEmpty else { return existingDraft }
         guard !trimmedDraft.isEmpty else { return trimmedPrompt }
         guard !trimmedDraft.hasPrefix(trimmedPrompt) else { return trimmedDraft }
-        return trimmedPrompt + trimmedDraft
+        return "\(trimmedPrompt) \(trimmedDraft)"
+    }
+
+    @discardableResult
+    static func apply(
+        _ suggestion: EmptyChatStarterSuggestion,
+        to chatStore: ChatStore,
+        onOpenProject: (() -> Void)? = nil,
+        onOpenCouncil: (() -> Void)? = nil
+    ) -> Bool {
+        let shouldFocusComposer = prepare(
+            suggestion,
+            to: chatStore,
+            onOpenProject: onOpenProject,
+            onOpenCouncil: onOpenCouncil
+        )
+
+        chatStore.draft = stagedPrompt(suggestion.prompt, existingDraft: chatStore.draft)
+        return shouldFocusComposer
     }
 }
 
@@ -301,7 +316,7 @@ struct EmptyChatView: View {
                 Text("What do you want to ask?")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(Color.textPrimary)
-                Text("Private by default. Add sources, Project, Council, or Agent when needed.")
+                Text("Private by default. Add sources, a Project, Council, or Agent when needed.")
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(Color.textTertiary)
                     .multilineTextAlignment(.center)

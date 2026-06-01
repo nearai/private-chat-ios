@@ -1326,7 +1326,7 @@ private struct DemoIronClawModesView: View {
 
                     DemoIronClawModeCard(
                         title: "Hosted IronClaw",
-                        subtitle: "Connected hosted Agent",
+                        subtitle: "Connected Hosted IronClaw",
                         bodyText: "The hosted run can fetch live GitHub PRs, update the attached plan, inspect repo context, and return a concrete artifact while the phone stays the control surface.",
                         chips: ["GitHub", "Shell", "Plan update", "Repo context", "Web"],
                         symbolName: "terminal",
@@ -1602,7 +1602,7 @@ private struct DemoIronClawResultView: View {
             Label("IronClaw ran against project context.", systemImage: "terminal")
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
-            Text("This is the completed hosted-agent result, not a setup screen. It updates the attached plan from the latest IronClaw GitHub PRs and returns the artifact into the conversation.")
+            Text("This is the completed Hosted IronClaw result, not a setup screen. It updates the attached plan from the latest IronClaw GitHub PRs and returns the artifact into the conversation.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
