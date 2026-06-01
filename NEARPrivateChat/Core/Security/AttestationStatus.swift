@@ -8,7 +8,8 @@ enum AttestationFreshness: String, Codable, Equatable, Sendable {
 
     static func classify(attestedAt: Date?, now: Date = Date()) -> AttestationFreshness {
         guard let attestedAt else { return .stale }
-        let age = max(0, now.timeIntervalSince(attestedAt))
+        let age = now.timeIntervalSince(attestedAt)
+        guard age >= -60 else { return .stale }
         if age < 120 {
             return .underTwoMinutes
         }
@@ -115,23 +116,73 @@ struct ProofCapsuleViewModel: Codable, Equatable, Sendable {
             return
         }
 
-        let copy = status.userFacingCopy(at: now)
-        title = copy.title
-        detail = copy.detail
-        badge = copy.badge
-        symbolName = status.symbolName
-
         switch status.effectiveState(at: now) {
         case .valid:
-            state = status.coverage(for: modelID, at: now) == .covered ? .verified : .verified
+            let selectedModelID = modelID?.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard selectedModelID?.isEmpty == false else {
+                state = .unverified
+                title = "Model proof unknown"
+                detail = "The route proof is present, but this view has no selected model to compare against the report."
+                badge = "Model unknown"
+                symbolName = "shield.slash"
+                return
+            }
+            switch status.coverage(for: selectedModelID, at: now) {
+            case .covered:
+                let copy = status.userFacingCopy(at: now)
+                state = .verified
+                title = copy.title
+                detail = copy.detail
+                badge = copy.badge
+                symbolName = status.symbolName
+            case .notCovered:
+                state = .mismatch
+                title = "Model not covered"
+                detail = "The current proof report does not list this selected model. Refresh proof after changing models."
+                badge = "Not covered"
+                symbolName = "exclamationmark.shield.fill"
+            case .unknown:
+                state = .unverified
+                title = "Model proof unknown"
+                detail = "The route proof is present, but this view has no selected model to compare against the report."
+                badge = "Model unknown"
+                symbolName = "shield.slash"
+            case .stale:
+                let copy = AttestationStatus.stale(status.evidence ?? AttestationEvidence(verifiedAt: now, coveredModelIDs: [])).userFacingCopy(at: now)
+                state = .stale
+                title = copy.title
+                detail = copy.detail
+                badge = copy.badge
+                symbolName = "clock.badge.exclamationmark"
+            }
         case .stale:
+            let copy = status.userFacingCopy(at: now)
             state = .stale
+            title = copy.title
+            detail = copy.detail
+            badge = copy.badge
+            symbolName = status.symbolName
         case .mismatch:
+            let copy = status.userFacingCopy(at: now)
             state = .mismatch
+            title = copy.title
+            detail = copy.detail
+            badge = copy.badge
+            symbolName = status.symbolName
         case .unavailable:
+            let copy = status.userFacingCopy(at: now)
             state = .unverified
+            title = copy.title
+            detail = copy.detail
+            badge = copy.badge
+            symbolName = status.symbolName
         case .unknown:
+            let copy = status.userFacingCopy(at: now)
             state = .unknown
+            title = copy.title
+            detail = copy.detail
+            badge = copy.badge
+            symbolName = status.symbolName
         }
     }
 
@@ -266,9 +317,9 @@ enum AttestationStatus: Codable, Equatable, Sendable {
         case .valid:
             let freshnessText = freshness(at: now)?.shortLabel ?? "fresh"
             return AttestationStatusCopy(
-                title: "Verified",
-                detail: "Checked on this device against signed proof from TEE-supported infrastructure. Verification does not judge answer quality or truth.",
-                badge: "Verified \(freshnessText)"
+                title: "Proof report checked",
+                detail: "Checked on this device against signed proof from TEE-supported infrastructure. Proof does not judge answer quality or truth.",
+                badge: "Proof \(freshnessText)"
             )
         case .stale:
             return AttestationStatusCopy(
@@ -286,9 +337,9 @@ enum AttestationStatus: Codable, Equatable, Sendable {
             )
         case .unknown:
             return AttestationStatusCopy(
-                title: "Verification pending",
-                detail: "No signed verification report has been checked on this device yet.",
-                badge: "Pending"
+                title: "No proof report on this device",
+                detail: "Fetch proof on a NEAR Private model to inspect route and model evidence.",
+                badge: "No report"
             )
         }
     }
@@ -299,9 +350,9 @@ enum AttestationStatus: Codable, Equatable, Sendable {
             switch reason {
             case .routeNotSupported:
                 return AttestationStatusCopy(
-                    title: "Unverified route",
-                    detail: "This route is anonymized through NEAR AI Cloud. Anonymized routes do not carry NEAR Private verification — use a private model when verification matters.",
-                    badge: "Unverified"
+                    title: "Privacy proxy route",
+                    detail: "This route uses NEAR AI Cloud privacy proxy forwarding, so a NEAR Private proof report is not attached. Use a private model when proof matters.",
+                    badge: "Privacy proxy"
                 )
             case .serviceUnavailable:
                 return AttestationStatusCopy(
@@ -317,23 +368,23 @@ enum AttestationStatus: Codable, Equatable, Sendable {
                 )
             case .notFetched:
                 return AttestationStatusCopy(
-                    title: "Verification pending",
-                    detail: "Fetch verification on a NEAR Private model to inspect route and model proof.",
-                    badge: "Pending"
+                    title: "No proof report on this device",
+                    detail: "Fetch proof on a NEAR Private model to inspect route and model evidence.",
+                    badge: "No report"
                 )
             }
         default:
             return AttestationStatusCopy(
-                title: "Verification pending",
-                detail: "No local verification report is available for this route.",
-                badge: "Pending"
+                title: "No proof report on this device",
+                detail: "Fetch proof on a NEAR Private model to inspect route and model evidence.",
+                badge: "No report"
             )
         }
     }
 
     func accessibilityLabel(at now: Date = Date()) -> String {
         let copy = userFacingCopy(at: now)
-        return "Verification state: \(copy.badge). \(copy.title)"
+        return "Proof state: \(copy.badge). \(copy.title)"
     }
 
     func accessibilityHint(at now: Date = Date()) -> String {
@@ -387,12 +438,12 @@ struct AttestationEducation: Codable, Equatable, Sendable {
         summary: "Checked on this device against signed proof from TEE-supported infrastructure.",
         sections: [
             AttestationEducationSection(
-                title: "What is verified",
-                body: "The app verifies signed evidence for the private route, runtime, signing details, freshness, and whether the selected model is covered by the current proof."
+                title: "What proof covers",
+                body: "The app checks signed evidence for the private route, runtime, signing details, freshness, and whether the selected model is covered by the current proof."
             ),
             AttestationEducationSection(
-                title: "What is not verified",
-                body: "Verification does not judge the truthfulness, safety, reasoning quality, or completeness of the model's answer."
+                title: "What proof does not cover",
+                body: "Proof does not judge the truthfulness, safety, reasoning quality, or completeness of the model's answer."
             ),
             AttestationEducationSection(
                 title: "Stale or unavailable",

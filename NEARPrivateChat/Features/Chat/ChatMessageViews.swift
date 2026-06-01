@@ -1,11 +1,17 @@
+import EventKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct MessageBubble: View {
     let message: ChatMessage
     let chatStore: ChatStore
     @State private var showingArtifact = false
+    @State private var showingAnswerExporter = false
     @State private var showingSecurity = false
     @State private var showingSources = false
+    @State private var answerExportDocument = ConversationExportDocument()
+    @State private var answerExportContentType: UTType = .plainText
+    @State private var answerExportFilename = "near-private-chat-answer.md"
     @State private var tappedSource: SourceSheetPresentation?
     @State private var editingUserMessage: ChatMessage?
     @State private var lastInputRequestID: String?
@@ -93,7 +99,25 @@ struct MessageBubble: View {
                         Button {
                             chatStore.copySignedSnippet(for: message)
                         } label: {
-                            Label("Copy Signed Snippet", systemImage: "checkmark.shield")
+                            Label("Copy Device-Signed Snippet", systemImage: "checkmark.shield")
+                        }
+
+                        Button {
+                            prepareAnswerExport(.markdown)
+                        } label: {
+                            Label("Export Markdown", systemImage: "doc.plaintext")
+                        }
+
+                        Button {
+                            prepareAnswerExport(.pdf)
+                        } label: {
+                            Label("Export PDF", systemImage: "doc.richtext")
+                        }
+
+                        Button {
+                            prepareAnswerExport(.docx)
+                        } label: {
+                            Label("Export Word Document", systemImage: "doc")
                         }
 
                         Button {
@@ -103,7 +127,7 @@ struct MessageBubble: View {
                         }
 
                         Button {
-                            chatStore.saveMessageAsProjectNote(message)
+                            chatStore.requestProjectNoteSave(for: message)
                         } label: {
                             Label(
                                 chatStore.isMessageSavedToSelectedProject(message) ? "Saved to Project" : "Save to Project",
@@ -123,6 +147,8 @@ struct MessageBubble: View {
                 if message.role == .assistant, let widget = message.widget, !message.isStreaming {
                     MessageWidgetCard(widget: widget) { followUp in
                         chatStore.composeWidgetFollowUp(followUp)
+                    } onCreateAppAction: { action in
+                        chatStore.createTracker(fromWidgetAction: action)
                     }
                 }
 
@@ -155,8 +181,9 @@ struct MessageBubble: View {
                         sourceCount: message.sources.count,
                         onCopy: { Clipboard.copy(message.text) },
                         onCopySigned: { chatStore.copySignedSnippet(for: message) },
+                        onExport: { prepareAnswerExport($0) },
                         onRegenerate: { chatStore.regenerateResponse(for: message) },
-                        onSave: { chatStore.saveMessageAsProjectNote(message) },
+                        onSave: { chatStore.requestProjectNoteSave(for: message) },
                         onOpen: { showingArtifact = true },
                         onSources: { showingSources = true }
                     )
@@ -203,6 +230,19 @@ struct MessageBubble: View {
             EditUserMessageView(message: userMessage)
                 .environmentObject(chatStore)
         }
+        .fileExporter(
+            isPresented: $showingAnswerExporter,
+            document: answerExportDocument,
+            contentType: answerExportContentType,
+            defaultFilename: answerExportFilename
+        ) { result in
+            switch result {
+            case .success:
+                chatStore.bannerMessage = "Answer exported."
+            case let .failure(error):
+                chatStore.bannerMessage = error.localizedDescription
+            }
+        }
         .onAppear {
             lastInputRequestID = message.pendingApproval?.id
         }
@@ -228,8 +268,8 @@ struct MessageBubble: View {
         }
     }
 
-    // Spec: assistant messages render without the redundant "GLM 5.1" header
-    // because the model is already named in the verification footer. User
+    // Spec: assistant messages render without the redundant model header
+    // because the model is already named in the proof footer. User
     // messages similarly hide "You" — the bubble side already carries that.
     // Show the row only when we have an actual status badge, shared author
     // attribution, or a live streaming status to surface.
@@ -257,6 +297,28 @@ struct MessageBubble: View {
         return message.authorDisplayLabel
     }
 
+    private func prepareAnswerExport(_ format: ConversationExportFormat) {
+        do {
+            answerExportDocument = try ConversationExportBuilder.selectedAnswerDocument(
+                for: chatStore.selectedConversation,
+                messages: [message],
+                answerID: message.id,
+                format: format
+            )
+            answerExportContentType = format.contentType
+            answerExportFilename = selectedAnswerFilename(format: format)
+            showingAnswerExporter = true
+        } catch {
+            chatStore.bannerMessage = error.localizedDescription
+        }
+    }
+
+    private func selectedAnswerFilename(format: ConversationExportFormat) -> String {
+        let fullName = ConversationExportBuilder.filename(for: chatStore.selectedConversation, format: format)
+        let base = (fullName as NSString).deletingPathExtension
+        return "\(base)-answer.\(format.fileExtension)"
+    }
+
     private var verifiedFooterViewModel: VerifiedFooterViewModel? {
         guard let proof = answerProofCapsule else { return nil }
         return VerifiedFooterViewModel(
@@ -279,17 +341,35 @@ struct MessageBubble: View {
             return nil
         }
 
+        if let proof = message.trustMetadata?.proof {
+            return ProofCapsuleViewModel(
+                state: proof.state,
+                title: proof.title,
+                detail: proof.detail,
+                badge: proof.badge,
+                symbolName: proof.symbolName
+            )
+        }
+
         switch ChatStore.routeKind(forModelID: modelID) {
         case .nearPrivate:
             let status = AttestationStatus(snapshot: chatStore.attestationSnapshot, selectedModelID: modelID)
             switch status.effectiveState() {
-            case .valid, .stale, .mismatch:
+            case .valid:
+                return ProofCapsuleViewModel(
+                    state: .private_,
+                    title: "Current route proof",
+                    detail: "The current proof report matches this route/model now. It was not captured with or cryptographically bound to this answer.",
+                    badge: "Current route proof",
+                    symbolName: "lock.shield"
+                )
+            case .stale, .mismatch:
                 return ProofCapsuleViewModel(status: status, modelID: modelID)
             case .unknown, .unavailable:
                 return ProofCapsuleViewModel(
                     state: .private_,
                     title: "Private route",
-                    detail: "This answer used the private route. Open Verification when you need a fresh model proof for the turn.",
+                    detail: "This answer used the private route. Open Proof when you need a fresh route/model report.",
                     badge: "Private",
                     symbolName: "lock.shield"
                 )
@@ -298,7 +378,7 @@ struct MessageBubble: View {
             return ProofCapsuleViewModel(
                 state: .proxied,
                 title: "Privacy proxy",
-                detail: "This answer was anonymized through the NEAR AI Cloud privacy proxy. Anonymized turns do not carry NEAR Private verification.",
+                detail: "This answer was anonymized through the NEAR AI Cloud privacy proxy. Anonymized turns do not carry NEAR Private proof.",
                 badge: "Privacy proxy",
                 symbolName: "eye.slash"
             )
@@ -306,7 +386,7 @@ struct MessageBubble: View {
             return ProofCapsuleViewModel(
                 state: .unverified,
                 title: "Agent route",
-                detail: "This answer used agent tools. Verification only applies when the underlying model route supplies proof.",
+                detail: "This answer used Agent tools. Proof applies only when the underlying model route supplies it.",
                 badge: "Agent",
                 symbolName: "terminal"
             )
@@ -665,7 +745,7 @@ private struct AgentRunStatusStrip: View {
 
     private func detailText(isStale: Bool) -> String? {
         if message.status == "failed" {
-            return "The bridge stopped before a final answer. Retry after checking the hosted endpoint."
+            return "Hosted IronClaw stopped before a final answer. Check the Agent connection, then retry."
         }
         if isStale {
             return message.isStreaming
@@ -743,6 +823,7 @@ private struct AssistantInlineActions: View {
     let sourceCount: Int
     let onCopy: () -> Void
     let onCopySigned: () -> Void
+    let onExport: (ConversationExportFormat) -> Void
     let onRegenerate: () -> Void
     let onSave: () -> Void
     let onOpen: () -> Void
@@ -752,11 +833,12 @@ private struct AssistantInlineActions: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
                 actionButton(symbolName: "doc.on.doc", label: "Copy", action: onCopy)
+                exportMenu
                 actionButton(symbolName: "arrow.clockwise", label: "Regenerate", action: onRegenerate)
                 if canOpen {
                     actionButton(symbolName: "rectangle.expand.vertical", label: "Open Output", action: onOpen)
                 }
-                actionButton(symbolName: "checkmark.shield", label: "Copy Signed Snippet", action: onCopySigned)
+                actionButton(symbolName: "checkmark.shield", label: "Copy Device-Signed Snippet", action: onCopySigned)
                 saveButton
                 if sourceCount > 0 {
                     Button(action: onSources) {
@@ -784,6 +866,34 @@ private struct AssistantInlineActions: View {
         }
         .scrollClipDisabled()
         .padding(.top, 2)
+    }
+
+    private var exportMenu: some View {
+        Menu {
+            Button {
+                onExport(.markdown)
+            } label: {
+                Label("Markdown", systemImage: "doc.plaintext")
+            }
+            Button {
+                onExport(.pdf)
+            } label: {
+                Label("PDF", systemImage: "doc.richtext")
+            }
+            Button {
+                onExport(.docx)
+            } label: {
+                Label("Word Document", systemImage: "doc")
+            }
+        } label: {
+            Image(systemName: "square.and.arrow.up")
+                .font(.title3.weight(.regular))
+                .foregroundStyle(.secondary)
+                .frame(width: 34, height: 34)
+                .background(Color.clear, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Export Answer")
     }
 
     private var saveButton: some View {
@@ -905,10 +1015,10 @@ private struct ArtifactOutputView: View {
                     } label: {
                         Image(systemName: "checkmark.shield")
                     }
-                    .accessibilityLabel("Copy Signed Snippet")
+                    .accessibilityLabel("Copy Device-Signed Snippet")
 
                     Button {
-                        chatStore.saveMessageAsProjectNote(message)
+                        chatStore.requestProjectNoteSave(for: message)
                     } label: {
                         Image(systemName: "bookmark")
                     }
@@ -1008,7 +1118,7 @@ private struct SourceCard: View {
                     .multilineTextAlignment(.leading)
                     .padding(.top, 2)
                 Spacer(minLength: 0)
-                Text(source.host)
+                Text(source.displaySubtitle)
                     .font(.footnote)
                     .fontWeight(.regular)
                     .foregroundStyle(Color.textSecondary)
@@ -1040,29 +1150,11 @@ private struct SourceCard: View {
 private struct FaviconBadge: View {
     let source: WebSearchSource
 
-    private var faviconURL: URL? {
-        guard let encodedHost = source.host.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-            return nil
-        }
-        return URL(string: "https://www.google.com/s2/favicons?sz=64&domain=\(encodedHost)")
-    }
-
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .fill(Color.appSecondaryBackground)
-            if let faviconURL {
-                AsyncImage(url: faviconURL) { phase in
-                    switch phase {
-                    case let .success(image):
-                        image.resizable().scaledToFit().padding(2)
-                    default:
-                        fallback
-                    }
-                }
-            } else {
-                fallback
-            }
+            fallback
         }
         .frame(width: 20, height: 20)
         .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
@@ -1076,7 +1168,7 @@ private struct FaviconBadge: View {
     }
 }
 
-// MARK: - Claude Design Verified Footer
+// MARK: - Claude Design Proof Footer
 
 struct VerifiedFooterViewModel {
     let state: ProofState
@@ -1109,7 +1201,7 @@ struct VerifiedFooterButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Open verification details")
+        .accessibilityLabel("Open proof details")
         .accessibilityValue(viewModel.detail)
     }
 
@@ -1142,12 +1234,12 @@ struct VerifiedFooterButton: View {
     }
 
     private var footerText: String {
-        // "Verified · GLM 5.1 · 4 sources · 2s ago"  (verified case)
-        // For non-verified states keep the badge so users still see "Stale" / "Privacy proxy" etc.
+        // For route/model proof and non-answer-bound states keep the badge so users see
+        // "Proof report" / "Stale" / "Privacy proxy" without answer-level overclaiming.
         var pieces: [String] = []
         switch viewModel.state {
         case .verified:
-            pieces.append("Verified")
+            pieces.append("Proof checked")
         case .stale:
             pieces.append("Proof stale")
         case .mismatch:
@@ -1210,7 +1302,7 @@ struct SourceSheetPresentation: Identifiable {
 /// favicon + domain; body is title (17/22 SemiBold), author/date row (13/18
 /// text-2), and a snippet block (15/22, surface-2 background) with the
 /// cited span highlighted in --proof-stale yellow when we have one. No
-/// "Verified" badge — verification is per-message, not per-source.
+/// Proof badge — route/model evidence is not answer-bound until messages carry proof metadata.
 struct SourceSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -1318,6 +1410,17 @@ struct SourceSheet: View {
             }
             .buttonStyle(.plain)
             .disabled(source.safeURL == nil)
+
+            Button {
+                Clipboard.copy(source.citationCopyText)
+            } label: {
+                Text("Copy citation")
+                    .font(.headline)
+                    .foregroundStyle(Color.actionPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
@@ -1335,12 +1438,8 @@ struct SourceSheet: View {
 }
 
 private extension WebSearchSource {
-    /// The web-grounding API returns title + url + publishedAt. There is no
-    /// snippet field today, so the sheet omits the snippet block rather
-    /// than fabricating one. Hook returns nil; flip to real snippet text
-    /// when the underlying type carries it.
     var snippetFallback: String? {
-        nil
+        snippetPreview
     }
 }
 
@@ -1354,6 +1453,7 @@ private extension WebSearchSource {
 struct MessageWidgetCard: View {
     let widget: MessageWidget
     var onFollowUp: ((String) -> Void)? = nil
+    var onCreateAppAction: ((WidgetActionItem) -> Void)? = nil
 
     var body: some View {
         WidgetShell(
@@ -1372,6 +1472,14 @@ struct MessageWidgetCard: View {
                 if let comparison = widget.comparison { WidgetComparisonBody(comparison: comparison) }
             case .newsBrief:
                 if let brief = widget.newsBrief { WidgetNewsBriefBody(brief: brief) }
+            case .actionPlan:
+                if let plan = widget.actionPlan {
+                    WidgetActionPlanBody(
+                        plan: plan,
+                        onFollowUp: onFollowUp,
+                        onCreateAppAction: onCreateAppAction
+                    )
+                }
             case .generic:
                 if let note = widget.note { WidgetGenericBody(note: note) }
             }
@@ -1636,6 +1744,613 @@ private struct WidgetNewsBriefBody: View {
     }
 }
 
+private struct WidgetActionPlanBody: View {
+    let plan: WidgetActionPlan
+    var onFollowUp: ((String) -> Void)? = nil
+    var onCreateAppAction: ((WidgetActionItem) -> Void)? = nil
+    @State private var selectedAction: WidgetActionItem?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let heading = widgetNonBlank(plan.heading) {
+                Text(heading)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let summary = widgetNonBlank(plan.summary) {
+                Text(summary)
+                    .font(.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(plan.actions.indices, id: \.self) { index in
+                    if index > 0 {
+                        Divider().overlay(Color.appHairline)
+                    }
+                    WidgetActionRow(
+                        action: plan.actions[index],
+                        onFollowUp: onFollowUp,
+                        onPreview: { selectedAction = $0 }
+                    )
+                        .padding(.vertical, 9)
+                }
+            }
+        }
+        .sheet(item: $selectedAction) { action in
+            WidgetActionCandidatePreviewSheet(
+                action: action,
+                canStageCommand: onFollowUp != nil,
+                onStageCommand: { command in
+                    selectedAction = nil
+                    onFollowUp?(command)
+                },
+                onCreateAppAction: { action in
+                    selectedAction = nil
+                    onCreateAppAction?(action)
+                }
+            )
+        }
+    }
+}
+
+private struct WidgetActionRow: View {
+    let action: WidgetActionItem
+    var onFollowUp: ((String) -> Void)? = nil
+    var onPreview: ((WidgetActionItem) -> Void)? = nil
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: symbolName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 26, height: 26)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(action.title.isEmpty ? "Action" : action.title)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                let metadata = metadataText
+                if !metadata.isEmpty {
+                    Text(metadata)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(tint)
+                        .lineLimit(2)
+                }
+
+                if let detail = widgetNonBlank(action.detail) {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if !action.missingFields.isEmpty {
+                    Text("Needs: \(action.missingFields.prefix(3).joined(separator: ", "))")
+                        .font(.caption2)
+                        .foregroundStyle(Color.textTertiary)
+                        .lineLimit(2)
+                }
+            }
+
+            if widgetNonBlank(action.command) != nil, onFollowUp != nil {
+                Spacer(minLength: 6)
+                Button {
+                    onPreview?(action)
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 21, weight: .semibold))
+                        .foregroundStyle(Color.actionPrimary)
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Stage action")
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onPreview?(action)
+        }
+        .accessibilityAction(named: "Preview") {
+            onPreview?(action)
+        }
+    }
+
+    private var normalizedType: String {
+        (action.type ?? "")
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var metadataText: String {
+        [
+            widgetNonBlank(action.type),
+            widgetNonBlank(action.schedule),
+            widgetNonBlank(action.recurrence),
+            widgetNonBlank(action.time),
+            widgetNonBlank(action.source)
+        ]
+        .compactMap { $0 }
+        .prefix(4)
+        .joined(separator: " · ")
+    }
+
+    private var symbolName: String {
+        if normalizedType.contains("calendar") || normalizedType.contains("invite") {
+            return "calendar.badge.plus"
+        }
+        if normalizedType.contains("reminder") {
+            return "bell.badge"
+        }
+        if normalizedType.contains("tracker") || normalizedType.contains("brief") || normalizedType.contains("watch") {
+            return "dot.radiowaves.left.and.right"
+        }
+        if normalizedType.contains("decision") {
+            return "checkmark.seal"
+        }
+        if normalizedType.contains("risk") {
+            return "exclamationmark.triangle"
+        }
+        if normalizedType.contains("question") {
+            return "questionmark.circle"
+        }
+        if normalizedType.contains("interest") {
+            return "sparkles"
+        }
+        return "checklist"
+    }
+
+    private var tint: Color {
+        widgetToneColor(action.tone)
+    }
+}
+
+private struct WidgetActionCandidatePreviewSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let action: WidgetActionItem
+    let canStageCommand: Bool
+    let onStageCommand: (String) -> Void
+    let onCreateAppAction: ((WidgetActionItem) -> Void)?
+    @State private var isSavingSystemAction = false
+    @State private var systemActionStatus: String?
+
+    var body: some View {
+        let systemDraft = action.systemActionDraft()
+        let appDraft = action.appActionDraft()
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(action.title.isEmpty ? "Action" : action.title)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(Color.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let detail = widgetNonBlank(action.detail) {
+                            Text(detail)
+                                .font(.subheadline)
+                                .foregroundStyle(Color.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    WidgetActionCandidateFieldList(action: action)
+
+                    WidgetAppActionSection(
+                        draft: appDraft,
+                        canCreate: onCreateAppAction != nil,
+                        onCreate: {
+                            onCreateAppAction?(action)
+                            dismiss()
+                        }
+                    )
+
+                    WidgetSystemActionSection(
+                        action: action,
+                        draft: systemDraft,
+                        isSaving: isSavingSystemAction,
+                        status: systemActionStatus,
+                        onSave: { draft in
+                            saveSystemAction(draft)
+                        }
+                    )
+
+                    if let command = widgetNonBlank(action.command) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Stage in Chat")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.textSecondary)
+                            Text(command)
+                                .font(.footnote)
+                                .foregroundStyle(Color.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(Color.appBorder, lineWidth: 0.5)
+                                }
+                        }
+                    }
+                }
+                .padding(18)
+            }
+            .background(Color.appBackground)
+            .navigationTitle("Review Before Creating")
+            .platformInlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if canStageCommand, let command = widgetNonBlank(action.command) {
+                        Button("Stage") {
+                            onStageCommand(command)
+                        }
+                    }
+                }
+            }
+        }
+        .platformMediumDetent()
+    }
+
+    private func saveSystemAction(_ draft: WidgetSystemActionDraft) {
+        guard !isSavingSystemAction else { return }
+        isSavingSystemAction = true
+        systemActionStatus = nil
+        Task {
+            do {
+                let message = try await WidgetSystemActionWriter.shared.save(draft)
+                await MainActor.run {
+                    systemActionStatus = message
+                    isSavingSystemAction = false
+                }
+            } catch {
+                await MainActor.run {
+                    systemActionStatus = error.localizedDescription
+                    isSavingSystemAction = false
+                }
+            }
+        }
+    }
+}
+
+private struct WidgetAppActionSection: View {
+    let draft: WidgetAppActionDraft?
+    let canCreate: Bool
+    let onCreate: () -> Void
+
+    var body: some View {
+        guard let draft else { return AnyView(EmptyView()) }
+        return AnyView(
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Create in App")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.textSecondary)
+
+                if draft.isReady {
+                    Button {
+                        onCreate()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "dot.radiowaves.left.and.right")
+                                .font(.subheadline.weight(.semibold))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Create Tracker")
+                                    .font(.subheadline.weight(.semibold))
+                                Text(draft.schedule.scheduleLabel)
+                                    .font(.caption)
+                                    .foregroundStyle(Color.textSecondary)
+                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Color.actionPrimary)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.actionPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canCreate)
+                    .accessibilityLabel("Create tracker")
+                } else {
+                    Label("Needs \(draft.missingFields.prefix(3).joined(separator: ", ")) before it can be saved as a tracker.", systemImage: "exclamationmark.triangle")
+                        .font(.footnote)
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+            }
+        )
+    }
+}
+
+private struct WidgetSystemActionSection: View {
+    let action: WidgetActionItem
+    let draft: WidgetSystemActionDraft?
+    let isSaving: Bool
+    let status: String?
+    let onSave: (WidgetSystemActionDraft) -> Void
+
+    var body: some View {
+        guard action.systemActionKind != nil else { return AnyView(EmptyView()) }
+        return AnyView(
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Add to Phone")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.textSecondary)
+
+                if let draft {
+                    Button {
+                        onSave(draft)
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isSaving {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: draft.kind == .calendarEvent ? "calendar.badge.plus" : "bell.badge")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            Text(draft.kind == .calendarEvent ? "Add to Calendar" : "Add Reminder")
+                                .font(.subheadline.weight(.semibold))
+                            Spacer(minLength: 0)
+                            Text(draft.startDate.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(Color.textSecondary)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.actionPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSaving)
+                } else {
+                    Label("Needs an exact date/time before it can be added to iOS.", systemImage: "exclamationmark.triangle")
+                        .font(.footnote)
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+
+                if let status = widgetNonBlank(status) {
+                    Text(status)
+                        .font(.footnote)
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        )
+    }
+}
+
+@MainActor
+private final class WidgetSystemActionWriter {
+    static let shared = WidgetSystemActionWriter()
+    private let eventStore = EKEventStore()
+
+    func save(_ draft: WidgetSystemActionDraft) async throws -> String {
+        switch draft.kind {
+        case .calendarEvent:
+            try await requestCalendarAccess()
+            guard let calendar = eventStore.defaultCalendarForNewEvents else {
+                throw WidgetSystemActionWriterError.noDefaultCalendar
+            }
+            let event = EKEvent(eventStore: eventStore)
+            event.calendar = calendar
+            event.title = draft.title
+            event.startDate = draft.startDate
+            event.endDate = draft.endDate ?? draft.startDate.addingTimeInterval(30 * 60)
+            event.notes = draft.notes
+            event.location = draft.location
+            if let rule = recurrenceRule(from: draft.recurrence) {
+                event.addRecurrenceRule(rule)
+            }
+            try eventStore.save(event, span: .futureEvents, commit: true)
+            return "Added to Calendar."
+        case .reminder:
+            try await requestReminderAccess()
+            guard let calendar = eventStore.defaultCalendarForNewReminders() else {
+                throw WidgetSystemActionWriterError.noDefaultReminderList
+            }
+            let reminder = EKReminder(eventStore: eventStore)
+            reminder.calendar = calendar
+            reminder.title = draft.title
+            reminder.notes = draft.notes
+            reminder.dueDateComponents = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute],
+                from: draft.startDate
+            )
+            if let rule = recurrenceRule(from: draft.recurrence) {
+                reminder.addRecurrenceRule(rule)
+            }
+            try eventStore.save(reminder, commit: true)
+            return "Added to Reminders."
+        }
+    }
+
+    private func requestCalendarAccess() async throws {
+        let granted: Bool = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Bool, Error>) in
+            eventStore.requestFullAccessToEvents { granted, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: granted)
+                }
+            }
+        }
+        guard granted else { throw WidgetSystemActionWriterError.accessDenied("Calendar") }
+    }
+
+    private func requestReminderAccess() async throws {
+        let granted: Bool = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Bool, Error>) in
+            eventStore.requestFullAccessToReminders { granted, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: granted)
+                }
+            }
+        }
+        guard granted else { throw WidgetSystemActionWriterError.accessDenied("Reminders") }
+    }
+
+    private func recurrenceRule(from value: String?) -> EKRecurrenceRule? {
+        guard let value = widgetNonBlank(value)?.lowercased() else { return nil }
+        if value.contains("weekday") || value.contains("weekdays") || value.contains("mon-fri") || value.contains("monday to friday") {
+            let weekdays = [
+                EKRecurrenceDayOfWeek(.monday),
+                EKRecurrenceDayOfWeek(.tuesday),
+                EKRecurrenceDayOfWeek(.wednesday),
+                EKRecurrenceDayOfWeek(.thursday),
+                EKRecurrenceDayOfWeek(.friday)
+            ]
+            return EKRecurrenceRule(
+                recurrenceWith: .weekly,
+                interval: 1,
+                daysOfTheWeek: weekdays,
+                daysOfTheMonth: nil,
+                monthsOfTheYear: nil,
+                weeksOfTheYear: nil,
+                daysOfTheYear: nil,
+                setPositions: nil,
+                end: nil
+            )
+        }
+        let frequency: EKRecurrenceFrequency
+        if value.contains("month") {
+            frequency = .monthly
+        } else if value.contains("week") {
+            frequency = .weekly
+        } else if value.contains("year") || value.contains("annual") {
+            frequency = .yearly
+        } else if value.contains("daily") || value.contains("day") {
+            frequency = .daily
+        } else {
+            return nil
+        }
+        return EKRecurrenceRule(recurrenceWith: frequency, interval: 1, end: nil)
+    }
+}
+
+private enum WidgetSystemActionWriterError: LocalizedError {
+    case accessDenied(String)
+    case noDefaultCalendar
+    case noDefaultReminderList
+
+    var errorDescription: String? {
+        switch self {
+        case let .accessDenied(scope):
+            return "\(scope) access was not granted."
+        case .noDefaultCalendar:
+            return "No writable default calendar is available."
+        case .noDefaultReminderList:
+            return "No writable default reminders list is available."
+        }
+    }
+}
+
+private struct WidgetActionCandidateFieldList: View {
+    let action: WidgetActionItem
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(fields.enumerated()), id: \.offset) { index, field in
+                if index > 0 {
+                    Divider().overlay(Color.appHairline)
+                        .padding(.leading, 40)
+                }
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: field.symbolName)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color.actionPrimary)
+                        .frame(width: 28, height: 28)
+                        .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(field.title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.textSecondary)
+                        Text(field.value)
+                            .font(.subheadline)
+                            .foregroundStyle(Color.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 10)
+            }
+        }
+        .padding(.horizontal, 12)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 0.5)
+        }
+    }
+
+    private var fields: [WidgetActionCandidateField] {
+        var result: [WidgetActionCandidateField] = []
+        func append(_ title: String, _ value: String?, _ symbolName: String) {
+            guard let value = widgetNonBlank(value) else { return }
+            result.append(WidgetActionCandidateField(title: title, value: value, symbolName: symbolName))
+        }
+        append("Type", action.type, "tag")
+        append("Schedule", action.schedule, "calendar")
+        append("Date", action.date, "calendar.badge.clock")
+        append("Time", action.time, "clock")
+        append("Duration", action.duration, "timer")
+        append("Recurrence", action.recurrence, "repeat")
+        append("Timezone", action.timezone, "globe")
+        append("Source", action.source, "doc.text.magnifyingglass")
+        append("Location", action.location, "mappin.and.ellipse")
+        if !action.attendees.isEmpty {
+            result.append(WidgetActionCandidateField(
+                title: "Attendees",
+                value: action.attendees.joined(separator: ", "),
+                symbolName: "person.2"
+            ))
+        }
+        if !action.missingFields.isEmpty {
+            result.append(WidgetActionCandidateField(
+                title: "Needs",
+                value: action.missingFields.joined(separator: ", "),
+                symbolName: "exclamationmark.triangle"
+            ))
+        }
+        if let confidence = action.confidence {
+            result.append(WidgetActionCandidateField(
+                title: "Confidence",
+                value: "\(Int((confidence * 100).rounded()))%",
+                symbolName: "gauge"
+            ))
+        }
+        if result.isEmpty {
+            result.append(WidgetActionCandidateField(
+                title: "Status",
+                value: "Preview only",
+                symbolName: "eye"
+            ))
+        }
+        return result
+    }
+}
+
+private struct WidgetActionCandidateField {
+    let title: String
+    let value: String
+    let symbolName: String
+}
+
 private struct WidgetGenericBody: View {
     let note: String
 
@@ -1718,6 +2433,11 @@ private func widgetToneColor(_ tone: WidgetTone?) -> Color {
     case .off: return .secondary
     default: return .primary
     }
+}
+
+private func widgetNonBlank(_ value: String?) -> String? {
+    let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return trimmed.isEmpty ? nil : trimmed
 }
 
 private func widgetColor(fromHex hex: String) -> Color? {

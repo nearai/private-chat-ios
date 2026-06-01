@@ -88,6 +88,8 @@ struct DemoCaptureRootView: View {
             return 8_000_000_000
         case .chatStarters:
             return 4_000_000_000
+        case .briefingBuilder:
+            return 4_000_000_000
         case .councilBriefingLive:
             return 4_000_000_000
         case .composer:
@@ -120,7 +122,7 @@ struct LiveDataDemoView: View {
                     .foregroundStyle(Color.actionPrimary)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Live data").font(.headline.weight(.semibold))
-                    Text("ETH price · NEAR account · today's news").font(.caption).foregroundStyle(Color.textSecondary)
+        Text("Live prices · accounts · today's news").font(.caption).foregroundStyle(Color.textSecondary)
                 }
                 Spacer(minLength: 0)
             }
@@ -161,9 +163,9 @@ private func demoCouncilRoomModel() -> CouncilRoomModel {
         ChatMessage(id: id, role: .assistant, text: text, model: model, createdAt: now, status: "completed", responseID: "\(id)-r", councilBatchID: batch, isStreaming: false)
     }
     let messages = [
-        message("c-glm", "glm-5.1", "I concur. The architecture is sound and the streaming path is stable in main, so shipping is reasonable."),
-        message("c-claude", "claude-opus-4-7", "Yes, with caveats. The latency budget on the streaming side is the one risk. If we cap concurrent models at 3 we hold the SLA at p95 < 1.4s."),
-        message("c-gemini", "gemini-2.5-pro", "I disagree. Per-message proof for cross-model consensus is not landed in main; however, shipping without it means the verification footer is silently wrong on Council answers."),
+        message("c-private", ChatStore.defaultModelID, "I concur. The architecture is sound and the streaming path is stable in main, so shipping is reasonable."),
+        message("c-independent-a", "near-cloud/demo-independent-model-a", "Yes, with caveats. The latency budget on the streaming side is the one risk. If we cap concurrent models at 3 we hold the SLA at p95 < 1.4s."),
+        message("c-independent-b", "near-cloud/demo-independent-model-b", "I disagree. Per-message proof for cross-model consensus is not landed in main; however, shipping without it means the verification footer is silently wrong on Council answers."),
         message("c-syn", "llm-council/synthesis", "Synthesis: the council broadly supports shipping Council v2.\n\nAgreement: two of three models back shipping; the architecture and streaming path are considered stable.\n\nDisagreement: one model flags that per-message cross-model proof is not yet in main.\n\nRecommended next step: ship behind a flag, land the proof path, then enable by default.")
     ]
     return CouncilRoomModel.from(councilMessages: messages)
@@ -185,7 +187,7 @@ private struct DemoCaptureScreenHost: View {
             case .fileAttach:
                 DemoFileAttachmentFlowView()
             case .glmResult:
-                DemoGLMAnswerView()
+                DemoPrivateAnswerView()
             case .councilOutput:
                 DemoCouncilComparisonView()
             case .chat, .composer, .widgets, .generativeChat, .chatStarters, .councilBriefingLive:
@@ -194,6 +196,8 @@ private struct DemoCaptureScreenHost: View {
                         .navigationTitle(chatStore.selectedConversationTitle)
                         .platformInlineNavigationTitle()
                 }
+            case .briefingBuilder:
+                BriefingEditorSheet()
             case .ironclaw:
                 DemoIronClawResultView()
             case .ironclawThinking:
@@ -203,14 +207,16 @@ private struct DemoCaptureScreenHost: View {
             case .verification:
                 SecurityView()
             case .models:
-                DemoSingleModelPickerView()
+                ModelPickerView()
             case .cloudModels:
                 DemoNearCloudModelsView()
             case .council:
-                DemoCouncilLineupView()
+                ModelPickerView(openingCouncil: true)
             case .councilRoom:
                 CouncilRoomView(
                     model: demoCouncilRoomModel(),
+                    supportsTargetedSend: true,
+                    synthesizeTitle: "Synthesize again",
                     onSend: { _, _ in },
                     onSynthesize: {}
                 )
@@ -525,7 +531,7 @@ private struct DemoMockLoginView: View {
                 }
 
                 if isComplete {
-                    Label("Google account verified", systemImage: "checkmark.shield.fill")
+                    Label("Google account connected", systemImage: "checkmark.shield.fill")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(Color.trustVerified)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -715,11 +721,11 @@ private struct DemoFileAttachmentFlowView: View {
     }
 }
 
-private struct DemoGLMAnswerView: View {
+private struct DemoPrivateAnswerView: View {
     @EnvironmentObject private var chatStore: ChatStore
 
     private var answer: ChatMessage? {
-        chatStore.messages.first { $0.role == .assistant && $0.model == "zai-org/GLM-5.1-FP8" }
+        chatStore.messages.first { $0.role == .assistant && $0.model == ChatStore.defaultModelID }
             ?? chatStore.messages.last { $0.role == .assistant }
     }
 
@@ -745,7 +751,7 @@ private struct DemoGLMAnswerView: View {
                                 HStack(spacing: 8) {
                                     AssistantAvatar()
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text("GLM 5.1")
+                                        Text("Private model")
                                             .font(.subheadline.weight(.bold))
                                         Text("NEAR Private route")
                                             .font(.caption.weight(.medium))
@@ -774,7 +780,7 @@ private struct DemoGLMAnswerView: View {
                     .padding(.vertical, 18)
                 }
                 .background(Color.appBackground)
-                .navigationTitle("Private GLM")
+                .navigationTitle("Private answer")
                 .platformInlineNavigationTitle()
                 .task {
                     try? await Task.sleep(nanoseconds: 2_500_000_000)
@@ -795,7 +801,7 @@ private struct DemoGLMAnswerView: View {
                 .frame(width: 34, height: 34)
                 .background(Color.trustVerified.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
-                Text("GLM answer first")
+                Text("Private answer first")
                     .font(.headline.weight(.semibold))
                 Text("One private model, live web sources, then proof.")
                     .font(.caption.weight(.medium))
@@ -814,10 +820,10 @@ private struct DemoVerifiedProofCard: View {
                 .frame(width: 36, height: 36)
                 .background(Color.trustVerified.opacity(0.16), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
-                Text("Verified")
+                Text("Proof checked")
                     .font(.headline.weight(.bold))
                     .foregroundStyle(Color.trustVerified)
-                Text("Fresh proof for GLM 5.1 on the NEAR Private route. Tap the shield to inspect nonce, model hash, gateway, and signature.")
+                Text("Fresh proof for the selected private model on the NEAR Private route. Tap the shield to inspect nonce, model hash, gateway, and signature.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -861,8 +867,8 @@ private struct DemoNearCloudModelsView: View {
                                 .foregroundStyle(.secondary)
                                 .textCase(.uppercase)
                             Label("Uses the same project files, saved links, and web context when the prompt needs them.", systemImage: "folder.badge.gearshape")
-                            Label("Cloud models run through the NEAR AI Cloud privacy proxy, separate from the fully private GLM route.", systemImage: "lock.rotation")
-                            Label("GLM 5.1 stays the default verified private model; Cloud is an explicit SOTA override.", systemImage: "checkmark.shield")
+                            Label("Cloud models run through the NEAR AI Cloud privacy proxy, separate from the fully private route.", systemImage: "lock.rotation")
+                            Label("The private route stays the default when proof matters; Cloud is an explicit override.", systemImage: "checkmark.shield")
                         }
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.secondary)
@@ -914,7 +920,7 @@ private struct DemoNearCloudModelsView: View {
                         .foregroundStyle(Color.trustVerified)
                 }
             }
-            Text("The app defaults to private verified GLM, but advanced users can deliberately switch to frontier Cloud models without losing project context.")
+            Text("The app defaults to the private route with proof, and advanced users can deliberately switch to Cloud models without losing project context.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -939,9 +945,9 @@ private struct DemoSingleModelPickerView: View {
 
                 Section("Selected model") {
                     DemoSingleModelRow(
-                        title: "GLM 5.1",
+                        title: "NEAR Private model",
                         subtitle: "Default private model",
-                        detail: "NEAR Private route · verified when proof is fresh",
+                        detail: "NEAR Private route · proof when fresh",
                         symbolName: "checkmark.shield.fill",
                         tint: .trustVerified,
                         isSelected: true
@@ -957,7 +963,7 @@ private struct DemoSingleModelPickerView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Council is a separate tab")
                                 .font(.subheadline.weight(.semibold))
-                            Text("Tap Council when you want GLM, Qwen Max, and Opus to answer together.")
+                            Text("Tap Council when you want the private model and independent cloud models to answer together.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -1210,9 +1216,9 @@ private struct DemoAgentTimelineStep: View {
 
 private struct DemoCouncilLineupView: View {
     private let models = [
-        ("GLM 5.1", "Private model answer", "NEAR Private · verified", "checkmark.shield.fill"),
-        ("Qwen Max", "Independent model answer", "NEAR AI Cloud · privacy proxy", "list.bullet.rectangle"),
-        ("Claude Opus 4.7", "Independent model answer", "NEAR AI Cloud · privacy proxy", "sparkles")
+        ("Private model", "Private model answer", "NEAR Private · proof", "checkmark.shield.fill"),
+        ("Independent model A", "Independent model answer", "NEAR AI Cloud · privacy proxy", "list.bullet.rectangle"),
+        ("Independent model B", "Independent model answer", "NEAR AI Cloud · privacy proxy", "sparkles")
     ]
 
     var body: some View {
@@ -1222,7 +1228,7 @@ private struct DemoCouncilLineupView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Label("Council lineup matches the synthesis", systemImage: "square.grid.2x2")
                             .font(.headline.weight(.semibold))
-                        Text("The same Iran prompt goes to GLM, Qwen Max, and Opus 4.7; the next screen shows each view and the synthesis.")
+                        Text("The same prompt goes to the private model and independent cloud models; the next screen shows each view and the synthesis.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1269,7 +1275,7 @@ private struct DemoCouncilLineupView: View {
                             Image(systemName: "sparkles")
                                 .foregroundStyle(Color.actionPrimary)
                             VStack(alignment: .leading, spacing: 1) {
-                                Text("GLM 5.1 writes the final answer")
+                                Text("The synthesizer writes the final answer")
                                     .font(.subheadline.weight(.semibold))
                                 Text("The synthesis keeps the headline, mechanics, and risks visible instead of hiding disagreement.")
                                     .font(.caption)
@@ -1303,7 +1309,7 @@ private struct DemoIronClawModesView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("IronClaw")
                             .font(.title2.weight(.bold))
-                        Text("Mobile for local, bounded tasks. Hosted for full workstation runs with shell, Git, tests, and GitHub.")
+                        Text("Mobile for local, bounded tasks. Hosted IronClaw for shell, Git, tests, and GitHub.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1312,7 +1318,7 @@ private struct DemoIronClawModesView: View {
                     DemoIronClawModeCard(
                         title: "IronClaw Mobile",
                         subtitle: "Runs on the phone",
-                        bodyText: "Good for reading the attached plan, drafting lightweight edits, and checking project context without connecting a workstation.",
+                        bodyText: "Good for reading the attached plan, drafting lightweight edits, and checking project context without connecting Hosted IronClaw.",
                         chips: ["Attached plan", "Phone-safe", "No repo access"],
                         symbolName: "iphone",
                         tint: .trustVerified
@@ -1320,7 +1326,7 @@ private struct DemoIronClawModesView: View {
 
                     DemoIronClawModeCard(
                         title: "Hosted IronClaw",
-                        subtitle: "Connected workstation agent",
+                        subtitle: "Connected hosted Agent",
                         bodyText: "The hosted run can fetch live GitHub PRs, update the attached plan, inspect repo context, and return a concrete artifact while the phone stays the control surface.",
                         chips: ["GitHub", "Shell", "Plan update", "Repo context", "Web"],
                         symbolName: "terminal",
@@ -1492,11 +1498,11 @@ private struct DemoCouncilComparisonView: View {
 
     private func modelAngle(for message: ChatMessage) -> String {
         switch message.model {
-        case "zai-org/GLM-5.1-FP8":
+        case ChatStore.defaultModelID:
             return "Private model answer"
-        case ModelOption.nearCloudQwenMaxModelID:
+        case "near-cloud/demo-independent-model-a":
             return "Independent model answer"
-        case "near-cloud/anthropic/claude-opus-4-7":
+        case "near-cloud/demo-independent-model-b":
             return "Independent model answer"
         default:
             return "Raw model view"

@@ -1,18 +1,25 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SecurityView: View {
     @EnvironmentObject private var chatStore: ChatStore
     @Environment(\.dismiss) private var dismiss
-    @State private var localVerificationMessage: String?
+    @State private var localProofCheckMessage: String?
+    @State private var isEducationExpanded = false
+    @State private var showingProofReportExporter = false
+    @State private var proofReportDocument = ConversationExportDocument()
+    @State private var proofReportFilename = "near-private-chat-proof-report.json"
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
                     verifiedHero
-                    detailListCard
+                    routeDisclosureCard
                     actionStack
-                    DisclosureGroup {
+                    detailListCard
+                    verificationDetailCard
+                    DisclosureGroup(isExpanded: $isEducationExpanded) {
                         VStack(alignment: .leading, spacing: 12) {
                             ForEach(AttestationEducation.standard.sections) { section in
                                 AttestationEducationRow(section: section)
@@ -20,15 +27,15 @@ struct SecurityView: View {
                         }
                         .padding(.top, 8)
                     } label: {
-                        Text("How verification works")
+                        Text("How proof works")
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .foregroundStyle(.primary)
                     }
                     .padding(14)
-                    .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .stroke(Color.appBorder, lineWidth: 1)
                     }
                     reportCard
@@ -52,6 +59,19 @@ struct SecurityView: View {
                     await chatStore.refreshAttestationReport()
                 }
             }
+            .fileExporter(
+                isPresented: $showingProofReportExporter,
+                document: proofReportDocument,
+                contentType: ConversationExportFormat.json.contentType,
+                defaultFilename: proofReportFilename
+            ) { result in
+                switch result {
+                case .success:
+                    chatStore.bannerMessage = "Proof report exported."
+                case let .failure(error):
+                    chatStore.bannerMessage = error.localizedDescription
+                }
+            }
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
@@ -62,7 +82,7 @@ struct SecurityView: View {
             return ProofCapsuleViewModel(
                 state: .proxied,
                 title: "Privacy proxy",
-                detail: "NEAR AI Cloud anonymizes your prompt to the provider before forwarding. Anonymized routes do not carry NEAR Private verification.",
+                detail: "NEAR AI Cloud anonymizes your prompt before forwarding to the provider. A NEAR Private proof report is not attached to this route.",
                 badge: "Privacy proxy",
                 symbolName: "eye.slash"
             )
@@ -115,23 +135,13 @@ struct SecurityView: View {
     private var detailListCard: some View {
         VStack(spacing: 0) {
             ClaudeDetailRow(label: "Model", trailing: modelTrailing) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(chatStore.selectedModelDisplayName)
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-                    if let hash = modelHashShort {
-                        Text("·")
-                            .font(.subheadline)
-                            .foregroundStyle(Color.textTertiary)
-                        Text(hash)
-                            .font(.system(.footnote, design: .monospaced))
-                            .foregroundStyle(.primary)
-                    }
-                }
+                Text(chatStore.selectedModelDisplayName)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
             }
             Divider().background(Color.appHairline).padding(.leading, 16)
 
-            ClaudeDetailRow(label: "Hardware", trailing: hardwareTrailing) {
+            ClaudeDetailRow(label: "Runtime", trailing: hardwareTrailing) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(hardwareSummary)
                         .font(.subheadline)
@@ -145,7 +155,7 @@ struct SecurityView: View {
             Divider().background(Color.appHairline).padding(.leading, 16)
 
             ClaudeDetailRow(
-                label: "Conversation",
+                label: "Proof report",
                 trailing: AnyView(Image(systemName: "chevron.right").font(.system(size: 14)).foregroundStyle(Color.textTertiary))
             ) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -159,10 +169,150 @@ struct SecurityView: View {
                 }
             }
 
-            // v2: duplicate in-card "Verify on-device" preview row removed —
+            // v2: duplicate in-card proof-check preview row removed —
             // the spec's PrimaryButton below is the single tap target. Two
             // identical labels read as redundant. Only the primary CTA in
             // `actionStack` stays.
+        }
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var routeDisclosureCard: some View {
+        let proof = currentProofViewModel
+        return VStack(alignment: .leading, spacing: 11) {
+            Label("This answer used", systemImage: "lock.doc")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.textPrimary)
+
+            disclosureRow(
+                label: "What left this phone",
+                value: whatLeftPhoneDisclosure,
+                symbolName: "iphone.and.arrow.forward"
+            )
+            disclosureRow(
+                label: "Route",
+                value: "\(chatStore.selectedProviderDisplayName) · \(chatStore.sourceModeDetail)",
+                symbolName: chatStore.selectedRouteKind.disclosureSymbolName
+            )
+            disclosureRow(
+                label: "Verified",
+                value: proof.state == .verified ? "Model/runtime proof is available for the private route." : proof.title,
+                symbolName: "checkmark.shield"
+            )
+            disclosureRow(
+                label: "Not verified",
+                value: unverifiedDisclosure,
+                symbolName: "exclamationmark.triangle"
+            )
+        }
+        .padding(12)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 1)
+        }
+    }
+
+    private func disclosureRow(label: String, value: String, symbolName: String) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: symbolName)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.actionPrimary)
+                .frame(width: 24, height: 24)
+                .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color.textTertiary)
+                    .textCase(.uppercase)
+                Text(value)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var whatLeftPhoneDisclosure: String {
+        if chatStore.selectedRouteKind == .ironclawHosted {
+            return "Your prompt plus approved handoff context goes to the hosted agent."
+        }
+        if chatStore.selectedRouteUsesNearCloud || (chatStore.isCouncilModeEnabled && chatStore.activeCouncilHasNearCloudRoutes) {
+            return "Your prompt is proxied through NEAR AI Cloud before the model provider sees it."
+        }
+        if chatStore.sourceModeDetail.lowercased().contains("web") {
+            return "Your prompt may use private-route web/source grounding. Local-only notes stay on device unless allowed."
+        }
+        return "The prompt stays on the selected private route. Local-only documents are excerpted only when the private route can use them."
+    }
+
+    private var unverifiedDisclosure: String {
+        if chatStore.selectedRouteKind == .nearPrivate && !chatStore.selectedRouteUsesNearCloud {
+            return "Web pages, uploaded files, and model claims are not magically true; verify sources before sharing."
+        }
+        return "External cloud or hosted-agent execution is outside the NEAR Private proof report."
+    }
+
+    private var verificationDetailCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.textSecondary)
+                Text(verificationDetailTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            Divider().background(Color.appHairline)
+
+            VerificationDetailRow(
+                label: "Fresh",
+                value: freshnessDetailValue,
+                detail: freshnessDetailText,
+                symbolName: "clock"
+            )
+            Divider().background(Color.appHairline).padding(.leading, 14)
+
+            VerificationDetailRow(
+                label: "Signer",
+                value: signingAddressValue,
+                detail: signingAddressDetailText,
+                symbolName: "key.horizontal"
+            )
+            Divider().background(Color.appHairline).padding(.leading, 14)
+
+            VerificationDetailRow(
+                label: "Model",
+                value: selectedModelCoverageValue,
+                detail: selectedModelHashDetailText,
+                symbolName: "cpu"
+            )
+            Divider().background(Color.appHairline).padding(.leading, 14)
+
+            VerificationDetailRow(
+                label: "Entries",
+                value: modelAttestationCountValue,
+                detail: modelAttestationCountDetailText,
+                symbolName: "list.bullet.rectangle"
+            )
+            Divider().background(Color.appHairline).padding(.leading, 14)
+
+            VerificationDetailRow(
+                label: "Current route",
+                value: routeSummary,
+                detail: routeCaveatText,
+                symbolName: routeSymbolName
+            )
         }
         .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
@@ -181,7 +331,7 @@ struct SecurityView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "lock.shield")
                             .font(.system(size: 16, weight: .semibold))
-                        Text("Verify on-device")
+                            Text("Check proof report")
                             .font(.headline)
                     }
                     .foregroundStyle(.white)
@@ -191,13 +341,11 @@ struct SecurityView: View {
                 }
                 .buttonStyle(.plain)
 
-                ShareLink(
-                    item: snapshot.prettyJSON,
-                    subject: Text("NEAR Private Chat proof JSON"),
-                    message: Text("Proof JSON only. It does not include conversation text.")
-                ) {
+                Button {
+                    prepareProofReportExport(snapshot)
+                } label: {
                     HStack(spacing: 6) {
-                        Text("Share with proof")
+                        Text("Export proof report")
                         Image(systemName: "arrow.up.right")
                             .font(.system(size: 14, weight: .semibold))
                     }
@@ -206,9 +354,11 @@ struct SecurityView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
                 }
+                .disabled(proofReportExportUnavailableReason != nil)
+                .accessibilityHint(proofReportExportUnavailableReason ?? "Exports only the cached proof report JSON.")
 
-                if let localVerificationMessage {
-                    Text(localVerificationMessage)
+                if let localProofCheckMessage {
+                    Text(localProofCheckMessage)
                         .font(.footnote)
                         .fontWeight(.regular)
                         .foregroundStyle(Color.textSecondary)
@@ -248,9 +398,9 @@ struct SecurityView: View {
             }
 
             Button {
-                // Toggling the disclosure card below is the simplest route;
-                // a real navigation to a "how this works" article would be
-                // wired here if/when one exists.
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                    isEducationExpanded = true
+                }
             } label: {
                 HStack(spacing: 4) {
                     Text("Learn how this works")
@@ -281,15 +431,6 @@ struct SecurityView: View {
         )
     }
 
-    private var modelHashShort: String? {
-        guard let snapshot = chatStore.attestationSnapshot else { return nil }
-        let raw = snapshot.nonce.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard raw.count >= 8 else { return nil }
-        let prefix = raw.prefix(4)
-        let suffix = raw.suffix(4)
-        return "\(prefix)…\(suffix)"
-    }
-
     private var hardwareSummary: String {
         switch chatStore.selectedRouteKind {
         case .nearPrivate:
@@ -315,14 +456,14 @@ struct SecurityView: View {
         if let snapshot = chatStore.attestationSnapshot {
             let formatter = DateFormatter()
             formatter.dateFormat = "HH:mm:ss"
-            return "Sealed at \(formatter.string(from: snapshot.fetchedAt))"
+            return "Report fetched at \(formatter.string(from: snapshot.fetchedAt))"
         }
-        return "Not sealed yet"
+        return "No proof report on this device"
     }
 
     private var conversationDetail: String {
         chatStore.attestationSnapshot == nil
-            ? "Fetch proof to seal this turn"
+            ? "Fetch proof report for the current route"
             : "Checked on this device"
     }
 
@@ -349,7 +490,7 @@ struct SecurityView: View {
     @ViewBuilder
     private var reportCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Report")
+            Text("Proof report")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
 
@@ -372,7 +513,7 @@ struct SecurityView: View {
                     .frame(maxHeight: 220)
                     .padding(.top, 6)
                 } label: {
-                    Label("Raw JSON", systemImage: "curlybraces")
+                    Label("Raw proof JSON", systemImage: "curlybraces")
                         .font(.subheadline.weight(.semibold))
                 }
 
@@ -393,7 +534,7 @@ struct SecurityView: View {
                         .foregroundStyle(.secondary)
                 }
             } else {
-                Text("No proof report fetched yet.")
+                Text("No proof report on this device")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -425,8 +566,265 @@ struct SecurityView: View {
         chatStore.currentAttestationStatus.freshness()?.shortLabel ?? (chatStore.attestationSnapshot == nil ? "Not fetched" : "Unknown")
     }
 
+    private var freshnessDetailValue: String {
+        guard let snapshot = chatStore.attestationSnapshot else {
+            return chatStore.isLoadingAttestation ? "Fetching" : (canFetchAttestation ? "Not fetched" : "Unavailable")
+        }
+
+        switch AttestationFreshness.classify(attestedAt: snapshot.fetchedAt) {
+        case .underTwoMinutes:
+            return "Fresh (<2m)"
+        case .underOneHour:
+            return "Recent (<1h)"
+        case .stale:
+            return "Stale"
+        }
+    }
+
     private var freshnessDetailText: String {
-        chatStore.attestationSnapshot?.fetchedAt.formatted(date: .abbreviated, time: .standard) ?? "Fetch proof to check freshness"
+        guard let snapshot = chatStore.attestationSnapshot else {
+            return canFetchAttestation ? "Fetch proof to inspect the report timestamp." : fetchAttestationDisabledText
+        }
+
+        let timestamp = snapshot.fetchedAt.formatted(date: .abbreviated, time: .standard)
+        switch AttestationFreshness.classify(attestedAt: snapshot.fetchedAt) {
+        case .underTwoMinutes, .underOneHour:
+            return "Report timestamp \(timestamp). Refresh after route or model changes."
+        case .stale:
+            return "Report timestamp \(timestamp). Refresh before relying on coverage."
+        }
+    }
+
+    private var signingAddressValue: String {
+        guard let snapshot = chatStore.attestationSnapshot else {
+            return "Not fetched"
+        }
+        let addresses = gatewaySigningAddresses(snapshot)
+        guard !addresses.isEmpty else {
+            return "Not included"
+        }
+        if addresses.count > 1 {
+            return "\(addresses.count) addresses"
+        }
+        let address = addresses[0]
+        return "\(address.label) \(shortenedIdentifier(address.value))"
+    }
+
+    private var signingAddressDetailText: String {
+        guard let snapshot = chatStore.attestationSnapshot else {
+            return "Gateway signing addresses are shown after a proof fetch."
+        }
+        let addresses = gatewaySigningAddresses(snapshot)
+        guard !addresses.isEmpty else {
+            return "The cached report did not expose gateway signing addresses."
+        }
+        return addresses
+            .map { "\($0.label): \(shortenedIdentifier($0.value, prefix: 14, suffix: 10))" }
+            .joined(separator: " · ")
+    }
+
+    private var selectedModelCoverageValue: String {
+        guard let snapshot = chatStore.attestationSnapshot else {
+            return "Awaiting proof"
+        }
+
+        switch chatStore.currentAttestationStatus.coverage(for: chatStore.selectedModel) {
+        case .covered:
+            return selectedModelHashPreview(in: snapshot, requireSelectedModelMatch: true) == nil
+                ? "Selected model listed in proof"
+                : "Exact model hash listed"
+        case .stale:
+            return "Model listing stale"
+        case .notCovered:
+            return "Selected model not listed"
+        case .unknown:
+            return "Coverage unknown"
+        }
+    }
+
+    private var selectedModelHashDetailText: String {
+        let modelID = shortenedIdentifier(chatStore.selectedModel, prefix: 24, suffix: 12)
+        guard let snapshot = chatStore.attestationSnapshot else {
+            return "\(modelID) · fetch proof to inspect model evidence."
+        }
+        return "\(modelID) · \(selectedModelHashStatus(in: snapshot))"
+    }
+
+    private var modelAttestationCountValue: String {
+        guard let snapshot = chatStore.attestationSnapshot else {
+            return "No proof report"
+        }
+        let count = snapshot.modelAttestationCount
+        if count == 1 {
+            return "1 model proof entry"
+        }
+        if count > 1 {
+            return "\(count) model proof entries"
+        }
+        return "No model proof entries"
+    }
+
+    private var modelAttestationCountDetailText: String {
+        guard let snapshot = chatStore.attestationSnapshot else {
+            return "The proof report has not been fetched on this device."
+        }
+        if snapshot.modelAttestationCount > 0 {
+            return attestationCoveragePhrase(snapshot)
+        }
+        if !snapshot.coveredModelIDs.isEmpty {
+            return "\(snapshot.coveredModelIDs.count) listed model IDs parsed outside model_attestations."
+        }
+        return "Gateway evidence may still be present; model-level entries were not parsed."
+    }
+
+    private var routeCaveatText: String {
+        if chatStore.isCouncilModeEnabled, chatStore.activeCouncilHasExternalRoutes {
+            return "Mixed or external Council lineups cannot fetch NEAR Private proof."
+        }
+        if chatStore.selectedRouteUsesNearCloud || (chatStore.isCouncilModeEnabled && chatStore.activeCouncilHasNearCloudRoutes) {
+            return "Privacy proxy forwarding uses a separate trust boundary from NEAR Private proof reports."
+        }
+
+        switch chatStore.selectedRouteKind {
+        case .nearPrivate:
+            return "Proof covers reported route and model evidence only; it does not verify answer truth or safety."
+        case .nearCloud:
+            return "NEAR AI Cloud anonymizes prompts through a privacy proxy."
+        case .ironclawMobile:
+            return "IronClaw Mobile is outside the NEAR Private proof report."
+        case .ironclawHosted:
+            return "Hosted IronClaw availability is separate from NEAR Private proof coverage."
+        }
+    }
+
+    private func gatewaySigningAddresses(_ snapshot: AttestationSnapshot) -> [(label: String, value: String)] {
+        var addresses: [(label: String, value: String)] = []
+        if let chatAddress = cleanedIdentifier(snapshot.chatGatewayAddress) {
+            addresses.append(("Chat", chatAddress))
+        }
+        if let cloudAddress = cleanedIdentifier(snapshot.cloudGatewayAddress) {
+            addresses.append(("Cloud", cloudAddress))
+        }
+        return addresses
+    }
+
+    private func selectedModelHashStatus(in snapshot: AttestationSnapshot) -> String {
+        if let hash = selectedModelHashPreview(in: snapshot, requireSelectedModelMatch: true) {
+            return "reported model hash \(shortenedIdentifier(hash, prefix: 14, suffix: 10))"
+        }
+        if snapshot.modelAttestationCount > 0 {
+            return "model hash not exposed in parsed evidence"
+        }
+        return "no model hash evidence in this report"
+    }
+
+    private func selectedModelHashPreview(in snapshot: AttestationSnapshot, requireSelectedModelMatch: Bool = false) -> String? {
+        guard let data = snapshot.prettyJSON.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let attestations = value(at: ["model_attestations"], in: object) as? [Any] else {
+            return nil
+        }
+
+        let attestationDictionaries = attestations.compactMap { $0 as? [String: Any] }
+        let selectedModel = AttestationEvidence.normalizedModelID(chatStore.selectedModel)
+
+        if let matchingAttestation = attestationDictionaries.first(where: { modelAttestation($0, matches: selectedModel) }),
+           let hash = firstModelHash(in: matchingAttestation) {
+            return hash
+        }
+        guard !requireSelectedModelMatch else { return nil }
+        if attestationDictionaries.count == 1,
+           let hash = firstModelHash(in: attestationDictionaries[0]) {
+            return hash
+        }
+        return nil
+    }
+
+    private func value(at path: [String], in object: Any) -> Any? {
+        var current = object
+        for key in path {
+            guard let dictionary = current as? [String: Any],
+                  let next = dictionary[key] else {
+                return nil
+            }
+            current = next
+        }
+        return current
+    }
+
+    private func modelAttestation(_ dictionary: [String: Any], matches normalizedModelID: String) -> Bool {
+        func walk(_ value: Any) -> Bool {
+            if let dictionary = value as? [String: Any] {
+                for key in ["model", "model_id", "modelId", "id", "name"] {
+                    if let modelID = dictionary[key] as? String,
+                       AttestationEvidence.normalizedModelID(modelID) == normalizedModelID {
+                        return true
+                    }
+                }
+                return dictionary.values.contains(where: walk)
+            }
+            if let array = value as? [Any] {
+                return array.contains(where: walk)
+            }
+            return false
+        }
+        return walk(dictionary)
+    }
+
+    private func firstModelHash(in dictionary: [String: Any]) -> String? {
+        func walk(_ value: Any) -> String? {
+            if let dictionary = value as? [String: Any] {
+                for (key, child) in dictionary where isModelHashKey(key) {
+                    if let string = child as? String,
+                       let cleaned = cleanedIdentifier(string) {
+                        return cleaned
+                    }
+                }
+                for child in dictionary.values {
+                    if let hash = walk(child) {
+                        return hash
+                    }
+                }
+            } else if let array = value as? [Any] {
+                for child in array {
+                    if let hash = walk(child) {
+                        return hash
+                    }
+                }
+            }
+            return nil
+        }
+        return walk(dictionary)
+    }
+
+    private func isModelHashKey(_ key: String) -> Bool {
+        let normalized = key
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .lowercased()
+        return [
+            "hash",
+            "digest",
+            "sha256",
+            "modelhash",
+            "modeldigest",
+            "weightshash",
+            "weightsdigest"
+        ].contains(normalized)
+    }
+
+    private func cleanedIdentifier(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func shortenedIdentifier(_ value: String, prefix: Int = 12, suffix: Int = 8) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > prefix + suffix + 3 else {
+            return trimmed
+        }
+        return "\(trimmed.prefix(prefix))...\(trimmed.suffix(suffix))"
     }
 
     @ViewBuilder
@@ -435,22 +833,21 @@ struct SecurityView: View {
             Button {
                 verifyProofOnDevice(snapshot)
             } label: {
-                Label("Verify on-device", systemImage: "checkmark.shield")
+                Label("Check proof report", systemImage: "checkmark.shield")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .accessibilityHint("Checks the cached signed report on this device. It does not verify answer truth.")
 
-            ShareLink(
-                item: snapshot.prettyJSON,
-                subject: Text("NEAR Private Chat proof JSON"),
-                message: Text("Proof JSON only. It does not include conversation text.")
-            ) {
-                Label("Share Proof JSON", systemImage: "square.and.arrow.up")
+            Button {
+                prepareProofReportExport(snapshot)
+            } label: {
+                Label("Export Proof Report", systemImage: "square.and.arrow.up")
             }
-            .accessibilityHint("Shares only the signed proof JSON.")
+            .disabled(proofReportExportUnavailableReason != nil)
+            .accessibilityHint(proofReportExportUnavailableReason ?? "Exports only the signed proof report JSON.")
 
-            if let localVerificationMessage {
-                Text(localVerificationMessage)
+            if let localProofCheckMessage {
+                Text(localProofCheckMessage)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -462,18 +859,18 @@ struct SecurityView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Button {} label: {
-                Label("Verify on-device", systemImage: "checkmark.shield")
+                Label("Check proof report", systemImage: "checkmark.shield")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .disabled(true)
             .accessibilityHint("Fetch proof first to check the signed report on this device.")
 
             Button {} label: {
-                Label("Share Proof JSON", systemImage: "square.and.arrow.up")
+                Label("Export Proof Report", systemImage: "square.and.arrow.up")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .disabled(true)
-            .accessibilityHint("Fetch proof first to share proof JSON.")
+            .accessibilityHint("Fetch proof first to export proof report JSON.")
         }
     }
 
@@ -507,7 +904,7 @@ struct SecurityView: View {
         } else {
             ProofFactRow(
                 title: "Proof data",
-                value: "No attestation JSON on device",
+                value: "No proof report on this device",
                 detail: proofActionsUnavailableText,
                 symbolName: "shield.slash"
             )
@@ -518,8 +915,8 @@ struct SecurityView: View {
         let status = chatStore.currentAttestationStatus
         let copy = status.userFacingCopy()
         let nonceText = snapshot.nonce.isEmpty ? "Nonce is missing." : "Nonce is present."
-        let message = "On-device check: \(copy.title). \(nonceText) This verifies signed TEE evidence cached on this device, not answer truth."
-        localVerificationMessage = message
+        let message = "Proof report check: \(copy.title). \(nonceText) This checks signed TEE evidence cached on this device, not answer truth."
+        localProofCheckMessage = message
         chatStore.bannerMessage = message
     }
 
@@ -581,18 +978,18 @@ struct SecurityView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Privacy proxy route")
                         .font(.headline)
-                    Text("NEAR AI Cloud anonymizes your prompt to the provider before forwarding. Anonymized routes do not carry NEAR Private verification.")
+                    Text("NEAR AI Cloud anonymizes your prompt before forwarding to the provider. A NEAR Private proof report is not attached to this route.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            StatusChip(title: "Privacy proxy · unverified", symbolName: "cloud", isPrimary: true)
+            StatusChip(title: "Privacy proxy · external model", symbolName: "cloud", isPrimary: true)
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("NEAR AI Cloud privacy proxy route, unverified")
+        .accessibilityLabel("NEAR AI Cloud privacy proxy route, external model")
     }
 
     private var canFetchAttestation: Bool {
@@ -607,27 +1004,54 @@ struct SecurityView: View {
             return "Fetching signed proof. Proof actions will unlock when the report is on this device."
         }
         if canFetchAttestation {
-            return "Fetch proof to enable on-device verification and proof JSON sharing."
+            return "Fetch proof to enable on-device proof checking and report export."
         }
         return fetchAttestationDisabledText
     }
 
+    private var proofReportExportUnavailableReason: String? {
+        guard chatStore.attestationSnapshot != nil else {
+            return "No proof report on this device. Fetch proof first."
+        }
+        guard canFetchAttestation else {
+            return fetchAttestationDisabledText
+        }
+        guard chatStore.currentAttestationStatus.effectiveState() == .valid else {
+            return "Refresh proof before exporting the cached proof report."
+        }
+        return nil
+    }
+
+    private var verificationDetailTitle: String {
+        canFetchAttestation ? "Proof details" : "Route trust details"
+    }
+
+    private func prepareProofReportExport(_ snapshot: AttestationSnapshot) {
+        if let reason = proofReportExportUnavailableReason {
+            chatStore.bannerMessage = reason
+            return
+        }
+        proofReportDocument = ConversationExportDocument(data: Data(snapshot.prettyJSON.utf8))
+        proofReportFilename = "near-private-chat-proof-report.json"
+        showingProofReportExporter = true
+    }
+
     private var fetchAttestationDisabledText: String {
         if chatStore.isCouncilModeEnabled, chatStore.activeCouncilHasExternalRoutes {
-            return "Verification proof is available for all-private Council lineups. Remove NEAR AI Cloud models to fetch proof."
+            return "Proof can be fetched for all-private Council lineups. Remove NEAR AI Cloud models to fetch proof."
         }
-        return "Switch to a NEAR Private model to fetch verification proof."
+        return "Switch to a NEAR Private model to fetch proof."
     }
 
     private func attestationCoveragePhrase(_ snapshot: AttestationSnapshot) -> String {
         if !snapshot.coveredModelIDs.isEmpty {
             if snapshot.coveredModelIDs.count == 1, let model = snapshot.coveredModelIDs.first {
-                return "\(model) covered by proof"
+                return "\(model) listed in proof"
             }
-            return "\(snapshot.coveredModelIDs.count) models covered by proof"
+            return "\(snapshot.coveredModelIDs.count) models listed in proof"
         }
         if let model = snapshot.model, snapshot.modelAttestationCount <= 1 {
-            return "\(model) covered by proof"
+            return "\(model) listed in proof"
         }
         if snapshot.modelAttestationCount > 0 {
             return "\(snapshot.modelAttestationCount) model proof entries"
@@ -643,20 +1067,20 @@ struct SecurityView: View {
             if snapshot.coveredModelIDs.contains(where: { AttestationEvidence.normalizedModelID($0) == AttestationEvidence.normalizedModelID(chatStore.selectedModel) }) {
                 return "\(chatStore.selectedModel) + \(snapshot.coveredModelIDs.count - 1) more"
             }
-            return "\(snapshot.coveredModelIDs.count) covered models"
+            return "\(snapshot.coveredModelIDs.count) listed models"
         }
         if let model = snapshot.model {
             return model
         }
         if snapshot.modelAttestationCount > 0 {
-            return "\(snapshot.modelAttestationCount) model attestations, IDs unavailable"
+            return "\(snapshot.modelAttestationCount) model proof entries, IDs unavailable"
         }
         return "Coverage metadata not in report"
     }
 
     private func proofModelDetail(_ snapshot: AttestationSnapshot) -> String? {
         if !snapshot.coveredModelIDs.isEmpty || snapshot.model != nil {
-            return chatStore.currentAttestationStatus.coverage(for: chatStore.selectedModel) == .covered ? "Covered by the current proof." : "Current selected model may need a refreshed proof."
+            return chatStore.currentAttestationStatus.coverage(for: chatStore.selectedModel) == .covered ? "Model ID listed in the current proof." : "Current selected model may need a refreshed proof."
         }
         return "The private model can still run; this report just cannot prove model coverage."
     }
@@ -693,7 +1117,7 @@ struct SecurityView: View {
         case .ironclawMobile:
             return "IronClaw Mobile"
         case .ironclawHosted:
-            return "IronClaw Hosted"
+            return "Hosted IronClaw"
         }
     }
 
@@ -717,9 +1141,9 @@ struct SecurityView: View {
         case .nearCloud:
             return "cloud-api.near.ai"
         case .ironclawMobile:
-            return chatStore.ironclawRemoteWorkstationAvailable ? "Phone + workstation" : "Phone runtime"
+            return chatStore.ironclawRemoteWorkstationAvailable ? "Phone + Hosted IronClaw" : "Phone runtime"
         case .ironclawHosted:
-            return chatStore.ironclawSettings.hasUsableHostedEndpoint ? "Configured gateway" : "Not configured"
+            return chatStore.ironclawSettings.hasUsableHostedEndpoint ? "Agent connection configured" : "Not configured"
         }
     }
 
@@ -822,7 +1246,7 @@ private struct VerificationDetailRow: View {
                 Text(detail)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(Color.textSecondary)
-                    .lineLimit(2)
+                    .lineLimit(3)
                     .minimumScaleFactor(0.82)
             }
 

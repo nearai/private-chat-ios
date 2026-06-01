@@ -33,15 +33,11 @@ extension ChatMessage {
         if model == ModelOption.llmCouncilSynthesisModelID {
             return "Council Synthesis"
         }
-        if model == ModelOption.nearCloudQwenMaxModelID {
-            return "Qwen Max"
+        if let model, model.hasPrefix(ModelOption.nearCloudModelPrefix) {
+            return ModelOption(modelID: model, publicModel: true, metadata: nil).displayName
         }
-        if model == "near-cloud/anthropic/claude-opus-4-7" {
-            return "Claude Opus 4.7"
-        }
-        // Strip the org prefix and precision suffix so message headers
-        // show "GLM 5.1" instead of "zai-org/GLM-5.1-FP8" or the raw
-        // trailing segment "GLM-5.1-FP8".
+        // Strip provider prefixes and precision suffixes so message headers
+        // are readable without exposing raw route IDs.
         if let modelID = model {
             return ModelOption.humanize(modelID: modelID)
         }
@@ -56,23 +52,23 @@ extension ChatMessage {
             case "searching":
                 return "Searching with NEAR Private"
             default:
-                return "Running mobile agent"
+                return "Running mobile Agent"
             }
         }
 
         if model == ModelOption.ironclawModelID {
             switch status {
             case "reasoning":
-                return "Running IronClaw agent"
+                return "Running Hosted IronClaw"
             case "approval":
                 return "Needs your input"
             case "searching":
                 if let searchQuery, !searchQuery.isEmpty {
                     return "Searching \(searchQuery)"
                 }
-                return "Searching web before IronClaw"
+                return "Searching web before Agent"
             default:
-                return "Waiting for final IronClaw output"
+                return "Waiting for final Agent output"
             }
         }
 

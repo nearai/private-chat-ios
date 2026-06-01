@@ -81,7 +81,7 @@ enum APIError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL: "The API URL is invalid."
-        case .unauthenticated: "Sign in again to continue."
+        case .unauthenticated: "Sign in to chat about anything with the general assistant."
         case .invalidCallback: "The sign-in callback did not include an authorization code."
         case let .status(code, message): Self.displayStatusMessage(code: code, rawMessage: message)
         case .emptyResponse: "The server returned an empty response."

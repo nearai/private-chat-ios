@@ -3,7 +3,9 @@ import SwiftUI
 
 struct ChatAttachment: Identifiable, Codable, Hashable {
     static let pendingTextKind = "pending_text"
+    static let pendingSharedFileKind = "pending_shared_file"
     static let localDocumentKind = "pdf_local"
+    static let localTableKind = "table_local"
 
     var id: String
     var name: String
@@ -14,10 +16,30 @@ struct ChatAttachment: Identifiable, Codable, Hashable {
         kind == Self.pendingTextKind || id.hasPrefix("local-paste-")
     }
 
+    var isLocalPendingSharedFile: Bool {
+        kind == Self.pendingSharedFileKind || id.hasPrefix("shared-file-")
+    }
+
     /// A document kept entirely on-device (privacy mode): never uploaded to the
     /// backend; only its relevant passages are inlined into the prompt at send.
     var isLocalOnly: Bool {
-        kind == Self.localDocumentKind || id.hasPrefix("local-doc-")
+        kind == Self.localDocumentKind ||
+            kind == Self.localTableKind ||
+            id.hasPrefix("local-doc-") ||
+            id.hasPrefix("local-table-")
+    }
+
+    var isNativeVisionImage: Bool {
+        Self.isNativeVisionImage(filename: name, mimeTypeOrKind: kind)
+    }
+
+    static func isNativeVisionImage(filename: String, mimeTypeOrKind: String) -> Bool {
+        let fileExtension = (filename as NSString).pathExtension.lowercased()
+        if ["png", "jpg", "jpeg", "webp", "gif"].contains(fileExtension) {
+            return true
+        }
+        let normalizedKind = mimeTypeOrKind.lowercased()
+        return ["image/png", "image/jpeg", "image/webp", "image/gif"].contains(normalizedKind)
     }
 
     var displaySize: String? {
@@ -29,11 +51,20 @@ struct ChatAttachment: Identifiable, Codable, Hashable {
         if isLocalPendingText {
             return "Text paste"
         }
+        if isLocalPendingSharedFile {
+            return "Shared file"
+        }
         if isLocalOnly {
+            if kind == Self.localTableKind || id.hasPrefix("local-table-") {
+                return "Table · on device"
+            }
             return "PDF · on device"
         }
         if kind == "pdf_text" {
             return "PDF text"
+        }
+        if kind == "table_text" {
+            return "Table text"
         }
         let fileExtension = (name as NSString).pathExtension.lowercased()
         switch fileExtension {
@@ -43,8 +74,14 @@ struct ChatAttachment: Identifiable, Codable, Hashable {
             return "Markdown"
         case "csv":
             return "CSV"
+        case "tsv":
+            return "TSV"
+        case "xlsx", "xls":
+            return "Spreadsheet"
         case "json":
             return "JSON"
+        case "png", "jpg", "jpeg", "webp", "gif", "heic", "heif", "tif", "tiff":
+            return "Image"
         case "txt", "text":
             return "Text"
         default:
@@ -56,11 +93,16 @@ struct ChatAttachment: Identifiable, Codable, Hashable {
         if isLocalPendingText {
             return "doc.text"
         }
+        if isLocalPendingSharedFile {
+            return "square.and.arrow.down"
+        }
         let fileExtension = (name as NSString).pathExtension.lowercased()
         switch fileExtension {
         case "pdf":
             return "doc.richtext"
-        case "csv":
+        case "png", "jpg", "jpeg", "webp", "gif", "heic", "heif", "tif", "tiff":
+            return "photo"
+        case "csv", "tsv", "xlsx", "xls":
             return "tablecells"
         case "json":
             return "curlybraces"

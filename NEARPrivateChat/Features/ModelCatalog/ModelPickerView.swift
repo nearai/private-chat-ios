@@ -25,7 +25,6 @@ struct ModelPickerView: View {
 
     private var defaultPrivateModel: ModelOption? {
         allPickerModels.first(where: { isDefaultPrivateModel($0) }) ??
-            allPickerModels.first(where: { $0.displayName.localizedCaseInsensitiveContains("GLM 5.1") }) ??
             allPickerModels.first(where: { $0.isPrivateVerifiableChatModel })
     }
 
@@ -74,6 +73,10 @@ struct ModelPickerView: View {
                     .padding(.top, 4)
                     .padding(.bottom, 16)
 
+                    activeRouteSummaryCard
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 18)
+
                     if selectedTab == .models {
                         modelsTab
                     } else {
@@ -103,17 +106,110 @@ struct ModelPickerView: View {
 
     // MARK: - Models tab
 
+    private var activeRouteSummaryCard: some View {
+        let summary = activeRouteSummary
+        return HStack(alignment: .top, spacing: 12) {
+            Image(systemName: summary.symbolName)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(summary.tint)
+                .frame(width: 30, height: 30)
+                .background(summary.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(summary.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(summary.detail)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !summary.badges.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(summary.badges, id: \.self) { badge in
+                            Text(badge)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(Color.textSecondary)
+                                .padding(.horizontal, 7)
+                                .frame(height: 20)
+                                .background(Color.appSecondaryBackground, in: Capsule())
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 0.5)
+        }
+    }
+
+    private var activeRouteSummary: (title: String, detail: String, badges: [String], symbolName: String, tint: Color) {
+        if chatStore.isCouncilModeEnabled {
+            let count = max(chatStore.activeCouncilModels.count, chatStore.defaultCouncilModels.count)
+            let proof = chatStore.activeCouncilHasExternalRoutes ? "Mixed proof boundary" : "Private proof when fetched"
+            return (
+                "Council",
+                "\(max(count, 2)) models answer independently, then the app synthesizes the result.",
+                ["Multiple models", proof],
+                "person.3.fill",
+                Color.brandBlue
+            )
+        }
+
+        switch chatStore.selectedRouteKind {
+        case .nearPrivate:
+            return (
+                "NEAR Private",
+                "Private route. A proof report can cover route and model evidence when fetched for the current model.",
+                ["Proof when fetched", "Private route"],
+                "lock.shield.fill",
+                Color.proofVerified
+            )
+        case .nearCloud:
+            return (
+                "NEAR AI Cloud",
+                "External model route through NEAR AI Cloud with privacy proxy forwarding.",
+                ["Privacy proxy", "External model"],
+                "cloud.fill",
+                Color.brandBlue
+            )
+        case .ironclawMobile:
+            return (
+                "IronClaw Mobile",
+                "On-device Agent route for bounded local tasks. It sits outside NEAR Private proof.",
+                ["IronClaw Mobile", "Outside proof"],
+                "iphone",
+                Color.brandBlue
+            )
+        case .ironclawHosted:
+            return (
+                "Hosted IronClaw",
+                "Hosted Agent route. Prompt text leaves the phone; file bytes are not sent unless excerpts are included.",
+                ["Hosted Agent", "File names only"],
+                "terminal.fill",
+                Color.proofStale
+            )
+        }
+    }
+
     @ViewBuilder
     private var modelsTab: some View {
         VStack(alignment: .leading, spacing: 22) {
             // DEFAULT
             ModelSpecSection(title: "Default") {
                 if let model = defaultPrivateModel {
-                    ModelSpecRow(
-                        symbolName: "cpu",
-                        symbolColor: Color.actionPrimary,
-                        title: "GLM 5.1",
-                        subtitle: "Strong default for private chat",
+	                    ModelSpecRow(
+	                        symbolName: "cpu",
+	                        symbolColor: Color.actionPrimary,
+	                        title: model.displayName,
+	                        subtitle: "Private inference with proof when fetched",
+                        badges: model.routeDisclosureBadges,
                         trailing: .checkmark,
                         isSelected: model.id == chatStore.selectedModel && !chatStore.isCouncilModeEnabled,
                         showsDivider: false,
@@ -133,6 +229,7 @@ struct ModelPickerView: View {
                             subtitle: index == 0
                                 ? "Multi-step reasoning, slower"
                                 : "Deep analysis for complex prompts",
+                            badges: model.routeDisclosureBadges,
                             trailing: model.id == chatStore.selectedModel && !chatStore.isCouncilModeEnabled
                                 ? .checkmark
                                 : .none,
@@ -149,10 +246,11 @@ struct ModelPickerView: View {
                 ModelSpecRow(
                     symbolName: chatStore.nearCloudKeyConfigured ? "cloud.fill" : "cloud",
                     symbolColor: Color.textSecondary,
-                    title: chatStore.nearCloudKeyConfigured ? "NEAR AI Cloud connected" : "Connect NEAR AI Cloud",
-                    subtitle: chatStore.nearCloudKeyConfigured
-                        ? "Refresh NEAR AI Cloud catalog or open account"
-                        : "Use Claude, GPT, and Gemini via your NEAR AI Cloud key",
+	                    title: chatStore.nearCloudKeyConfigured ? "NEAR AI Cloud connected" : "Connect NEAR AI Cloud",
+	                    subtitle: chatStore.nearCloudKeyConfigured
+	                        ? "Refresh NEAR AI Cloud catalog or open account"
+	                        : "Use external models via your NEAR AI Cloud key",
+                    badges: ["Privacy proxy", "External models"],
                     trailing: .chevron,
                     isSelected: false,
                     showsDivider: false,
@@ -160,15 +258,16 @@ struct ModelPickerView: View {
                 )
             }
 
-            // FRONTIER
+            // CLOUD MODELS
             if chatStore.nearCloudKeyConfigured && !frontierCloudModels.isEmpty {
-                ModelSpecSection(title: "Frontier (via Cloud)") {
+                ModelSpecSection(title: "Cloud Models") {
                     ForEach(Array(frontierCloudModels.enumerated()), id: \.element.id) { index, model in
                         ModelSpecRow(
                             symbolName: "cpu",
                             symbolColor: Color.textSecondary,
                             title: model.displayName,
                             subtitle: frontierSubtitle(for: model),
+                            badges: model.routeDisclosureBadges,
                             trailing: model.id == chatStore.selectedModel && !chatStore.isCouncilModeEnabled
                                 ? .checkmark
                                 : .none,
@@ -180,11 +279,11 @@ struct ModelPickerView: View {
                 }
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Frontier (via Cloud)".uppercased())
+                    Text("Cloud Models".uppercased())
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(Color.textSecondary)
                         .padding(.horizontal, 16)
-                    Text("Connect NEAR AI Cloud to use Claude Opus 4.5, GPT-5.5, Gemini 3 Pro.")
+	                    Text("Connect NEAR AI Cloud to browse external models available on your account.")
                         .font(.subheadline)
                         .foregroundStyle(Color.textTertiary)
                         .multilineTextAlignment(.center)
@@ -214,8 +313,9 @@ struct ModelPickerView: View {
                     ModelSpecRow(
                         symbolName: "person.3",
                         symbolColor: Color.textSecondary,
-                        title: "Council unavailable",
-                        subtitle: "Need at least two eligible chat models",
+	                        title: "Council unavailable",
+	                        subtitle: "Need at least two eligible chat models",
+	                        badges: ["2-3 models", "Route varies"],
                         trailing: .none,
                         isSelected: false,
                         showsDivider: false,
@@ -231,9 +331,9 @@ struct ModelPickerView: View {
                         )
                     }
                 }
-            }
+	            }
 
-            VStack(spacing: 10) {
+	            VStack(spacing: 10) {
                 Button {
                     if isActive {
                         chatStore.clearCouncilMode()
@@ -242,7 +342,7 @@ struct ModelPickerView: View {
                     }
                     dismiss()
                 } label: {
-                    Text(isActive ? "Turn Off Council" : "Use Recommended Council")
+                    Text(isActive ? "Turn off Council" : "Use recommended Council")
                         .font(.body.weight(.semibold))
                         .frame(maxWidth: .infinity, minHeight: 50)
                         .foregroundStyle(Color.white)
@@ -251,10 +351,12 @@ struct ModelPickerView: View {
                 .buttonStyle(.plain)
                 .disabled(lineup.count < 2 && !isActive)
                 .opacity(lineup.count < 2 && !isActive ? 0.4 : 1)
-            }
-            .padding(.horizontal, 16)
+	            }
+	            .padding(.horizontal, 16)
 
-            if !chatStore.councilPresets.isEmpty {
+	            councilCandidatesSection
+
+	            if !chatStore.councilPresets.isEmpty {
                 ModelSpecSection(title: "Preset Combos") {
                     let presets = chatStore.councilPresets
                     ForEach(Array(presets.enumerated()), id: \.element.id) { index, preset in
@@ -263,6 +365,7 @@ struct ModelPickerView: View {
                             symbolColor: preset.isAvailable ? Color.textSecondary : Color.textTertiary,
                             title: preset.title,
                             subtitle: preset.isAvailable ? preset.previewNames : "Needs available models",
+	                            badges: ["Council", "Route varies"],
                             trailing: .chevron,
                             isSelected: false,
                             showsDivider: index != presets.count - 1,
@@ -288,18 +391,10 @@ struct ModelPickerView: View {
         return Array(chatStore.defaultCouncilModels.prefix(4))
     }
 
-    private func councilSubtitle(for model: ModelOption, index: Int) -> String {
-        if model.isPrivateVerifiableChatModel {
-            return "Verification-first answer"
-        }
-        if model.isNearCloudModel {
-            return "Cloud comparison"
-        }
-        if index == 0 {
-            return "Primary answer"
-        }
-        return "Independent comparison"
-    }
+	    private func councilSubtitle(for model: ModelOption, index: Int) -> String {
+	        let suffix = index == 0 ? "Primary answer" : "Independent comparison"
+	        return "\(model.routeDisclosureBadges.prefix(2).joined(separator: " · ")) · \(suffix)"
+	    }
 
     private func presetSymbol(for preset: CouncilPresetOption) -> String {
         if !preset.symbolName.isEmpty { return preset.symbolName }
@@ -307,20 +402,80 @@ struct ModelPickerView: View {
     }
 
     private func isDefaultPrivateModel(_ model: ModelOption) -> Bool {
-        model.id == "zai-org/GLM-5.1-FP8" ||
-            model.id == "zai-org/GLM-latest" ||
-            model.displayName.localizedCaseInsensitiveContains("GLM 5.1")
+        model.id == ModelOption.nearPrivateDefaultModelID ||
+            model.displayName.localizedCaseInsensitiveContains("NEAR Private")
     }
 
-    private func frontierSubtitle(for model: ModelOption) -> String {
-        let name = model.displayName.lowercased()
-        if name.contains("opus") || name.contains("claude") { return "Anthropic · long-context" }
-        if name.contains("gpt") { return "OpenAI · general-purpose" }
-        if name.contains("gemini") { return "Google · multimodal" }
-        if name.contains("qwen") { return "Alibaba · multilingual" }
-        if name.contains("kimi") { return "Moonshot · long-context" }
-        return model.metadata?.modelDescription ?? "Frontier model via NEAR AI Cloud"
+	    private func frontierSubtitle(for model: ModelOption) -> String {
+	        if let description = compactCatalogDescription(for: model) {
+	            return description
+	        }
+	        return "\(providerLabel(for: model)) via NEAR AI Cloud"
+	    }
+
+    @ViewBuilder
+    private var councilCandidatesSection: some View {
+        let candidates = Array(chatStore.councilCandidateModels.prefix(8))
+        if !candidates.isEmpty {
+            ModelSpecSection(title: "Choose Models") {
+                Text(councilSelectionStatusText)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.textSecondary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.appSecondaryBackground.opacity(0.72))
+
+                ForEach(Array(candidates.enumerated()), id: \.element.id) { index, model in
+                    let isSelected = chatStore.councilIndex(for: model.id) != nil
+                    let isEnabled = isSelected || chatStore.activeCouncilModels.count < chatStore.maxCouncilModelCount
+                    ModelSpecRow(
+                        symbolName: isSelected ? "checkmark.circle.fill" : "plus.circle",
+                        symbolColor: isSelected ? Color.actionPrimary : Color.textSecondary,
+                        title: model.displayName,
+                        subtitle: manualCouncilSubtitle(for: model),
+                        badges: model.routeDisclosureBadges,
+                        trailing: isSelected ? .checkmark : .none,
+                        isSelected: isSelected,
+                        showsDivider: index != candidates.count - 1,
+                        isEnabled: isEnabled,
+                        action: { chatStore.toggleCouncilModel(model.id) }
+                    )
+                }
+            }
+        }
     }
+
+    private func manualCouncilSubtitle(for model: ModelOption) -> String {
+        if let index = chatStore.councilIndex(for: model.id) {
+            return "Council slot \(index)"
+        }
+        if chatStore.activeCouncilModels.count >= chatStore.maxCouncilModelCount {
+            return "Remove another model to add this one"
+        }
+        return "Tap to add to Council"
+    }
+
+    private var councilSelectionStatusText: String {
+        "\(chatStore.activeCouncilModels.count) selected · 2 required · \(chatStore.maxCouncilModelCount) max"
+    }
+
+	    private func compactCatalogDescription(for model: ModelOption) -> String? {
+	        guard let raw = model.metadata?.modelDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+	              !raw.isEmpty else {
+	            return nil
+	        }
+	        let firstSentence = raw.split(separator: ".", maxSplits: 1).first.map(String.init) ?? raw
+	        return String(firstSentence.prefix(74))
+	    }
+
+	    private func providerLabel(for model: ModelOption) -> String {
+	        let id = (model.nearCloudUnderlyingModelID ?? model.id)
+	            .split(separator: "/")
+	            .first
+	            .map(String.init) ?? "External model"
+	        return ModelOption.humanize(modelID: id)
+	    }
 
     private func selectModelAndDismiss(_ model: ModelOption) {
         chatStore.selectModel(model.id)
@@ -363,9 +518,9 @@ private struct ModelSpecSection<Content: View>: View {
             VStack(spacing: 0) {
                 content
             }
-            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(Color.appBorder, lineWidth: 0.5)
             }
             .padding(.horizontal, 16)
@@ -384,6 +539,7 @@ private struct ModelSpecRow: View {
     let symbolColor: Color
     let title: String
     let subtitle: String
+    var badges: [String] = []
     let trailing: ModelSpecTrailing
     let isSelected: Bool
     let showsDivider: Bool
@@ -392,8 +548,8 @@ private struct ModelSpecRow: View {
 
     var body: some View {
         Button(action: action) {
-            ZStack(alignment: .bottom) {
-                HStack(alignment: .center, spacing: 14) {
+            VStack(spacing: 0) {
+                HStack(alignment: .top, spacing: 14) {
                     Image(systemName: symbolName)
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(isEnabled ? symbolColor : Color.textTertiary)
@@ -410,6 +566,21 @@ private struct ModelSpecRow: View {
                             .foregroundStyle(Color.textSecondary)
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
+
+                        if !badges.isEmpty {
+                            HStack(spacing: 6) {
+                                ForEach(Array(badges.prefix(3)), id: \.self) { badge in
+                                    Text(badge)
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(Color.textSecondary)
+                                        .lineLimit(1)
+                                        .padding(.horizontal, 7)
+                                        .frame(height: 20)
+                                        .background(Color.appSecondaryBackground, in: Capsule())
+                                }
+                            }
+                            .padding(.top, 3)
+                        }
                     }
 
                     Spacer(minLength: 0)
@@ -417,7 +588,7 @@ private struct ModelSpecRow: View {
                     trailingView
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .padding(.vertical, 14)
                 .frame(minHeight: 60)
                 .background(isSelected ? Color.actionPrimary.opacity(0.10) : Color.clear)
                 .contentShape(Rectangle())
@@ -429,6 +600,7 @@ private struct ModelSpecRow: View {
                             .fill(Color.appHairline)
                             .frame(height: 0.5)
                     }
+                    .frame(height: 0.5)
                 }
             }
         }
@@ -495,5 +667,23 @@ private struct CouncilNumberedRow: View {
                 }
             }
         }
+    }
+}
+
+private extension ModelOption {
+    var routeDisclosureBadges: [String] {
+        if isNearCloudModel {
+            return ["NEAR AI Cloud", "Privacy proxy"]
+        }
+        if isIronclawHostedModel {
+            return ["Hosted IronClaw", "File names only"]
+        }
+        if isIronclawMobileRuntime {
+            return ["IronClaw Mobile", "Outside proof"]
+        }
+        if isPrivateVerifiableChatModel {
+            return ["NEAR Private", "Proof when fetched"]
+        }
+        return Array((["NEAR Private"] + capabilityBadges).prefix(3))
     }
 }

@@ -1,21 +1,22 @@
 import SwiftUI
 
-// MARK: - Wordmark (text-based NEAR AI Private Chat lockup)
+// MARK: - Wordmark (text-based NEAR Private Chat lockup)
 
 struct ProductWordmark: View {
     var alignment: HorizontalAlignment = .leading
     var scale: CGFloat = 1
 
     var body: some View {
-        VStack(alignment: alignment, spacing: -2 * scale) {
-            Text("NEAR AI")
-                .font(.system(size: 44 * scale, weight: .heavy, design: .default))
-                .foregroundStyle(Color.brandBlack)
-            Text("private chat")
-                .font(.system(size: 30 * scale, weight: .heavy, design: .default))
+        VStack(alignment: alignment, spacing: 0) {
+            Text("NEAR")
+                .font(.largeTitle.weight(.heavy))
+                .foregroundStyle(Color.textPrimary)
+            Text("Private Chat")
+                .font(.title2.weight(.heavy))
                 .foregroundStyle(Color.brandBlue)
         }
-        .accessibilityLabel("NEAR AI Private Chat")
+        .scaleEffect(scale)
+        .accessibilityLabel("NEAR Private Chat")
     }
 }
 

@@ -8,30 +8,44 @@ import UIKit
 
 enum ConversationExportFormat {
     case text
+    case markdown
     case json
     case signedJSON
     case pdf
+    case docx
 
     var contentType: UTType {
         switch self {
         case .text: .plainText
+        case .markdown: UTType(filenameExtension: "md") ?? .plainText
         case .json, .signedJSON: .json
         case .pdf: .pdf
+        case .docx: UTType(filenameExtension: "docx") ?? UTType(importedAs: "org.openxmlformats.wordprocessingml.document")
         }
     }
 
     var fileExtension: String {
         switch self {
         case .text: "txt"
+        case .markdown: "md"
         case .json: "json"
-        case .signedJSON: "verified.json"
+        case .signedJSON: "signed.json"
         case .pdf: "pdf"
+        case .docx: "docx"
         }
     }
 }
 
 struct ConversationExportDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.plainText, .json, .pdf] }
+    static var readableContentTypes: [UTType] {
+        [
+            .plainText,
+            UTType(filenameExtension: "md") ?? .plainText,
+            .json,
+            .pdf,
+            UTType(filenameExtension: "docx") ?? UTType(importedAs: "org.openxmlformats.wordprocessingml.document")
+        ]
+    }
 
     var data: Data
 
@@ -69,7 +83,7 @@ enum ConversationExportBuilder {
         signedContext: SignedTranscriptExportContext = .defaults
     ) throws -> ConversationExportDocument {
         switch format {
-        case .text:
+        case .text, .markdown:
             return ConversationExportDocument(data: Data(transcriptText(conversation: conversation, messages: messages).utf8))
         case .json:
             let payload = ConversationExportPayload(conversation: conversation, messages: messages)
@@ -90,7 +104,41 @@ enum ConversationExportBuilder {
             #else
             return ConversationExportDocument(data: Data(transcriptText(conversation: conversation, messages: messages).utf8))
             #endif
+        case .docx:
+            return ConversationExportDocument(data: try docxData(markdown: transcriptText(conversation: conversation, messages: messages)))
         }
+    }
+
+    static func selectedAnswerDocument(
+        for conversation: ConversationSummary?,
+        messages: [ChatMessage],
+        answerID: String,
+        format: ConversationExportFormat
+    ) throws -> ConversationExportDocument {
+        let answer = try selectedAnswer(in: messages, answerID: answerID)
+
+        switch format {
+        case .text, .markdown:
+            return ConversationExportDocument(data: Data(selectedAnswerMarkdown(conversation: conversation, answer: answer).utf8))
+        case .pdf:
+            #if canImport(UIKit)
+            return ConversationExportDocument(data: pdfData(markdown: selectedAnswerMarkdown(conversation: conversation, answer: answer)))
+            #else
+            return ConversationExportDocument(data: Data(selectedAnswerMarkdown(conversation: conversation, answer: answer).utf8))
+            #endif
+        case .docx:
+            return ConversationExportDocument(data: try docxData(markdown: selectedAnswerMarkdown(conversation: conversation, answer: answer)))
+        case .json, .signedJSON:
+            throw ConversationExportError.unsupportedSelectedAnswerFormat(format.fileExtension)
+        }
+    }
+
+    static func selectedAnswerMarkdown(
+        conversation: ConversationSummary?,
+        messages: [ChatMessage],
+        answerID: String
+    ) throws -> String {
+        try selectedAnswerMarkdown(conversation: conversation, answer: selectedAnswer(in: messages, answerID: answerID))
     }
 
     static func transcriptText(conversation: ConversationSummary?, messages: [ChatMessage]) -> String {
@@ -111,6 +159,12 @@ enum ConversationExportBuilder {
             if let model = message.model, message.role == .assistant {
                 lines.append("Model: \(model)")
             }
+            if let trust = message.trustMetadata, message.role == .assistant {
+                lines.append("Route: \(trust.route.provider) · \(trust.route.privacyRoute) · \(trust.route.sourceModeTitle)")
+                if let proof = trust.proof {
+                    lines.append("Proof: \(proof.badge)")
+                }
+            }
             if !message.attachments.isEmpty {
                 lines.append("Files: \(message.attachments.map(\.name).joined(separator: ", "))")
             }
@@ -122,6 +176,50 @@ enum ConversationExportBuilder {
         }
 
         return lines.joined(separator: "\n")
+    }
+
+    private static func selectedAnswerMarkdown(conversation: ConversationSummary?, answer: ChatMessage) -> String {
+        var lines: [String] = [
+            "# \(conversation?.title ?? "NEAR Private Chat")",
+            "",
+            "Exported: \(ISO8601DateFormatter().string(from: Date()))"
+        ]
+
+        if let conversation {
+            lines.append("Conversation: \(conversation.id)")
+        }
+
+        lines.append("")
+        lines.append("## Answer")
+        lines.append(answer.createdAt.formatted(date: .abbreviated, time: .standard))
+        if let model = answer.model {
+            lines.append("Model: \(model)")
+        }
+        if let trust = answer.trustMetadata {
+            lines.append("Route: \(trust.route.provider) · \(trust.route.privacyRoute) · \(trust.route.sourceModeTitle)")
+            if let proof = trust.proof {
+                lines.append("Proof: \(proof.badge)")
+            }
+        }
+        if !answer.attachments.isEmpty {
+            lines.append("Files: \(answer.attachments.map(\.name).joined(separator: ", "))")
+        }
+        if !answer.sources.isEmpty {
+            lines.append("Sources: \(answer.sources.map(\.url).joined(separator: ", "))")
+        }
+        lines.append("")
+        lines.append(answer.text)
+        return lines.joined(separator: "\n")
+    }
+
+    private static func selectedAnswer(in messages: [ChatMessage], answerID: String) throws -> ChatMessage {
+        guard let answer = messages.first(where: { $0.id == answerID }) else {
+            throw ConversationExportError.answerNotFound
+        }
+        guard answer.role == .assistant else {
+            throw ConversationExportError.selectedMessageIsNotAnswer
+        }
+        return answer
     }
 
     static func signedTranscriptData(
@@ -290,32 +388,43 @@ enum ConversationExportBuilder {
             "model_id": message.model.map(CanonicalJSON.string) ?? .null,
             "response_id": message.responseID.map(CanonicalJSON.string) ?? .null,
             "route": signedRoute(for: message, fallbackRoute: fallbackRoute, context: context),
+            "trust": signedTrust(message.trustMetadata),
             "sources": .array(message.sources.map(signedSource)),
             "attachments": .array(message.attachments.map(signedAttachment))
         ])
     }
 
     private static func signedRoute(for message: ChatMessage, fallbackRoute: CanonicalJSON, context: SignedTranscriptExportContext) -> CanonicalJSON {
+        if let route = message.trustMetadata?.route {
+            return signedRoute(route, context: context)
+        }
+
         guard message.role == .assistant,
               let modelID = message.model?.trimmingCharacters(in: .whitespacesAndNewlines),
               !modelID.isEmpty else {
             return fallbackRoute.setting("scope", to: .string("message_default"))
         }
 
-        var provider = context.provider
-        var privacyRoute = context.privacyRoute
-        switch modelID {
-        case ModelOption.ironclawMobileModelID:
-            provider = "ironclaw-mobile"
-            privacyRoute = "phone-agent"
-        case ModelOption.ironclawModelID:
-            provider = "ironclaw-hosted"
-            privacyRoute = "hosted-agent"
-        case ModelOption.nearCloudQwenMaxModelID:
-            provider = "near-cloud"
-            privacyRoute = "external-cloud"
-        default:
-            break
+        var provider: String
+        var privacyRoute: String
+        if modelID == ModelOption.llmCouncilSynthesisModelID {
+            provider = "llm-council"
+            privacyRoute = "multi-model-synthesis"
+        } else {
+            switch RoutePlanner.routeKind(forModelID: modelID) {
+            case .nearPrivate:
+                provider = "near-private"
+                privacyRoute = "tee-private"
+            case .nearCloud:
+                provider = "near-cloud"
+                privacyRoute = "external-cloud"
+            case .ironclawMobile:
+                provider = "ironclaw-mobile"
+                privacyRoute = "phone-agent"
+            case .ironclawHosted:
+                provider = "ironclaw-hosted"
+                privacyRoute = "hosted-agent"
+            }
         }
 
         var values: [String: CanonicalJSON] = [
@@ -328,6 +437,63 @@ enum ConversationExportBuilder {
         ]
         if let projectID = context.projectID {
             values["project_id_hash"] = .string(sha256Digest(projectID))
+        }
+        return .object(values)
+    }
+
+    private static func signedRoute(_ route: MessageRouteMetadata, context: SignedTranscriptExportContext) -> CanonicalJSON {
+        var values: [String: CanonicalJSON] = [
+            "provider": .string(route.provider),
+            "privacy_route": .string(route.privacyRoute),
+            "source_mode": .string(route.sourceMode),
+            "source_mode_title": .string(route.sourceModeTitle),
+            "web_search": .bool(route.webSearchEnabled),
+            "research_mode": .bool(route.researchModeEnabled),
+            "project_context_included": .bool(route.projectContextIncluded),
+            "scope": .string("message_captured"),
+            "captured_at": .string(isoString(route.capturedAt))
+        ]
+        if let modelID = route.modelID {
+            values["derived_from_model_id"] = .string(modelID)
+        }
+        if let projectID = context.projectID, route.projectContextIncluded {
+            values["project_id_hash"] = .string(sha256Digest(projectID))
+        }
+        return .object(values)
+    }
+
+    private static func signedTrust(_ trust: MessageTrustMetadata?) -> CanonicalJSON {
+        guard let trust else { return .null }
+        var values: [String: CanonicalJSON] = [
+            "captured_at": .string(isoString(trust.capturedAt)),
+            "route": .object([
+                "provider": .string(trust.route.provider),
+                "privacy_route": .string(trust.route.privacyRoute),
+                "route_kind": .string(trust.route.routeKind),
+                "source_mode": .string(trust.route.sourceMode),
+                "web_search": .bool(trust.route.webSearchEnabled),
+                "research_mode": .bool(trust.route.researchModeEnabled),
+                "project_context_included": .bool(trust.route.projectContextIncluded)
+            ])
+        ]
+        if let proof = trust.proof {
+            var proofValues: [String: CanonicalJSON] = [
+                "state": .string(proof.state.rawValue),
+                "title": .string(proof.title),
+                "badge": .string(proof.badge),
+                "captured_at": .string(isoString(proof.capturedAt)),
+                "covered_model_count": .number(proof.coveredModelCount)
+            ]
+            if let freshness = proof.freshness {
+                proofValues["freshness"] = .string(freshness)
+            }
+            if let reportHash = proof.reportHash {
+                proofValues["report_hash"] = .string(reportHash)
+            }
+            if let coversSelectedModel = proof.coversSelectedModel {
+                proofValues["covers_selected_model"] = .bool(coversSelectedModel)
+            }
+            values["proof"] = .object(proofValues)
         }
         return .object(values)
     }
@@ -397,7 +563,10 @@ enum ConversationExportBuilder {
 
     #if canImport(UIKit)
     private static func pdfData(conversation: ConversationSummary?, messages: [ChatMessage]) -> Data {
-        let text = transcriptText(conversation: conversation, messages: messages)
+        pdfData(markdown: transcriptText(conversation: conversation, messages: messages))
+    }
+
+    private static func pdfData(markdown text: String) -> Data {
         let pageRect = CGRect(x: 0, y: 0, width: 612, height: 792)
         let margin: CGFloat = 44
         let contentWidth = pageRect.width - margin * 2
@@ -473,6 +642,189 @@ enum ConversationExportBuilder {
         return line.isEmpty ? 7 : 4
     }
     #endif
+
+    private static func docxData(markdown: String) throws -> Data {
+        try MinimalZIPArchive(entries: [
+            MinimalZIPArchive.Entry(path: "[Content_Types].xml", data: Data(docxContentTypesXML.utf8)),
+            MinimalZIPArchive.Entry(path: "_rels/.rels", data: Data(docxPackageRelationshipsXML.utf8)),
+            MinimalZIPArchive.Entry(path: "word/document.xml", data: Data(docxDocumentXML(markdown: markdown).utf8))
+        ]).data()
+    }
+
+    private static let docxContentTypesXML = """
+    <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>
+    """
+
+    private static let docxPackageRelationshipsXML = """
+    <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>
+    """
+
+    private static func docxDocumentXML(markdown: String) -> String {
+        let body = markdown
+            .components(separatedBy: .newlines)
+            .map(docxParagraphXML)
+            .joined()
+        return """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>\(body)<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>
+        """
+    }
+
+    private static func docxParagraphXML(_ markdownLine: String) -> String {
+        let text = docxLineText(markdownLine)
+        let escaped = xmlEscaped(text.isEmpty ? " " : text)
+        let paragraphProperties = docxParagraphProperties(for: markdownLine)
+        let runProperties = docxRunProperties(for: markdownLine)
+        return "<w:p>\(paragraphProperties)<w:r>\(runProperties)<w:t xml:space=\"preserve\">\(escaped)</w:t></w:r></w:p>"
+    }
+
+    private static func docxLineText(_ line: String) -> String {
+        line
+            .replacingOccurrences(of: #"^##\s+"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"^#\s+"#, with: "", options: .regularExpression)
+    }
+
+    private static func docxParagraphProperties(for line: String) -> String {
+        if line.hasPrefix("# ") {
+            return "<w:pPr><w:spacing w:after=\"280\"/></w:pPr>"
+        }
+        if line.hasPrefix("## ") {
+            return "<w:pPr><w:spacing w:before=\"160\" w:after=\"120\"/></w:pPr>"
+        }
+        return ""
+    }
+
+    private static func docxRunProperties(for line: String) -> String {
+        if line.hasPrefix("# ") {
+            return "<w:rPr><w:b/><w:sz w:val=\"32\"/></w:rPr>"
+        }
+        if line.hasPrefix("## ") {
+            return "<w:rPr><w:b/><w:color w:val=\"006ABF\"/><w:sz w:val=\"24\"/></w:rPr>"
+        }
+        return ""
+    }
+
+    private static func xmlEscaped(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&apos;")
+    }
+}
+
+enum ConversationExportError: LocalizedError, Equatable {
+    case answerNotFound
+    case selectedMessageIsNotAnswer
+    case unsupportedSelectedAnswerFormat(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .answerNotFound:
+            return "The selected answer could not be found."
+        case .selectedMessageIsNotAnswer:
+            return "Only assistant answers can be exported with the selected-answer exporter."
+        case let .unsupportedSelectedAnswerFormat(fileExtension):
+            return "Selected-answer export is not available for .\(fileExtension)."
+        }
+    }
+}
+
+private struct MinimalZIPArchive {
+    struct Entry {
+        var path: String
+        var data: Data
+    }
+
+    var entries: [Entry]
+
+    func data() throws -> Data {
+        var archive = Data()
+        var centralDirectory = Data()
+
+        for entry in entries {
+            let localHeaderOffset = UInt32(archive.count)
+            let pathData = Data(entry.path.utf8)
+            let crc = CRC32.checksum(entry.data)
+            let size = UInt32(entry.data.count)
+
+            archive.appendLittleEndianUInt32(0x04034b50)
+            archive.appendLittleEndianUInt16(20)
+            archive.appendLittleEndianUInt16(0)
+            archive.appendLittleEndianUInt16(0)
+            archive.appendLittleEndianUInt16(0)
+            archive.appendLittleEndianUInt16(0)
+            archive.appendLittleEndianUInt32(crc)
+            archive.appendLittleEndianUInt32(size)
+            archive.appendLittleEndianUInt32(size)
+            archive.appendLittleEndianUInt16(UInt16(pathData.count))
+            archive.appendLittleEndianUInt16(0)
+            archive.append(pathData)
+            archive.append(entry.data)
+
+            centralDirectory.appendLittleEndianUInt32(0x02014b50)
+            centralDirectory.appendLittleEndianUInt16(20)
+            centralDirectory.appendLittleEndianUInt16(20)
+            centralDirectory.appendLittleEndianUInt16(0)
+            centralDirectory.appendLittleEndianUInt16(0)
+            centralDirectory.appendLittleEndianUInt16(0)
+            centralDirectory.appendLittleEndianUInt16(0)
+            centralDirectory.appendLittleEndianUInt32(crc)
+            centralDirectory.appendLittleEndianUInt32(size)
+            centralDirectory.appendLittleEndianUInt32(size)
+            centralDirectory.appendLittleEndianUInt16(UInt16(pathData.count))
+            centralDirectory.appendLittleEndianUInt16(0)
+            centralDirectory.appendLittleEndianUInt16(0)
+            centralDirectory.appendLittleEndianUInt16(0)
+            centralDirectory.appendLittleEndianUInt16(0)
+            centralDirectory.appendLittleEndianUInt32(0)
+            centralDirectory.appendLittleEndianUInt32(localHeaderOffset)
+            centralDirectory.append(pathData)
+        }
+
+        let centralDirectoryOffset = UInt32(archive.count)
+        archive.append(centralDirectory)
+        archive.appendLittleEndianUInt32(0x06054b50)
+        archive.appendLittleEndianUInt16(0)
+        archive.appendLittleEndianUInt16(0)
+        archive.appendLittleEndianUInt16(UInt16(entries.count))
+        archive.appendLittleEndianUInt16(UInt16(entries.count))
+        archive.appendLittleEndianUInt32(UInt32(centralDirectory.count))
+        archive.appendLittleEndianUInt32(centralDirectoryOffset)
+        archive.appendLittleEndianUInt16(0)
+        return archive
+    }
+}
+
+private enum CRC32 {
+    static func checksum(_ data: Data) -> UInt32 {
+        var crc: UInt32 = 0xffff_ffff
+        for byte in data {
+            crc ^= UInt32(byte)
+            for _ in 0..<8 {
+                let mask = 0 &- (crc & 1)
+                crc = (crc >> 1) ^ (0xedb8_8320 & mask)
+            }
+        }
+        return ~crc
+    }
+}
+
+private extension Data {
+    mutating func appendLittleEndianUInt16(_ value: UInt16) {
+        append(UInt8(value & 0xff))
+        append(UInt8((value >> 8) & 0xff))
+    }
+
+    mutating func appendLittleEndianUInt32(_ value: UInt32) {
+        append(UInt8(value & 0xff))
+        append(UInt8((value >> 8) & 0xff))
+        append(UInt8((value >> 16) & 0xff))
+        append(UInt8((value >> 24) & 0xff))
+    }
 }
 
 struct SignedTranscriptExportContext: Hashable {
@@ -660,6 +1012,7 @@ private struct ExportMessage: Encodable {
     let searchQuery: String?
     let sources: [ExportSource]
     let attachments: [ExportAttachment]
+    let trustMetadata: MessageTrustMetadata?
 
     init(_ message: ChatMessage) {
         id = message.id
@@ -672,6 +1025,7 @@ private struct ExportMessage: Encodable {
         searchQuery = message.searchQuery
         sources = message.sources.map(ExportSource.init)
         attachments = message.attachments.map(ExportAttachment.init)
+        trustMetadata = message.trustMetadata
     }
 
     enum CodingKeys: String, CodingKey {
@@ -685,6 +1039,7 @@ private struct ExportMessage: Encodable {
         case searchQuery = "search_query"
         case sources
         case attachments
+        case trustMetadata = "trust_metadata"
     }
 }
 

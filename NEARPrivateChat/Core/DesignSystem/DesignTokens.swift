@@ -5,12 +5,49 @@ import UIKit
 #endif
 
 extension Color {
+    struct AccessibleRGB: Equatable {
+        let red: Double
+        let green: Double
+        let blue: Double
+
+        var color: Color {
+            Color(red: red, green: green, blue: blue)
+        }
+
+        func contrastRatioAgainstWhite() -> Double {
+            contrastRatio(against: AccessibleRGB(red: 1, green: 1, blue: 1))
+        }
+
+        func contrastRatio(against other: AccessibleRGB) -> Double {
+            let ownLuminance = relativeLuminance
+            let otherLuminance = other.relativeLuminance
+            let lighter = max(ownLuminance, otherLuminance)
+            let darker = min(ownLuminance, otherLuminance)
+            return (lighter + 0.05) / (darker + 0.05)
+        }
+
+        private var relativeLuminance: Double {
+            func channel(_ value: Double) -> Double {
+                value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue)
+        }
+    }
+
+    static let appBackgroundLightToken = AccessibleRGB(red: 0.972, green: 0.974, blue: 0.966)
+    static let appBackgroundDarkToken = AccessibleRGB(red: 0.055, green: 0.060, blue: 0.063)
+    static let appSecondaryBackgroundDarkToken = AccessibleRGB(red: 0.098, green: 0.106, blue: 0.112)
+    static let appPanelBackgroundDarkToken = AccessibleRGB(red: 0.075, green: 0.082, blue: 0.088)
+    static let brandBlueToken = AccessibleRGB(red: 0.0, green: 0.427, blue: 0.749)
+    static let proofVerifiedToken = AccessibleRGB(red: 0.0, green: 0.478, blue: 0.239)
+    static let proofStaleToken = AccessibleRGB(red: 0.590, green: 0.390, blue: 0.0)
+
     static let brandBlack = Color(red: 0.0, green: 0.0, blue: 0.0)
     static let brandDarkGrey = Color(red: 0.153, green: 0.153, blue: 0.153)
     static let brandGrey = Color(red: 0.655, green: 0.655, blue: 0.655)
     static let brandOffWhite = Color(red: 0.933, green: 0.933, blue: 0.922)
     static let brandSky = Color(red: 0.514, green: 0.863, blue: 1.0)
-    static let brandBlue = Color(red: 0.0, green: 0.569, blue: 0.992)
+    static let brandBlue = brandBlueToken.color
     static let appSelection = Color(red: 0.86, green: 0.94, blue: 1.0)
     static let appBlueTint = Color(red: 0.92, green: 0.97, blue: 1.0)
     static let appSymbolBlueBackground = Color(red: 0.78, green: 0.91, blue: 1.0)
@@ -35,8 +72,8 @@ extension Color {
     #else
     static let actionFill = Color(red: 0.78, green: 0.91, blue: 1.0)
     #endif
-    static let proofVerified = Color(red: 0.082, green: 0.745, blue: 0.325)
-    static let proofStale = Color(red: 0.961, green: 0.651, blue: 0.137)
+    static let proofVerified = proofVerifiedToken.color
+    static let proofStale = proofStaleToken.color
     static let proofMismatch = Color(red: 0.898, green: 0.282, blue: 0.302)
     static let failedColor = Color.proofMismatch
     static let routeCloud = Color.textSecondary

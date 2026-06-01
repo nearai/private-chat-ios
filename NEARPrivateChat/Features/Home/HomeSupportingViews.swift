@@ -153,7 +153,7 @@ struct SetupLaunchCard: View {
                 .foregroundStyle(.white)
                 .background(Color.primaryAction, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-                Button("Not now", action: onDismiss)
+                Button("Use defaults", action: onDismiss)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.textSecondary)
                     .frame(height: 44)
@@ -696,7 +696,7 @@ private struct SetupWorkspaceSeedSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Starter workspace")
+            Text("Starter Project")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(Color.textSecondary)
 
@@ -741,7 +741,7 @@ private struct SetupSkillSuggestionSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("IronClaw skills")
+            Text("Agent skills")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(Color.textSecondary)
 
@@ -1403,46 +1403,297 @@ struct HomeEmptyState: View {
     }
 }
 
-struct HomeHeroActions: View {
-    let showsAgent: Bool
-    let projectTitle: String
-    let onAgent: () -> Void
-    let onProject: () -> Void
+struct HomePromptCaptureCard: View {
+    let subtitle: String
+    @Binding var draft: String
+    let suggestions: [EmptyChatStarterSuggestion]
+    let selectedSuggestionID: String?
+    let selectedProjectName: String?
+    let actionTitle: String
+    let actionSymbolName: String
+    let actionEnabled: Bool
+    let onSelectSuggestion: (EmptyChatStarterSuggestion) -> Void
+    let onSubmit: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
-            if showsAgent {
-                HomeTextActionButton(title: "Run Agent", symbolName: "terminal", action: onAgent)
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Start from one prompt")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Text(subtitle)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            HomeTextActionButton(title: projectTitle, symbolName: "folder", action: onProject)
+            if let selectedProjectName = selectedProjectName?.nilIfBlank {
+                Label("\(selectedProjectName) context is active", systemImage: "folder.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.brandBlue)
+                    .padding(.horizontal, 10)
+                    .frame(height: 28)
+                    .background(Color.actionTint, in: Capsule())
+            }
 
-            Spacer(minLength: 0)
+            TextField(
+                "Paste a task, source, file question, tracker idea, or handoff brief",
+                text: $draft,
+                axis: .vertical
+            )
+            .textFieldStyle(.plain)
+            .font(.body)
+            .lineLimit(3...6)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.appBorder, lineWidth: 1)
+            }
+
+            if !suggestions.isEmpty {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        promptIntentChips(fillsWidth: false)
+                    }
+
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 132), spacing: 8)],
+                        alignment: .leading,
+                        spacing: 8
+                    ) {
+                        promptIntentChips(fillsWidth: true)
+                    }
+                }
+            }
+
+            HStack(alignment: .center, spacing: 12) {
+                Text("Nothing sends until you review it in chat.")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+
+                Button(action: onSubmit) {
+                    Label(actionTitle, systemImage: actionSymbolName)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .frame(height: 42)
+                        .background(
+                            actionEnabled ? Color.actionPrimary : Color.textTertiary,
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(!actionEnabled)
+            }
         }
-        .padding(.horizontal, 4)
+        .padding(14)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 1)
+        }
+    }
+
+    @ViewBuilder
+    private func promptIntentChips(fillsWidth: Bool) -> some View {
+        ForEach(suggestions) { suggestion in
+            HomePromptIntentChip(
+                suggestion: suggestion,
+                isSelected: suggestion.id == selectedSuggestionID,
+                fillsWidth: fillsWidth,
+                action: { onSelectSuggestion(suggestion) }
+            )
+        }
     }
 }
 
-struct HomeTextActionButton: View {
-    let title: String
-    let symbolName: String
+private struct HomePromptIntentChip: View {
+    let suggestion: EmptyChatStarterSuggestion
+    let isSelected: Bool
+    var fillsWidth = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: symbolName)
+            HStack(spacing: 6) {
+                Image(systemName: suggestion.symbolName)
                     .font(.caption.weight(.bold))
-                Text(title)
-                    .font(.footnote.weight(.semibold))
+                Text(suggestion.title)
+                    .font(.caption.weight(.semibold))
                     .lineLimit(1)
-                Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.bold))
             }
-            .foregroundStyle(Color.textSecondary)
-            .padding(.vertical, 5)
+            .foregroundStyle(isSelected ? Color.actionPrimary : Color.textSecondary)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: 40)
+            .background(
+                isSelected ? Color.actionTint : Color.appSecondaryBackground,
+                in: Capsule()
+            )
+            .overlay {
+                Capsule()
+                    .stroke(isSelected ? Color.actionPrimary.opacity(0.24) : Color.appBorder, lineWidth: 1)
+            }
         }
         .buttonStyle(.plain)
+    }
+}
+
+struct HomeInboxSectionPlan: Equatable {
+    let selectedFilter: HomeFilter
+    let searchQuery: String
+    let activeConversationCount: Int
+    let activeProjectCount: Int
+    let projectContextMatchCount: Int
+    let sharedWithMeCount: Int
+    let archivedConversationCount: Int
+    let archivedProjectCount: Int
+
+    init(
+        selectedFilter: HomeFilter,
+        searchQuery: String,
+        activeConversationCount: Int,
+        activeProjectCount: Int,
+        projectContextMatchCount: Int,
+        sharedWithMeCount: Int,
+        archivedConversationCount: Int,
+        archivedProjectCount: Int
+    ) {
+        self.selectedFilter = selectedFilter
+        self.searchQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.activeConversationCount = activeConversationCount
+        self.activeProjectCount = activeProjectCount
+        self.projectContextMatchCount = projectContextMatchCount
+        self.sharedWithMeCount = sharedWithMeCount
+        self.archivedConversationCount = archivedConversationCount
+        self.archivedProjectCount = archivedProjectCount
+    }
+
+    var isSearching: Bool {
+        !searchQuery.isEmpty
+    }
+
+    var filterCounts: [HomeFilter: Int] {
+        [
+            .all: activeConversationCount + activeProjectCount + projectContextMatchCount,
+            .shared: sharedWithMeCount,
+            .archived: archivedConversationCount + archivedProjectCount
+        ]
+    }
+
+    var showsActiveInbox: Bool {
+        selectedFilter == .all
+    }
+
+    var showsProjectContext: Bool {
+        showsActiveInbox && projectContextMatchCount > 0
+    }
+
+    var showsProjects: Bool {
+        showsActiveInbox && activeProjectCount > 0
+    }
+
+    var showsConversations: Bool {
+        showsActiveInbox && activeConversationCount > 0
+    }
+
+    var showsWorkboard: Bool {
+        showsActiveInbox && !isSearching
+    }
+
+    var showsSharedWithMe: Bool {
+        selectedFilter == .shared && sharedWithMeCount > 0
+    }
+
+    var showsArchivedProjects: Bool {
+        selectedFilter == .archived && archivedProjectCount > 0
+    }
+
+    var showsArchivedConversations: Bool {
+        selectedFilter == .archived && archivedConversationCount > 0
+    }
+
+    var hasActiveContent: Bool {
+        activeConversationCount > 0 || activeProjectCount > 0 || projectContextMatchCount > 0
+    }
+
+    var showsActiveSetupEmptyState: Bool {
+        showsActiveInbox && activeConversationCount == 0
+    }
+
+    var showsActiveSearchEmptyState: Bool {
+        showsActiveInbox && isSearching && !hasActiveContent
+    }
+
+    var showsSharedEmptyState: Bool {
+        selectedFilter == .shared && sharedWithMeCount == 0
+    }
+
+    var showsArchivedEmptyState: Bool {
+        selectedFilter == .archived && archivedConversationCount == 0 && archivedProjectCount == 0
+    }
+}
+
+struct HomeInboxEmptyState: View {
+    let title: String
+    let subtitle: String
+    let symbolName: String
+    var isLoading = false
+    var actionTitle: String? = nil
+    var actionSymbolName: String? = nil
+    var action: (() -> Void)? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                if isLoading {
+                    ProgressView()
+                        .frame(width: 32, height: 32)
+                } else {
+                    Image(systemName: symbolName)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(width: 32, height: 32)
+                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(subtitle)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            if let actionTitle, let action {
+                Button(action: action) {
+                    Label(actionTitle, systemImage: actionSymbolName ?? "arrow.clockwise")
+                        .font(.caption.weight(.bold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.primaryAction)
+                .background(Color.secondarySurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+        }
+        .padding(14)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 1)
+        }
     }
 }
 
@@ -1466,7 +1717,7 @@ struct HomeFilterStrip: View {
             } label: {
                 HStack(spacing: 7) {
                     Image(systemName: selectedFilter.symbolName)
-                    Text("\(selectedFilter.title) chats")
+                    Text(selectedFilter == .all ? "Today" : "\(selectedFilter.title) items")
                     Image(systemName: "chevron.down")
                         .font(.caption2.weight(.bold))
                 }
@@ -1711,7 +1962,7 @@ struct WorkspaceCommandHeader: View {
                     Text(subtitle)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.70))
-                        .lineLimit(1)
+                        .lineLimit(2)
                         .minimumScaleFactor(0.82)
                 }
 

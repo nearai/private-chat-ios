@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 private actor ResponseStreamVisibility {
     private var sawVisibleOutput = false
@@ -302,10 +305,11 @@ let payload = ConversationCreatePayload(metadata: ["title": title])
             let filename = Self.sanitizedMultipartFilename(url.lastPathComponent.isEmpty ? "Attachment" : url.lastPathComponent)
             return (data, filename, Self.mimeType(for: url))
         }.value
+        let upload = try Self.normalizedVisionUpload(data: data, filename: filename, mimeType: mimeType)
         return try await uploadFileData(
-            data,
-            filename: filename,
-            mimeType: mimeType
+            upload.data,
+            filename: upload.filename,
+            mimeType: upload.mimeType
         )
     }
 
@@ -358,7 +362,7 @@ let payload = ConversationCreatePayload(metadata: ["title": title])
         let safeFilename = Self.sanitizedMultipartFilename(filename)
         let boundary = "Boundary-\(UUID().uuidString)"
         var body = Data()
-        body.appendMultipartField(name: "purpose", value: "user_data", boundary: boundary)
+        body.appendMultipartField(name: "purpose", value: Self.uploadPurpose(filename: safeFilename, mimeType: mimeType), boundary: boundary)
         body.appendMultipartField(name: "expires_after[anchor]", value: "created_at", boundary: boundary)
         body.appendMultipartField(name: "expires_after[seconds]", value: "36000", boundary: boundary)
         body.appendMultipartFile(
@@ -620,8 +624,7 @@ let payload = ConversationCreatePayload(metadata: ["title": title])
 let promptText = text.isEmpty && !attachments.isEmpty
             ? "Review the attached file context. Lead with the most useful summary, then call out decisions, risks, and next actions."
             : text
-        let content = [ResponseContent(type: "input_text", text: promptText, fileID: nil)] +
-            attachments.map { ResponseContent(type: "input_file", text: nil, fileID: $0.id) }
+        let content = Self.responseContent(promptText: promptText, attachments: attachments)
         let payload = ResponsePayload(
             model: model,
             input: [
@@ -1127,17 +1130,41 @@ let promptText = text.isEmpty && !attachments.isEmpty
 
     /// Steering that lets the model attach exactly one structured "near-widget"
     /// block to an answer when the answer's natural shape is a number, a trend,
-    /// a comparison, or a digest. Parsed client-side by `MessageWidget.extract`
-    /// and rendered as a native card. This is the one sanctioned exception to
-    /// the "avoid raw JSON" rule in the answer contract above.
+    /// a comparison, a digest, or a preview of actionable next moves. Parsed
+    /// client-side by `MessageWidget.extract` and rendered as a native card.
+    /// This is the one sanctioned exception to the "avoid raw JSON" rule in the
+    /// answer contract above.
+    static var widgetInstructionForTesting: String { widgetInstruction }
+
+    static func responseInstructionsForTesting(webSearchEnabled: Bool, systemPrompt: String = "") -> String {
+        responseInstructions(webSearchEnabled: webSearchEnabled, systemPrompt: systemPrompt)
+    }
+
+    static func responseContentDescriptorsForTesting(attachments: [ChatAttachment]) -> [(type: String, fileID: String?)] {
+        responseContent(promptText: "Test prompt", attachments: attachments).map { ($0.type, $0.fileID) }
+    }
+
+    private static func responseContent(promptText: String, attachments: [ChatAttachment]) -> [ResponseContent] {
+        [ResponseContent(type: "input_text", text: promptText, fileID: nil)] +
+            attachments.map { attachment in
+                ResponseContent(
+                    type: attachment.isNativeVisionImage ? "input_image" : "input_file",
+                    text: nil,
+                    fileID: attachment.id
+                )
+            }
+    }
+
     private static let widgetInstruction = """
 
 
     Generative widgets:
-    - When the answer is naturally a trend over time, a head-to-head comparison, a multi-item news digest, or a key tracked metric that benefits from emphasis, ALSO append exactly one fenced code block tagged near-widget containing a compact JSON object. This is the only place raw JSON is allowed.
+    - When the answer is naturally a trend over time, a head-to-head comparison, a multi-item news digest, a preview of proposed actions, or a key tracked metric that benefits from emphasis, ALSO append exactly one fenced code block tagged near-widget containing a compact JSON object. This is the only place raw JSON is allowed.
+    - Use kind action_plan when the user asks to turn context/files/tables into actions, trackers, reminders, calendar-worthy items, tasks, decisions, risks, or things they should care about. Stage commands only; do not claim a tracker, reminder, or calendar event was created unless the app confirms it.
+    - For action_plan actions, include structured candidate fields when known: source, date, time, duration, recurrence, timezone, location, attendees, missing_fields, and confidence. Put fuzzy values like "upon waking" in schedule/time and list the concrete field that still needs confirmation in missing_fields.
     - Do NOT emit a widget for a simple one-off number, a short factual reply, or a plain explanatory answer — only when a native card materially helps. Put the prose answer first; the near-widget block goes last; never emit more than one.
     - Schema (include only the keys that apply):
-      {"kind":"chart|metric|comparison|news_brief","title":"short source label","time":"e.g. 1h ago","freshness":"fresh|stale","follow_up":"a natural follow-up question","chart":{"label":"ETH / USD","value":"$3,124","delta":"-2.3%","trend":"up|down|flat","points":[3210,3180,3150,3124],"caption":"context line","timeframe":"past 1h"},"metric":{"label":"...","value":"...","delta":"...","trend":"up|down|flat","caption":"..."},"comparison":{"subtitle":"A vs B","columns":["A","B"],"rows":[{"label":"Row","cells":[{"text":"yes","tone":"good"},{"text":"no","tone":"off"}]}]},"news_brief":{"heading":"Today · 3 stories","stories":[{"title":"...","tag":"Markets","sources":[{"label":"R","domain":"reuters.com"}]}]}}
+      {"kind":"chart|metric|comparison|news_brief|action_plan","title":"short source label","time":"e.g. 1h ago","freshness":"fresh|stale","follow_up":"a natural follow-up question","chart":{"label":"Project progress","value":"42% complete","delta":"+3 items","trend":"up|down|flat","points":[20,28,35,42],"caption":"context line","timeframe":"past week"},"metric":{"label":"Open risks","value":"4","delta":"+1","trend":"up|down|flat","caption":"..."},"comparison":{"subtitle":"A vs B","columns":["A","B"],"rows":[{"label":"Row","cells":[{"text":"yes","tone":"good"},{"text":"no","tone":"off"}]}]},"news_brief":{"heading":"Today · 3 stories","stories":[{"title":"...","tag":"Research","sources":[{"label":"Source","domain":"example.com"}]}]},"action_plan":{"heading":"Top actions","summary":"why these matter","actions":[{"title":"...","type":"tracker|briefing|reminder|calendar|task|decision|risk|question|interest","detail":"why or missing details","schedule":"optional cadence/time","source":"file.xlsx · Supplements row 12","date":"YYYY-MM-DD if known","time":"8:00 AM or upon waking","duration":"30m","recurrence":"daily","timezone":"America/Toronto","location":"optional","attendees":["optional email/name"],"missing_fields":["exact bedtime"],"confidence":0.84,"command":"Create a tracker for ... every ...","tone":"good|warn|bad|neutral"}]}}
     """
 
     private static func responseInstructions(webSearchEnabled: Bool, systemPrompt: String) -> String {
@@ -1146,7 +1173,7 @@ let promptText = text.isEmpty && !attachments.isEmpty
         let userInstruction = trimmedSystemPrompt.isEmpty ? "" : "\n\nUser system preference:\n\(trimmedSystemPrompt)"
         if webSearchEnabled {
             return """
-            You are NEAR AI Private Chat. The current date is \(date). For current, recent, time-sensitive, or specific public factual questions, call web_search before answering.
+            You are NEAR Private Chat. The current date is \(date). For current, recent, time-sensitive, or specific public factual questions, call web_search before answering.
 
             Answer contract:
             - Lead with the direct answer in 1-3 tight sentences.
@@ -1159,7 +1186,7 @@ let promptText = text.isEmpty && !attachments.isEmpty
         }
 
         return """
-        You are NEAR AI Private Chat. The current date is \(date).
+        You are NEAR Private Chat. The current date is \(date).
 
         Answer contract:
         - Lead with the direct answer in 1-3 tight sentences.
@@ -1176,7 +1203,13 @@ let promptText = text.isEmpty && !attachments.isEmpty
         rawSources.compactMap { source in
             guard let rawURL = source["url"] as? String,
                   let url = WebSearchSource.sanitizedURLString(rawURL) else { return nil }
-            return WebSearchSource(type: source["type"] as? String, url: url)
+            return WebSearchSource(
+                type: firstSourceString(in: source, keys: ["type", "source_type", "kind"]),
+                url: url,
+                title: firstSourceString(in: source, keys: ["title", "name", "display_title"]),
+                publishedAt: firstSourceString(in: source, keys: ["published_at", "publishedAt", "date", "published"]),
+                snippet: firstSourceString(in: source, keys: ["snippet", "description", "summary", "text"])
+            )
         }
     }
 
@@ -1189,7 +1222,15 @@ let promptText = text.isEmpty && !attachments.isEmpty
             var collected: [WebSearchSource] = []
             if let rawURL = dictionary["url"] as? String,
                let url = WebSearchSource.sanitizedURLString(rawURL) {
-                collected.append(WebSearchSource(type: dictionary["type"] as? String, url: url))
+                collected.append(
+                    WebSearchSource(
+                        type: firstSourceString(in: dictionary, keys: ["type", "source_type", "kind"]),
+                        url: url,
+                        title: firstSourceString(in: dictionary, keys: ["title", "name", "display_title"]),
+                        publishedAt: firstSourceString(in: dictionary, keys: ["published_at", "publishedAt", "date", "published"]),
+                        snippet: firstSourceString(in: dictionary, keys: ["snippet", "description", "summary", "text"])
+                    )
+                )
             }
             for key in ["sources", "results", "items", "documents", "citations"] {
                 collected += webSearchSources(from: dictionary[key])
@@ -1202,15 +1243,90 @@ let promptText = text.isEmpty && !attachments.isEmpty
         return []
     }
 
-    private static func mimeType(for url: URL) -> String {
+    private static func firstSourceString(in dictionary: [String: Any], keys: [String]) -> String? {
+        for key in keys {
+            if let value = dictionary[key] as? String,
+               WebSearchSource.cleanedMetadata(value, maxLength: 600) != nil {
+                return value
+            }
+        }
+        return nil
+    }
+
+    static func mimeType(for url: URL) -> String {
         switch url.pathExtension.lowercased() {
         case "pdf":
             return "application/pdf"
-        case "txt", "md", "csv", "json", "log", "swift", "js", "ts", "tsx", "py", "html", "css":
+        case "csv":
+            return "text/csv"
+        case "tsv":
+            return "text/tab-separated-values"
+        case "xlsx":
+            return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        case "xls":
+            return "application/vnd.ms-excel"
+        case "json":
+            return "application/json"
+        case "png":
+            return "image/png"
+        case "jpg", "jpeg":
+            return "image/jpeg"
+        case "webp":
+            return "image/webp"
+        case "gif":
+            return "image/gif"
+        case "heic":
+            return "image/heic"
+        case "heif":
+            return "image/heif"
+        case "tif", "tiff":
+            return "image/tiff"
+        case "txt", "md", "log", "swift", "js", "ts", "tsx", "py", "html", "css":
             return "text/plain"
         default:
             return "application/octet-stream"
         }
+    }
+
+    static func uploadPurpose(filename: String, mimeType: String) -> String {
+        ChatAttachment.isNativeVisionImage(filename: filename, mimeTypeOrKind: mimeType) ? "vision" : "user_data"
+    }
+
+    static func needsVisionTranscode(filename: String, mimeType: String) -> Bool {
+        let fileExtension = (filename as NSString).pathExtension.lowercased()
+        if ["heic", "heif", "tif", "tiff"].contains(fileExtension) {
+            return true
+        }
+        return ["image/heic", "image/heif", "image/tiff"].contains(mimeType.lowercased())
+    }
+
+    static func normalizedVisionFilename(filename: String, mimeType: String) -> String {
+        guard needsVisionTranscode(filename: filename, mimeType: mimeType) else {
+            return sanitizedMultipartFilename(filename)
+        }
+        let safeFilename = sanitizedMultipartFilename(filename)
+        let base = (safeFilename as NSString).deletingPathExtension
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\((base.isEmpty ? "image" : base)).jpg"
+    }
+
+    static func normalizedVisionUpload(data: Data, filename: String, mimeType: String) throws -> (data: Data, filename: String, mimeType: String) {
+        guard needsVisionTranscode(filename: filename, mimeType: mimeType) else {
+            return (data, sanitizedMultipartFilename(filename), mimeType)
+        }
+        #if canImport(UIKit)
+        guard let image = UIImage(data: data),
+              let jpegData = image.jpegData(compressionQuality: 0.92) else {
+            throw APIError.status(415, "Could not convert this HEIC/TIFF image to JPEG for native vision upload.")
+        }
+        return (
+            jpegData,
+            normalizedVisionFilename(filename: filename, mimeType: mimeType),
+            "image/jpeg"
+        )
+        #else
+        throw APIError.status(415, "HEIC/TIFF images must be converted to JPEG before native vision upload.")
+        #endif
     }
 
     private static func sanitizedMultipartFilename(_ filename: String) -> String {

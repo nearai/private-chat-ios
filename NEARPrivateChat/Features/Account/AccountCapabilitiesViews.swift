@@ -28,7 +28,6 @@ struct AccountSettingsView: View {
     @State private var showingSecurity = false
     @State private var isImportingChats = false
     @State private var showingSignOutConfirm = false
-    @State private var showingDeleteAllConfirm = false
     @State private var showingIronclawPowerTool = false
     @State private var showingAPIKeysPowerTool = false
     @State private var hasOpenedInitialDeepLink = false
@@ -141,12 +140,6 @@ struct AccountSettingsView: View {
                 Button("Sign Out", role: .destructive) {
                     sessionStore.signOut()
                     dismiss()
-                }
-                Button("Cancel", role: .cancel) { }
-            }
-            .confirmationDialog("Delete all chats? This cannot be undone.", isPresented: $showingDeleteAllConfirm, titleVisibility: .visible) {
-                Button("Delete All Chats", role: .destructive) {
-                    chatStore.bannerMessage = "Bulk delete needs a confirmation flow before it can run."
                 }
                 Button("Cancel", role: .cancel) { }
             }
@@ -279,19 +272,10 @@ struct AccountSettingsView: View {
             }
             .disabled(isImportingChats)
 
-            Button {
-                chatStore.bannerMessage = "Export data is handled from each chat's share menu."
-            } label: {
-                Text("Export Data")
-                    .foregroundStyle(.primary)
-            }
+            Text("Export signed transcripts and proof reports from a conversation's Share menu.")
+                .font(.footnote)
+                .foregroundStyle(Color.textSecondary)
 
-            Button {
-                showingDeleteAllConfirm = true
-            } label: {
-                Text("Delete All Chats")
-                    .foregroundStyle(Color.proofMismatch)
-            }
         }
     }
 
@@ -318,28 +302,46 @@ struct AccountSettingsView: View {
                 .onChange(of: webSearchEnabled) { _, _ in
                     Task { await saveChatSettings() }
                 }
+            Text("Web search is explicit by default for private chat; research setup can turn current-source search on.")
+                .font(.caption)
+                .foregroundStyle(Color.textSecondary)
         }
     }
 
-    // MARK: - 5. Power Tools
+    // MARK: - 5. Capabilities
 
     private var powerToolsSection: some View {
         Section {
+            Button {
+                showingCapabilities = true
+            } label: {
+                powerToolButtonRow(icon: "square.grid.2x2", title: "Capability Center", subtitle: capabilitiesStatusLine)
+                    .foregroundStyle(.primary)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                openIronclawPowerTool()
+            } label: {
+                powerToolButtonRow(icon: "terminal", title: "Agent", subtitle: "Connect Hosted IronClaw or run phone-safe Agent tasks")
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                openAPIKeysPowerTool()
+            } label: {
+                powerToolButtonRow(icon: "key", title: "Cloud keys", subtitle: chatStore.nearCloudKeyConfigured ? "NEAR AI Cloud connected" : "Connect NEAR AI Cloud")
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                showingSecurity = true
+            } label: {
+                powerToolSubRow(icon: "seal", title: "Proof report", subtitle: chatStore.attestationSnapshot == nil ? "No proof report fetched" : "Proof report available")
+                    .foregroundStyle(.primary)
+            }
+
             DisclosureGroup(isExpanded: $powerToolsExpanded) {
-                Button {
-                    openIronclawPowerTool()
-                } label: {
-                    powerToolButtonRow(icon: "sparkles", title: "IronClaw / Agent", subtitle: "Run an agent task")
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    openAPIKeysPowerTool()
-                } label: {
-                    powerToolButtonRow(icon: "lock.shield", title: "API keys", subtitle: nil)
-                }
-                .buttonStyle(.plain)
-
                 NavigationLink {
                     PowerToolDiagnosticsView()
                         .environmentObject(chatStore)
@@ -360,33 +362,39 @@ struct AccountSettingsView: View {
                     )
                     .environmentObject(sessionStore)
                 } label: {
-                    powerToolSubRow(icon: "doc.text", title: "Endpoints", subtitle: nil)
-                }
-
-                Button {
-                    showingCapabilities = true
-                } label: {
-                    powerToolSubRow(icon: "cpu", title: "NEAR AI Cloud (advanced)", subtitle: nil)
-                        .foregroundStyle(.primary)
-                }
-
-                Button {
-                    showingSecurity = true
-                } label: {
-                    powerToolSubRow(icon: "seal", title: "Verification settings", subtitle: nil)
-                        .foregroundStyle(.primary)
+                    powerToolSubRow(icon: "doc.text", title: "Advanced API settings", subtitle: nil)
                 }
             } label: {
-                Label("Power Tools", systemImage: "wrench.and.screwdriver")
+                Label("Advanced", systemImage: "wrench.and.screwdriver")
                     .font(.body)
                     .foregroundStyle(.primary)
             }
+        } header: {
+            Text("Capabilities")
         } footer: {
-            Text("Advanced controls. Open only when a route or integration asks for it.")
+            Text("Private chat works now. Connect Cloud or Agent capabilities only when a task needs them.")
                 .font(.footnote)
                 .fontWeight(.regular)
                 .foregroundStyle(Color.textSecondary)
         }
+    }
+
+    private var capabilitiesStatusLine: String {
+        [
+            "Private route",
+            chatStore.nearCloudKeyConfigured ? "Cloud connected" : "Cloud not connected",
+            agentCapabilityStatus
+        ].joined(separator: " · ")
+    }
+
+    private var agentCapabilityStatus: String {
+        if chatStore.ironclawRemoteWorkstationAvailable {
+            return "Agent connected"
+        }
+        if chatStore.agentModels.contains(where: { $0.id == ModelOption.ironclawMobileModelID }) {
+            return "Phone agent available"
+        }
+        return "Agent not set up"
     }
 
     private func powerToolSubRow(icon: String, title: String, subtitle: String?) -> some View {
@@ -442,7 +450,7 @@ struct AccountSettingsView: View {
                 Text("Privacy Policy").foregroundStyle(.primary)
             }
             Button {
-                chatStore.bannerMessage = "Acknowledgments will be added before TestFlight."
+                chatStore.bannerMessage = "Acknowledgments: NEAR AI, IronClaw, SwiftUI, WidgetKit, EventKit, CryptoKit, Vision, PDFKit, and the open web sources you choose to use."
             } label: {
                 Text("Acknowledgments").foregroundStyle(.primary)
             }
@@ -762,13 +770,13 @@ private struct DefaultModelDetailView: View {
 
     private func subtitle(for option: ModelOption) -> String? {
         if option.id == ChatStore.defaultModelID {
-            return "Shipped default · verified private route"
+            return "Shipped default · private route with proof"
         }
         if option.isNearCloudModel {
-            return "Routed via NEAR AI Cloud privacy proxy"
+            return "NEAR AI Cloud · no NEAR Private proof"
         }
         if option.isVerifiable {
-            return "Private · verifiable"
+            return "NEAR Private · attested when proof is fresh"
         }
         return nil
     }
@@ -799,7 +807,7 @@ private struct ReasoningEffortDetailView: View {
     }
 }
 
-// MARK: - Power Tools detail pushes
+// MARK: - Capability detail pushes
 
 private struct PowerToolIronclawView: View {
     @EnvironmentObject private var chatStore: ChatStore
@@ -814,7 +822,7 @@ private struct PowerToolIronclawView: View {
         Form {
             Section("Status") {
                 HStack {
-                    Text("IronClaw").foregroundStyle(.primary)
+                    Text("Agent").foregroundStyle(.primary)
                     Spacer()
                     Text(chatStore.ironclawStatusText).foregroundStyle(Color.textSecondary)
                 }
@@ -833,8 +841,8 @@ private struct PowerToolIronclawView: View {
                 .listRowBackground(Color.clear)
             }
 
-            Section("Bridge") {
-                TextField("Hosted HTTPS endpoint", text: $ironclawEndpoint)
+            Section("Agent connection") {
+                TextField("Hosted IronClaw URL", text: $ironclawEndpoint)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
@@ -848,7 +856,7 @@ private struct PowerToolIronclawView: View {
                 Button {
                     onSave()
                 } label: {
-                    Label("Save Bridge", systemImage: "point.3.connected.trianglepath.dotted")
+                    Label("Save Agent Connection", systemImage: "point.3.connected.trianglepath.dotted")
                 }
 
                 Button {
@@ -861,7 +869,7 @@ private struct PowerToolIronclawView: View {
                 Button {
                     Task { await chatStore.testIronclawWorkstation() }
                 } label: {
-                    Label(chatStore.isTestingIronclawWorkstation ? "Checking" : "Verify Tools", systemImage: "terminal")
+                    Label(chatStore.isTestingIronclawWorkstation ? "Checking" : "Check Hosted Tools", systemImage: "terminal")
                 }
                 .disabled(chatStore.isTestingIronclawWorkstation)
             }
@@ -872,12 +880,12 @@ private struct PowerToolIronclawView: View {
                         chatStore.disconnectIronclaw()
                         onReload()
                     } label: {
-                        Label("Disconnect IronClaw", systemImage: "trash")
+                        Label("Disconnect Agent", systemImage: "trash")
                     }
                 }
             }
         }
-        .navigationTitle("IronClaw / Agent")
+        .navigationTitle("Agent connection")
         .platformInlineNavigationTitle()
         .onAppear { onReload() }
     }
@@ -966,8 +974,8 @@ private struct PowerToolEndpointsView: View {
 
     var body: some View {
         Form {
-            Section("Endpoints") {
-                InfoRow(title: "Endpoint", value: AppConfiguration.production.baseURL.absoluteString, monospaced: true)
+            Section("Advanced API") {
+                InfoRow(title: "Private API", value: AppConfiguration.production.baseURL.absoluteString, monospaced: true)
                 InfoRow(title: "Callback", value: AppConfiguration.production.callbackURL.absoluteString, monospaced: true)
                 InfoRow(title: "Auth", value: sessionStore.session?.sessionID.isEmpty == false ? "Browser session" : "Session token")
             }
@@ -998,7 +1006,7 @@ private struct PowerToolEndpointsView: View {
                 .disabled(isSavingSettings)
             }
         }
-        .navigationTitle("Endpoints")
+        .navigationTitle("Advanced API")
         .platformInlineNavigationTitle()
     }
 }
@@ -1060,12 +1068,24 @@ struct CapabilitiesView: View {
                     setupDefaultsCard
 
                     CapabilityCard(
+                        iconName: "sparkles",
+                        title: "General Assistant",
+                        status: "Ready",
+                        statusColor: .actionPrimary,
+                        summary: "Write, code, research, summarize files, compare options, and turn messy context into concrete next actions.",
+                        trustLine: "Default: start private, then use Web, Cloud, Agent, or Council only when the task calls for it.",
+                        detail: "Ask in normal language. Attach files, paste notes, or describe what you want tracked; the chat surface should stage work for review before creating anything.",
+                        primaryAction: nil,
+                        secondaryAction: nil
+                    )
+
+                    CapabilityCard(
                         iconName: "lock.shield",
                         title: "Private Inference",
                         status: privateStatus,
                         statusColor: privateStatusColor,
                         summary: "Private chat works immediately on iPhone and can attach proof when the selected route supports it.",
-                        trustLine: "Trust boundary: verification proves route evidence, not that an answer is true.",
+                        trustLine: "Trust boundary: proof reports cover route evidence, not whether an answer is true.",
                         detail: privateDetail,
                         primaryAction: privatePrimaryAction,
                         secondaryAction: nil
@@ -1077,7 +1097,7 @@ struct CapabilitiesView: View {
                         status: cloudStatus,
                         statusColor: cloudStatusColor,
                         summary: "Connect Cloud when you want more external models inside the same conversation flow.",
-                        trustLine: "Trust boundary: Cloud turns use privacy proxy routing, but they are not NEAR Private verification proof.",
+                        trustLine: "Trust boundary: NEAR AI Cloud requests can leave the private route and do not carry NEAR Private proof.",
                         detail: cloudDetail,
                         primaryAction: cloudPrimaryAction,
                         secondaryAction: nil
@@ -1085,11 +1105,11 @@ struct CapabilitiesView: View {
 
                     CapabilityCard(
                         iconName: "terminal.fill",
-                        title: "IronClaw Agent",
+                        title: "Agent",
                         status: agentStatus,
                         statusColor: agentStatusColor,
-                        summary: "Use phone-safe agent skills now, then hand off repo, shell, and workstation tasks when hosted IronClaw is connected.",
-                        trustLine: "Trust boundary: agent runs can read files, use tools, and act with any connected credentials.",
+                        summary: "Use phone-safe Agent skills now, then hand off repo, shell, and code tasks when Hosted IronClaw is connected.",
+                        trustLine: "Trust boundary: hosted IronClaw receives prompt text plus file metadata unless source excerpts are included.",
                         detail: agentDetail,
                         primaryAction: agentPrimaryAction,
                         secondaryAction: agentSecondaryAction
@@ -1141,7 +1161,7 @@ struct CapabilitiesView: View {
 
     private var capabilityHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Private chat is ready now. Connect Cloud or hosted agents only when a task needs them.")
+            Text("Chat about anything. The app starts private, then adds Web, Cloud, Agent, or Council when the task needs them.")
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1175,10 +1195,14 @@ struct CapabilitiesView: View {
 
     private var headerStatusLine: String {
         [
-            "Private ready",
+            privateHeaderStatus,
             chatStore.nearCloudKeyConfigured ? "Cloud connected" : "Cloud not connected",
-            chatStore.ironclawRemoteWorkstationAvailable ? "Agent connected" : "Agent phone ready"
+            agentStatus
         ].joined(separator: " · ")
+    }
+
+    private var privateHeaderStatus: String {
+        chatStore.attestationSnapshot == nil ? "Private route" : "Private \(privateStatus.lowercased())"
     }
 
     private var setupDefaultsCard: some View {
@@ -1243,7 +1267,7 @@ struct CapabilitiesView: View {
     }
 
     private var privateStatus: String {
-        guard let snapshot = chatStore.attestationSnapshot else { return "Ready" }
+        guard let snapshot = chatStore.attestationSnapshot else { return "No proof yet" }
         switch AttestationFreshness.classify(attestedAt: snapshot.fetchedAt) {
         case .underTwoMinutes:
             return "Proof fresh"
@@ -1266,13 +1290,13 @@ struct CapabilitiesView: View {
 
     private var privateDetail: String {
         guard let snapshot = chatStore.attestationSnapshot else {
-            return "Current route: \(chatStore.selectedProviderDisplayName). Fetch proof from Security when you need a signed private-route report."
+            return "Current route: \(chatStore.selectedProviderDisplayName). Open Proof report when you need signed private-route evidence."
         }
 
         let coveredCount = max(snapshot.modelAttestationCount, snapshot.coveredModelIDs.count)
         let freshness = AttestationFreshness.classify(attestedAt: snapshot.fetchedAt).shortLabel
         let countLabel = "\(coveredCount) model\(coveredCount == 1 ? "" : "s")"
-        return "Last report: \(countLabel) covered · \(freshness) · current route \(chatStore.selectedProviderDisplayName)."
+        return "Last report: \(countLabel) listed · \(freshness) · Current route: \(chatStore.selectedProviderDisplayName)."
     }
 
     private var cloudStatus: String {
@@ -1295,7 +1319,7 @@ struct CapabilitiesView: View {
 
     private var agentStatus: String {
         if chatStore.ironclawRemoteWorkstationAvailable {
-            return "Workstation connected"
+            return "Hosted connected"
         }
         if chatStore.agentModels.contains(where: { $0.id == ModelOption.ironclawMobileModelID }) {
             return "Phone ready"
@@ -1312,7 +1336,7 @@ struct CapabilitiesView: View {
 
     private var agentDetail: String {
         if let verifiedAt = chatStore.ironclawLastVerifiedAt, chatStore.ironclawRemoteWorkstationAvailable {
-            return "Hosted tools last verified \(verifiedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()))."
+            return "Hosted tools last checked \(verifiedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()))."
         }
         return chatStore.ironclawStatusText
     }
@@ -1351,7 +1375,7 @@ struct CapabilitiesView: View {
 
     private var privatePrimaryAction: CapabilityCardAction? {
         guard let onOpenSecurity else { return nil }
-        return CapabilityCardAction(title: "Open Security", systemImage: "checkmark.shield", role: .primary) {
+        return CapabilityCardAction(title: "Open Proof report", systemImage: "checkmark.shield", role: .primary) {
             dismissThen(onOpenSecurity)
         }
     }
@@ -1359,7 +1383,7 @@ struct CapabilitiesView: View {
     private var cloudPrimaryAction: CapabilityCardAction? {
         guard let onOpenAccountSettings else { return nil }
         return CapabilityCardAction(
-            title: chatStore.nearCloudKeyConfigured ? "Manage Cloud" : "Connect Cloud",
+            title: chatStore.nearCloudKeyConfigured ? "Manage Cloud keys" : "Connect Cloud",
             systemImage: chatStore.nearCloudKeyConfigured ? "slider.horizontal.3" : "key",
             role: .primary
         ) {
@@ -1385,7 +1409,7 @@ struct CapabilitiesView: View {
 
     private var agentSecondaryAction: CapabilityCardAction? {
         guard chatStore.ironclawRemoteWorkstationAvailable, let onOpenAccountSettings else { return nil }
-        return CapabilityCardAction(title: "Manage Endpoint", systemImage: "slider.horizontal.3", role: .secondary) {
+        return CapabilityCardAction(title: "Manage Agent Connection", systemImage: "slider.horizontal.3", role: .secondary) {
             dismissThen {
                 onOpenAccountSettings(.ironclawAgent)
             }
@@ -1394,7 +1418,7 @@ struct CapabilitiesView: View {
 
     private var councilPrimaryAction: CapabilityCardAction? {
         guard chatStore.councilModelIDs.count < 2, chatStore.defaultCouncilModels.count >= 2 else { return nil }
-        return CapabilityCardAction(title: "Use Auto-Council", systemImage: "square.grid.2x2", role: .primary) {
+        return CapabilityCardAction(title: "Use recommended Council", systemImage: "square.grid.2x2", role: .primary) {
             chatStore.useDefaultCouncilLineup()
         }
     }
@@ -1620,7 +1644,7 @@ private struct IronclawBridgeReadinessCard: View {
             }
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
-                readinessPill(title: "Endpoint", value: endpointConnected ? "Hosted" : "Missing", symbolName: "server.rack", active: endpointConnected)
+                readinessPill(title: "Connection", value: endpointConnected ? "Hosted" : "Missing", symbolName: "server.rack", active: endpointConnected)
                 readinessPill(title: "Token", value: tokenConfigured ? "Saved" : "Optional", symbolName: "key", active: tokenConfigured)
                 readinessPill(title: "Tools", value: toolValue, symbolName: "chevron.left.forwardslash.chevron.right", active: toolsAvailable)
                 readinessPill(title: "Repo Auth", value: "Gated", symbolName: "lock.shield", active: true)
@@ -1653,7 +1677,7 @@ private struct IronclawBridgeReadinessCard: View {
         if let lastVerifiedAt {
             return lastVerifiedAt.formatted(date: .omitted, time: .shortened)
         }
-        return "Verify"
+        return "Check"
     }
 
     private var statusLine: String {
@@ -1661,15 +1685,15 @@ private struct IronclawBridgeReadinessCard: View {
             return "Checking shell and git"
         }
         if lastVerifiedAt != nil {
-            return toolNames.isEmpty ? "Shell and git verified" : "Shell, git, files, and agent tools verified"
+            return toolNames.isEmpty ? "Shell and git checked" : "Shell, git, files, and agent tools checked"
         }
         if !toolNames.isEmpty {
-            return "Tool catalog available; run Tools for shell/git preflight"
+            return "Tool catalog available; check shell/git before running"
         }
         if endpointConnected {
-            return "Endpoint ready; verify tools"
+            return "Agent connection ready; check hosted tools"
         }
-        return "Add a hosted HTTPS endpoint"
+        return "Add a Hosted IronClaw URL"
     }
 
     private var toolsAvailable: Bool {

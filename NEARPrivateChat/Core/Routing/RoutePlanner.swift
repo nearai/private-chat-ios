@@ -25,7 +25,7 @@ struct ChatRouteReadinessIssue: Identifiable, Hashable {
 
 struct RoutePlanner {
     static func routeKind(forModelID modelID: String) -> ChatRouteKind {
-        if modelID == ModelOption.nearCloudQwenMaxModelID || modelID.hasPrefix(ModelOption.nearCloudModelPrefix) {
+        if modelID.hasPrefix(ModelOption.nearCloudModelPrefix) {
             return .nearCloud
         }
         if modelID == ModelOption.ironclawMobileModelID {
@@ -72,13 +72,13 @@ struct RoutePlanner {
 
         if modelIDs.contains(where: { routeKind(forModelID: $0) == .ironclawHosted }), !hostedIronclawEndpointUsable {
             let endpointMessage = hostedIronclawEndpointMessage?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let detail = endpointMessage?.isEmpty == false ? endpointMessage! : "Add a hosted HTTPS IronClaw endpoint in Account before sending."
+            let detail = endpointMessage?.isEmpty == false ? endpointMessage! : "Add a Hosted IronClaw URL in Account before sending."
             return ChatRouteReadinessIssue(
                 route: .hostedIronclaw,
-                title: "Hosted IronClaw endpoint required",
+                title: "Hosted IronClaw connection required",
                 message: "\(detail) Your draft and attachments were kept.",
                 recoveryAction: .configureIronClawEndpoint,
-                recoveryTitle: "Configure Endpoint"
+                recoveryTitle: "Connect Agent"
             )
         }
 

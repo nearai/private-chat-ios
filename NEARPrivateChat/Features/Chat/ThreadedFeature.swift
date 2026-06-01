@@ -287,7 +287,7 @@ struct ThreadedBriefingView: View {
                 let reply = ThreadReply(
                     role: .assistant,
                     text: body,
-                    verifiedModel: succeeded ? "GLM 5.1" : nil,
+                    verifiedModel: succeeded ? "NEAR Private" : nil,
                     ago: "just now",
                     widget: answer.widget
                 )
@@ -517,7 +517,7 @@ private struct ThreadVerifiedFooter: View {
         .padding(.top, 2)
     }
     private var footerText: String {
-        var parts = ["Verified", model]
+        var parts = ["Proof", model]
         if sources > 0 { parts.append("\(sources) sources") }
         parts.append(ago)
         return parts.joined(separator: " · ")
@@ -597,6 +597,9 @@ extension ThreadedBriefingView {
         if let brief = widget.newsBrief, !brief.stories.isEmpty {
             return brief.stories.prefix(3).map(\.title).joined(separator: " · ")
         }
+        if let plan = widget.actionPlan, !plan.actions.isEmpty {
+            return plan.heading ?? plan.actions.prefix(3).map(\.title).joined(separator: " · ")
+        }
         if let comparison = widget.comparison, let subtitle = comparison.subtitle {
             return subtitle
         }
@@ -641,7 +644,7 @@ extension ThreadedBriefingView {
                                 BriefingSourceTag(letter: "r", colorHex: "#FF6B35"),
                                 BriefingSourceTag(letter: "B", colorHex: "#000000")
                             ],
-                            verifiedModel: "GLM 5.1",
+                            verifiedModel: "NEAR Private",
                             verifiedSources: 2,
                             ago: "just now"
                         )

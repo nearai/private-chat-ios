@@ -99,7 +99,7 @@ struct ModelCatalogStore {
                 verifiable: false,
                 contextLength: nil,
                 modelDisplayName: "IronClaw Mobile",
-                modelDescription: "Runs an iOS-safe IronClaw runtime with NEAR Private inference, web search, attachments, projects, and automatic hosted workstation handoff for git/code/shell tasks.",
+                modelDescription: "Runs an iOS-safe IronClaw runtime with NEAR Private inference, web search, attachments, projects, and optional Hosted IronClaw handoff for git/code/shell tasks.",
                 modelIcon: nil,
                 aliases: ["IronClaw", "mobile runtime", "agent", "iOS", "workstation", "git", "code"]
             )
@@ -114,7 +114,7 @@ struct ModelCatalogStore {
                 verifiable: false,
                 contextLength: nil,
                 modelDisplayName: "Hosted IronClaw",
-                modelDescription: "Connect a hosted IronClaw HTTPS workstation for git, code, shell, research, and software tasks.",
+                modelDescription: "Connect Hosted IronClaw for git, code, shell, research, and software tasks.",
                 modelIcon: nil,
                 aliases: ["IronClaw", "Hosted IronClaw", "agent", "hosted endpoint", "workstation", "git", "code", "shell"]
             )
@@ -122,52 +122,21 @@ struct ModelCatalogStore {
     }
 
     static func fallbackNearCloudModels() -> [ModelOption] {
-        [
-            nearCloudFallbackModel(
-                cloudModelID: "anthropic/claude-opus-4-7",
-                displayName: "Claude Opus 4.7",
-                description: "Runs Claude Opus 4.7 through NEAR AI Cloud with privacy proxy routing."
-            ),
-            nearCloudFallbackModel(
-                cloudModelID: "openai/gpt-5.5",
-                displayName: "GPT-5.5",
-                description: "Runs GPT-5.5 through NEAR AI Cloud with privacy proxy routing."
-            ),
-            nearCloudFallbackModel(
-                cloudModelID: "qwen/qwen3.7-max",
-                displayName: "Qwen3.7 Max",
-                description: "Runs Qwen3.7 Max through NEAR AI Cloud with privacy proxy routing."
-            ),
-            nearCloudFallbackModel(
-                cloudModelID: "moonshotai/kimi-k2.6",
-                displayName: "Kimi K2.6",
-                description: "Runs Kimi K2.6 through NEAR AI Cloud with privacy proxy routing."
-            ),
-            nearCloudFallbackModel(
-                cloudModelID: "google/gemini-3.5-flash",
-                displayName: "Gemini 3.5 Flash",
-                description: "Runs Gemini 3.5 Flash through NEAR AI Cloud with privacy proxy routing."
-            ),
-            nearCloudFallbackModel(
-                cloudModelID: "openai/gpt-oss-120b",
-                displayName: "GPT OSS 120B",
-                description: "Runs GPT OSS 120B through NEAR AI Cloud with privacy proxy routing."
-            )
-        ]
+        []
     }
 
     static func fallbackPrivateModels() -> [ModelOption] {
         [
             ModelOption(
-                modelID: "zai-org/GLM-5.1-FP8",
+                modelID: ModelOption.nearPrivateDefaultModelID,
                 publicModel: true,
                 metadata: ModelOption.Metadata(
                     verifiable: true,
                     contextLength: nil,
-                    modelDisplayName: "GLM 5.1",
-                    modelDescription: "Default NEAR Private route with verification support.",
+                    modelDisplayName: "NEAR Private model",
+                    modelDescription: "Default private route with proof support.",
                     modelIcon: nil,
-                    aliases: ["GLM", "GLM 5.1", "NEAR Private", "verified", "private"]
+                    aliases: ["NEAR Private", "verified", "private"]
                 )
             )
         ]
@@ -181,11 +150,11 @@ struct ModelCatalogStore {
             guard !normalizedID.isEmpty, seen.insert(normalizedID.lowercased()).inserted else {
                 return nil
             }
-            let aliases = uniqueStrings(["NEAR AI Cloud", "privacy proxy", "unverified", normalizedID, model.displayName] + (model.metadata?.aliases ?? []))
+            let aliases = uniqueStrings(["NEAR AI Cloud", "privacy proxy", "external model", normalizedID, model.displayName] + (model.metadata?.aliases ?? []))
             let description = model.metadata?.modelDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
             let routeDescription = description?.isEmpty == false
-                ? "\(description!) Runs through NEAR AI Cloud with privacy proxy routing."
-                : "Runs \(model.displayName) through NEAR AI Cloud with privacy proxy routing."
+                ? "\(description!) Routes through NEAR AI Cloud with privacy proxy forwarding."
+                : "Routes \(model.displayName) through NEAR AI Cloud with privacy proxy forwarding."
             return ModelOption(
                 modelID: nearCloudRouteModelID(for: normalizedID),
                 publicModel: model.publicModel,
@@ -237,16 +206,13 @@ struct ModelCatalogStore {
                 modelDisplayName: displayName,
                 modelDescription: description,
                 modelIcon: nil,
-                aliases: ["NEAR AI Cloud", cloudModelID, displayName, "privacy proxy", "unverified"]
+                aliases: ["NEAR AI Cloud", cloudModelID, displayName, "privacy proxy", "external model"]
             )
         )
     }
 
     private static func nearCloudRouteModelID(for cloudModelID: String) -> String {
         let normalized = cloudModelID.trimmingCharacters(in: .whitespacesAndNewlines)
-        if normalized.localizedCaseInsensitiveCompare("qwen/qwen3.7-max") == .orderedSame {
-            return ModelOption.nearCloudQwenMaxModelID
-        }
         return ModelOption.nearCloudModelID(for: normalized)
     }
 

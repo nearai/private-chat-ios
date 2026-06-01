@@ -35,6 +35,20 @@
                ReferencedContainer = "container:NEARPrivateChat.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "DD5000000000000000000001"
+               BuildableName = "NEARPrivateChatUITests.xctest"
+               BlueprintName = "NEARPrivateChatUITests"
+               ReferencedContainer = "container:NEARPrivateChat.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -51,6 +65,17 @@
                BlueprintIdentifier = "B50000000000000000000001"
                BuildableName = "NEARPrivateChatTests.xctest"
                BlueprintName = "NEARPrivateChatTests"
+               ReferencedContainer = "container:NEARPrivateChat.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "DD5000000000000000000001"
+               BuildableName = "NEARPrivateChatUITests.xctest"
+               BlueprintName = "NEARPrivateChatUITests"
                ReferencedContainer = "container:NEARPrivateChat.xcodeproj">
             </BuildableReference>
          </TestableReference>

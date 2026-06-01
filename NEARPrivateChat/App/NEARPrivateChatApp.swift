@@ -57,6 +57,7 @@ enum DemoCaptureScreen: String, CaseIterable {
     case liveData
     case generativeChat
     case chatStarters
+    case briefingBuilder
     case councilBriefingLive
     case councilOutput
     case verification
@@ -196,10 +197,10 @@ struct AskPrivateChatIntent: AppIntent {
     }
 }
 
-/// "Run my Private Chat briefings" — refreshes the scheduled Today briefings.
+/// "Run my Private Chat trackers" — refreshes scheduled trackers.
 struct RunBriefingsIntent: AppIntent {
-    static var title: LocalizedStringResource = "Run my briefings"
-    static var description = IntentDescription("Refresh your scheduled Private Chat briefings.")
+    static var title: LocalizedStringResource = "Run my trackers"
+    static var description = IntentDescription("Refresh scheduled Private Chat trackers.")
     static var openAppWhenRun = true
 
     func perform() async throws -> some IntentResult {
@@ -222,10 +223,10 @@ struct NearAppShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: RunBriefingsIntent(),
             phrases: [
-                "Run my \(.applicationName) briefings",
+                "Run my \(.applicationName) trackers",
                 "Refresh \(.applicationName)"
             ],
-            shortTitle: "Run briefings",
+            shortTitle: "Run trackers",
             systemImageName: "bell.badge.fill"
         )
     }

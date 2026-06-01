@@ -8,6 +8,7 @@ private enum SetupDefaultToggle: Hashable {
 
 struct UserSetupView: View {
     @EnvironmentObject private var chatStore: ChatStore
+    @Environment(\.dismiss) private var dismiss
     let readiness: AppSetupReadinessSnapshot
     let onComplete: (UserSetupProfile) -> Void
     let onSkip: () -> Void
@@ -60,13 +61,19 @@ struct UserSetupView: View {
                 .padding(.bottom, 116)
             }
             .background(HomeSurfaceBackground())
-            .navigationTitle("Setup")
+            .navigationTitle("Defaults")
             .platformInlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") {
+                        dismiss()
+                    }
+                }
+            }
             .safeAreaInset(edge: .bottom) {
                 setupFooter
             }
         }
-        .interactiveDismissDisabled()
     }
 
     private var setupFooter: some View {
@@ -86,7 +93,7 @@ struct UserSetupView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(primarySetupActionTitle)
 
-            Button("Not now") {
+            Button("Keep current defaults") {
                 onSkip()
             }
             .font(.footnote.weight(.semibold))
@@ -104,7 +111,7 @@ struct UserSetupView: View {
     }
 
     private var primarySetupActionTitle: String {
-        setupPlan.expectedFirstAction
+        "Save defaults"
     }
 
     private var setupPlan: AppSetupPlan {
@@ -116,10 +123,10 @@ struct UserSetupView: View {
             HStack(alignment: .top, spacing: 12) {
                 PrivacySeal(size: 48)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Make it yours")
+                    Text("Tune defaults for new chats")
                         .font(.title2.weight(.bold))
                         .foregroundStyle(.white)
-                    Text("Tell NEAR Private Chat what should work first. It will set route, context, and proof defaults around that goal.")
+                    Text("Set source behavior, model route, and optional capabilities. Home stays ready either way.")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.68))
                         .fixedSize(horizontal: false, vertical: true)
@@ -127,8 +134,8 @@ struct UserSetupView: View {
             }
             HStack(spacing: 8) {
                 SetupHeroMetric(title: "Private", symbolName: "lock.shield")
-                SetupHeroMetric(title: "Web", symbolName: "globe")
-                SetupHeroMetric(title: "Agents", symbolName: "terminal")
+                SetupHeroMetric(title: "Sources", symbolName: "folder")
+                SetupHeroMetric(title: "Routes", symbolName: "slider.horizontal.3")
             }
         }
         .padding(16)
@@ -154,7 +161,7 @@ struct UserSetupView: View {
     }
 
     private var setupExperienceMode: some View {
-        setupSection(title: "How much control do you want?") {
+        setupSection(title: "Default controls") {
             ForEach(UserSetupExperienceMode.allCases) { mode in
                 SetupChoiceRow(
                     title: mode.title,
@@ -169,7 +176,7 @@ struct UserSetupView: View {
     }
 
     private var setupUseCases: some View {
-        setupSection(title: "What should work first?") {
+        setupSection(title: "Default work mode") {
             ForEach(UserSetupUseCase.allCases) { useCase in
                 SetupChoiceRow(
                     title: useCase.title,
@@ -202,7 +209,7 @@ struct UserSetupView: View {
     }
 
     private var setupCapabilitiesDisclosure: some View {
-        setupSection(title: "Connect more capabilities") {
+        setupSection(title: "Optional capabilities") {
             DisclosureGroup(isExpanded: $showsCapabilitySetup) {
                 VStack(alignment: .leading, spacing: 16) {
                     setupContextStyle
@@ -239,30 +246,18 @@ struct UserSetupView: View {
     }
 
     private var setupPreview: some View {
-        setupSection(title: "What will happen next") {
+        setupSection(title: "Default behavior preview") {
             SetupPlanPreviewCard(plan: setupPlan)
         }
     }
 
     private func applyUseCaseDefaultsFromSelection() {
-        let selected = Set(profile.useCases)
-        profile.useCase = profile.useCases.setupPrimaryUseCase
-        if !editedDefaultToggles.contains(.web) {
-            profile.wantsWeb = false
-        }
-        if !editedDefaultToggles.contains(.ironclaw) {
-            profile.wantsIronclaw = profile.experienceMode == .power && selected.contains(.buildAgents)
-        }
-        if !editedDefaultToggles.contains(.council) {
-            profile.wantsCouncil = profile.experienceMode == .power && selected.contains(.research) && !profile.wantsIronclaw
-        }
-        if !editedContextStyle {
-            if selected.contains(.research) || selected.contains(.buildAgents) || selected.contains(.teamProjects) {
-                profile.contextStyle = .project
-            } else {
-                profile.contextStyle = .simple
-            }
-        }
+        profile.applyUseCaseSelectionDefaults(
+            editedWeb: editedDefaultToggles.contains(.web),
+            editedIronclaw: editedDefaultToggles.contains(.ironclaw),
+            editedCouncil: editedDefaultToggles.contains(.council),
+            editedContextStyle: editedContextStyle
+        )
     }
 
     private func setupToggleBinding(_ toggle: SetupDefaultToggle, keyPath: WritableKeyPath<UserSetupProfile, Bool>) -> Binding<Bool> {
@@ -291,29 +286,32 @@ struct UserSetupView: View {
 
     private var capabilityDisclosureTitle: String {
         if profile.experienceMode == .power {
-            return "Power controls are available"
+            return "Optional capabilities are available"
         }
         return "Private-first defaults are enough to start"
     }
 
     private var capabilityDisclosureDetail: String {
         if profile.experienceMode == .power {
-            return "Adjust source style, live web, Council, and agent routes before your first chat."
+            return "Choose source behavior, live web, Council, and Agent defaults."
         }
-        return "Expand only if you want to tune sources, web behavior, or advanced routes now."
+        if profile.useCases.contains(.research) && profile.wantsWeb {
+            return "Research starts with current-source search on. Web requests can leave the private route."
+        }
+        return "Expand only if you want to tune sources, web behavior, or advanced routes."
     }
 
     @ViewBuilder
     private var setupAdvancedRoutesContent: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text("Routes")
+            Text("Model route")
                 .font(.headline.weight(.bold))
                 .foregroundStyle(.secondary)
 
             if profile.experienceMode == .power {
                 VStack(spacing: 8) {
                     SetupToggleRow(
-                        title: "IronClaw agent",
+                        title: "Agent",
                         subtitle: ironclawToggleSubtitle,
                         symbolName: "terminal",
                         isOn: setupToggleBinding(.ironclaw, keyPath: \.wantsIronclaw)
@@ -328,8 +326,8 @@ struct UserSetupView: View {
                 }
             } else {
                 SetupInfoCard(
-                    title: "Beginner mode keeps routes simple",
-                    detail: "Start with private chat, sources, and project memory first. Switch to Power whenever you want agents or Council visible from day one.",
+                    title: "Beginner mode keeps the route simple",
+                    detail: "Start with private chat, sources, and Project memory. Switch to Power whenever you want Agent or Council defaults visible.",
                     symbolName: "sparkles"
                 )
             }
@@ -355,7 +353,7 @@ struct UserSetupView: View {
 
     private var setupExamples: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text("Start with an example")
+            Text("Load a preset")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.textSecondary)
             ViewThatFits(in: .horizontal) {
@@ -533,7 +531,7 @@ private struct SetupGoalField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("What should this app help you do?", systemImage: "text.badge.plus")
+            Label("Default goal or workflow", systemImage: "text.badge.plus")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.textSecondary)
             TextField("Research, build agents, write code, manage projects...", text: $text, axis: .vertical)
@@ -804,7 +802,7 @@ struct SetupPlanPreviewCard: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Starter workspace")
+                    Text("Starter Project")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
                     ForEach(plan.starterWorkspaceSeeds) { seed in
@@ -817,7 +815,7 @@ struct SetupPlanPreviewCard: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("IronClaw skills")
+                    Text("Agent skills")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
                     ForEach(plan.starterSkillSuggestions) { skill in

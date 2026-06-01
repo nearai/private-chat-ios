@@ -2,37 +2,14 @@ import SwiftUI
 import UniformTypeIdentifiers
 import AVFoundation
 import Speech
-
-private enum ComposerFocusMode: String, CaseIterable, Identifiable {
-    case auto
-    case web
-    case project
-    case research
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .auto: "Auto"
-        case .web: "Web"
-        case .project: "Project"
-        case .research: "Research"
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .auto: "sparkles"
-        case .web: "globe"
-        case .project: "folder"
-        case .research: "doc.text.magnifyingglass"
-        }
-    }
-}
+import PhotosUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 private enum SlashCommandAction {
     case council
-    case verify
+    case proof
     case project
     case sources
 }
@@ -54,6 +31,9 @@ struct InputBar: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var isFocused: Bool
     @State private var showingFileImporter = false
+    @State private var showingPhotoPicker = false
+    @State private var showingCamera = false
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var showingProjectFiles = false
     @State private var showingSecurity = false
     @State private var showingAgentWorkspace = false
@@ -74,7 +54,10 @@ struct InputBar: View {
             }
 
             if !composerStore.pendingAttachments.isEmpty {
-                AttachmentStrip(attachments: composerStore.pendingAttachments) { attachment in
+                AttachmentStrip(
+                    attachments: composerStore.pendingAttachments,
+                    showsMetadataOnly: chatStore.selectedRouteKind == .ironclawHosted
+                ) { attachment in
                     chatStore.removePendingAttachment(attachment)
                 }
             }
@@ -103,12 +86,37 @@ struct InputBar: View {
                 slashCommandTray
             }
 
-            composerRoutingControls
+            composerRouteControl
 
             HStack(alignment: .bottom, spacing: 8) {
-                Button {
-                    AppHaptics.selection()
-                    showingFileImporter = true
+                Menu {
+                    Button {
+                        AppHaptics.selection()
+                        showingFileImporter = true
+                    } label: {
+                        Label("Files", systemImage: "folder")
+                    }
+
+                    Button {
+                        AppHaptics.selection()
+                        showingPhotoPicker = true
+                    } label: {
+                        Label("Photos", systemImage: "photo.on.rectangle")
+                    }
+
+                    Button {
+                        AppHaptics.selection()
+                        openCamera()
+                    } label: {
+                        Label("Camera", systemImage: "camera")
+                    }
+
+                    Button {
+                        AppHaptics.selection()
+                        attachPasteboard()
+                    } label: {
+                        Label("Paste", systemImage: "doc.on.clipboard")
+                    }
                 } label: {
                     Image(systemName: "plus")
                         .font(.body.weight(.semibold))
@@ -117,7 +125,8 @@ struct InputBar: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(transcriptStore.isStreaming)
-                .accessibilityLabel("Attach File")
+                .accessibilityLabel("Add attachment")
+                .accessibilityHint("Choose files, photos, camera capture, or pasteboard text.")
 
                 TextField(
                     "",
@@ -205,7 +214,18 @@ struct InputBar: View {
         .safeAreaPadding(.bottom, 8)
         .fileImporter(
             isPresented: $showingFileImporter,
-            allowedContentTypes: [.pdf, .plainText, .text, .commaSeparatedText, .json, .data],
+            allowedContentTypes: [
+                .pdf,
+                .plainText,
+                .text,
+                .commaSeparatedText,
+                .json,
+                .image,
+                UTType(filenameExtension: "tsv") ?? .text,
+                UTType(filenameExtension: "xlsx") ?? .data,
+                UTType(filenameExtension: "xls") ?? .data,
+                .data
+            ],
             allowsMultipleSelection: true
         ) { result in
             if case let .success(urls) = result {
@@ -214,6 +234,25 @@ struct InputBar: View {
                 }
             }
         }
+        .photosPicker(
+            isPresented: $showingPhotoPicker,
+            selection: $selectedPhotoItems,
+            maxSelectionCount: 5,
+            matching: .images
+        )
+        .onChange(of: selectedPhotoItems) { items in
+            attachPhotoItems(items)
+        }
+        #if canImport(UIKit)
+        .sheet(isPresented: $showingCamera) {
+            CameraCaptureView { image in
+                showingCamera = false
+                attachCapturedImage(image)
+            } onCancel: {
+                showingCamera = false
+            }
+        }
+        #endif
         .sheet(isPresented: $showingProjectFiles) {
             ProjectFilesView()
                 .environmentObject(chatStore)
@@ -309,7 +348,29 @@ struct InputBar: View {
     }
 
     private var composerPlaceholder: String {
-        "Ask privately."
+        if chatStore.isCouncilModeEnabled {
+            return "Ask the Council"
+        }
+        switch chatStore.selectedRouteKind {
+        case .nearCloud:
+            return "Ask with NEAR AI Cloud"
+        case .ironclawMobile:
+            return "Tell the phone Agent what to do"
+        case .ironclawHosted:
+            return "Tell the Agent what to run"
+        case .nearPrivate:
+            if researchButtonActive {
+                return "Ask for a cited answer"
+            }
+            switch chatStore.sourceMode {
+            case .web:
+                return "Ask with web sources"
+            case .files, .links, .all:
+                return chatStore.selectedProject == nil ? "Ask with sources" : "Ask this Project"
+            case .auto:
+                return "Ask, attach, or say what to track"
+            }
+        }
     }
 
     private var researchButtonActive: Bool {
@@ -331,7 +392,7 @@ struct InputBar: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Model \(chatStore.selectedModelDisplayName)")
-                .accessibilityHint("Choose GLM, NEAR AI Cloud, or another model for the next message.")
+                .accessibilityHint("Choose a private, Cloud, Council, or Agent model for the next message.")
 
                 Button {
                     openModelPicker(openingCouncil: true)
@@ -379,6 +440,148 @@ struct InputBar: View {
         }
     }
 
+    private var composerRouteControl: some View {
+        Menu {
+            Button {
+                openModelPicker(openingCouncil: false)
+            } label: {
+                Label("Model: \(chatStore.selectedModelDisplayName)", systemImage: composerModelSymbolName)
+            }
+
+            Button {
+                openModelPicker(openingCouncil: true)
+            } label: {
+                Label(
+                    chatStore.isCouncilModeEnabled ? "Council: \(chatStore.activeCouncilModels.count) models" : "Use Council",
+                    systemImage: "person.3"
+                )
+            }
+
+            if selectedModelSupportsReasoningEffort {
+                Divider()
+                ForEach(ModelReasoningEffort.allCases) { effort in
+                    Button {
+                        chatStore.setReasoningEffort(effort)
+                    } label: {
+                        Label("Effort: \(effort.title)", systemImage: effort == chatStore.advancedModelParams.reasoningEffort ? "checkmark" : "gauge.medium")
+                    }
+                }
+            }
+
+            Divider()
+
+            Button {
+                AppHaptics.selection()
+                chatStore.selectSourceMode(.auto)
+            } label: {
+                Label("Auto sources", systemImage: sourceModeMenuSymbolName(isActive: sourceModeControlIsAuto))
+            }
+
+            Button {
+                AppHaptics.selection()
+                chatStore.selectSourceMode(.web)
+            } label: {
+                Label("Web", systemImage: sourceModeMenuSymbolName(isActive: sourceModeControlIsWeb))
+            }
+
+            Button {
+                selectProjectSourceMode()
+            } label: {
+                Label("Project", systemImage: sourceModeMenuSymbolName(isActive: sourceModeControlIsProject))
+            }
+
+            Button {
+                selectResearchSourceMode()
+            } label: {
+                Label("Research", systemImage: sourceModeMenuSymbolName(isActive: researchButtonActive, fallback: "doc.text.magnifyingglass"))
+            }
+            .disabled(chatStore.selectedRouteUsesNearCloud)
+
+            Divider()
+
+            ForEach(exactProjectSourceModes) { mode in
+                Button {
+                    AppHaptics.selection()
+                    chatStore.selectSourceMode(mode)
+                    if mode == .files && chatStore.selectedProject == nil && composerStore.pendingAttachments.isEmpty {
+                        showingProjectFiles = true
+                    }
+                } label: {
+                    Label(sourceModeMenuTitle(for: mode), systemImage: exactSourceModeMenuSymbolName(for: mode))
+                }
+            }
+
+            if !quickStartSuggestions.isEmpty {
+                Divider()
+
+                Section("Quick starts") {
+                    ForEach(quickStartSuggestions) { suggestion in
+                        Button {
+                            applyQuickStartSuggestion(suggestion)
+                        } label: {
+                            Label(suggestion.title, systemImage: suggestion.symbolName)
+                        }
+                    }
+                }
+            }
+        } label: {
+            ComposerRouteChip(
+                title: composerRouteSummaryTitle,
+                symbolName: composerRouteSummarySymbolName,
+                isActive: composerRouteIsCustomized,
+                showsChevron: true
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Route \(composerRouteSummaryTitle)")
+        .accessibilityHint("Choose model, Council, effort, web, research, project files, or saved links for the next message.")
+    }
+
+    private var composerRouteSummaryTitle: String {
+        var parts: [String] = []
+        if chatStore.isCouncilModeEnabled {
+            parts.append("Council \(chatStore.activeCouncilModels.count)")
+        } else if chatStore.selectedRouteKind == .nearPrivate {
+            parts.append("Private")
+        } else {
+            parts.append(chatStore.selectedProviderDisplayName)
+        }
+
+        if chatStore.sourceMode != .auto || chatStore.researchModeEnabled {
+            parts.append(composerSourceTitle)
+        }
+
+        if chatStore.advancedModelParams.reasoningEffort != .automatic {
+            parts.append(chatStore.advancedModelParams.reasoningEffort.title)
+        }
+
+        return parts.prefix(2).joined(separator: " · ")
+    }
+
+    private var composerRouteSummarySymbolName: String {
+        if chatStore.isCouncilModeEnabled {
+            return "person.3"
+        }
+        if researchButtonActive {
+            return "doc.text.magnifyingglass"
+        }
+        if chatStore.sourceMode == .web {
+            return "globe"
+        }
+        if chatStore.sourceMode != .auto {
+            return "folder"
+        }
+        return composerModelSymbolName
+    }
+
+    private var composerRouteIsCustomized: Bool {
+        chatStore.isCouncilModeEnabled ||
+            chatStore.sourceMode != .auto ||
+            chatStore.researchModeEnabled ||
+            chatStore.selectedRouteKind != .nearPrivate ||
+            chatStore.advancedModelParams.reasoningEffort != .automatic
+    }
+
     private var selectedModelSupportsReasoningEffort: Bool {
         guard let model = chatStore.selectedModelOption else { return false }
         return model.isRecommendedReasoningModel || model.isNearCloudModel
@@ -401,64 +604,84 @@ struct InputBar: View {
     }
 
     private var composerSourceTitle: String {
-        if chatStore.selectedRouteUsesNearCloud {
-            return "Cloud"
-        }
         if researchButtonActive {
             return "Research"
         }
-        return chatStore.sourceMode.shortTitle
-    }
-
-    private var composerContextModes: [ChatSourceMode] {
-        [.auto, .web, .files, .links]
-    }
-
-    private var focusModes: [ComposerFocusMode] {
-        [.auto, .web, .project, .research]
-    }
-
-    private var selectedFocusMode: ComposerFocusMode? {
-        if chatStore.selectedRouteUsesNearCloud {
-            return nil
-        }
-        if researchButtonActive {
-            return .research
-        }
         switch chatStore.sourceMode {
-        case .auto: return .auto
-        case .web: return .web
-        case .files, .links, .all: return .project
+        case .auto:
+            return "Auto"
+        case .web:
+            return "Web"
+        case .links:
+            return "Links"
+        case .files:
+            return "Files"
+        case .all:
+            return "Web + Files"
         }
     }
 
-    private var focusModeRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 7) {
-                ForEach(focusModes) { mode in
-                    Button {
-                        selectFocusMode(mode)
-                    } label: {
-                        Label(mode.title, systemImage: mode.symbolName)
-                            .font(.caption.weight(.semibold))
-                            .labelStyle(.titleAndIcon)
-                            .lineLimit(1)
-                            .foregroundStyle(focusModeColor(mode))
-                            .padding(.horizontal, 10)
-                            .frame(height: 32)
-                            .background(focusModeBackground(mode), in: Capsule())
-                            .overlay {
-                                Capsule()
-                                    .stroke(focusModeBorder(mode), lineWidth: 1)
-                            }
+    private var exactProjectSourceModes: [ChatSourceMode] {
+        [.links, .files, .all]
+    }
+
+    private var quickStartSuggestions: [EmptyChatStarterSuggestion] {
+        EmptyChatStarterCoordinator.suggestions(for: chatStore)
+    }
+
+    private var sourceModeControl: some View {
+        Menu {
+            Button {
+                AppHaptics.selection()
+                chatStore.selectSourceMode(.auto)
+            } label: {
+                Label("Auto", systemImage: sourceModeMenuSymbolName(isActive: sourceModeControlIsAuto))
+            }
+
+            Button {
+                AppHaptics.selection()
+                chatStore.selectSourceMode(.web)
+            } label: {
+                Label("Web", systemImage: sourceModeMenuSymbolName(isActive: sourceModeControlIsWeb))
+            }
+
+            Button {
+                selectProjectSourceMode()
+            } label: {
+                Label("Project", systemImage: sourceModeMenuSymbolName(isActive: sourceModeControlIsProject))
+            }
+
+            Button {
+                selectResearchSourceMode()
+            } label: {
+                Label("Research", systemImage: sourceModeMenuSymbolName(isActive: researchButtonActive, fallback: "doc.text.magnifyingglass"))
+            }
+            .disabled(chatStore.selectedRouteUsesNearCloud)
+
+            Divider()
+
+            ForEach(exactProjectSourceModes) { mode in
+                Button {
+                    AppHaptics.selection()
+                    chatStore.selectSourceMode(mode)
+                    if mode == .files && chatStore.selectedProject == nil && composerStore.pendingAttachments.isEmpty {
+                        showingProjectFiles = true
                     }
-                    .buttonStyle(.plain)
-                    .disabled(transcriptStore.isStreaming || chatStore.selectedRouteUsesNearCloud)
-                    .accessibilityLabel(selectedFocusMode == mode ? "Focus: \(mode.title), selected" : "Focus: \(mode.title)")
+                } label: {
+                    Label(sourceModeMenuTitle(for: mode), systemImage: exactSourceModeMenuSymbolName(for: mode))
                 }
             }
-            .padding(.horizontal, 1)
+        } label: {
+            ComposerRouteChip(
+                title: composerSourceTitle,
+                symbolName: composerSourceSymbolName,
+                isActive: chatStore.sourceMode != .auto || chatStore.researchModeEnabled,
+                showsChevron: true
+            )
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Source mode \(composerSourceTitle)")
+        .accessibilityHint("Choose web, saved link, file, combined, or research context for the next message.")
     }
 
     private var slashCommands: [SlashCommandSuggestion] {
@@ -471,11 +694,11 @@ struct InputBar: View {
                 action: .council
             ),
             SlashCommandSuggestion(
-                command: "/verify",
-                title: "Verify",
-                subtitle: "Open verification details",
+                command: "/proof",
+                title: "Proof",
+                subtitle: "Open proof report details",
                 symbolName: "checkmark.shield",
-                action: .verify
+                action: .proof
             ),
             SlashCommandSuggestion(
                 command: "/project",
@@ -551,27 +774,91 @@ struct InputBar: View {
         }
     }
 
-    private func selectFocusMode(_ mode: ComposerFocusMode) {
+    private var composerSourceSymbolName: String {
+        if researchButtonActive {
+            return "doc.text.magnifyingglass"
+        }
+        switch chatStore.sourceMode {
+        case .auto:
+            return "sparkles"
+        case .web:
+            return "globe"
+        case .links, .files, .all:
+            return "folder"
+        }
+    }
+
+    private var sourceModeControlIsAuto: Bool {
+        !researchButtonActive && chatStore.sourceMode == .auto
+    }
+
+    private var sourceModeControlIsWeb: Bool {
+        !researchButtonActive && chatStore.sourceMode == .web
+    }
+
+    private var sourceModeControlIsProject: Bool {
+        !researchButtonActive && chatStore.sourceMode != .auto && chatStore.sourceMode != .web
+    }
+
+    private func sourceModeMenuSymbolName(isActive: Bool, fallback: String = "checkmark") -> String {
+        isActive ? "checkmark" : fallback
+    }
+
+    private func exactSourceModeMenuSymbolName(for mode: ChatSourceMode) -> String {
+        (!researchButtonActive && mode == chatStore.sourceMode) ? "checkmark" : mode.symbolName
+    }
+
+    private func selectProjectSourceMode() {
+        AppHaptics.selection()
+        chatStore.selectSourceMode(chatStore.selectedProject == nil ? .files : .all)
+        if chatStore.selectedProject == nil && composerStore.pendingAttachments.isEmpty {
+            showingProjectFiles = true
+        }
+    }
+
+    private func selectResearchSourceMode() {
         guard !chatStore.selectedRouteUsesNearCloud else { return }
         AppHaptics.selection()
+        if chatStore.sourceMode != .web {
+            chatStore.sourceMode = .web
+        }
+        if !chatStore.researchModeEnabled {
+            chatStore.toggleResearchMode()
+        }
+    }
+
+    private func sourceModeMenuTitle(for mode: ChatSourceMode) -> String {
         switch mode {
         case .auto:
-            chatStore.selectSourceMode(.auto)
+            return composerStore.pendingAttachments.isEmpty ? "Auto" : "Auto · \(composerStore.pendingAttachments.count) prompt \(composerStore.pendingAttachments.count == 1 ? "file" : "files")"
         case .web:
-            chatStore.selectSourceMode(.web)
-        case .project:
-            chatStore.selectSourceMode(chatStore.selectedProject == nil ? .files : .all)
-            if chatStore.selectedProject == nil && composerStore.pendingAttachments.isEmpty {
+            return composerStore.pendingAttachments.isEmpty ? "Web" : "Web · \(composerStore.pendingAttachments.count) prompt \(composerStore.pendingAttachments.count == 1 ? "file" : "files")"
+        case .links:
+            let count = chatStore.selectedProjectLinks.count
+            return count == 0 ? "Saved links" : "Saved links · \(count)"
+        case .files:
+            let count = chatStore.selectedProjectAttachments.count + composerStore.pendingAttachments.count
+            return count == 0 ? "Files" : "Files · \(count)"
+        case .all:
+            let files = chatStore.selectedProjectAttachments.count + composerStore.pendingAttachments.count
+            let links = chatStore.selectedProjectLinks.count
+            if files > 0 || links > 0 {
+                return "Web + Files · \(files) files / \(links) links"
+            }
+            return "Web + Files"
+        }
+    }
+
+    private func applyQuickStartSuggestion(_ suggestion: EmptyChatStarterSuggestion) {
+        AppHaptics.selection()
+        let shouldFocusComposer = EmptyChatStarterCoordinator.apply(
+            suggestion,
+            to: chatStore,
+            onOpenProject: {
                 showingProjectFiles = true
             }
-        case .research:
-            if chatStore.sourceMode != .web {
-                chatStore.sourceMode = .web
-            }
-            if !chatStore.researchModeEnabled {
-                chatStore.toggleResearchMode()
-            }
-        }
+        )
+        isFocused = shouldFocusComposer
     }
 
     private func applySlashCommand(_ suggestion: SlashCommandSuggestion) {
@@ -582,7 +869,7 @@ struct InputBar: View {
             chatStore.useDefaultCouncilLineup()
             chatStore.draft = remainder
             isFocused = true
-        case .verify:
+        case .proof:
             chatStore.draft = remainder
             showingSecurity = true
             isFocused = false
@@ -622,21 +909,134 @@ struct InputBar: View {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func focusModeColor(_ mode: ComposerFocusMode) -> Color {
-        guard selectedFocusMode == mode else { return .secondary }
-        return mode == .auto ? Color.brandBlack : Color.white
+    private func attachPhotoItems(_ items: [PhotosPickerItem]) {
+        guard !items.isEmpty else { return }
+        Task {
+            for (index, item) in items.prefix(5).enumerated() {
+                do {
+                    guard let data = try await item.loadTransferable(type: Data.self) else {
+                        continue
+                    }
+                    await attachImageData(data, preferredName: "photo-\(index + 1).jpg")
+                } catch {
+                    await MainActor.run {
+                        chatStore.bannerMessage = "Could not attach one of those photos."
+                    }
+                }
+            }
+            await MainActor.run {
+                selectedPhotoItems = []
+            }
+        }
     }
 
-    private func focusModeBackground(_ mode: ComposerFocusMode) -> Color {
-        guard selectedFocusMode == mode else { return Color.clear }
-        return mode == .auto ? Color.brandSky : Color.brandBlue
+    private func attachImageData(_ data: Data, preferredName: String) async {
+        guard data.count <= ChatStore.maxAttachmentUploadBytes else {
+            await MainActor.run {
+                chatStore.bannerMessage = "Images must be 10 MB or smaller."
+            }
+            return
+        }
+        let safeName = preferredName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "image.jpg" : preferredName
+        let pathExtension = (safeName as NSString).pathExtension
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(pathExtension.isEmpty ? "jpg" : pathExtension)
+        do {
+            try data.write(to: url, options: [.atomic])
+            await chatStore.addAttachment(from: url, displayName: safeName)
+        } catch {
+            await MainActor.run {
+                chatStore.bannerMessage = "Could not prepare that image."
+            }
+        }
     }
 
-    private func focusModeBorder(_ mode: ComposerFocusMode) -> Color {
-        guard selectedFocusMode == mode else { return Color.appBorder.opacity(0.8) }
-        return Color.clear
+    private func openCamera() {
+        #if canImport(UIKit)
+        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+            showingCamera = true
+        } else {
+            chatStore.bannerMessage = "Camera is not available here. Choose Photos or Files."
+        }
+        #else
+        chatStore.bannerMessage = "Camera is not available here. Choose Photos or Files."
+        #endif
+    }
+
+    private func attachPasteboard() {
+        #if canImport(UIKit)
+        let pasteboard = UIPasteboard.general
+        if let text = pasteboard.string?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+            chatStore.stageTextAttachment(text, suggestedName: "clipboard.txt")
+            return
+        }
+        if let image = pasteboard.image,
+           let data = image.jpegData(compressionQuality: 0.9) {
+            Task { await attachImageData(data, preferredName: "clipboard-image.jpg") }
+            return
+        }
+        chatStore.bannerMessage = "Clipboard has no text or image to attach."
+        #else
+        chatStore.bannerMessage = "Paste attachments are not available on this platform."
+        #endif
+    }
+
+    #if canImport(UIKit)
+    private func attachCapturedImage(_ image: UIImage) {
+        guard let data = image.jpegData(compressionQuality: 0.9) else {
+            chatStore.bannerMessage = "Could not read that photo."
+            return
+        }
+        Task { await attachImageData(data, preferredName: "camera-photo.jpg") }
+    }
+    #endif
+}
+
+#if canImport(UIKit)
+private struct CameraCaptureView: UIViewControllerRepresentable {
+    let onCapture: (UIImage) -> Void
+    let onCancel: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onCapture: onCapture, onCancel: onCancel)
+    }
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let controller = UIImagePickerController()
+        controller.sourceType = .camera
+        controller.delegate = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let onCapture: (UIImage) -> Void
+        let onCancel: () -> Void
+
+        init(onCapture: @escaping (UIImage) -> Void, onCancel: @escaping () -> Void) {
+            self.onCapture = onCapture
+            self.onCancel = onCancel
+        }
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            if let image = info[.originalImage] as? UIImage {
+                onCapture(image)
+            } else {
+                onCancel()
+            }
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            onCancel()
+        }
     }
 }
+#endif
 
 struct ComposerRouteChip: View {
     let title: String
@@ -814,6 +1214,7 @@ private struct ProjectContextStrip: View {
 
 private struct AttachmentStrip: View {
     let attachments: [ChatAttachment]
+    var showsMetadataOnly = false
     let onRemove: (ChatAttachment) -> Void
 
     var body: some View {
@@ -866,6 +1267,14 @@ private struct AttachmentStrip: View {
     }
 
     private func attachmentShelfDetail(for attachment: ChatAttachment) -> String {
+        if showsMetadataOnly {
+            var hostedParts = ["File names only", "filename plus prompt excerpts only"]
+            if let displaySize = attachment.displaySize {
+                hostedParts.append(displaySize)
+            }
+            return hostedParts.joined(separator: " · ")
+        }
+
         var parts: [String] = []
         if attachment.isLocalPendingText {
             parts.append("Uploads as text on send")

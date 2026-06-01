@@ -86,7 +86,7 @@ struct BriefingCondition: Codable, Hashable {
 enum TrackerListFormatter {
     static func summary(for briefings: [Briefing], now: Date = Date()) -> String {
         guard !briefings.isEmpty else {
-            return "You don’t have any trackers yet. Try “notify me when ETH drops below $2,000” or “every morning, give me a news briefing.”"
+            return "You don’t have any automations yet. Try “turn this table into reminders” or “every weekday, check for new sources on this project.”"
         }
         // Active first, then by creation order.
         let sorted = briefings.sorted { a, b in
@@ -237,7 +237,7 @@ enum BriefDigest {
             rows.append(WidgetComparisonRow(label: "Nothing tracked yet", cells: [WidgetComparisonCell(text: "—", tone: nil)]))
         }
         let count = active.count
-        let subtitle = count == 0 ? "Market snapshot" : "\(count) tracker\(count == 1 ? "" : "s") · markets"
+        let subtitle = count == 0 ? "No automations yet" : "\(count) automation\(count == 1 ? "" : "s") · latest signals"
         return MessageWidget(
             kind: .comparison,
             title: "Your brief",
@@ -260,6 +260,9 @@ struct Briefing: Codable, Hashable, Identifiable {
     var latestResult: MessageWidget?
     var kind: BriefingKind
     var accountID: String?
+    var timeZoneIdentifier: String
+    var lastFailureAt: Date?
+    var lastFailureMessage: String?
     /// Run a multi-model council + synthesis on each scheduled run (customPrompt
     /// only; live-data kinds are single API fetches where council is meaningless).
     var council: Bool
@@ -275,7 +278,7 @@ struct Briefing: Codable, Hashable, Identifiable {
     var snoozedUntil: Date?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, prompt, schedule, isPaused, createdAt, lastRunAt, latestResult, kind, accountID, council, condition, history, isPinned, snoozedUntil
+        case id, title, prompt, schedule, isPaused, createdAt, lastRunAt, latestResult, kind, accountID, timeZoneIdentifier, lastFailureAt, lastFailureMessage, council, condition, history, isPinned, snoozedUntil
     }
 
     init(
@@ -289,6 +292,9 @@ struct Briefing: Codable, Hashable, Identifiable {
         latestResult: MessageWidget? = nil,
         kind: BriefingKind = .customPrompt,
         accountID: String? = nil,
+        timeZoneIdentifier: String = TimeZone.current.identifier,
+        lastFailureAt: Date? = nil,
+        lastFailureMessage: String? = nil,
         council: Bool = false,
         condition: BriefingCondition? = nil,
         history: [TrackerSample] = [],
@@ -305,6 +311,9 @@ struct Briefing: Codable, Hashable, Identifiable {
         self.latestResult = latestResult
         self.kind = kind
         self.accountID = accountID
+        self.timeZoneIdentifier = timeZoneIdentifier
+        self.lastFailureAt = lastFailureAt
+        self.lastFailureMessage = lastFailureMessage
         self.council = council
         self.condition = condition
         self.history = history
@@ -317,8 +326,21 @@ struct Briefing: Codable, Hashable, Identifiable {
 
     var status: BriefingStatus {
         if isPaused { return .paused }
-        if latestResult != nil { return .live }
+        if lastFailureAt != nil, latestResult == nil { return .failed }
+        if latestResult != nil { return .active }
         return .scheduled
+    }
+
+    var scheduleCalendar: Calendar {
+        var calendar = Calendar.current
+        if let timeZone = TimeZone(identifier: timeZoneIdentifier) {
+            calendar.timeZone = timeZone
+        }
+        return calendar
+    }
+
+    var timeZoneLabel: String {
+        TimeZone(identifier: timeZoneIdentifier)?.identifier ?? TimeZone.current.identifier
     }
 }
 
@@ -338,6 +360,9 @@ extension Briefing {
             latestResult: try? c.decode(MessageWidget.self, forKey: .latestResult),
             kind: (try? c.decode(BriefingKind.self, forKey: .kind)) ?? .customPrompt,
             accountID: try? c.decode(String.self, forKey: .accountID),
+            timeZoneIdentifier: (try? c.decode(String.self, forKey: .timeZoneIdentifier)) ?? TimeZone.current.identifier,
+            lastFailureAt: try? c.decode(Date.self, forKey: .lastFailureAt),
+            lastFailureMessage: try? c.decode(String.self, forKey: .lastFailureMessage),
             council: (try? c.decode(Bool.self, forKey: .council)) ?? false,
             condition: try? c.decode(BriefingCondition.self, forKey: .condition),
             history: (try? c.decode([TrackerSample].self, forKey: .history)) ?? [],
@@ -348,6 +373,8 @@ extension Briefing {
 }
 
 enum BriefingStatus: String, Codable, Hashable {
+    case active
+    case failed
     case live
     case scheduled
     case paused
@@ -357,18 +384,23 @@ enum BriefingSchedule: Codable, Hashable {
     case daily(hour: Int, minute: Int)
     case weekdays(hour: Int, minute: Int)
     case weekly(weekday: Int, hour: Int, minute: Int)
+    case biweekly(weekday: Int, hour: Int, minute: Int)
+    case monthly(day: Int, hour: Int, minute: Int)
     case everyNHours(Int)
 
     private enum Kind: String, Codable {
         case daily
         case weekdays
         case weekly
+        case biweekly
+        case monthly
         case everyNHours
     }
 
     private enum CodingKeys: String, CodingKey {
         case kind
         case weekday
+        case day
         case hour
         case minute
         case intervalHours
@@ -387,6 +419,18 @@ enum BriefingSchedule: Codable, Hashable {
         case .weekly:
             self = .weekly(
                 weekday: (try? container.decode(Int.self, forKey: .weekday)) ?? 2,
+                hour: hour,
+                minute: minute
+            )
+        case .biweekly:
+            self = .biweekly(
+                weekday: (try? container.decode(Int.self, forKey: .weekday)) ?? 2,
+                hour: hour,
+                minute: minute
+            )
+        case .monthly:
+            self = .monthly(
+                day: Self.clampedMonthDay((try? container.decode(Int.self, forKey: .day)) ?? 1),
                 hour: hour,
                 minute: minute
             )
@@ -411,6 +455,16 @@ enum BriefingSchedule: Codable, Hashable {
             try container.encode(clampedWeekday(weekday), forKey: .weekday)
             try container.encode(clampedHour(hour), forKey: .hour)
             try container.encode(clampedMinute(minute), forKey: .minute)
+        case let .biweekly(weekday, hour, minute):
+            try container.encode(Kind.biweekly, forKey: .kind)
+            try container.encode(clampedWeekday(weekday), forKey: .weekday)
+            try container.encode(clampedHour(hour), forKey: .hour)
+            try container.encode(clampedMinute(minute), forKey: .minute)
+        case let .monthly(day, hour, minute):
+            try container.encode(Kind.monthly, forKey: .kind)
+            try container.encode(Self.clampedMonthDay(day), forKey: .day)
+            try container.encode(clampedHour(hour), forKey: .hour)
+            try container.encode(clampedMinute(minute), forKey: .minute)
         case let .everyNHours(interval):
             try container.encode(Kind.everyNHours, forKey: .kind)
             try container.encode(max(1, interval), forKey: .intervalHours)
@@ -431,6 +485,23 @@ enum BriefingSchedule: Codable, Hashable {
             return nextMatchingDate(after: date, hour: hour, minute: minute, calendar: calendar) { candidate in
                 calendar.component(.weekday, from: candidate) == targetWeekday
             }
+        case let .biweekly(weekday, hour, minute):
+            let targetWeekday = clampedWeekday(weekday)
+            if calendar.component(.weekday, from: date) == targetWeekday,
+               let twoWeeks = calendar.date(byAdding: .day, value: 14, to: date) {
+                var components = calendar.dateComponents([.year, .month, .day], from: twoWeeks)
+                components.hour = clampedHour(hour)
+                components.minute = clampedMinute(minute)
+                components.second = 0
+                if let candidate = calendar.date(from: components), candidate > date {
+                    return candidate
+                }
+            }
+            return nextMatchingDate(after: date, hour: hour, minute: minute, calendar: calendar) { candidate in
+                calendar.component(.weekday, from: candidate) == targetWeekday
+            }
+        case let .monthly(day, hour, minute):
+            return nextMonthlyDate(after: date, day: day, hour: hour, minute: minute, calendar: calendar)
         case let .everyNHours(interval):
             guard interval > 0 else { return nil }
             return calendar.date(byAdding: .hour, value: interval, to: date)
@@ -461,6 +532,14 @@ enum BriefingSchedule: Codable, Hashable {
             components.hour = clampedHour(hour)
             components.minute = clampedMinute(minute)
             return [UNCalendarNotificationTrigger(dateMatching: components, repeats: true)]
+        case .biweekly:
+            return [UNTimeIntervalNotificationTrigger(timeInterval: 14 * 24 * 3600, repeats: true)]
+        case let .monthly(day, hour, minute):
+            var components = DateComponents()
+            components.day = Self.clampedMonthDay(day)
+            components.hour = clampedHour(hour)
+            components.minute = clampedMinute(minute)
+            return [UNCalendarNotificationTrigger(dateMatching: components, repeats: true)]
         case let .everyNHours(interval):
             let seconds = TimeInterval(max(1, interval) * 3600)
             return [UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: true)]
@@ -475,6 +554,10 @@ enum BriefingSchedule: Codable, Hashable {
             return "Weekdays · \(Self.timeLabel(hour: hour, minute: minute))"
         case let .weekly(weekday, hour, minute):
             return "\(Self.weekdayLabel(weekday)) · \(Self.timeLabel(hour: hour, minute: minute))"
+        case let .biweekly(weekday, hour, minute):
+            return "Every other \(Self.weekdayLabel(weekday)) · \(Self.timeLabel(hour: hour, minute: minute))"
+        case let .monthly(day, hour, minute):
+            return "Monthly on day \(Self.clampedMonthDay(day)) · \(Self.timeLabel(hour: hour, minute: minute))"
         case let .everyNHours(interval):
             return "Every \(max(1, interval))h"
         }
@@ -484,7 +567,9 @@ enum BriefingSchedule: Codable, Hashable {
         switch self {
         case let .daily(hour, minute),
              let .weekdays(hour, minute),
-             let .weekly(_, hour, minute):
+             let .weekly(_, hour, minute),
+             let .biweekly(_, hour, minute),
+             let .monthly(_, hour, minute):
             return (clampedHour(hour), clampedMinute(minute))
         case .everyNHours:
             return nil
@@ -496,6 +581,8 @@ enum BriefingSchedule: Codable, Hashable {
         case .daily: return .daily
         case .weekdays: return .weekdays
         case .weekly: return .weekly
+        case .biweekly: return .biweekly
+        case .monthly: return .monthly
         case .everyNHours: return .everyNHours
         }
     }
@@ -527,6 +614,33 @@ enum BriefingSchedule: Codable, Hashable {
         return nil
     }
 
+    private func nextMonthlyDate(
+        after date: Date,
+        day: Int,
+        hour: Int,
+        minute: Int,
+        calendar: Calendar
+    ) -> Date? {
+        let targetDay = Self.clampedMonthDay(day)
+        let current = calendar.dateComponents([.year, .month], from: date)
+        guard let year = current.year, let month = current.month else { return nil }
+        for offset in 0...24 {
+            guard let firstOfMonth = calendar.date(from: DateComponents(year: year, month: month + offset, day: 1)),
+                  let range = calendar.range(of: .day, in: .month, for: firstOfMonth) else {
+                continue
+            }
+            var components = calendar.dateComponents([.year, .month], from: firstOfMonth)
+            components.day = min(targetDay, range.count)
+            components.hour = clampedHour(hour)
+            components.minute = clampedMinute(minute)
+            components.second = 0
+            if let candidate = calendar.date(from: components), candidate > date {
+                return candidate
+            }
+        }
+        return nil
+    }
+
     private static func timeLabel(hour: Int, minute: Int) -> String {
         var components = DateComponents()
         components.hour = clampedHour(hour)
@@ -539,12 +653,18 @@ enum BriefingSchedule: Codable, Hashable {
         let labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
         return labels[clampedWeekday(weekday) - 1]
     }
+
+    private static func clampedMonthDay(_ day: Int) -> Int {
+        min(31, max(1, day))
+    }
 }
 
 enum BriefingScheduleFrequency: String, CaseIterable, Identifiable {
     case daily = "Daily"
     case weekdays = "Weekdays"
     case weekly = "Weekly"
+    case biweekly = "Biweekly"
+    case monthly = "Monthly"
     case everyNHours = "Every N hours"
 
     var id: String { rawValue }
@@ -618,7 +738,7 @@ final class BriefingStore: ObservableObject {
         }
     }
 
-    /// Agent-inbox steering: pin a tracker to the top of Today.
+    /// Agent-inbox steering: pin a tracker to the top of Next actions.
     func setPinned(_ briefing: Briefing, _ isPinned: Bool) {
         guard let index = briefings.firstIndex(where: { $0.id == briefing.id }) else { return }
         briefings[index].isPinned = isPinned
@@ -650,7 +770,13 @@ final class BriefingStore: ObservableObject {
         guard let index = briefings.firstIndex(where: { $0.id == briefing.id }) else { return }
         // On failure (e.g. signed out), leave lastRunAt untouched so the briefing
         // stays due and retries, rather than silently skipping its next run.
-        guard let result else { return }
+        guard let result else {
+            briefings[index].latestResult = nil
+            briefings[index].lastFailureAt = Date()
+            briefings[index].lastFailureMessage = "Run failed before producing a result."
+            save()
+            return
+        }
         // Accumulate a numeric value from this run, then — once there are ≥2
         // points — surface the trend over time as a chart ("watch chart"). Runs
         // that yield no number just deliver the result as-is.
@@ -671,6 +797,8 @@ final class BriefingStore: ObservableObject {
         }
         briefings[index].latestResult = delivered
         briefings[index].lastRunAt = Date()
+        briefings[index].lastFailureAt = nil
+        briefings[index].lastFailureMessage = nil
         // A conditional alert is one-shot: it only delivers when its threshold is
         // crossed, so once it fires we pause it rather than re-notifying every
         // cycle while the condition still holds. It stays on Today as a record the
@@ -787,7 +915,7 @@ final class BriefingStore: ObservableObject {
             // Snoozed trackers skip runs until the snooze elapses, then resume.
             if let snoozedUntil = briefing.snoozedUntil, snoozedUntil > now { return false }
             let baseline = briefing.lastRunAt ?? briefing.createdAt
-            guard let nextRun = briefing.schedule.nextRun(after: baseline) else { return false }
+            guard let nextRun = briefing.schedule.nextRun(after: baseline, calendar: briefing.scheduleCalendar) else { return false }
             return nextRun <= now
         }
     }
@@ -848,6 +976,9 @@ final class BriefingStore: ObservableObject {
     /// result. Prefers a concrete metric/chart value, then a news headline,
     /// then the generic note, then a scheduled-state fallback.
     static func widgetSummary(for briefing: Briefing) -> String {
+        if briefing.status == .failed {
+            return briefing.lastFailureMessage ?? "Last run failed"
+        }
         guard let widget = briefing.latestResult else {
             return briefing.isPaused ? "Paused" : "Scheduled — \(briefing.schedule.scheduleLabel)"
         }
@@ -869,6 +1000,9 @@ final class BriefingStore: ObservableObject {
             }
         case .comparison:
             if let subtitle = widget.comparison?.subtitle, !subtitle.isEmpty { return subtitle }
+        case .actionPlan:
+            if let heading = widget.actionPlan?.heading, !heading.isEmpty { return heading }
+            if let first = widget.actionPlan?.actions.first?.title, !first.isEmpty { return first }
         case .generic:
             break
         }
@@ -945,7 +1079,7 @@ struct TodaySection: View {
             header
 
             if store.briefings.isEmpty {
-                Text("Pull live briefings into your day. They refresh on schedule and land right here.")
+            Text("Turn any source, note, or chat into a recurring check. Results land here and open back into chat.")
                     .font(.subheadline)
                     .foregroundStyle(Color.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1009,7 +1143,7 @@ struct TodaySection: View {
     private var header: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Today")
+                Text("Automations")
                     .font(.title3.weight(.semibold))
                 Text(Date().formatted(.dateTime.weekday(.wide).month(.wide).day()))
                     .font(.subheadline)
@@ -1024,7 +1158,7 @@ struct TodaySection: View {
                     .background(Color.actionPrimary, in: Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("New briefing")
+            .accessibilityLabel("New workflow")
         }
     }
 
@@ -1141,6 +1275,12 @@ struct BriefingTile: View {
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
+        case .actionPlan:
+            Text(widget?.actionPlan?.heading ?? widget?.actionPlan?.actions.first?.title ?? "Actions ready")
+                .font(.footnote)
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
         case .generic, .none:
             Text(widget?.note ?? "No result yet")
                 .font(.footnote)
@@ -1151,7 +1291,8 @@ struct BriefingTile: View {
     }
 
     private var footerText: String {
-        guard let widget else { return "Scheduled" }
+        if briefing.status == .failed { return "Failed" }
+        guard let widget else { return briefing.status == .active ? "Active" : "Scheduled" }
         switch widget.kind {
         case .newsBrief:
             let stories = widget.newsBrief?.stories.count ?? 0
@@ -1166,6 +1307,9 @@ struct BriefingTile: View {
             return widget.chart?.timeframe ?? widget.chart?.caption ?? "Chart"
         case .metric:
             return widget.metric?.caption ?? widget.metric?.label ?? "Metric"
+        case .actionPlan:
+            let count = widget.actionPlan?.actions.count ?? 0
+            return count == 1 ? "1 action" : "\(count) actions"
         case .generic:
             return "Brief"
         }
@@ -1224,11 +1368,19 @@ struct ScheduleRow: View {
     }
 
     private var subtitle: String {
-        if briefing.isPaused { return "paused" }
-        guard let next = briefing.schedule.nextRun(after: briefing.lastRunAt ?? Date()) else {
+        switch briefing.status {
+        case .paused:
+            return "paused"
+        case .failed:
+            return briefing.lastFailureMessage ?? "last run failed"
+        case .active, .live, .scheduled:
+            break
+        }
+        guard let next = briefing.schedule.nextRun(after: briefing.lastRunAt ?? Date(), calendar: briefing.scheduleCalendar) else {
             return "not scheduled"
         }
-        return "next run \(relativeNextRun(next))"
+        let suffix = briefing.timeZoneLabel == TimeZone.current.identifier ? "" : " · \(briefing.timeZoneLabel)"
+        return "next run \(relativeNextRun(next))\(suffix)"
     }
 }
 
@@ -1244,8 +1396,17 @@ struct BriefingEditorSheet: View {
     @State private var frequency: BriefingScheduleFrequency
     @State private var time: Date
     @State private var weekday: Int
+    @State private var monthDay: Int
     @State private var intervalHours: Int
     @State private var isPaused: Bool
+    @State private var kind: BriefingKind
+    @State private var accountID: String?
+    @State private var council: Bool
+    @State private var condition: BriefingCondition?
+    @State private var builderInput = ""
+    @State private var builderMessages: [BriefingBuilderMessage]
+    @State private var builderActionCandidates: [WidgetActionItem]
+    @State private var approvedBuilderActionIDs: Set<String>
 
     init(
         briefing: Briefing? = nil,
@@ -1260,58 +1421,30 @@ struct BriefingEditorSheet: View {
         _frequency = State(initialValue: briefing?.schedule.frequency ?? .weekdays)
         _time = State(initialValue: Self.dateForTime(briefing?.schedule.timeComponents ?? (8, 0)))
         _weekday = State(initialValue: Self.weekday(from: briefing?.schedule) ?? 2)
+        _monthDay = State(initialValue: Self.monthDay(from: briefing?.schedule) ?? 1)
         _intervalHours = State(initialValue: Self.interval(from: briefing?.schedule) ?? 6)
         _isPaused = State(initialValue: briefing?.isPaused ?? false)
+        _kind = State(initialValue: briefing?.kind ?? .customPrompt)
+        _accountID = State(initialValue: briefing?.accountID)
+        _council = State(initialValue: briefing?.council ?? false)
+        _condition = State(initialValue: briefing?.condition)
+        _builderMessages = State(initialValue: [
+            BriefingBuilderMessage(role: .assistant, text: "What should I turn into an action, automation, reminder, or calendar follow-up?")
+        ])
+        _builderActionCandidates = State(initialValue: [])
+        _approvedBuilderActionIDs = State(initialValue: [])
     }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Briefing") {
-                    TextField("Title", text: $title)
-                    TextField("Prompt", text: $prompt, axis: .vertical)
-                        .lineLimit(4...8)
-                }
-
-                Section("Schedule") {
-                    Picker("Frequency", selection: $frequency) {
-                        ForEach(BriefingScheduleFrequency.allCases) { frequency in
-                            Text(frequency.rawValue).tag(frequency)
-                        }
-                    }
-
-                    if frequency == .weekly {
-                        Picker("Day", selection: $weekday) {
-                            ForEach(1...7, id: \.self) { value in
-                                Text(weekdayName(value)).tag(value)
-                            }
-                        }
-                    }
-
-                    if frequency == .everyNHours {
-                        Stepper("Every \(intervalHours) hours", value: $intervalHours, in: 1...24)
-                    } else {
-                        DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute)
-                    }
-
-                    Toggle("Paused", isOn: $isPaused)
-                        .tint(Color.actionPrimary)
-                }
-
-                if let existingBriefing, onDelete != nil {
-                    Section {
-                        Button(role: .destructive) {
-                            onDelete?(existingBriefing)
-                            dismiss()
-                        } label: {
-                            Text("Delete Briefing")
-                        }
-                    }
+            Group {
+                if existingBriefing == nil {
+                    briefingBuilder
+                } else {
+                    briefingForm
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(Color.appBackground)
-            .navigationTitle(existingBriefing == nil ? "New Briefing" : "Edit Briefing")
+            .navigationTitle(existingBriefing == nil ? "New Workflow" : "Edit Workflow")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -1330,9 +1463,170 @@ struct BriefingEditorSheet: View {
         }
     }
 
+    private var briefingForm: some View {
+        Form {
+            Section("Workflow") {
+                TextField("Title", text: $title)
+                TextField("Prompt", text: $prompt, axis: .vertical)
+                    .lineLimit(4...8)
+            }
+
+            Section("Schedule") {
+                Picker("Frequency", selection: $frequency) {
+                    ForEach(BriefingScheduleFrequency.allCases) { frequency in
+                        Text(frequency.rawValue).tag(frequency)
+                    }
+                }
+
+                if frequency == .weekly || frequency == .biweekly {
+                    Picker("Day", selection: $weekday) {
+                        ForEach(1...7, id: \.self) { value in
+                            Text(weekdayName(value)).tag(value)
+                        }
+                    }
+                }
+
+                if frequency == .monthly {
+                    Stepper("Day \(monthDay)", value: $monthDay, in: 1...31)
+                }
+
+                if frequency == .everyNHours {
+                    Stepper("Every \(intervalHours) hours", value: $intervalHours, in: 1...24)
+                } else {
+                    DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute)
+                }
+
+                Toggle("Active", isOn: Binding(
+                    get: { !isPaused },
+                    set: { isPaused = !$0 }
+                ))
+                    .tint(Color.actionPrimary)
+            }
+
+            if let existingBriefing, onDelete != nil {
+                Section {
+                    Button(role: .destructive) {
+                        onDelete?(existingBriefing)
+                        dismiss()
+                    } label: {
+                        Text("Delete Workflow")
+                    }
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.appBackground)
+    }
+
+    private var briefingBuilder: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Describe the workflow")
+                            .font(.caption.weight(.semibold))
+                            .textCase(.uppercase)
+                            .foregroundStyle(Color.textSecondary)
+                        ForEach(builderMessages) { message in
+                            BriefingBuilderBubble(message: message)
+                        }
+                    }
+
+                    BriefingBuilderExamples { example in
+                        applyBuilderInput(example)
+                    }
+
+                    if builderActionCandidates.isEmpty && !hasDraftPreviewContent {
+                        BriefingBuilderStartPanel()
+                    }
+
+                    if !builderActionCandidates.isEmpty {
+                        BriefingBuilderActionCards(
+                            actions: builderActionCandidates,
+                            approvedIDs: approvedBuilderActionIDs,
+                            onApprove: approveBuilderAction,
+                            onReject: rejectBuilderAction
+                        )
+                    }
+
+                    if hasDraftPreviewContent {
+                        BriefingDraftPreview(
+                            title: $title,
+                            prompt: $prompt,
+                            frequency: $frequency,
+                            time: $time,
+                            weekday: $weekday,
+                            monthDay: $monthDay,
+                            intervalHours: $intervalHours,
+                            isPaused: $isPaused,
+                            accountID: $accountID,
+                            council: $council,
+                            kind: kind,
+                            canSave: canSave
+                        )
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 18)
+            }
+
+            Divider().overlay(Color.appHairline)
+            briefingBuilderComposer
+        }
+        .background(Color.appBackground)
+    }
+
+    private var briefingBuilderComposer: some View {
+        HStack(alignment: .bottom, spacing: 10) {
+            TextField("Paste a row, source, note, or goal...", text: $builderInput, axis: .vertical)
+                .lineLimit(1...4)
+                .font(.body)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.appBorder, lineWidth: 1)
+                }
+
+            Button {
+                applyBuilderInput(builderInput)
+            } label: {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: 32, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Color.actionPrimary)
+            }
+            .buttonStyle(.plain)
+            .disabled(builderInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .opacity(builderInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
+            .accessibilityLabel("Stage workflow")
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 16)
+        .background(Color.appBackground)
+    }
+
     private var canSave: Bool {
-        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasBase =
+            !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard hasBase else { return false }
+        switch kind {
+        case .nearAccount, .cryptoPrice, .stockPrice, .watchlist:
+            return accountID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        case .customPrompt, .ethPrice, .dailyNews, .dailyBrief:
+            return true
+        }
+    }
+
+    private var hasDraftPreviewContent: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            accountID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
     private func makeBriefing() -> Briefing {
@@ -1350,14 +1644,84 @@ struct BriefingEditorSheet: View {
             latestResult: existingBriefing?.latestResult,
             // Preserve the live kind + account when editing, or the edit would
             // silently revert a live briefing to a custom prompt.
-            kind: existingBriefing?.kind ?? .customPrompt,
-            accountID: existingBriefing?.accountID,
+            kind: kind,
+            accountID: accountID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            timeZoneIdentifier: existingBriefing?.timeZoneIdentifier ?? TimeZone.current.identifier,
+            lastFailureAt: existingBriefing?.lastFailureAt,
+            lastFailureMessage: existingBriefing?.lastFailureMessage,
             // Preserve council + condition too — otherwise editing a conditional
             // alert would silently turn it into a plain recurring price briefing
             // that fires every cycle.
-            council: existingBriefing?.council ?? false,
-            condition: existingBriefing?.condition
+            council: council,
+            condition: condition
         )
+    }
+
+    private func applyBuilderInput(_ rawText: String) {
+        let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        builderInput = ""
+        builderMessages.append(BriefingBuilderMessage(role: .user, text: text))
+        let current = BriefingBuilderDraft(
+            title: title,
+            prompt: prompt,
+            schedule: makeScheduleForCurrentState(),
+            kind: kind,
+            accountID: accountID,
+            council: council,
+            condition: condition
+        )
+        let plan = BriefingBuilderPlanner.plan(from: text, current: current)
+        applyBuilderDraft(plan.draft)
+        builderActionCandidates = plan.actions
+        approvedBuilderActionIDs.removeAll()
+        builderMessages.append(BriefingBuilderMessage(role: .assistant, text: plan.reply))
+        AppHaptics.selection()
+    }
+
+    private func applyBuilderDraft(_ draft: BriefingBuilderDraft) {
+        title = draft.title
+        prompt = draft.prompt
+        kind = draft.kind
+        accountID = draft.accountID
+        council = draft.council
+        condition = draft.condition
+        applySchedule(draft.schedule)
+    }
+
+    private func approveBuilderAction(_ action: WidgetActionItem) {
+        approvedBuilderActionIDs.insert(action.id)
+        if let appDraft = action.appActionDraft(), appDraft.isReady {
+            title = appDraft.title
+            prompt = appDraft.prompt
+            kind = .customPrompt
+            accountID = nil
+            council = council || action.type?.localizedCaseInsensitiveContains("research") == true
+            condition = nil
+            applySchedule(appDraft.schedule)
+        }
+        AppHaptics.selection()
+    }
+
+    private func rejectBuilderAction(_ action: WidgetActionItem) {
+        builderActionCandidates.removeAll { $0.id == action.id }
+        approvedBuilderActionIDs.remove(action.id)
+        AppHaptics.selection()
+    }
+
+    private func applySchedule(_ schedule: BriefingSchedule) {
+        frequency = schedule.frequency
+        weekday = Self.weekday(from: schedule) ?? weekday
+        monthDay = Self.monthDay(from: schedule) ?? monthDay
+        intervalHours = Self.interval(from: schedule) ?? intervalHours
+        if let timeComponents = schedule.timeComponents {
+            time = Self.dateForTime(timeComponents)
+        }
+    }
+
+    private func makeScheduleForCurrentState() -> BriefingSchedule {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: time)
+        return makeSchedule(hour: components.hour ?? 8, minute: components.minute ?? 0)
     }
 
     private func makeSchedule(hour: Int, minute: Int) -> BriefingSchedule {
@@ -1368,6 +1732,10 @@ struct BriefingEditorSheet: View {
             return .weekdays(hour: hour, minute: minute)
         case .weekly:
             return .weekly(weekday: weekday, hour: hour, minute: minute)
+        case .biweekly:
+            return .biweekly(weekday: weekday, hour: hour, minute: minute)
+        case .monthly:
+            return .monthly(day: monthDay, hour: hour, minute: minute)
         case .everyNHours:
             return .everyNHours(intervalHours)
         }
@@ -1389,6 +1757,16 @@ struct BriefingEditorSheet: View {
         if case let .weekly(weekday, _, _) = schedule {
             return weekday
         }
+        if case let .biweekly(weekday, _, _) = schedule {
+            return weekday
+        }
+        return nil
+    }
+
+    private static func monthDay(from schedule: BriefingSchedule?) -> Int? {
+        if case let .monthly(day, _, _) = schedule {
+            return day
+        }
         return nil
     }
 
@@ -1397,6 +1775,760 @@ struct BriefingEditorSheet: View {
             return interval
         }
         return nil
+    }
+}
+
+private struct BriefingBuilderMessage: Identifiable, Equatable {
+    enum Role: Equatable {
+        case assistant
+        case user
+    }
+
+    let id = UUID()
+    let role: Role
+    let text: String
+}
+
+struct BriefingBuilderDraft: Equatable {
+    var title: String = ""
+    var prompt: String = ""
+    var schedule: BriefingSchedule = .weekdays(hour: 8, minute: 0)
+    var kind: BriefingKind = .customPrompt
+    var accountID: String? = nil
+    var council: Bool = false
+    var condition: BriefingCondition? = nil
+}
+
+struct BriefingBuilderPlan: Equatable {
+    var draft: BriefingBuilderDraft
+    var reply: String
+    var actions: [WidgetActionItem]
+
+    init(draft: BriefingBuilderDraft, reply: String, actions: [WidgetActionItem]? = nil) {
+        self.draft = draft
+        self.reply = reply
+        self.actions = actions ?? BriefingBuilderPlanner.actionCandidates(for: draft)
+    }
+}
+
+enum BriefingBuilderPlanner {
+    static func plan(from rawText: String, current: BriefingBuilderDraft = BriefingBuilderDraft()) -> BriefingBuilderPlan {
+        let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            return BriefingBuilderPlan(draft: current, reply: "Tell me what to turn into a workflow and how often it should run.")
+        }
+
+        if current.kind == .nearAccount,
+           current.accountID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false,
+           let account = QuickIntentParser.extractAccount(from: text.lowercased()) {
+            var draft = current
+            draft.title = "NEAR account"
+            draft.prompt = "Track NEAR account \(account)."
+            draft.accountID = account
+            return BriefingBuilderPlan(draft: draft, reply: reply(for: draft))
+        }
+
+        if !current.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let revision = QuickIntentParser.parse("create a tracker for \(current.title) \(text)"),
+           case let .createTracker(spec) = revision {
+            var draft = current
+            draft.schedule = spec.schedule
+            draft.council = spec.council || current.council
+            return BriefingBuilderPlan(draft: draft, reply: reply(for: draft))
+        }
+
+        let parsed = QuickIntentParser.parse(text)
+            ?? QuickIntentParser.parse("create a tracker for \(text)")
+            ?? QuickIntentParser.parse("make a recurring briefing for \(text)")
+
+        switch parsed {
+        case let .createTracker(spec):
+            let draft = draft(from: spec, fallbackText: text)
+            return BriefingBuilderPlan(draft: draft, reply: reply(for: draft))
+        case let .requestNearAccountTracker(schedule):
+            let draft = BriefingBuilderDraft(
+                title: "NEAR account",
+                prompt: "Track my NEAR account.",
+                schedule: schedule,
+                kind: .nearAccount
+            )
+            return BriefingBuilderPlan(
+                draft: draft,
+                reply: "I can do that. Send the NEAR account id and I will finish the draft."
+            )
+        case let .nearAccount(account):
+            let schedule = current.schedule
+            let draft = BriefingBuilderDraft(
+                title: "NEAR account",
+                prompt: account.map { "Track NEAR account \($0)." } ?? "Track my NEAR account.",
+                schedule: schedule,
+                kind: .nearAccount,
+                accountID: account
+            )
+            let reply = account == nil
+                ? "I can do that. Send the NEAR account id and I will finish the draft."
+                : Self.reply(for: draft)
+            return BriefingBuilderPlan(draft: draft, reply: reply)
+        case .news:
+            let draft = BriefingBuilderDraft(
+                title: "Daily news brief",
+                prompt: "Today's top news",
+                schedule: current.schedule,
+                kind: .dailyNews
+            )
+            return BriefingBuilderPlan(draft: draft, reply: reply(for: draft))
+        case let .price(coinID, symbol):
+            let kind: BriefingKind = coinID == "ethereum" ? .ethPrice : .cryptoPrice
+            let draft = BriefingBuilderDraft(
+                title: "\(symbol) price",
+                prompt: "What is the \(symbol) price?",
+                schedule: current.schedule,
+                kind: kind,
+                accountID: kind == .cryptoPrice ? coinID : nil
+            )
+            return BriefingBuilderPlan(draft: draft, reply: reply(for: draft))
+        case let .stock(symbol, company):
+            let draft = BriefingBuilderDraft(
+                title: "\(company) stock",
+                prompt: "Track \(company) (\(symbol)) stock price.",
+                schedule: current.schedule,
+                kind: .stockPrice,
+                accountID: symbol
+            )
+            return BriefingBuilderPlan(draft: draft, reply: reply(for: draft))
+        case let .watchlist(serialized):
+            let draft = BriefingBuilderDraft(
+                title: "Watchlist",
+                prompt: "Track this watchlist.",
+                schedule: current.schedule,
+                kind: .watchlist,
+                accountID: serialized
+            )
+            return BriefingBuilderPlan(draft: draft, reply: reply(for: draft))
+        case .briefMe:
+            let draft = BriefingBuilderDraft(
+                title: "Daily Brief",
+                prompt: "Brief me",
+                schedule: current.schedule,
+                kind: .dailyBrief
+            )
+            return BriefingBuilderPlan(draft: draft, reply: reply(for: draft))
+        default:
+            let draft = genericDraft(from: text, current: current)
+            return BriefingBuilderPlan(draft: draft, reply: reply(for: draft))
+        }
+    }
+
+    private static func draft(from spec: TrackerSpec, fallbackText: String) -> BriefingBuilderDraft {
+        let rawTitle = spec.title.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? title(from: fallbackText)
+        let title = self.title(from: rawTitle)
+        let prompt: String
+        if let specPrompt = spec.prompt?.trimmingCharacters(in: .whitespacesAndNewlines), !specPrompt.isEmpty {
+            prompt = spec.kind == .customPrompt ? enhancedRecurringPrompt(specPrompt) : specPrompt
+        } else if spec.kind == .nearAccount, let account = spec.subject {
+            prompt = "Track NEAR account \(account)."
+        } else {
+            let confirmation = spec.confirmation.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            prompt = spec.kind == .customPrompt
+                ? genericPrompt(from: fallbackText)
+                : (confirmation ?? genericPrompt(from: fallbackText))
+        }
+        return BriefingBuilderDraft(
+            title: title,
+            prompt: prompt,
+            schedule: spec.schedule,
+            kind: spec.kind,
+            accountID: spec.subject,
+            council: spec.council,
+            condition: spec.condition
+        )
+    }
+
+    static func actionCandidates(for draft: BriefingBuilderDraft) -> [WidgetActionItem] {
+        let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prompt = draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty || !prompt.isEmpty else { return [] }
+
+            let baseTitle = title.isEmpty ? "Recurring workflow" : title
+            var actions: [WidgetActionItem] = [
+                WidgetActionItem(
+                    title: baseTitle,
+                    type: "workflow",
+                    detail: prompt.isEmpty ? "Run a recurring check and summarize what changed." : prompt,
+                    schedule: draft.schedule.scheduleLabel,
+                    command: "Create a tracker for \(prompt.isEmpty ? baseTitle : prompt) \(draft.schedule.scheduleLabel.lowercased())",
+                source: draft.kind == .customPrompt ? nil : draft.kind.rawValue,
+                recurrence: draft.schedule.scheduleLabel,
+                missingFields: draft.kind == .nearAccount && draft.accountID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false ? ["NEAR account"] : [],
+                confidence: 0.84,
+                tone: .neutral
+            )
+        ]
+
+        let normalized = "\(title) \(prompt)".lowercased()
+        if normalized.contains("supplement") ||
+            normalized.contains("workbook") ||
+            normalized.contains("table") ||
+            normalized.contains("dose") ||
+            normalized.contains("calendar invite") {
+            actions.append(
+                WidgetActionItem(
+                    title: "Phone reminder candidates",
+                    type: "reminder",
+                    detail: "Extract rows into reminder cards before anything is written to the phone.",
+                    source: title.isEmpty ? nil : title,
+                    recurrence: "per row",
+                    missingFields: ["exact waking time", "bedtime if used", "start date"],
+                    confidence: 0.72,
+                    tone: .warn
+                )
+            )
+            actions.append(
+                WidgetActionItem(
+                    title: "Calendar invite preview",
+                    type: "calendar",
+                    detail: "Create calendar-worthy events only after concrete dates and times are confirmed.",
+                    source: title.isEmpty ? nil : title,
+                    missingFields: ["date", "time", "duration"],
+                    confidence: 0.62,
+                    tone: .neutral
+                )
+            )
+        }
+
+        if normalized.contains("risk") || normalized.contains("decision") || normalized.contains("follow-up") || normalized.contains("follow up") {
+            actions.append(
+                WidgetActionItem(
+                    title: "Decision and follow-up log",
+                    type: "decision",
+                    detail: "Save durable decisions, risks, and follow-ups back into the project after review.",
+                    command: "Save this decision: \(baseTitle)",
+                    source: title.isEmpty ? nil : title,
+                    confidence: 0.7,
+                    tone: .good
+                )
+            )
+        }
+
+        return actions
+    }
+
+    private static func genericDraft(from text: String, current: BriefingBuilderDraft) -> BriefingBuilderDraft {
+        BriefingBuilderDraft(
+            title: title(from: text),
+            prompt: genericPrompt(from: text),
+            schedule: current.schedule,
+            kind: .customPrompt,
+            accountID: nil,
+            council: current.council,
+            condition: nil
+        )
+    }
+
+    private static func title(from text: String) -> String {
+        var title = text
+            .replacingOccurrences(of: #"\b(create|make|set up|build|start|add)\b"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\b(a|an|the)\s+(briefing|tracker|watcher|brief|digest)\s+(for|about|on)?\b"#, with: "", options: [.regularExpression, .caseInsensitive])
+            .replacingOccurrences(of: #"\b(track|watch|monitor|brief me on|brief me about|keep an eye on)\b"#, with: "", options: [.regularExpression, .caseInsensitive])
+            .replacingOccurrences(of: #"\b(every|daily|weekly|biweekly|monthly|weekdays|weekday|hourly|at)\b.*$"#, with: "", options: [.regularExpression, .caseInsensitive])
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: " .,:;-").union(.whitespacesAndNewlines))
+        if title.isEmpty {
+            title = "Workflow"
+        }
+        return String(title.prefix(48))
+    }
+
+    private static func genericPrompt(from text: String) -> String {
+        """
+        Run this recurring workflow: \(text)
+
+        Use provided or project sources first. If current external data is needed, state what source was checked. Return a concise update with what changed, why it matters, any calendar-worthy or follow-up actions, and the next useful action.
+        """
+    }
+
+    private static func enhancedRecurringPrompt(_ prompt: String) -> String {
+        if prompt.lowercased().contains("calendar-worthy") {
+            return prompt
+        }
+        return """
+        \(prompt)
+
+        Return a concise update with what changed, why it matters, any calendar-worthy or follow-up actions, and the next useful action.
+        """
+    }
+
+    private static func reply(for draft: BriefingBuilderDraft) -> String {
+        let schedule = draft.schedule.scheduleLabel
+        if draft.kind == .nearAccount,
+           draft.accountID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+            return "I staged the NEAR account automation for \(schedule). Send the account id before saving."
+        }
+        return "Drafted workflow: \(draft.title) - \(schedule). Save it, or tell me what to change."
+    }
+}
+
+private struct BriefingBuilderBubble: View {
+    let message: BriefingBuilderMessage
+
+    var body: some View {
+        HStack {
+            if message.role == .user {
+                Spacer(minLength: 44)
+            }
+            Text(message.text)
+                .font(.subheadline)
+                .foregroundStyle(message.role == .user ? Color.appPanelBackground : .primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(message.role == .assistant ? Color.appBorder : Color.clear, lineWidth: 1)
+                }
+            if message.role == .assistant {
+                Spacer(minLength: 44)
+            }
+        }
+    }
+
+    private var background: Color {
+        message.role == .user ? Color.actionPrimary : Color.appPanelBackground
+    }
+}
+
+private struct BriefingBuilderActionCards: View {
+    let actions: [WidgetActionItem]
+    let approvedIDs: Set<String>
+    let onApprove: (WidgetActionItem) -> Void
+    let onReject: (WidgetActionItem) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "checklist")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.actionPrimary)
+                Text("Review before anything is created")
+                    .font(.caption.weight(.semibold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(Color.textSecondary)
+            }
+
+            VStack(spacing: 8) {
+                ForEach(actions) { action in
+                    actionCard(action)
+                }
+            }
+        }
+    }
+
+    private func actionCard(_ action: WidgetActionItem) -> some View {
+        let approved = approvedIDs.contains(action.id)
+        return VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: symbolName(for: action))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(tint(for: action, approved: approved))
+                    .frame(width: 28, height: 28)
+                    .background(tint(for: action, approved: approved).opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(action.title.isEmpty ? "Action" : action.title)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(metadata(for: action, approved: approved))
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(tint(for: action, approved: approved))
+                        .lineLimit(2)
+
+                    if let detail = nonBlank(action.detail) {
+                        Text(detail)
+                            .font(.caption)
+                            .foregroundStyle(Color.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if !action.missingFields.isEmpty {
+                        Text("Needs: \(action.missingFields.prefix(3).joined(separator: ", "))")
+                            .font(.caption2)
+                            .foregroundStyle(Color.textTertiary)
+                            .lineLimit(2)
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    onApprove(action)
+                } label: {
+                    Label(approved ? "Approved" : "Approve", systemImage: approved ? "checkmark.circle.fill" : "checkmark.circle")
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(approved ? Color.proofVerified : Color.actionPrimary)
+
+                Button {
+                    onReject(action)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.bold))
+                        .frame(width: 34)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Remove action")
+            }
+        }
+        .padding(12)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(approved ? Color.proofVerified.opacity(0.45) : Color.appBorder, lineWidth: 1)
+        }
+    }
+
+    private func metadata(for action: WidgetActionItem, approved: Bool) -> String {
+        let parts = [
+            approved ? "approved" : nil,
+            nonBlank(action.type),
+            nonBlank(action.schedule),
+            nonBlank(action.recurrence),
+            nonBlank(action.time),
+            nonBlank(action.source)
+        ].compactMap { $0 }
+        return parts.prefix(4).joined(separator: " · ")
+    }
+
+    private func symbolName(for action: WidgetActionItem) -> String {
+        let normalized = (action.type ?? "").lowercased()
+        if normalized.contains("calendar") { return "calendar.badge.plus" }
+        if normalized.contains("reminder") { return "bell.badge" }
+        if normalized.contains("workflow") || normalized.contains("automation") || normalized.contains("tracker") || normalized.contains("brief") || normalized.contains("watch") {
+            return "dot.radiowaves.left.and.right"
+        }
+        if normalized.contains("decision") { return "checkmark.seal" }
+        return "checklist"
+    }
+
+    private func tint(for action: WidgetActionItem, approved: Bool) -> Color {
+        if approved { return Color.proofVerified }
+        switch action.tone ?? .neutral {
+        case .warn: return Color.proofStale
+        case .bad: return Color.proofMismatch
+        case .good: return Color.proofVerified
+        case .neutral, .off: return Color.actionPrimary
+        }
+    }
+
+    private func nonBlank(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+private struct BriefingBuilderExamples: View {
+    let onSelect: (String) -> Void
+
+    private let examples = [
+        "Turn this table into reminders",
+        "Check new project sources every weekday at 8am",
+        "Brief me on client follow-ups every morning",
+        "Create a daily digest of what changed"
+    ]
+
+    var body: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 150), spacing: 8)],
+            alignment: .leading,
+            spacing: 8
+        ) {
+            ForEach(examples, id: \.self) { example in
+                Button {
+                    onSelect(example)
+                } label: {
+                    Text(example)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.appBorder, lineWidth: 1)
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+private struct BriefingBuilderStartPanel: View {
+    private let rows: [(String, String, String)] = [
+        ("1", "Drop in any source", "Paste a table row, screenshot text, note, URL, or goal."),
+        ("2", "Review candidates", "The app drafts automations, reminders, calendar items, and missing fields."),
+        ("3", "Approve creation", "Nothing is saved or sent to the phone calendar until you approve it.")
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("How this should work")
+                .font(.caption.weight(.semibold))
+                .textCase(.uppercase)
+                .foregroundStyle(Color.textSecondary)
+
+            VStack(spacing: 8) {
+                ForEach(rows, id: \.0) { row in
+                    HStack(alignment: .top, spacing: 10) {
+                        Text(row.0)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color.actionPrimary)
+                            .frame(width: 26, height: 26)
+                            .background(Color.actionPrimary.opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(row.1)
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(Color.textPrimary)
+                            Text(row.2)
+                                .font(.caption)
+                                .foregroundStyle(Color.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+            .padding(12)
+            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.appBorder, lineWidth: 1)
+            }
+        }
+    }
+}
+
+private struct BriefingDraftPreview: View {
+    @Binding var title: String
+    @Binding var prompt: String
+    @Binding var frequency: BriefingScheduleFrequency
+    @Binding var time: Date
+    @Binding var weekday: Int
+    @Binding var monthDay: Int
+    @Binding var intervalHours: Int
+    @Binding var isPaused: Bool
+    @Binding var accountID: String?
+    @Binding var council: Bool
+    let kind: BriefingKind
+    let canSave: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                BriefingIconChip(symbolName: canSave ? "checkmark.seal.fill" : "sparkles", tint: canSave ? Color.proofVerified : Color.actionPrimary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(canSave ? "Ready to save" : "Draft")
+                        .font(.headline)
+                    Text(canSave ? scheduleSummary : "Schedule suggested: \(scheduleSummary)")
+                        .font(.caption)
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+
+            VStack(spacing: 10) {
+                TextField("Title", text: $title)
+                    .font(.subheadline.weight(.semibold))
+                    .textFieldStyle(.plain)
+                    .padding(12)
+                    .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                TextField("What should run on schedule?", text: $prompt, axis: .vertical)
+                    .font(.subheadline)
+                    .textFieldStyle(.plain)
+                    .lineLimit(3...7)
+                    .padding(12)
+                    .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                if requiresAccount {
+                    TextField(accountPlaceholder, text: Binding(
+                        get: { accountID ?? "" },
+                        set: { accountID = $0 }
+                    ))
+                    .font(.subheadline)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .textFieldStyle(.plain)
+                    .padding(12)
+                    .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+            }
+
+            scheduleControls
+
+            if !canSave {
+                Label("Add a title and what to check before saving.", systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 12) {
+                if kind == .customPrompt {
+                    Toggle(isOn: $council) {
+                        Label("Council", systemImage: "person.3.fill")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .toggleStyle(.switch)
+                    .tint(Color.actionPrimary)
+                }
+                Toggle(isOn: Binding(
+                    get: { !isPaused },
+                    set: { isPaused = !$0 }
+                )) {
+                    Label("Active", systemImage: "bell.badge")
+                        .font(.caption.weight(.semibold))
+                }
+                .toggleStyle(.switch)
+                .tint(Color.actionPrimary)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 1)
+        }
+    }
+
+    private var scheduleControls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(BriefingScheduleFrequency.allCases) { item in
+                        Button {
+                            frequency = item
+                        } label: {
+                            Text(shortLabel(for: item))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(frequency == item ? Color.actionPrimary : Color.textSecondary)
+                                .lineLimit(1)
+                                .padding(.horizontal, 10)
+                                .frame(height: 30)
+                                .background(
+                                    frequency == item ? Color.actionTint : Color.appSecondaryBackground,
+                                    in: Capsule()
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 1)
+            }
+            .scrollClipDisabled()
+
+            if frequency == .weekly || frequency == .biweekly {
+                Picker("Day", selection: $weekday) {
+                    ForEach(1...7, id: \.self) { value in
+                        Text(weekdayName(value)).tag(value)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+
+            if frequency == .monthly {
+                Stepper("Day \(monthDay)", value: $monthDay, in: 1...31)
+                    .font(.subheadline)
+            }
+
+            if frequency == .everyNHours {
+                Stepper("Every \(intervalHours) hours", value: $intervalHours, in: 1...24)
+                    .font(.subheadline)
+            } else {
+                DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute)
+                    .font(.subheadline)
+            }
+        }
+    }
+
+    private var scheduleSummary: String {
+        switch frequency {
+        case .daily, .weekdays, .weekly, .biweekly, .monthly:
+            let components = Calendar.current.dateComponents([.hour, .minute], from: time)
+            let schedule: BriefingSchedule
+            if frequency == .daily {
+                schedule = .daily(hour: components.hour ?? 8, minute: components.minute ?? 0)
+            } else if frequency == .weekdays {
+                schedule = .weekdays(hour: components.hour ?? 8, minute: components.minute ?? 0)
+            } else if frequency == .weekly {
+                schedule = .weekly(weekday: weekday, hour: components.hour ?? 8, minute: components.minute ?? 0)
+            } else if frequency == .biweekly {
+                schedule = .biweekly(weekday: weekday, hour: components.hour ?? 8, minute: components.minute ?? 0)
+            } else {
+                schedule = .monthly(day: monthDay, hour: components.hour ?? 8, minute: components.minute ?? 0)
+            }
+            return schedule.scheduleLabel
+        case .everyNHours:
+            return BriefingSchedule.everyNHours(intervalHours).scheduleLabel
+        }
+    }
+
+    private var requiresAccount: Bool {
+        switch kind {
+        case .nearAccount, .cryptoPrice, .stockPrice, .watchlist:
+            return true
+        case .customPrompt, .ethPrice, .dailyNews, .dailyBrief:
+            return false
+        }
+    }
+
+    private var accountPlaceholder: String {
+        switch kind {
+        case .nearAccount:
+            return "NEAR account, e.g. yourname.near"
+        case .cryptoPrice:
+            return "Coin id"
+        case .stockPrice:
+            return "Ticker"
+        case .watchlist:
+            return "Watchlist"
+        case .customPrompt, .ethPrice, .dailyNews, .dailyBrief:
+            return "Subject"
+        }
+    }
+
+    private func shortLabel(for item: BriefingScheduleFrequency) -> String {
+        switch item {
+        case .daily: return "Daily"
+        case .weekdays: return "Weekdays"
+        case .weekly: return "Weekly"
+        case .biweekly: return "Biweekly"
+        case .monthly: return "Monthly"
+        case .everyNHours: return "Hourly"
+        }
+    }
+
+    private func weekdayName(_ value: Int) -> String {
+        let labels = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+        return labels[clampedWeekday(value) - 1]
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 
@@ -1470,7 +2602,7 @@ struct BriefingDetailView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("No result yet")
                             .font(.headline)
-                        Text("Run this briefing to generate its first Today card.")
+                        Text("Run this tracker to generate its first result.")
                             .font(.subheadline)
                             .foregroundStyle(Color.textSecondary)
                     }
@@ -1504,16 +2636,16 @@ private struct TodayEmptyState: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             BriefingIconChip(symbolName: "calendar.badge.plus", tint: Color.actionPrimary)
-            Text("No briefings yet")
+            Text("No automations yet")
                 .font(.headline)
-            Text("Create a recurring prompt and its latest result will appear here.")
+            Text("Create a recurring check from any source, note, table, or chat.")
                 .font(.subheadline)
                 .foregroundStyle(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button(action: onNewBriefing) {
                 HStack(spacing: 8) {
                     Image(systemName: "plus")
-                    Text("New briefing")
+                    Text("New workflow")
                         .font(.subheadline.weight(.semibold))
                 }
                 .foregroundStyle(Color.appPanelBackground)
@@ -1566,6 +2698,7 @@ private struct BriefingIconChip: View {
         case .metric: return "number"
         case .comparison: return "tablecells"
         case .newsBrief: return "newspaper"
+        case .actionPlan: return "checklist"
         case .generic, .none: return "sparkles"
         }
     }
@@ -1609,24 +2742,24 @@ struct BriefingTemplate: Identifiable {
             needsAccount: false
         ),
         BriefingTemplate(
-            title: "ETH price watcher",
-            subtitle: "Ethereum price + 24h trend, daily",
-            symbol: "chart.line.uptrend.xyaxis",
+            title: "Project digest",
+            subtitle: "Open questions, risks, and next steps",
+            symbol: "folder.badge.gearshape",
             tint: .proofVerified,
-            kind: .ethPrice,
+            kind: .customPrompt,
             schedule: .daily(hour: 9, minute: 0),
-            prompt: "What is the ETH price?",
+            prompt: "Review my active project context and summarize open questions, risks, and next steps.",
             needsAccount: false
         ),
         BriefingTemplate(
-            title: "My NEAR account",
-            subtitle: "Balance & holdings for your account",
-            symbol: "person.crop.circle.badge.checkmark",
+            title: "Research brief",
+            subtitle: "New developments on a topic you care about",
+            symbol: "doc.text.magnifyingglass",
             tint: .brandBlue,
-            kind: .nearAccount,
+            kind: .customPrompt,
             schedule: .daily(hour: 8, minute: 0),
-            prompt: "How is my NEAR account doing?",
-            needsAccount: true
+            prompt: "Research the latest credible developments on my saved topic and turn them into a short briefing with sources and follow-ups.",
+            needsAccount: false
         )
     ]
 
@@ -1634,7 +2767,7 @@ struct BriefingTemplate: Identifiable {
     /// that drives recurring engagement.
     static let dailyBriefTemplate = BriefingTemplate(
         title: "Daily Brief",
-        subtitle: "One digest of everything you track + markets",
+        subtitle: "One digest of everything you track",
         symbol: "tray.full.fill",
         tint: .brandBlue,
         kind: .dailyBrief,
@@ -1658,7 +2791,9 @@ struct BriefingTemplate: Identifiable {
         if tracksMarket, !kinds.contains(.dailyNews), let news = suggested.first(where: { $0.kind == .dailyNews }) {
             result.append(news)
         }
-        for template in suggested where !result.contains(where: { $0.kind == template.kind }) && !kinds.contains(template.kind) {
+        for template in suggested
+        where !result.contains(where: { $0.title == template.title }) &&
+            (template.kind == .customPrompt || !kinds.contains(template.kind)) {
             result.append(template)
         }
         return Array(result.prefix(3))
@@ -1782,19 +2917,18 @@ private enum BriefingSamples {
             kind: .dailyNews
         ),
         Briefing(
-            title: "ETH price watcher",
-            prompt: "What is the ETH price?",
+            title: "Project digest",
+            prompt: "Review my active project context and summarize open questions, risks, and next steps.",
             schedule: .daily(hour: 9, minute: 0),
             createdAt: Date().addingTimeInterval(-86_400 * 2),
-            kind: .ethPrice
+            kind: .customPrompt
         ),
         Briefing(
-            title: "My NEAR account",
-            prompt: "How is my NEAR account doing?",
+            title: "Research brief",
+            prompt: "Research the latest credible developments on my saved topic and turn them into a short briefing with sources and follow-ups.",
             schedule: .daily(hour: 8, minute: 0),
             createdAt: Date().addingTimeInterval(-86_400),
-            kind: .nearAccount,
-            accountID: "root.near"
+            kind: .customPrompt
         )
     ]
 

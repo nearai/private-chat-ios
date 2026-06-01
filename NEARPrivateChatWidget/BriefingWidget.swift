@@ -18,14 +18,14 @@ struct BriefingEntry: TimelineEntry {
         date: Date(),
         snapshot: BriefingSnapshot(
             id: "placeholder",
-            title: "Daily news brief",
-            summary: "Top headlines, refreshed every weekday morning.",
+            title: "Scheduled update",
+            summary: "Automation results appear here.",
             lastRunAt: Date()
         ),
         recent: [
-            BriefingSnapshot(id: "p1", title: "Daily news brief", summary: "Top headlines, refreshed every weekday morning.", lastRunAt: Date()),
-            BriefingSnapshot(id: "p2", title: "ETH price watcher", summary: "$2,005 · −0.8%", lastRunAt: Date()),
-            BriefingSnapshot(id: "p3", title: "My NEAR account", summary: "2,911.17 NEAR · $7,103", lastRunAt: Date())
+            BriefingSnapshot(id: "p1", title: "Scheduled update", summary: "Latest result appears after the next run.", lastRunAt: Date()),
+            BriefingSnapshot(id: "p2", title: "Project follow-up", summary: "Open tasks, links, and next steps.", lastRunAt: Date()),
+            BriefingSnapshot(id: "p3", title: "Account check", summary: "Private account updates stay neutral in previews.", lastRunAt: Date())
         ],
         totalCount: 3,
         isPlaceholder: true
@@ -157,7 +157,7 @@ struct BriefingWidgetEntryView: View {
                         .foregroundStyle(.tertiary)
                     Spacer(minLength: 8)
                     if entry.totalCount > 1 {
-                        Text("\(entry.totalCount) briefings")
+                        Text("\(entry.totalCount) automations")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
@@ -210,7 +210,7 @@ struct BriefingWidgetEntryView: View {
             Image(systemName: "sparkles")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.tint)
-            Text("Today")
+            Text("Automations")
                 .font(.caption.weight(.semibold))
                 .textCase(.uppercase)
                 .foregroundStyle(.secondary)
@@ -220,10 +220,10 @@ struct BriefingWidgetEntryView: View {
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 6) {
             header
-            Text("No briefings yet")
+            Text("No automations yet")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
-            Text("Create a briefing in Private Chat to see its latest result here.")
+            Text("Create an automation in Private Chat to see its latest result here.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(4)
@@ -247,8 +247,8 @@ struct BriefingWidget: Widget {
         StaticConfiguration(kind: BriefingWidgetRefresher.kind, provider: BriefingProvider()) { entry in
             BriefingWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("Today Briefing")
-        .description("Your latest scheduled briefing at a glance.")
+        .configurationDisplayName("Today Automations")
+        .description("Your latest automation result at a glance.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }

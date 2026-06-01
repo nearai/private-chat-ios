@@ -76,12 +76,15 @@ struct CouncilRoomModel {
         }
 
         let assistantMessages = scopedMessages.filter { $0.role == .assistant }
-        let synthesisMessage = assistantMessages.first(where: isSynthesisMessage)
+        let synthesisMessage = assistantMessages
+            .filter(isSynthesisMessage)
+            .sorted { $0.createdAt < $1.createdAt }
+            .last
         var participantByModel = [String: CouncilParticipant]()
         var participants = [CouncilParticipant]()
         var rows = [CouncilMessageVM]()
 
-        for message in assistantMessages where message.id != synthesisMessage?.id {
+        for message in assistantMessages where !isSynthesisMessage(message) {
             let modelID = normalizedModelID(for: message)
             let participant: CouncilParticipant
             if let existing = participantByModel[modelID] {
@@ -216,7 +219,7 @@ struct CouncilRoomModel {
             ),
             disagreement: section(
                 in: fullText,
-                labels: ["disagreement", "where they differ", "dissent"]
+                labels: ["disagreement", "disagreements or uncertainty", "where they differ", "dissent", "uncertainty"]
             ),
             nextStep: section(
                 in: fullText,
@@ -277,8 +280,10 @@ struct CouncilRoomModel {
             "what the council agrees on",
             "consensus",
             "disagreement",
+            "disagreements or uncertainty",
             "where they differ",
             "dissent",
+            "uncertainty",
             "recommended next step",
             "next step",
             "recommendation",
@@ -289,6 +294,8 @@ struct CouncilRoomModel {
 
 struct CouncilRoomView: View {
     let model: CouncilRoomModel
+    var supportsTargetedSend: Bool = false
+    var synthesizeTitle: String? = nil
     let onSend: (String, CouncilTarget) -> Void
     let onSynthesize: () -> Void
 
@@ -314,6 +321,8 @@ struct CouncilRoomView: View {
 
             CouncilComposerBar(
                 participants: model.participants,
+                supportsTargetedSend: supportsTargetedSend,
+                synthesizeTitle: synthesizeTitle,
                 onSend: onSend,
                 onSynthesize: onSynthesize
             )
@@ -455,7 +464,7 @@ struct CouncilRosterStrip: View {
     private func stateLabel(_ stance: CouncilStance) -> String {
         switch stance {
         case .reasoning: return "thinking"
-        case .dissents: return "dissents"
+        case .dissents: return "differs"
         case .agrees, .neutral: return "ready"
         }
     }
@@ -479,9 +488,9 @@ struct CouncilStanceBadge: View {
     private var label: String? {
         switch stance {
         case .agrees:
-            return "Agrees"
+            return "Likely agrees"
         case .dissents:
-            return "Dissents"
+            return "Likely differs"
         case .reasoning:
             return "reasoning..."
         case .neutral:
@@ -591,6 +600,8 @@ struct CouncilSynthesisCard: View {
 
 struct CouncilComposerBar: View {
     let participants: [CouncilParticipant]
+    var supportsTargetedSend: Bool = false
+    var synthesizeTitle: String? = nil
     let onSend: (String, CouncilTarget) -> Void
     let onSynthesize: () -> Void
 
@@ -600,9 +611,13 @@ struct CouncilComposerBar: View {
     var body: some View {
         VStack(spacing: 10) {
             HStack(spacing: 8) {
-                targetMenu
+                if supportsTargetedSend {
+                    targetMenu
+                } else {
+                    staticTargetPill
+                }
 
-                TextField("Ask the council", text: $draft, axis: .vertical)
+                TextField(supportsTargetedSend ? "Ask the council" : "Stage a follow-up", text: $draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...4)
                     .padding(.horizontal, 11)
@@ -635,16 +650,19 @@ struct CouncilComposerBar: View {
                 .frame(height: 30)
                 .background(Color.appSecondaryBackground, in: Capsule())
 
-                Button(action: onSynthesize) {
-                    Label("Synthesize", systemImage: "sparkles")
-                        .font(.caption.weight(.bold))
-                        .labelStyle(.titleAndIcon)
+                if let synthesizeTitle {
+                    Button(action: onSynthesize) {
+                        Label(synthesizeTitle, systemImage: "sparkles")
+                            .font(.caption.weight(.bold))
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.actionPrimary)
+                    .padding(.horizontal, 10)
+                    .frame(height: 30)
+                    .background(Color.actionPrimary.opacity(0.10), in: Capsule())
+                    .accessibilityHint("Use the completed Council answers that are ready now.")
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.actionPrimary)
-                .padding(.horizontal, 10)
-                .frame(height: 30)
-                .background(Color.actionPrimary.opacity(0.10), in: Capsule())
 
                 Spacer(minLength: 0)
             }
@@ -687,6 +705,21 @@ struct CouncilComposerBar: View {
             .background(Color.actionPrimary.opacity(0.10), in: Capsule())
         }
         .buttonStyle(.plain)
+    }
+
+    private var staticTargetPill: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "text.bubble")
+                .font(.caption.weight(.bold))
+            Text("Follow-up")
+                .font(.caption.weight(.bold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(Color.textSecondary)
+        .padding(.horizontal, 10)
+        .frame(height: 36)
+        .background(Color.appSecondaryBackground, in: Capsule())
+        .accessibilityLabel("Stage a room follow-up")
     }
 
     private var targetLabel: String {
@@ -773,23 +806,23 @@ private enum SynthesisChip: String, CaseIterable, Identifiable {
 
 #Preview("Council Room") {
     let glm = CouncilParticipant(
-        id: "zai-org/GLM-5.1-FP8",
-        modelID: "zai-org/GLM-5.1-FP8",
-        displayName: "GLM",
+        id: "preview-private-model",
+        modelID: "preview-private-model",
+        displayName: "Private",
         color: .brandBlue,
         stance: .agrees
     )
     let claude = CouncilParticipant(
-        id: "near-cloud/anthropic/claude-opus-4-7",
-        modelID: "near-cloud/anthropic/claude-opus-4-7",
-        displayName: "Claude",
+        id: "preview-independent-model-a",
+        modelID: "preview-independent-model-a",
+        displayName: "Model A",
         color: .proofVerified,
         stance: .agrees
     )
     let gemini = CouncilParticipant(
-        id: "google/gemini-2.5-pro",
-        modelID: "google/gemini-2.5-pro",
-        displayName: "Gemini",
+        id: "preview-independent-model-b",
+        modelID: "preview-independent-model-b",
+        displayName: "Model B",
         color: .proofMismatch,
         stance: .dissents
     )
@@ -797,7 +830,7 @@ private enum SynthesisChip: String, CaseIterable, Identifiable {
     return CouncilRoomView(
         model: CouncilRoomModel(
             title: "Council",
-            subtitle: "GLM · Claude · Gemini",
+            subtitle: "Private · Model A · Model B",
             participants: [glm, claude, gemini],
             messages: [
                 CouncilMessageVM(
@@ -821,7 +854,7 @@ private enum SynthesisChip: String, CaseIterable, Identifiable {
             ],
             synthesis: CouncilSynthesisVM(
                 agreement: "All models support a separate room that preserves the current council transcript and does not call store APIs directly.",
-                disagreement: "Gemini would not make the room the default presentation until usage proves it is clearer than the compact stack.",
+                disagreement: "Model B would not make the room the default presentation until usage proves it is clearer than the compact stack.",
                 nextStep: "Add an Open Council Room affordance, map the selected batch through `CouncilRoomModel.from`, then wire send and synthesize callbacks.",
                 fullText: "The council broadly supports a separate room UI while keeping the existing stacked rendering stable. The main disagreement is default placement versus opt-in access."
             )

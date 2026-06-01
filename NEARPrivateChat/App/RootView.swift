@@ -21,9 +21,6 @@ struct RootView: View {
         .preferredColorScheme(chatStore.appearancePreference.preferredColorScheme)
         .onAppear {
             refreshLegalTermsAcceptance()
-            // v2: no automatic Setup presentation on sign-in. The Claude Design
-            // Auth spec flows directly to Home; Setup is reachable only via
-            // explicit "Run setup again" from Account (beginSetupRerun()).
         }
         .onChange(of: sessionStore.session?.token) { _, _ in
             refreshLegalTermsAcceptance()
@@ -53,10 +50,7 @@ struct RootView: View {
         ) {
             if let accountID = presentedSetupAccountID {
                 UserSetupView(
-                    initialProfile: UserSetupStorage.presentationProfile(
-                        for: accountID,
-                        currentDefaults: currentSetupProfile
-                    ),
+                    initialProfile: setupDefaultsTuningProfile(for: accountID),
                     readiness: setupReadinessSnapshot,
                     onComplete: { profile in
                         completeSetup(profile, for: accountID)
@@ -135,9 +129,14 @@ struct RootView: View {
 
     private func beginSetupRerun() {
         guard sessionStore.isSignedIn, let accountID = sessionStore.setupAccountID else { return }
-        UserSetupStorage.clearCompletion(for: accountID)
+        // Setup is optional defaults tuning now; completion state changes only
+        // after the user saves or explicitly keeps current defaults.
         UserSetupStorage.clearPendingLaunchCard(for: accountID)
         presentedSetupAccountID = accountID
+    }
+
+    private func setupDefaultsTuningProfile(for accountID: String) -> UserSetupProfile {
+        UserSetupStorage.load(for: accountID) ?? currentSetupProfile
     }
 
     private func completeSetup(_ profile: UserSetupProfile, for accountID: String) {
@@ -150,7 +149,7 @@ struct RootView: View {
 
     private func skipSetup(for accountID: String) {
         let profile = chatStore.setupProfileSnapshot(
-            UserSetupStorage.presentationProfile(for: accountID, currentDefaults: currentSetupProfile)
+            setupDefaultsTuningProfile(for: accountID)
         )
         UserSetupStorage.saveWithoutPendingLaunchCard(profile, for: accountID)
         presentedSetupAccountID = nil
@@ -190,14 +189,8 @@ struct RootView: View {
         guard let accountID = sessionStore.setupAccountID else { return }
         LegalTermsAcceptanceStore.acceptCurrentVersion(for: accountID)
         legalTermsAccepted = true
-        // v2: terms acceptance flows directly to Home — no Setup gate.
     }
 
-    /// v2 replacement for the old `refreshSetupPresentation`. We no longer
-    /// auto-present Setup based on completion status — only migrate the
-    /// underlying storage when the active account changes. Setup is reached
-    /// solely via the explicit "Run setup again" entry in Account, which
-    /// drives `beginSetupRerun()`.
     private func migrateSetupStorageIfNeeded(previousAccountID: String?) {
         guard sessionStore.isSignedIn, let accountID = sessionStore.setupAccountID else { return }
         if let previousAccountID, previousAccountID != accountID {

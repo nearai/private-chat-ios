@@ -49,13 +49,15 @@ struct AuthView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .accessibilityHidden(true)
 
-                Text("Private AI.\nVerifiably Yours.")
-                    .font(.system(size: 33, weight: .bold, design: .serif))
-                    .foregroundStyle(.primary)
+                ProductWordmark(alignment: .center, scale: 0.9)
+                    .frame(maxWidth: 280)
+
+                Text("Sign in to chat about anything: write, code, research, summarize files, analyze ideas, and turn messy context into actions.")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-                    .frame(maxWidth: 300)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 310)
             }
             .padding(.top, 56)
             .frame(maxWidth: .infinity)
@@ -237,9 +239,7 @@ struct AuthView: View {
 
 // MARK: - Hero card (compatibility shim for non-Auth surfaces)
 
-/// Mark + headline block used by surfaces that historically reused the Auth
-/// hero (LegalTermsRequiredView, DemoCaptureViews). AuthView itself inlines
-/// the same composition per the v2 spec.
+/// Mark + headline block used by auth-adjacent surfaces.
 struct AuthHeroCard: View {
     var body: some View {
         VStack(spacing: 28) {
@@ -251,13 +251,8 @@ struct AuthHeroCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .accessibilityHidden(true)
 
-            Text("Private AI.\nVerifiably Yours.")
-                .font(.system(size: 33, weight: .bold, design: .serif))
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.center)
-                .lineSpacing(4)
-                .frame(maxWidth: 300)
-                .fixedSize(horizontal: false, vertical: true)
+            ProductWordmark(alignment: .center, scale: 0.9)
+                .frame(maxWidth: 280)
         }
         .frame(maxWidth: .infinity)
     }

@@ -55,6 +55,7 @@ enum QuickIntent: Equatable {
     case searchHistory(query: String)
     case createReminder(PersonalReminder)
     case createTracker(TrackerSpec)
+    case requestNearAccountTracker(schedule: BriefingSchedule)
     /// "track that" — make a tracker from whatever the previous answer was about.
     case trackLast(schedule: BriefingSchedule)
 }
@@ -64,6 +65,89 @@ enum QuickIntent: Equatable {
 struct PersonalReminder: Equatable {
     var title: String
     var date: Date
+}
+
+/// Generic "make this useful" steering for turns where the user wants context
+/// converted into concrete next moves. This is deliberately domain-agnostic:
+/// supplements, client sheets, repo notes, meeting transcripts, PDFs, and saved
+/// project context should all flow through the same action surface.
+enum ActionSurfacePlanner {
+    static func shouldAugment(text: String, attachmentNames: [String]) -> Bool {
+        let normalized = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty || !attachmentNames.isEmpty else { return false }
+        if normalized.isEmpty {
+            return !attachmentNames.isEmpty
+        }
+
+        let actionCues = [
+            "action", "actionable", "next step", "next steps", "follow up", "follow-up",
+            "todo", "to-do", "task", "tasks", "checklist", "plan", "schedule", "tracker",
+            "track", "watch", "monitor", "reminder", "remind", "calendar", "invite",
+            "habit", "routine", "surface", "interested", "recommend", "extract",
+            "analyze", "analyse", "compare", "prioritize", "prioritise", "research",
+            "investigate", "deep search", "deep research", "workflow", "generate",
+            "brief", "briefing", "digest", "cron", "recurring", "notify",
+            "turn into", "turn this into", "make this useful", "what should i do"
+        ]
+        guard actionCues.contains(where: { normalized.contains($0) }) else {
+            return false
+        }
+
+        let explicitActionCues = [
+            "action", "actionable", "next step", "next steps", "follow up", "follow-up",
+            "todo", "to-do", "task", "tasks", "checklist", "plan", "schedule", "tracker",
+            "track", "watch", "monitor", "reminder", "remind", "calendar", "invite",
+            "habit", "routine", "surface", "recommend", "extract", "prioritize",
+            "prioritise", "workflow", "generate", "briefing", "digest", "cron",
+            "recurring", "notify", "turn into", "turn this into", "make this useful",
+            "what should i do"
+        ]
+        if attachmentNames.isEmpty,
+           !explicitActionCues.contains(where: { normalized.contains($0) }),
+           ["research", "investigate", "compare", "analyze", "analyse"].contains(where: { normalized.contains($0) }) {
+            return false
+        }
+
+        let nonActionExclusions = [
+            "what is", "what are", "define ", "translate ", "summarize in one sentence"
+        ]
+        if attachmentNames.isEmpty,
+           nonActionExclusions.contains(where: { normalized.hasPrefix($0) }) {
+            return false
+        }
+        return true
+    }
+
+    static func augmentedPrompt(text: String, attachmentNames: [String], sourceInstruction: String? = nil) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard shouldAugment(text: trimmed, attachmentNames: attachmentNames) else {
+            return text
+        }
+
+        let trimmedSourceInstruction = sourceInstruction?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let sourceLine = !trimmedSourceInstruction.isEmpty
+            ? trimmedSourceInstruction
+            : (attachmentNames.isEmpty
+                ? "Use the conversation, selected project context, and any supplied sources."
+                : "Use every relevant attached file or sheet: \(attachmentNames.joined(separator: ", ")).")
+        let userRequest = trimmed.isEmpty
+            ? "Review this context and turn it into useful actions."
+            : trimmed
+
+        return """
+        \(userRequest)
+
+        Action surface contract:
+        - \(sourceLine)
+        - Do not narrow this to one workflow. Identify the useful actionable surface in the context: trackers/briefings, reminders, calendar-worthy events, habits/routines, tasks, decisions, open questions, risks, and things I am likely to care about.
+        - If structured rows or tables exist, scan all relevant sections/sheets and preserve concrete names, quantities, dates, cadences, timing, and caveats.
+        - For every proposed action, include: title, type, why it matters, owner/recipient if known, schedule or trigger if present, missing details if any, and the exact app command that would create or stage it.
+        - If you emit a near-widget action_plan, include structured fields where known: source, date, time, duration, recurrence, timezone, location, attendees, missing_fields, and confidence. Do not invent concrete times for fuzzy cues like upon waking or before bed; mark the missing field.
+        - Use these app command forms when applicable: "Create a tracker for ... every ...", "Remind me to ... at ...", "Make a briefing about ... every ...", "Ask the agent to ...", or "Save this decision: ...".
+        - If the user asked to create actions, show a preview first and call out anything that cannot be safely created yet. Do not claim calendar events or trackers were installed unless the app explicitly confirms them.
+        - End with the highest-leverage next action and a compact near-widget action_plan card of the top proposed actions when a card would help.
+        """
+    }
 }
 
 struct TrackerSpec: Equatable {
@@ -82,6 +166,7 @@ enum QuickIntentParser {
         let trimmedRaw = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let text = trimmedRaw.lowercased()
         guard !text.isEmpty else { return nil }
+        let blocksLiveNetwork = blocksLiveNetwork(text)
 
         // 0) memory — recall stored facts, or store a new one. Checked first so
         // "remember that …" never gets mistaken for a tracker/reminder.
@@ -169,7 +254,7 @@ enum QuickIntentParser {
         // Checked before the generic tracker path so an alert isn't mistaken for
         // a plain recurring price briefing. Has its own strict gate (alert/when +
         // coin + comparator + number), so ordinary prose can't trip it.
-        if let spec = makeConditionalTracker(from: text, original: trimmedRaw) {
+        if !blocksLiveNetwork, let spec = makeConditionalTracker(from: text, original: trimmedRaw) {
             return .createTracker(spec)
         }
 
@@ -178,22 +263,48 @@ enum QuickIntentParser {
         // informational subject (watchVerb + an info cue like "price"/"value"),
         // so "track the price of a Rolex GMT Master II" becomes a web-grounded
         // recurring tracker while "remind me to stretch daily" stays a reminder.
-        let createVerb = contains(text, ["create", "make", "set up", "set-up", "setup", "build", "schedule", "start", "add", "track", "watch", "remind"])
-        let trackerNoun = contains(text, ["tracker", "watcher", "alert", "briefing", "brief", "digest", "every day", "every morning", "each morning", "each day", "every weekday", "daily", "weekly"])
+        let createVerb = contains(text, [
+            "create", "make", "set up", "set-up", "setup", "build", "schedule",
+            "start", "add", "track", "watch", "monitor", "follow", "check", "run",
+            "research", "scan", "look up", "look for", "find", "investigate"
+        ])
+        let trackerNoun = contains(text, [
+            "tracker", "watcher", "alert", "briefing", "brief", "digest", "cron",
+            "cron job", "recurring", "scheduled task", "every day", "every morning",
+            "each morning", "each day", "every weekday", "daily", "weekly",
+            "hourly", "every hour", "every evening", "nightly"
+        ])
         let infoCue = contains(text, ["price", "value", "cost", "worth", "quote", "rate", "index", "stock",
                                       "score", "news", "level", "status", "forecast", "floor price", "market cap",
                                       "how much", "trading at"])
+        let hasScheduleCue = trackerNoun || hasExplicitCadence(text)
         // "track that / watch it daily" → track whatever the last answer was
         // about (checked before the generic gate; the pronoun has no subject).
         if parseTrackLast(text) {
             return .trackLast(schedule: extractSchedule(from: text))
         }
-        if (createVerb && trackerNoun) || (startsWithWatchCommand(text) && (infoCue || parseStock(text, original: trimmedRaw) != nil || parseWatchlistAssets(text) != nil)),
+        if let recurringReminder = makeRecurringReminderTracker(from: text, original: trimmedRaw) {
+            return .createTracker(recurringReminder)
+        }
+        if shouldPreviewInsteadOfCreate(text) || hasUnsupportedRecurringCadence(text) {
+            return nil
+        }
+        if blocksLiveNetwork,
+           (createVerb && hasScheduleCue) || startsWithWatchCommand(text) {
+            return nil
+        }
+        if createVerb && hasScheduleCue && isNearAccountTrackerRequest(text) && extractAccount(from: text) == nil {
+            return .requestNearAccountTracker(schedule: extractSchedule(from: text))
+        }
+        if (createVerb && hasScheduleCue) || (startsWithWatchCommand(text) && (infoCue || parseStock(text, original: trimmedRaw) != nil || parseWatchlistAssets(text) != nil)),
            let spec = makeTracker(from: text, original: trimmedRaw) {
             return .createTracker(spec)
         }
 
         // 1b) watchlist — an explicit "watchlist" of ≥2 assets shown as one card.
+        if contains(text, ["watchlist", "watch list"]), hasUnresolvedAssetListSubject(text) {
+            return nil
+        }
         if contains(text, ["watchlist", "watch list"]), let serialized = parseWatchlistAssets(text) {
             return .watchlist(serialized: serialized)
         }
@@ -203,14 +314,16 @@ enum QuickIntentParser {
         // topic ("what's happening in global politics", "tech news") carries a
         // subject the feed can't honor, so it falls through to the web-grounded
         // model for a real answer on that topic.
-        if contains(text, ["news", "headlines", "what's happening", "whats happening", "top stories", "current events"]),
+        if !blocksLiveNetwork,
+           contains(text, ["news", "headlines", "what's happening", "whats happening", "top stories", "current events"]),
            isBareNewsRequest(text) {
             return .news
         }
 
         // 2a2) trending crypto — specific phrases only, so it doesn't swallow a
         // single-coin price question.
-        if contains(text, ["trending coin", "trending coins", "trending crypto", "trending token",
+        if !blocksLiveNetwork,
+           contains(text, ["trending coin", "trending coins", "trending crypto", "trending token",
                             "trending tokens", "trending cryptocurrencies", "what's trending in crypto",
                             "whats trending in crypto", "what is trending in crypto", "crypto trending",
                             "what's hot in crypto", "whats hot in crypto", "top trending coins",
@@ -219,7 +332,8 @@ enum QuickIntentParser {
         }
 
         // 2a3) crypto market overview — total cap / dominance.
-        if contains(text, ["crypto market", "how's the crypto market", "hows the crypto market",
+        if !blocksLiveNetwork,
+           contains(text, ["crypto market", "how's the crypto market", "hows the crypto market",
                             "how is the crypto market", "crypto market overview", "total market cap",
                             "total crypto market cap", "market cap of crypto", "btc dominance",
                             "bitcoin dominance", "eth dominance", "state of crypto", "state of the crypto market"]) {
@@ -228,20 +342,25 @@ enum QuickIntentParser {
 
         // 2a4) stocks — a ticker/company with a stock or price cue ("AAPL price",
         // "Tesla stock", "$NVDA"). Conservatively gated so prose isn't hijacked.
-        if let stock = parseStock(text, original: trimmedRaw) {
+        if !blocksLiveNetwork, hasMixedKnownUnknownValueAsk(text) {
+            return nil
+        }
+        if !blocksLiveNetwork, let stock = parseStock(text, original: trimmedRaw) {
             return .stock(symbol: stock.symbol, company: stock.company)
         }
 
         // 2b) weather — needs an extractable place ("weather in tokyo",
         // "tokyo forecast"). Without a place we fall through to the model.
-        if contains(text, ["weather", "forecast", "temperature"]),
+        if !blocksLiveNetwork,
+           contains(text, ["weather", "forecast", "temperature"]),
            let place = extractLocation(from: text) {
             return .weather(query: place)
         }
 
         // 2c) world time — "what time is it in tokyo", "london time". The
         // place gate keeps "time to go" / "what time do you close" out.
-        if contains(text, ["time", "clock"]),
+        if !blocksLiveNetwork,
+           requestsWorldTime(text),
            let place = extractLocation(from: text, keywords: ["time", "clock"]) {
             return .worldTime(query: place)
         }
@@ -275,7 +394,8 @@ enum QuickIntentParser {
         // whole branch so it reaches the model rather than asking for a .near id.
         let account = extractAccount(from: text)
         let mentionsTestnet = text.contains(".testnet")
-        if !mentionsTestnet,
+        if !blocksLiveNetwork,
+           !mentionsTestnet,
            contains(text, ["my near account", "near account", "near.com account", "account doing", "account balance", "wallet balance", "my wallet", "my balance"]) ||
             (account != nil && contains(text, ["doing", "balance", "holdings", "how is", "status", "account", "wallet", "worth"])) {
             return .nearAccount(account: account)
@@ -283,7 +403,7 @@ enum QuickIntentParser {
 
         // 3b) currency conversion ("convert 100 usd to eur", "50 gbp in usd").
         // The currency-code gate keeps "translate X to spanish" out.
-        if let fx = parseFX(text) {
+        if !blocksLiveNetwork, let fx = parseFX(text) {
             return .fx(amount: fx.amount, from: fx.from, to: fx.to)
         }
 
@@ -294,7 +414,8 @@ enum QuickIntentParser {
 
         // 4) price of a coin (a bare "?" is not enough — it swallows
         // "can you explain ethereum?" — so require an explicit price word).
-        if let coin = matchedCoin(in: text),
+        if !blocksLiveNetwork,
+           let coin = matchedCoin(in: text),
            contains(text, ["price", "worth", "trading", "how much", "value", "cost"]) {
             return .price(coinID: coin.id, symbol: coin.symbol)
         }
@@ -317,23 +438,60 @@ enum QuickIntentParser {
         "what can this do", "what else can you do", "how do you work", "what do you do"
     ]
 
+    private static func requestsWorldTime(_ text: String) -> Bool {
+        if contains(text, [
+            "what time is it", "current time", "local time", "time in ",
+            "time at ", "time for ", "clock in ", "clock at ", "clock for "
+        ]) {
+            return true
+        }
+        let simplePlaceTimePattern = #"^[a-z][a-z .'-]{1,40}\s+(time|clock)\??$"#
+        return text.range(of: simplePlaceTimePattern, options: .regularExpression) != nil
+    }
+
+    private static func blocksLiveNetwork(_ text: String) -> Bool {
+        let normalized = " " + text
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines) + " "
+        let looseNormalized = " " + text
+            .replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines) + " "
+        let phrases = [
+            "no web", "without web", "no browsing", "do not browse", "don't browse",
+            "do not search the web", "don't search the web", "no internet",
+            "offline only", "do not use web", "don't use web"
+        ]
+        return phrases.contains { phrase in
+            let loosePhrase = phrase
+                .replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalized.contains(" \(phrase) ") ||
+                (!loosePhrase.isEmpty && looseNormalized.contains(" \(loosePhrase) "))
+        }
+    }
+
     /// A concise tour of what the assistant can do, with copy-pasteable example
     /// prompts. Static + deterministic so it's testable and reusable.
     static func capabilitiesText() -> String {
         """
-        Here’s what I can do — all on-device or over public data, no sign-in needed:
+        Here’s what this app can do:
 
-        **Live answers** — ask in plain language:
-        • “What’s the ETH price?” · “What’s trending in crypto?” · “How’s my account, alice.near?”
+        **Chat about anything** — sign in for the general assistant:
+        • “Write a concise client follow-up email”
+        • “Summarize this PDF and pull out next actions”
+        • “Debug this Swift error” · “Compare these options”
+        • “Research this topic and make a decision brief”
+
+        **Quick tools before sign-in** — local utilities and public data:
         • “Weather in Tokyo” · “What time is it in London?”
         • “Convert 100 USD to EUR” · “5 miles in km” · “Define serendipity”
-        • Top headlines · or chain them: “ETH price and weather in Lisbon”
+        • “Top headlines” · “What’s the ETH price?” · “How’s my account, alice.near?”
 
-        **Trackers & alerts** — I check on a schedule and surface results on Today:
-        • Track *anything*: “Track the price of a Rolex GMT Master II every morning” — I find it on the web and build a chart over time
-        • Ask something, then just say “track that” to start watching it
-        • “Notify me when ETH drops below $2,000” — I alert once, then pause
-        • “Brief me” — one digest of everything I’m tracking + the markets (or “brief me every morning”)
+        **Automations & alerts** — I can stage recurring checks and surface approved results:
+        • “Check this topic every morning” — I’ll draft the workflow before creating anything
+        • Ask something, then say “track that” to start a recurring check
+        • “Remind me to review the grant draft every Friday”
+        • “Brief me” — one digest of your active automations and relevant signals
         • “What are you tracking?” to review them
 
         **Quick math & dates** — instant, on-device:
@@ -350,7 +508,7 @@ enum QuickIntentParser {
 
         **Hands-free**: tap the mic to dictate, or ask Siri to run your briefings.
 
-        Just type what you want — if it’s a question I can answer live, I will; otherwise I’ll think it through.
+        Just type what you want. If it needs the general model, I’ll route it through chat; if it’s a quick local/public lookup, I can answer immediately.
         """
     }
 
@@ -405,7 +563,7 @@ enum QuickIntentParser {
         switch intent {
         case .price, .stock, .trendingCrypto, .cryptoMarket, .nearAccount, .news, .weather, .worldTime, .fx, .unitConvert, .define:
             return true
-        case .watchlist, .briefMe, .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .setDocumentPrivacy, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker, .trackLast:
+        case .watchlist, .briefMe, .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .setDocumentPrivacy, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker, .requestNearAccountTracker, .trackLast:
             return false
         }
     }
@@ -420,7 +578,7 @@ enum QuickIntentParser {
         let schedule = extractSchedule(from: text)
         let label = schedule.scheduleLabel
         let account = extractAccount(from: text)
-        let mentionsAccount = contains(text, ["account", "wallet", "near.com"]) || account != nil
+        let mentionsAccount = isNearAccountTrackerRequest(text) || account != nil
 
         // Live-data kinds are single deterministic fetches — council is
         // meaningless there, so it's always false regardless of the wording.
@@ -479,6 +637,13 @@ enum QuickIntentParser {
             }
             return TrackerSpec(title: "Daily news", kind: .dailyNews, subject: nil, schedule: schedule, council: false, confirmation: "Daily news · \(label)")
         }
+        let infoCue = contains(text, ["price", "value", "cost", "worth", "quote", "rate", "index", "stock",
+                                      "score", "level", "status", "forecast", "floor price", "market cap",
+                                      "how much", "trading at"])
+        if startsWithWatchCommand(text), infoCue, hasUnresolvedAssetListSubject(text),
+           let generic = makeOpenEndedInfoTracker(from: original, text: text, schedule: schedule, council: council, label: label) {
+            return generic
+        }
         if let serialized = parseWatchlistAssets(text) {
             let count = serialized.split(separator: "|").count
             return TrackerSpec(
@@ -515,13 +680,12 @@ enum QuickIntentParser {
         // don't have a built-in feed for (a watch, a stock, a collectible…).
         // Becomes a web-grounded recurring custom-prompt tracker — the agentic-OS
         // case: "track the price of a Rolex GMT Master II every morning".
-        let infoCue = contains(text, ["price", "value", "cost", "worth", "quote", "rate", "index", "stock",
-                                      "score", "level", "status", "forecast", "floor price", "market cap",
-                                      "how much", "trading at"])
         if startsWithWatchCommand(text) && infoCue {
-            let subject = trackerSubject(from: original)
-            guard subject.count >= 2 else { return nil }
-            let title = prettyTrackerTitle(from: subject)
+            return makeOpenEndedInfoTracker(from: original, text: text, schedule: schedule, council: council, label: label)
+        }
+
+        if let generic = genericScheduledTaskSubject(from: text, original: original) {
+            let title = prettyTrackerTitle(from: generic)
             return TrackerSpec(
                 title: title,
                 kind: .customPrompt,
@@ -529,7 +693,7 @@ enum QuickIntentParser {
                 schedule: schedule,
                 council: council,
                 confirmation: "Tracking \(title) · \(label)",
-                prompt: "Using web search, find the latest \(subject) and report it concisely. Lead with the current number/price (with its currency) and the as-of date, then one short line of context. If it's a price or numeric value, present it as a metric or chart widget."
+                prompt: "Run this recurring task: \(generic). Use web search when fresh facts are needed, include dates/sources when relevant, and lead with what changed or what needs attention."
             )
         }
 
@@ -555,12 +719,38 @@ enum QuickIntentParser {
         )
     }
 
+    private static func makeOpenEndedInfoTracker(
+        from original: String,
+        text: String,
+        schedule: BriefingSchedule,
+        council: Bool,
+        label: String
+    ) -> TrackerSpec? {
+        let subject = trackerSubject(from: original)
+        guard subject.count >= 2 else { return nil }
+        let title = prettyTrackerTitle(from: subject)
+        return TrackerSpec(
+            title: title,
+            kind: .customPrompt,
+            subject: nil,
+            schedule: schedule,
+            council: council,
+            confirmation: "Tracking \(title) · \(label)",
+            prompt: "Using web search, find the latest \(subject) and report it concisely. Lead with the current number/price (with its currency) and the as-of date, then one short line of context. If it's a price or numeric value, present it as a metric or chart widget."
+        )
+    }
+
     /// The subject of an open-ended tracker: the cleaned prompt with leading
     /// watch verbs and articles stripped. "track the price of a Rolex GMT Master
     /// II every morning" → "price of a Rolex GMT Master II".
     static func trackerSubject(from text: String) -> String {
         var subject = cleanedTrackerPrompt(from: text)
-        let leadVerbs = ["keep an eye on ", "keep tabs on ", "keep track of ", "track ", "watch ", "monitor ", "follow "]
+        let leadVerbs = [
+            "keep an eye on ", "keep tabs on ", "keep track of ", "track ",
+            "watch for ", "watch ", "monitor ", "follow ", "check on ", "check ",
+            "research ", "scan for ", "scan ", "look up ", "look for ",
+            "find ", "investigate ", "run "
+        ]
         var changed = true
         while changed {
             changed = false
@@ -573,6 +763,140 @@ enum QuickIntentParser {
             }
         }
         return subject.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+    }
+
+    private static func hasUnresolvedAssetListSubject(_ text: String) -> Bool {
+        guard contains(text, ["watchlist", "watch list", " and ", ",", " vs ", " versus ", " plus ", " with "]) else {
+            return false
+        }
+        let subject = trackerSubject(from: text)
+            .lowercased()
+            .replacingOccurrences(of: #"[^\p{L}\p{N}$]+"#, with: " ", options: .regularExpression)
+        let noise: Set<String> = [
+            "a", "an", "the", "my", "me", "please", "for", "of", "to", "from",
+            "what", "whats", "what's", "is", "are", "and", "or", "vs", "versus", "plus", "with", "every", "each",
+            "daily", "weekly", "monthly", "morning", "evening", "night", "nightly",
+            "weekday", "weekdays", "week", "weeks", "month", "months", "day", "days",
+            "at", "am", "pm", "price", "prices", "value", "values", "cost",
+            "costs", "worth", "quote", "quotes", "rate", "rates", "index",
+            "watchlist", "watch", "list", "stock", "stocks", "share", "shares", "ticker", "tickers", "crypto",
+            "coin", "coins", "token", "tokens", "market", "cap", "floor",
+            "trading", "protocol", "network", "asset", "assets"
+        ]
+
+        for token in subject.split(separator: " ").map(String.init) where token.count >= 2 {
+            let stripped = token.trimmingCharacters(in: CharacterSet(charactersIn: "$"))
+            if stripped.isEmpty || Double(stripped) != nil || noise.contains(stripped) {
+                continue
+            }
+            if matchedCoin(in: stripped) != nil || resolveStockToken(stripped) != nil {
+                continue
+            }
+            return true
+        }
+        return false
+    }
+
+    private static func hasMixedKnownUnknownValueAsk(_ text: String) -> Bool {
+        let valueCue = contains(text, [
+            "price", "prices", "value", "values", "cost", "costs", "worth",
+            "quote", "quotes", "rate", "rates", "market cap", "floor price"
+        ])
+        guard valueCue,
+              contains(text, [" and ", ",", " vs ", " versus ", " plus ", " with "]),
+              hasUnresolvedAssetListSubject(text) else {
+            return false
+        }
+        return matchedCoin(in: text) != nil || parseWatchlistAssets(text) != nil
+    }
+
+    private static func isNearAccountTrackerRequest(_ text: String) -> Bool {
+        contains(text, ["near account", "near wallet", "near.com account", "account balance", "wallet balance"])
+    }
+
+    private static func shouldPreviewInsteadOfCreate(_ text: String) -> Bool {
+        contains(text, [
+            "only if", "if there is", "if there's", "if it finds", "if you find",
+            "make a tracker if", "create a tracker if", "add a tracker if",
+            "otherwise list", "preview before creating", "preview before you create"
+        ])
+    }
+
+    private static func hasUnsupportedRecurringCadence(_ text: String) -> Bool {
+        if text.range(of: #"\bevery\s+\d+\s*(min|mins|minute|minutes)\b"#, options: .regularExpression) != nil {
+            return true
+        }
+        return contains(text, [
+            "twice daily", "twice a day", "twice per day",
+            "twice weekly", "twice a week", "twice per week",
+            "twice monthly", "twice a month", "twice per month",
+            "quarterly", "every quarter", "yearly", "annually",
+            "semiweekly", "semi-weekly"
+        ])
+    }
+
+    private static func genericScheduledTaskSubject(from text: String, original: String) -> String? {
+        guard hasExplicitCadence(text) || contains(text, ["tracker", "watcher", "cron", "recurring", "scheduled task"]) else {
+            return nil
+        }
+        let subject = trackerSubject(from: original)
+        guard subject.count >= 3 else { return nil }
+        let lower = subject.lowercased()
+        if lower.hasPrefix("remind me ") || lower.hasPrefix("reminder ") { return nil }
+        if contains(lower, ["this video", "this movie", "tv tonight", "watch tonight"]) { return nil }
+        return subject
+    }
+
+    private static func makeRecurringReminderTracker(from text: String, original: String) -> TrackerSpec? {
+        let triggers = [
+            "remind me to ", "remind me about ", "remind me ",
+            "set a reminder to ", "set a reminder for ", "set a reminder ",
+            "reminder to "
+        ]
+        guard let trigger = triggers.first(where: { text.hasPrefix($0) }),
+              hasRecurringCadence(text) else {
+            return nil
+        }
+        let hasClockTime = text.range(of: #"\b\d{1,2}(:\d{2})?\s*(am|pm)\b"#, options: .regularExpression) != nil ||
+            contains(text, ["at noon", "at midnight", "noon", "midday"])
+        guard hasClockTime else {
+            return nil
+        }
+
+        var task = String(original.dropFirst(trigger.count))
+        let schedulePhrases = [
+            "every weekday morning", "every weekday", "each weekday", "every morning",
+            "each morning", "every single day", "every day", "each day", "every evening",
+            "every night", "every week", "weekly", "daily", "weekdays", "weekday",
+            "hourly", "nightly", "at noon", "at midnight", "noon", "midday",
+            "every sunday", "every monday", "every tuesday", "every wednesday",
+            "every thursday", "every friday", "every saturday", "each sunday",
+            "each monday", "each tuesday", "each wednesday", "each thursday",
+            "each friday", "each saturday"
+        ]
+        for phrase in schedulePhrases {
+            task = task.replacingOccurrences(of: phrase, with: " ", options: .caseInsensitive)
+        }
+        for phrase in ["no web", "without web", "no browsing", "no internet", "offline only"] {
+            task = task.replacingOccurrences(of: phrase, with: " ", options: .caseInsensitive)
+        }
+        task = task.replacingOccurrences(of: #"\bevery\s+\d+\s*(h|hr|hrs|hour|hours|min|mins|minutes)\b"#, with: " ", options: [.regularExpression, .caseInsensitive])
+        task = task.replacingOccurrences(of: #"\b(at\s+)?\d{1,2}(:\d{2})?\s*(am|pm)\b"#, with: " ", options: [.regularExpression, .caseInsensitive])
+        task = task.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+        guard task.count >= 2 else { return nil }
+
+        let schedule = extractSchedule(from: text)
+        let title = prettyTrackerTitle(from: task)
+        return TrackerSpec(
+            title: title,
+            kind: .customPrompt,
+            subject: nil,
+            schedule: schedule,
+            council: false,
+            confirmation: "Recurring reminder · \(title) · \(schedule.scheduleLabel)",
+            prompt: "Recurring reminder: \(task). When this tracker runs, return a short notification-ready reminder, any relevant caveat, and whether the cadence still makes sense."
+        )
     }
 
     /// Big-cap tickers ↔ company names. `ambiguous` marks names that are common
@@ -607,6 +931,9 @@ enum QuickIntentParser {
         // NB: no "doing" — too broad ("what is Amazon doing about AI" is prose,
         // not a stock card). Use "stock"/"shares" or "price" to ask for a quote.
         let priceCue = contains(text, ["price", "worth", "trading", "quote", "how much", "value"])
+        if priceCue, !stockCue, hasProductPriceContext(text) {
+            return nil
+        }
 
         // 1) $TICKER — explicit. But a crypto ticker ($ETH, $BTC) is not a stock:
         // defer to the coin path unless it's a known equity ticker.
@@ -632,6 +959,16 @@ enum QuickIntentParser {
             }
         }
         return nil
+    }
+
+    private static func hasProductPriceContext(_ text: String) -> Bool {
+        contains(text, [
+            "model y", "model 3", "cybertruck", "car", "vehicle", "ev ",
+            "iphone", "ipad", "macbook", "airpods", "apple watch",
+            "prime", "subscription", "ticket", "tickets", "movie", "movies",
+            "phone", "laptop", "shoe", "shoes", "sneaker", "sneakers",
+            "console", "device", "service", "plan", "membership"
+        ])
     }
 
     /// Resolves a single token to a known stock (no cue required — used inside a
@@ -841,7 +1178,7 @@ enum QuickIntentParser {
         let verbs = ["track ", "watch ", "monitor ", "follow ", "keep an eye on ", "keep tabs on ", "keep track of "]
         guard let verb = verbs.first(where: { rest.hasPrefix($0) }) else { return nil }
         let tail = String(rest.dropFirst(verb.count))
-        if verb == "watch " && (tail.hasPrefix("out") || tail.hasPrefix("for ")) { return nil }
+        if verb == "watch " && tail.hasPrefix("out") { return nil }
         return tail
     }
 
@@ -1018,9 +1355,28 @@ enum QuickIntentParser {
         if text.range(of: #"\b\d{1,2}(:\d{2})?\s*(am|pm)\b"#, options: .regularExpression) != nil { return true }
         if text.range(of: #"\bevery\s+\d+\s*(h|hr|hrs|hour|hours|min|mins|minutes)\b"#, options: .regularExpression) != nil { return true }
         return contains(text, [" every morning", " every day", " each day", " daily", " weekly",
-                               " every week", " every weekday", " weekdays", " each morning",
+                               " biweekly", " bi-weekly", " every other week", " monthly",
+                               " every month", " once a month", " every week", " every weekday",
+                               " every business day", " business days", " weekdays", " each morning",
                                " every evening", " nightly", " every hour", " hourly", " every night",
-                               " at noon", " at midnight", " every monday"])
+                               " at noon", " at midnight", " every monday", " every tuesday",
+                               " every wednesday", " every thursday", " every friday",
+                               " every saturday", " every sunday", " each monday", " each tuesday",
+                               " each wednesday", " each thursday", " each friday", " each saturday",
+                               " each sunday"])
+    }
+
+    private static func hasRecurringCadence(_ text: String) -> Bool {
+        if text.range(of: #"\bevery\s+\d+\s*(h|hr|hrs|hour|hours|min|mins|minutes)\b"#, options: .regularExpression) != nil { return true }
+        return contains(text, [" every morning", " every day", " each day", " daily", " weekly",
+                               " biweekly", " bi-weekly", " every other week", " monthly",
+                               " every month", " once a month", " every week", " every weekday",
+                               " every business day", " business days", " weekdays", " each morning",
+                               " every evening", " nightly", " every hour", " hourly", " every night",
+                               " every monday", " every tuesday", " every wednesday", " every thursday",
+                               " every friday", " every saturday", " every sunday", " each monday",
+                               " each tuesday", " each wednesday", " each thursday", " each friday",
+                               " each saturday", " each sunday"])
     }
 
     /// Strips the "create a tracker … every morning … using council" scaffolding
@@ -1030,11 +1386,18 @@ enum QuickIntentParser {
         let phrases = [
             "using council", "with council", "via council", "by the council", "by council", "as a council", "council",
             "every weekday morning", "every weekday", "each weekday", "every morning", "each morning",
-            "every single day", "every day", "each day", "every week", "weekly", "daily", "weekdays", "weekday"
+            "every single day", "every day", "each day", "every business day", "business days",
+            "every week", "weekly", "daily", "weekdays", "weekday"
         ]
         for p in phrases {
             s = s.replacingOccurrences(of: p, with: " ", options: .caseInsensitive)
         }
+        s = s.replacingOccurrences(of: #"\bevery\s+\d+\s*(h|hr|hrs|hour|hours|min|mins|minutes)\b"#, with: " ", options: [.regularExpression, .caseInsensitive])
+        s = s.replacingOccurrences(
+            of: #"\b(every|each|on)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)s?\b"#,
+            with: " ",
+            options: [.regularExpression, .caseInsensitive]
+        )
         s = s.replacingOccurrences(of: #"\b(at\s+)?\d{1,2}(:\d{2})?\s*(am|pm)\b"#, with: " ", options: [.regularExpression, .caseInsensitive])
         s = s.replacingOccurrences(
             of: #"^\s*(please\s+)?(create|set ?up|make|build|schedule|start|add)\s+(a|an|the)?\s*(tracker|briefing|alert|watcher|digest)\s*(to|for|that|which)?\s*"#,
@@ -1075,15 +1438,29 @@ enum QuickIntentParser {
     static func extractLocation(from text: String, keywords: [String] = ["weather", "forecast", "temperature"]) -> String? {
         for separator in [" in ", " at ", " for "] {
             if let range = text.range(of: separator) {
-                return cleanLocation(String(text[range.upperBound...]))
+                let candidate = String(text[range.upperBound...])
+                guard !containsChainedAction(candidate) else { return nil }
+                return cleanLocation(candidate)
             }
         }
         for keyword in keywords {
             if let range = text.range(of: keyword), range.lowerBound > text.startIndex {
-                return cleanLocation(String(text[..<range.lowerBound]))
+                let candidate = String(text[..<range.lowerBound])
+                guard !containsChainedAction(candidate) else { return nil }
+                return cleanLocation(candidate)
             }
         }
         return nil
+    }
+
+    private static func containsChainedAction(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return contains(lower, [
+            " and remind me", " then remind me", " and set a reminder", " then set a reminder",
+            " and create", " then create", " and make", " then make",
+            " and track", " then track", " and schedule", " then schedule",
+            " and add to calendar", " then add to calendar"
+        ])
     }
 
     private static func cleanLocation(_ raw: String) -> String? {
@@ -1237,6 +1614,7 @@ enum QuickIntentParser {
         let fullRange = NSRange(original.startIndex..<original.endIndex, in: original)
         let dateMatches = detector.matches(in: original, options: [], range: fullRange).filter { $0.date != nil }
         guard let firstDate = dateMatches.first?.date else { return nil }
+        guard hasConcreteReminderTime(original.lowercased()) else { return nil }
 
         // Build the title: remove every detected date phrase (back-to-front so
         // earlier ranges stay valid), then strip the trigger prefix and tidy.
@@ -1265,6 +1643,13 @@ enum QuickIntentParser {
             fire = Calendar.current.date(byAdding: .day, value: 1, to: fire) ?? fire
         }
         return PersonalReminder(title: title, date: fire)
+    }
+
+    private static func hasConcreteReminderTime(_ text: String) -> Bool {
+        text.range(of: #"\b\d{1,2}(:\d{2})?\s*(am|pm)\b"#, options: .regularExpression) != nil ||
+            text.range(of: #"\b\d{1,2}:\d{2}\b"#, options: .regularExpression) != nil ||
+            text.range(of: #"t\d{2}:\d{2}"#, options: .regularExpression) != nil ||
+            text.range(of: #"\b(noon|midday|midnight)\b"#, options: .regularExpression) != nil
     }
 
     static func parseForget(_ text: String, original: String) -> String? {
@@ -1528,9 +1913,23 @@ enum QuickIntentParser {
         return nil
     }
 
+    static func schedule(from text: String) -> BriefingSchedule {
+        extractSchedule(from: text.lowercased())
+    }
+
     private static func extractSchedule(from text: String) -> BriefingSchedule {
         var hour = 8
         var minute = 0
+        if contains(text, ["hourly", "every hour"]) {
+            return .everyNHours(1)
+        }
+        if let r = text.range(of: #"\bevery\s+(\d+)\s*(h|hr|hrs|hour|hours)\b"#, options: .regularExpression) {
+            let token = String(text[r])
+            let digits = token.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }
+            if let interval = digits.first.flatMap(Int.init) {
+                return .everyNHours(max(1, interval))
+            }
+        }
         if contains(text, ["evening", "night", "9pm", "9 pm"]) { hour = 21 }
         if contains(text, ["noon", "midday"]) { hour = 12 }
         // explicit "8am", "7:30 am", "at 9 pm"
@@ -1544,13 +1943,51 @@ enum QuickIntentParser {
             }
             if digits.count > 1, let m = Int(digits[1]) { minute = m }
         }
-        if contains(text, ["weekday", "weekdays", "every weekday"]) {
+        if contains(text, ["weekday", "weekdays", "every weekday", "business day", "business days"]) {
             return .weekdays(hour: hour, minute: minute)
         }
-        if contains(text, ["weekly", "every week", "every monday"]) {
+        if contains(text, ["biweekly", "bi-weekly", "every other week"]) {
+            let weekday = mentionedWeekday(in: text)?.value ?? 2
+            return .biweekly(weekday: weekday, hour: hour, minute: minute)
+        }
+        if contains(text, ["monthly", "every month", "once a month"]) {
+            return .monthly(day: mentionedMonthDay(in: text) ?? 1, hour: hour, minute: minute)
+        }
+        if let weekday = mentionedWeekday(in: text),
+           contains(text, ["every", "each", "weekly", "on \(weekday.name)"]) {
+            return .weekly(weekday: weekday.value, hour: hour, minute: minute)
+        }
+        if contains(text, ["weekly", "every week"]) {
             return .weekly(weekday: 2, hour: hour, minute: minute)
         }
         return .daily(hour: hour, minute: minute)
+    }
+
+    private static func mentionedWeekday(in text: String) -> (name: String, value: Int)? {
+        let weekdays: [(String, Int)] = [
+            ("sunday", 1), ("monday", 2), ("tuesday", 3), ("wednesday", 4),
+            ("thursday", 5), ("friday", 6), ("saturday", 7)
+        ]
+        return weekdays.first { wordPresent($0.0, in: text) }
+    }
+
+    private static func mentionedMonthDay(in text: String) -> Int? {
+        let patterns = [
+            #"\b(?:day|on day)\s+(\d{1,2})\b"#,
+            #"\b(\d{1,2})(st|nd|rd|th)\b"#,
+            #"\bon the\s+(\d{1,2})\b"#
+        ]
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern),
+                  let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..<text.endIndex, in: text)),
+                  match.numberOfRanges > 1,
+                  let range = Range(match.range(at: 1), in: text),
+                  let value = Int(text[range]) else {
+                continue
+            }
+            return min(31, max(1, value))
+        }
+        return nil
     }
 
     private static func contains(_ text: String, _ needles: [String]) -> Bool {
@@ -2287,9 +2724,16 @@ enum LiveDataService {
     /// geocoding + forecast, both auth-free) → metric widget.
     static func weatherWidget(query: String) async -> MessageWidget? {
         let place = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let languageCode = Locale.current.language.languageCode?.identifier ?? "en"
+        let usesFahrenheit = Locale.current.measurementSystem == .us
+        let temperatureUnit = usesFahrenheit ? "fahrenheit" : "celsius"
+        let temperatureSymbol = usesFahrenheit ? "F" : "C"
+        func temperatureLabel(_ value: Double) -> String {
+            "\(Int(value.rounded()))°\(temperatureSymbol)"
+        }
         guard !place.isEmpty,
               let encoded = place.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let geoURL = URL(string: "https://geocoding-api.open-meteo.com/v1/search?name=\(encoded)&count=1&language=en&format=json") else {
+              let geoURL = URL(string: "https://geocoding-api.open-meteo.com/v1/search?name=\(encoded)&count=1&language=\(languageCode)&format=json") else {
             return nil
         }
 
@@ -2298,7 +2742,7 @@ enum LiveDataService {
             let geo = try decoder.decode(GeocodingResponse.self, from: try await fetchData(from: geoURL))
             guard let match = geo.results?.first else { return nil }
 
-            guard let forecastURL = URL(string: "https://api.open-meteo.com/v1/forecast?latitude=\(match.latitude)&longitude=\(match.longitude)&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto&forecast_days=1") else {
+            guard let forecastURL = URL(string: "https://api.open-meteo.com/v1/forecast?latitude=\(match.latitude)&longitude=\(match.longitude)&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&temperature_unit=\(temperatureUnit)&timezone=auto&forecast_days=1") else {
                 return nil
             }
             let forecast = try decoder.decode(WeatherForecastResponse.self, from: try await fetchData(from: forecastURL))
@@ -2307,7 +2751,7 @@ enum LiveDataService {
             let condition = weatherDescription(forCode: forecast.current?.weatherCode ?? -1)
             var captionParts = [condition]
             if let high = forecast.daily?.temperatureMax?.first, let low = forecast.daily?.temperatureMin?.first {
-                captionParts.append("H \(Int(high.rounded()))° · L \(Int(low.rounded()))°")
+                captionParts.append("H \(temperatureLabel(high)) · L \(temperatureLabel(low))")
             }
             let region = [match.admin1, match.country].compactMap { $0 }.first
 
@@ -2321,7 +2765,7 @@ enum LiveDataService {
                 chart: nil,
                 metric: WidgetMetric(
                     label: region ?? "Weather",
-                    value: "\(Int(temperature.rounded()))°F",
+                    value: temperatureLabel(temperature),
                     delta: nil,
                     trend: .flat,
                     caption: captionParts.joined(separator: " · ")
@@ -2356,9 +2800,10 @@ enum LiveDataService {
     /// IANA timezone; the time itself is computed on-device) → metric widget.
     static func worldTimeWidget(query: String) async -> MessageWidget? {
         let place = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let languageCode = Locale.current.language.languageCode?.identifier ?? "en"
         guard !place.isEmpty,
               let encoded = place.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let geoURL = URL(string: "https://geocoding-api.open-meteo.com/v1/search?name=\(encoded)&count=1&language=en&format=json") else {
+              let geoURL = URL(string: "https://geocoding-api.open-meteo.com/v1/search?name=\(encoded)&count=1&language=\(languageCode)&format=json") else {
             return nil
         }
         do {

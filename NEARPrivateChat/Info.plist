@@ -58,6 +58,18 @@
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Private Chat uses the microphone only while you dictate a message. Audio is processed for speech-to-text and never stored.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Private Chat attaches a camera photo only after you choose Camera from the composer.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Private Chat attaches selected photos only after you choose them from the composer.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Private Chat adds calendar events only after you confirm an action card.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Private Chat adds calendar events only after you confirm an action card.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Private Chat adds reminders only after you confirm an action card.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Private Chat adds reminders only after you confirm an action card.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Private Chat converts your dictation to text so you can compose messages by voice.</string>
 </dict>

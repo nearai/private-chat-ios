@@ -56,7 +56,7 @@ struct SharedConversationSheet: View {
                     ContentUnavailableView(
                         "Open a shared conversation",
                         systemImage: "link",
-                        description: Text("Paste a public or shared NEAR AI Private Chat link.")
+                        description: Text("Paste a public or shared NEAR Private Chat link.")
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }

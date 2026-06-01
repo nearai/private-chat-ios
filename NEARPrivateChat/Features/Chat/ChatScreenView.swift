@@ -10,14 +10,30 @@ struct ChatView: View {
 }
 
 private struct ChatTranscriptView: View {
-    let chatStore: ChatStore
+    @ObservedObject var chatStore: ChatStore
     @ObservedObject var transcriptStore: ChatTranscriptStore
     @State private var lastAutoScrollNanoseconds: UInt64 = 0
     @State private var autoScrollPauseUntilNanoseconds: UInt64 = 0
     @State private var streamAutoScrollSuppressed = false
+    @State private var isAttachmentDropTargeted = false
+    @State private var showingEmptyProjectFiles = false
+    @State private var showingEmptyCouncilPicker = false
 
     private static let streamingAutoScrollIntervalNanoseconds: UInt64 = 300_000_000
     private static let dragAutoScrollPauseNanoseconds: UInt64 = 1_500_000_000
+    private static let maxDroppedAttachments = 5
+    private static let attachmentFileContentTypes: [UTType] = [
+        .pdf,
+        .plainText,
+        .text,
+        .commaSeparatedText,
+        .json,
+        UTType(filenameExtension: "tsv") ?? .text,
+        UTType(filenameExtension: "xlsx") ?? .data,
+        UTType(filenameExtension: "xls") ?? .data,
+        .data
+    ]
+    private static let attachmentDropContentTypes: [UTType] = [.fileURL] + attachmentFileContentTypes
 
     var body: some View {
         let transcript = transcriptStore.state
@@ -34,80 +50,238 @@ private struct ChatTranscriptView: View {
             ChatToolbar(transcriptStore: transcriptStore)
                 .background(Color.appBackground)
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    if messages.isEmpty {
-                        GeometryReader { geo in
-                            EmptyChatView()
-                                .frame(width: geo.size.width, height: geo.size.height)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 360)
-                        .containerRelativeFrame(.vertical)
-                    } else {
-                        LazyVStack(alignment: .leading, spacing: 18) {
-                            ForEach(displayItems) { item in
-                                switch item {
-                                case let .message(message):
-                                    MessageBubble(message: message, chatStore: chatStore)
-                                        .id(item.id)
-                                case let .council(batchID: _, messages: messages):
-                                    CouncilResponseGroup(messages: messages, chatStore: chatStore)
-                                        .id(item.id)
+            VStack(spacing: 0) {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        if messages.isEmpty {
+                            GeometryReader { geo in
+                                EmptyChatView(
+                                    onOpenProject: { showingEmptyProjectFiles = true },
+                                    onOpenCouncil: { showingEmptyCouncilPicker = true }
+                                )
+                                    .frame(width: geo.size.width, height: geo.size.height)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 360)
+                            .containerRelativeFrame(.vertical)
+                        } else {
+                            LazyVStack(alignment: .leading, spacing: 18) {
+                                ForEach(displayItems) { item in
+                                    switch item {
+                                    case let .message(message):
+                                        MessageBubble(message: message, chatStore: chatStore)
+                                            .id(item.id)
+                                    case let .council(batchID: _, messages: messages):
+                                        CouncilResponseGroup(messages: messages, chatStore: chatStore)
+                                            .id(item.id)
+                                    }
                                 }
                             }
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 18)
                         }
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 18)
                     }
-                }
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 1)
-                        .onChanged { _ in
-                            noteUserScrollInteraction()
-                        }
-                        .onEnded { _ in
-                            noteUserScrollInteraction()
-                        }
-                )
-                .scrollDismissesKeyboard(.interactively)
-                .background(Color.appBackground)
-                .task(id: chatStore.selectedConversation?.id) {
-                    resetAutoScrollState()
-                    guard let targetID = scrollSignature.targetID else { return }
-                    try? await Task.sleep(nanoseconds: 250_000_000)
-                    await MainActor.run {
-                        proxy.scrollTo(targetID, anchor: .bottom)
-                    }
-                }
-                .onChange(of: isStreaming) { _, isStreaming in
-                    if isStreaming {
-                        streamAutoScrollSuppressed = false
-                        autoScrollPauseUntilNanoseconds = 0
-                    }
-                }
-                .onChange(of: scrollSignature) { _, signature in
-                    guard let targetID = signature.targetID else { return }
-                    let now = DispatchTime.now().uptimeNanoseconds
-                    guard shouldAutoScroll(now: now, isStreaming: signature.isStreaming) else { return }
-                    lastAutoScrollNanoseconds = now
-                    if signature.isStreaming {
-                        proxy.scrollTo(targetID, anchor: .bottom)
-                    } else {
-                        withAnimation(.easeOut(duration: 0.2)) {
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 1)
+                            .onChanged { _ in
+                                noteUserScrollInteraction()
+                            }
+                            .onEnded { _ in
+                                noteUserScrollInteraction()
+                            }
+                    )
+                    .scrollDismissesKeyboard(.interactively)
+                    .background(Color.appBackground)
+                    .task(id: chatStore.selectedConversation?.id) {
+                        resetAutoScrollState()
+                        guard let targetID = scrollSignature.targetID else { return }
+                        try? await Task.sleep(nanoseconds: 250_000_000)
+                        await MainActor.run {
                             proxy.scrollTo(targetID, anchor: .bottom)
                         }
                     }
+                    .onChange(of: isStreaming) { _, isStreaming in
+                        if isStreaming {
+                            streamAutoScrollSuppressed = false
+                            autoScrollPauseUntilNanoseconds = 0
+                        }
+                    }
+                    .onChange(of: scrollSignature) { _, signature in
+                        guard let targetID = signature.targetID else { return }
+                        let now = DispatchTime.now().uptimeNanoseconds
+                        guard shouldAutoScroll(now: now, isStreaming: signature.isStreaming) else { return }
+                        lastAutoScrollNanoseconds = now
+                        if signature.isStreaming {
+                            proxy.scrollTo(targetID, anchor: .bottom)
+                        } else {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                proxy.scrollTo(targetID, anchor: .bottom)
+                            }
+                        }
+                    }
+                }
+
+                Divider()
+                    .opacity(0.55)
+                InputBar(transcriptStore: transcriptStore, composerStore: chatStore.composerStore)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(Color.appPanelBackground)
+            }
+            .contentShape(Rectangle())
+            .onDrop(of: Self.attachmentDropContentTypes, isTargeted: $isAttachmentDropTargeted) { providers in
+                handleAttachmentDrop(providers)
+            }
+            .overlay {
+                if isAttachmentDropTargeted {
+                    AttachmentDropTargetOverlay()
+                        .padding(18)
+                        .allowsHitTesting(false)
                 }
             }
-
-            Divider()
-                .opacity(0.55)
-            InputBar(transcriptStore: transcriptStore, composerStore: chatStore.composerStore)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(Color.appPanelBackground)
+            .animation(.easeInOut(duration: 0.16), value: isAttachmentDropTargeted)
         }
         .background(Color.appBackground)
+        .sheet(item: pendingProjectNoteSaveBinding) { message in
+            SaveOutputToProjectSheet(message: message)
+                .environmentObject(chatStore)
+        }
+        .sheet(isPresented: $showingEmptyProjectFiles) {
+            ProjectFilesView()
+                .environmentObject(chatStore)
+        }
+        .sheet(isPresented: $showingEmptyCouncilPicker) {
+            ModelPickerView(openingCouncil: true)
+                .environmentObject(chatStore)
+        }
+    }
+
+    private var pendingProjectNoteSaveBinding: Binding<ChatMessage?> {
+        Binding(
+            get: { chatStore.pendingProjectNoteSaveMessage },
+            set: { newValue in
+                if newValue == nil {
+                    chatStore.clearPendingProjectNoteSave()
+                }
+            }
+        )
+    }
+
+    private func handleAttachmentDrop(_ providers: [NSItemProvider]) -> Bool {
+        let availableSlots = max(0, Self.maxDroppedAttachments - chatStore.composerStore.pendingAttachments.count)
+        guard availableSlots > 0 else {
+            chatStore.bannerMessage = "Attach up to five files at once."
+            return false
+        }
+
+        let supportedProviders = Array(providers
+            .filter { Self.canLoadDroppedAttachment(from: $0) }
+            .prefix(availableSlots))
+        guard !supportedProviders.isEmpty else { return false }
+
+        Task {
+            for provider in supportedProviders {
+                guard let url = await Self.droppedAttachmentURL(from: provider) else { continue }
+                await chatStore.addAttachment(from: url)
+            }
+        }
+        return true
+    }
+
+    private static func canLoadDroppedAttachment(from provider: NSItemProvider) -> Bool {
+        attachmentDropContentTypes.contains { provider.hasItemConformingToTypeIdentifier($0.identifier) }
+    }
+
+    private static func droppedAttachmentURL(from provider: NSItemProvider) async -> URL? {
+        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            return await droppedFileURL(from: provider)
+        }
+
+        guard let contentType = attachmentFileContentTypes.first(where: {
+            provider.hasItemConformingToTypeIdentifier($0.identifier)
+        }) else {
+            return nil
+        }
+        return await droppedFileRepresentationURL(from: provider, contentType: contentType)
+    }
+
+    private static func droppedFileURL(from provider: NSItemProvider) async -> URL? {
+        await withCheckedContinuation { (continuation: CheckedContinuation<URL?, Never>) in
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                continuation.resume(returning: fileURL(from: item))
+            }
+        }
+    }
+
+    private static func droppedFileRepresentationURL(from provider: NSItemProvider, contentType: UTType) async -> URL? {
+        let suggestedName = provider.suggestedName
+        return await withCheckedContinuation { (continuation: CheckedContinuation<URL?, Never>) in
+            _ = provider.loadInPlaceFileRepresentation(forTypeIdentifier: contentType.identifier) { url, isInPlace, _ in
+                guard let url else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                if isInPlace {
+                    continuation.resume(returning: url)
+                } else {
+                    continuation.resume(returning: copyTemporaryDroppedFile(url, suggestedName: suggestedName, contentType: contentType))
+                }
+            }
+        }
+    }
+
+    private static func fileURL(from item: Any?) -> URL? {
+        if let url = item as? URL, url.isFileURL {
+            return url
+        }
+        if let data = item as? Data,
+           let url = URL(dataRepresentation: data, relativeTo: nil),
+           url.isFileURL {
+            return url
+        }
+        if let string = item as? String {
+            return fileURL(from: string)
+        }
+        if let string = item as? NSString {
+            return fileURL(from: string as String)
+        }
+        return nil
+    }
+
+    private static func fileURL(from string: String) -> URL? {
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let url = URL(string: trimmed), url.isFileURL {
+            return url
+        }
+        return URL(fileURLWithPath: trimmed)
+    }
+
+    private static func copyTemporaryDroppedFile(_ url: URL, suggestedName: String?, contentType: UTType) -> URL? {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DroppedChatAttachments", isDirectory: true)
+        let destination = directory.appendingPathComponent(
+            "\(UUID().uuidString)-\(droppedFilename(for: url, suggestedName: suggestedName, contentType: contentType))",
+            isDirectory: false
+        )
+
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: url, to: destination)
+            return destination
+        } catch {
+            return nil
+        }
+    }
+
+    private static func droppedFilename(for url: URL, suggestedName: String?, contentType: UTType) -> String {
+        let rawName = suggestedName.map { URL(fileURLWithPath: $0).lastPathComponent }
+            ?? url.lastPathComponent
+        let filename = rawName.isEmpty ? "Attachment" : rawName
+        guard URL(fileURLWithPath: filename).pathExtension.isEmpty,
+              let preferredExtension = contentType.preferredFilenameExtension else {
+            return filename
+        }
+        return "\(filename).\(preferredExtension)"
     }
 
     private func noteUserScrollInteraction() {
@@ -132,6 +306,174 @@ private struct ChatTranscriptView: View {
         guard !(isStreaming && streamAutoScrollSuppressed) else { return false }
         let minimumInterval = isStreaming ? Self.streamingAutoScrollIntervalNanoseconds : 0
         return minimumInterval == 0 || now - lastAutoScrollNanoseconds >= minimumInterval
+    }
+}
+
+private struct AttachmentDropTargetOverlay: View {
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.actionPrimary.opacity(0.08))
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(
+                    Color.actionPrimary.opacity(0.72),
+                    style: StrokeStyle(lineWidth: 2, dash: [8, 5])
+                )
+
+            VStack(spacing: 10) {
+                Image(systemName: "tray.and.arrow.down.fill")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(Color.actionPrimary)
+                    .frame(width: 46, height: 46)
+                    .background(Color.actionPrimary.opacity(0.12), in: Circle())
+
+                VStack(spacing: 3) {
+                    Text("Drop files to attach")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(Color.textPrimary)
+                    Text("Up to five files")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Color.textSecondary)
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 12)
+                .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.appBorder, lineWidth: 1)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct SaveOutputToProjectSheet: View {
+    @EnvironmentObject private var chatStore: ChatStore
+    @Environment(\.dismiss) private var dismiss
+
+    let message: ChatMessage
+
+    @State private var projectName = ""
+    @State private var instructions = ""
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Save output", systemImage: "bookmark.fill")
+                            .font(.headline)
+                        Text("Create a Project for this chat or save into an existing Project.")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.textSecondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Create project")
+                            .font(.caption.weight(.semibold))
+                            .textCase(.uppercase)
+                            .foregroundStyle(Color.textSecondary)
+
+                        TextField("Project name", text: $projectName)
+                            .font(.body)
+                            .textFieldStyle(.plain)
+                            .padding(12)
+                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                        TextField("Project instructions", text: $instructions, axis: .vertical)
+                            .font(.subheadline)
+                            .textFieldStyle(.plain)
+                            .lineLimit(3...6)
+                            .padding(12)
+                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                        Button {
+                            chatStore.createProjectAndSaveMessageAsNote(
+                                message,
+                                named: projectName,
+                                instructions: instructions
+                            )
+                            dismiss()
+                        } label: {
+                            Label("Create Project and Save", systemImage: "folder.badge.plus")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.actionPrimary)
+                        .disabled(projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                    .padding(14)
+                    .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.appBorder, lineWidth: 1)
+                    }
+
+                    if !chatStore.visibleProjects.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Existing projects")
+                                .font(.caption.weight(.semibold))
+                                .textCase(.uppercase)
+                                .foregroundStyle(Color.textSecondary)
+
+                            ForEach(chatStore.visibleProjects) { project in
+                                Button {
+                                    chatStore.saveMessageAsProjectNote(message, toProjectID: project.id)
+                                    dismiss()
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: project.projectIconName)
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(project.tintColor)
+                                            .frame(width: 34, height: 34)
+                                            .background(project.tintBackgroundColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(project.name)
+                                                .font(.subheadline.weight(.semibold))
+                                                .foregroundStyle(.primary)
+                                            Text(project.notes.count == 1 ? "1 note" : "\(project.notes.count) notes")
+                                                .font(.caption)
+                                                .foregroundStyle(Color.textSecondary)
+                                        }
+                                        Spacer(minLength: 0)
+                                        Image(systemName: "arrow.down.forward.circle")
+                                            .foregroundStyle(Color.textSecondary)
+                                    }
+                                    .padding(12)
+                                    .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .stroke(Color.appBorder, lineWidth: 1)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+                .padding(16)
+            }
+            .background(Color.appBackground)
+            .navigationTitle("Save to Project")
+            .platformInlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        chatStore.clearPendingProjectNoteSave()
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .platformMediumDetent()
+        .onAppear {
+            if projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                projectName = chatStore.suggestedProjectNameForSavedNote(message)
+            }
+        }
     }
 }
 
@@ -252,12 +594,14 @@ private struct CouncilResponseGroup: View {
         .sheet(isPresented: $showingRoom) {
             CouncilRoomView(
                 model: CouncilRoomModel.from(councilMessages: messages),
-                onSend: { text, _ in
-                    chatStore.composeWidgetFollowUp(text)
+                supportsTargetedSend: true,
+                synthesizeTitle: synthesizeTitle,
+                onSend: { text, target in
+                    chatStore.sendCouncilRoomFollowUp(text, batchID: batchID, target: target)
                     showingRoom = false
                 },
                 onSynthesize: {
-                    chatStore.stopWaitingForCouncil(batchID: batchID)
+                    chatStore.synthesizeCouncilBatch(batchID: batchID)
                     showingRoom = false
                 }
             )
@@ -313,6 +657,12 @@ private struct CouncilResponseGroup: View {
 
     private var canStopWaiting: Bool {
         hasRunningModels && messages.contains(where: \.hasUsableCouncilAnswer)
+    }
+
+    private var synthesizeTitle: String? {
+        let usableCount = messages.filter(\.hasUsableCouncilAnswer).count
+        guard usableCount > 1 else { return nil }
+        return hasRunningModels ? "Synthesize now" : "Synthesize again"
     }
 }
 
@@ -516,7 +866,6 @@ private struct ChatToolbar: View {
     @EnvironmentObject private var chatStore: ChatStore
     @ObservedObject var transcriptStore: ChatTranscriptStore
     @State private var showingShare = false
-    @State private var showingModels = false
     @State private var showingSecurity = false
     @State private var showingSharedLink = false
     @State private var showingRename = false
@@ -544,10 +893,6 @@ private struct ChatToolbar: View {
                 ShareConversationView(conversation: conversation)
                     .environmentObject(chatStore)
             }
-        }
-        .sheet(isPresented: $showingModels) {
-            ModelPickerView(openingCouncil: false)
-                .environmentObject(chatStore)
         }
         .sheet(isPresented: $showingSecurity) {
             SecurityView()
@@ -596,50 +941,181 @@ private struct ChatToolbar: View {
         }
     }
 
-    private var regularToolbar: some View {
-        HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(chatStore.selectedConversationTitle)
-                    .font(.title3.weight(.semibold))
-                    .lineLimit(1)
-                metadataRow
+    private var compactToolbar: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(compactTitle)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(2)
+
+                    Text(compactStatusText)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                compactAttestationButton
             }
 
-            Spacer()
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    MetadataPill(
+                        title: compactRouteTitle,
+                        symbolName: compactRouteSymbolName,
+                        isPrimary: true
+                    )
 
-            toolbarButtons
+                    MetadataPill(
+                        title: compactSourceModeTitle,
+                        symbolName: chatStore.sourceModeSymbolName,
+                        isPrimary: chatStore.effectiveWebSearchEnabled || chatStore.researchModeEnabled
+                    )
+
+                    if let selectedProject = chatStore.selectedProject {
+                        Button {
+                            showingProjectFiles = true
+                        } label: {
+                            MetadataPill(title: selectedProject.name, symbolName: "folder", isPrimary: false)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Open project \(selectedProject.name)")
+                        .accessibilityHint("Shows the selected Project context.")
+                    }
+
+                    if let projectContextSummary {
+                        MetadataPill(
+                            title: projectContextSummary,
+                            symbolName: projectContextSummarySymbolName,
+                            isPrimary: false
+                        )
+                    }
+
+                    if shouldShowAgentWorkspaceButton {
+                        Button {
+                            showingAgentWorkspace = true
+                        } label: {
+                            MetadataPill(
+                                title: compactAgentPillTitle,
+                                symbolName: "terminal",
+                                isPrimary: chatStore.selectedRouteKind.isIronclawRoute || chatStore.ironclawRemoteWorkstationAvailable
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Open agent workspace")
+                        .accessibilityHint("Shows agent tools and handoff options.")
+                    }
+                }
+                .padding(.horizontal, 1)
+            }
+            .scrollClipDisabled()
         }
+        .padding(14)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 1)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
     }
 
-    private var compactToolbar: some View {
-        // v2: the model picker lives ONLY in the composer chip row at
-        // the bottom. The chat-view.jsx spec includes a centered
-        // model chip below the nav bar, but in this app the composer
-        // chips render at all times, so a second top-of-thread chip
-        // reads as redundant. Nothing rendered here — the "..." menu
-        // is mounted into the nav bar via `.toolbar` in body.
-        Color.clear.frame(height: 0)
-    }
-
-    private var shouldShowCompactStatusText: Bool {
-        !transcriptStore.messages.isEmpty
+    private var compactTitle: String {
+        chatStore.selectedConversationTitle
     }
 
     private var compactStatusText: String {
+        if transcriptStore.messages.isEmpty {
+            return "Private by default. Add sources, a Project, or Agent when the task needs them."
+        }
+
         var parts: [String] = []
-        if chatStore.selectedRouteUsesNearCloud {
-            parts.append("Privacy proxy")
-        } else if chatStore.selectedProviderDisplayName == "IronClaw" {
-            parts.append("Agent run")
-        } else if chatStore.researchModeEnabled {
-            parts.append("Private research")
+        if chatStore.isCouncilModeEnabled {
+            parts.append("Council answers")
         } else {
-            parts.append("Private chat")
+            switch chatStore.selectedRouteKind {
+            case .nearPrivate:
+                parts.append(chatStore.researchModeEnabled ? "Private research" : "Private chat")
+            case .nearCloud:
+                parts.append("Privacy proxy route")
+            case .ironclawMobile:
+                parts.append("Phone agent route")
+            case .ironclawHosted:
+                parts.append("Hosted agent route")
+            }
         }
-        if let project = chatStore.selectedProject {
-            parts.append(project.name)
+
+        if let projectName = chatStore.selectedProject?.name.nilIfBlank {
+            parts.append(projectName)
         }
-        return parts.joined(separator: " › ")
+
+        return parts.joined(separator: " · ")
+    }
+
+    private var compactRouteTitle: String {
+        if chatStore.isCouncilModeEnabled {
+            return "Council \(chatStore.activeCouncilModels.count)"
+        }
+        return chatStore.selectedRouteKind.disclosureTitle
+    }
+
+    private var compactRouteSymbolName: String {
+        chatStore.isCouncilModeEnabled ? "square.grid.2x2" : chatStore.selectedRouteKind.disclosureSymbolName
+    }
+
+    private var compactSourceModeTitle: String {
+        if chatStore.researchModeEnabled {
+            return "Research"
+        }
+        switch chatStore.sourceMode {
+        case .auto:
+            return "Auto"
+        case .web:
+            return "Web"
+        case .links:
+            return "Links"
+        case .files:
+            return "Files"
+        case .all:
+            return "Web + Files"
+        }
+    }
+
+    private var projectContextSummary: String? {
+        let files = chatStore.activeProjectContextAttachments.count
+        let links = chatStore.activeProjectContextLinks.count
+        var parts: [String] = []
+        if files > 0 {
+            parts.append(countLabel(files, singular: "file"))
+        }
+        if links > 0 {
+            parts.append(countLabel(links, singular: "link"))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private var projectContextSummarySymbolName: String {
+        let hasFiles = !chatStore.activeProjectContextAttachments.isEmpty
+        let hasLinks = !chatStore.activeProjectContextLinks.isEmpty
+        if hasFiles && hasLinks {
+            return "rectangle.3.group"
+        }
+        return hasFiles ? "paperclip" : "link"
+    }
+
+    private var compactAgentPillTitle: String {
+        switch chatStore.selectedRouteKind {
+        case .ironclawMobile:
+            return "Phone Agent"
+        case .ironclawHosted:
+            return "Hosted Agent"
+        case .nearPrivate, .nearCloud:
+            return "Agent"
+        }
     }
 
     private var compactAttestationButton: some View {
@@ -674,168 +1150,6 @@ private struct ChatToolbar: View {
         return value
             .replacingOccurrences(of: "Verified ", with: "")
             .replacingOccurrences(of: " proof", with: "")
-    }
-
-    private var metadataRow: some View {
-        HStack(spacing: 8) {
-            if chatStore.isCouncilModeEnabled {
-                MetadataPill(
-                    title: chatStore.activeCouncilRouteSummary,
-                    symbolName: "square.grid.2x2",
-                    isPrimary: true
-                )
-            } else {
-                MetadataPill(
-                    title: chatStore.selectedRouteUsesNearCloud ? "NEAR AI Cloud" : "Private",
-                    symbolName: chatStore.selectedRouteUsesNearCloud ? "cloud" : "lock.shield",
-                    isPrimary: true
-                )
-            }
-            if chatStore.selectedRouteUsesNearCloud || (chatStore.isCouncilModeEnabled && chatStore.activeCouncilHasNearCloudRoutes) {
-                MetadataPill(title: "Privacy proxy", symbolName: "eye.slash", isPrimary: true)
-                MetadataPill(
-                    title: chatStore.effectiveAppWebGroundingEnabled ? "App web on" : "App web off",
-                    symbolName: chatStore.effectiveAppWebGroundingEnabled ? "globe" : "globe.slash",
-                    isPrimary: chatStore.effectiveAppWebGroundingEnabled
-                )
-            } else {
-                MetadataPill(title: chatStore.sourceModeDetail, symbolName: chatStore.sourceModeSymbolName, isPrimary: chatStore.effectiveWebSearchEnabled)
-            }
-            if chatStore.selectedProviderDisplayName == "NEAR Private" || (chatStore.isCouncilModeEnabled && !chatStore.activeCouncilHasExternalRoutes) {
-                MetadataPill(
-                    title: chatStore.currentAttestationStatus.userFacingCopy().badge,
-                    symbolName: chatStore.currentAttestationStatus.symbolName,
-                    isPrimary: false
-                )
-            }
-            if chatStore.selectedProviderDisplayName != "NEAR Private", !chatStore.selectedRouteUsesNearCloud, !chatStore.isCouncilModeEnabled {
-                MetadataPill(title: chatStore.selectedProviderDisplayName, symbolName: "point.3.connected.trianglepath.dotted", isPrimary: true)
-            }
-            if chatStore.selectedModelOption?.isIronclawMobileRuntime == true {
-                MetadataPill(title: "Phone tools", symbolName: "iphone", isPrimary: false)
-                if chatStore.ironclawRemoteWorkstationAvailable {
-                    MetadataPill(title: "Shell handoff", symbolName: "terminal", isPrimary: true)
-                }
-                MetadataPill(
-                    title: chatStore.ironclawRemoteWorkstationAvailable ? "Workstation on" : "Workstation off",
-                    symbolName: "terminal",
-                    isPrimary: chatStore.ironclawRemoteWorkstationAvailable
-                )
-            } else if chatStore.selectedModelOption?.isIronclawHostedModel == true {
-                MetadataPill(title: "Hosted workstation", symbolName: "terminal", isPrimary: true)
-                MetadataPill(title: ironclawToolPillTitle, symbolName: "chevron.left.forwardslash.chevron.right", isPrimary: chatStore.ironclawRemoteWorkstationAvailable)
-                if chatStore.ironclawTokenConfigured {
-                    MetadataPill(title: "Token saved", symbolName: "key", isPrimary: false)
-                }
-            }
-            if let project = chatStore.selectedProject {
-                MetadataPill(title: project.name, symbolName: "folder", isPrimary: false)
-                if !chatStore.activeProjectContextAttachments.isEmpty {
-                    MetadataPill(title: countLabel(chatStore.activeProjectContextAttachments.count, singular: "file"), symbolName: "paperclip", isPrimary: false)
-                }
-                if !chatStore.activeProjectContextLinks.isEmpty {
-                    MetadataPill(title: countLabel(chatStore.activeProjectContextLinks.count, singular: "link"), symbolName: "link", isPrimary: false)
-                }
-            }
-        }
-    }
-
-    private var ironclawToolPillTitle: String {
-        guard chatStore.ironclawRemoteWorkstationAvailable else { return "Tools off" }
-        return chatStore.ironclawToolNames.isEmpty ? "Shell + git" : "\(chatStore.ironclawToolNames.count) tools"
-    }
-
-    private var toolbarButtons: some View {
-        HStack(spacing: 8) {
-            modelSelectorButton(maxWidth: 150)
-
-            if chatStore.selectedProject != nil {
-                projectContextButton
-            }
-
-            if shouldShowAgentWorkspaceButton {
-                agentWorkspaceButton
-            }
-
-            securityButton
-
-            if chatStore.selectedConversation != nil {
-                reloadButton
-
-                shareButton
-            }
-
-            moreMenuButton
-        }
-    }
-
-    private func modelSelectorButton(maxWidth: CGFloat) -> some View {
-        Button {
-            AppHaptics.selection()
-            showingModels = true
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: chatStore.selectedRouteUsesNearCloud ? "cloud" : "cpu")
-                    .font(.caption.weight(.bold))
-                Text(chatStore.selectedModelDisplayName)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.bold))
-                    .opacity(0.68)
-            }
-            .foregroundStyle(Color.actionPrimary)
-            .padding(.horizontal, 10)
-            .frame(height: 34)
-            .frame(maxWidth: maxWidth)
-            .background(Color.actionTint, in: Capsule())
-            .overlay {
-                Capsule()
-                    .stroke(Color.actionPrimary.opacity(0.16), lineWidth: 1)
-            }
-        }
-        .accessibilityLabel(modelSelectorAccessibilityLabel)
-        .accessibilityHint("Opens model selection for the next message.")
-    }
-
-    private var modelSelectorAccessibilityLabel: String {
-        var label = "Select model, currently \(chatStore.selectedModelDisplayName)"
-        if chatStore.isCouncilModeEnabled {
-            label += ", Council active"
-        }
-        return label
-    }
-
-    private var projectContextButton: some View {
-        Button {
-            showingProjectFiles = true
-        } label: {
-            ToolbarIcon(symbolName: "folder.badge.plus")
-        }
-        .accessibilityLabel("Project Context")
-        .disabled(chatStore.selectedProject == nil)
-    }
-
-    private var agentWorkspaceButton: some View {
-        Button {
-            showingAgentWorkspace = true
-        } label: {
-            ToolbarIcon(symbolName: "terminal", isPrimary: chatStore.selectedProviderDisplayName == "IronClaw")
-        }
-        .accessibilityLabel("Agent")
-    }
-
-    private var securityButton: some View {
-        Button {
-            showingSecurity = true
-        } label: {
-            ToolbarIcon(
-                symbolName: chatStore.currentAttestationStatus.symbolName,
-                isPrimary: chatStore.currentAttestationStatus.effectiveState() == .valid
-            )
-        }
-        .accessibilityLabel(chatStore.currentAttestationStatus.accessibilityLabel())
-        .accessibilityHint(chatStore.currentAttestationStatus.accessibilityHint())
     }
 
     private var reloadButton: some View {
@@ -887,7 +1201,7 @@ private struct ChatToolbar: View {
             Button {
                 showingSecurity = true
             } label: {
-                Label("Verification", systemImage: "checkmark.shield")
+                Label("Proof", systemImage: "checkmark.shield")
             }
             Button {
                 showingProjectFiles = true

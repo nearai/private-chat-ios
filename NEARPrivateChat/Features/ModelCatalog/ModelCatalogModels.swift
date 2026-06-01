@@ -150,10 +150,10 @@ struct ModelOption: Decodable, Identifiable, Hashable {
     let modelID: String
     let publicModel: Bool?
     let metadata: Metadata?
+    static let nearPrivateDefaultModelID = "zai-org/GLM-latest"
     static let ironclawModelID = "ironclaw/agent"
     static let ironclawMobileModelID = "ironclaw/mobile-runtime"
     static let nearCloudModelPrefix = "near-cloud/"
-    static let nearCloudQwenMaxModelID = "near-cloud/qwen3.7-max"
     static let llmCouncilSynthesisModelID = "llm-council/synthesis"
 
     var id: String { modelID }
@@ -169,9 +169,10 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             if let modelDisplayName = sanitizedModelDisplayName {
                 return modelDisplayName
             }
-            if isNearCloudQwenMaxModel {
-                return "Qwen 3.7 Max"
+            if let familyName = Self.providerFamilyName(for: nearCloudUnderlyingModelID ?? modelID) {
+                return "\(familyName) model"
             }
+            return "NEAR AI Cloud model"
         }
         if modelID == Self.llmCouncilSynthesisModelID {
             return "Council Synthesis"
@@ -190,10 +191,8 @@ struct ModelOption: Decodable, Identifiable, Hashable {
         return value
     }
 
-    /// Turn a fully-qualified model id like "zai-org/GLM-5.1-FP8" into a
-    /// chip-friendly label like "GLM 5.1". Drops the org prefix, the
-    /// numeric-precision suffix (FP8/FP16/INT8/BF16/Q4/Q8…), and replaces
-    /// the family/version hyphen with a space. Falls back to the raw
+    /// Turn a fully-qualified model id into a readable label by dropping the
+    /// provider prefix and numeric-precision suffix. Falls back to the raw
     /// trailing segment if no recognisable pattern is present.
     static func humanize(modelID: String) -> String {
         let trailing = modelID.split(separator: "/").last.map(String.init) ?? modelID
@@ -203,9 +202,8 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             trimmed = String(trimmed.dropLast(suffix.count))
             break
         }
-        // Family-version split: "GLM-5.1" → "GLM 5.1", "gpt-5.5" → "GPT 5.5",
-        // "kimi-k2" → "Kimi K2". Multi-segment names like
-        // "claude-opus-4-7" map to "Claude Opus 4 7" — acceptable for a chip.
+        // Family-version split keeps compact model labels readable without
+        // exposing provider paths.
         let parts = trimmed.split(separator: "-").map(String.init)
         guard !parts.isEmpty else { return trailing }
         let humanized = parts.enumerated().map { index, part -> String in
@@ -243,6 +241,26 @@ struct ModelOption: Decodable, Identifiable, Hashable {
         return humanized.joined(separator: " ")
     }
 
+    static func providerFamilyName(for modelID: String) -> String? {
+        let lowercased = modelID.lowercased()
+        if lowercased.contains("anthropic") || lowercased.contains("claude") {
+            return "Anthropic"
+        }
+        if lowercased.contains("openai") || lowercased.contains("gpt") || lowercased.contains("o3") || lowercased.contains("o4") {
+            return "OpenAI"
+        }
+        if lowercased.contains("qwen") {
+            return "Qwen"
+        }
+        if lowercased.contains("moonshot") || lowercased.contains("kimi") {
+            return "Moonshot"
+        }
+        if lowercased.contains("google") || lowercased.contains("gemini") {
+            return "Google"
+        }
+        return nil
+    }
+
     var isVerifiable: Bool {
         guard !isExternalModel else { return false }
         return metadata?.verifiable ?? true
@@ -260,13 +278,8 @@ struct ModelOption: Decodable, Identifiable, Hashable {
         isIronclawHostedModel || isIronclawMobileRuntime
     }
 
-    var isNearCloudQwenMaxModel: Bool {
-        modelID == Self.nearCloudQwenMaxModelID ||
-            nearCloudUnderlyingModelID?.localizedCaseInsensitiveCompare("qwen/qwen3.7-max") == .orderedSame
-    }
-
     var isNearCloudModel: Bool {
-        modelID == Self.nearCloudQwenMaxModelID || modelID.hasPrefix(Self.nearCloudModelPrefix)
+        modelID.hasPrefix(Self.nearCloudModelPrefix)
     }
 
     var isExternalModel: Bool {
@@ -274,9 +287,6 @@ struct ModelOption: Decodable, Identifiable, Hashable {
     }
 
     var nearCloudUnderlyingModelID: String? {
-        if modelID == Self.nearCloudQwenMaxModelID {
-            return "qwen/qwen3.7-max"
-        }
         guard modelID.hasPrefix(Self.nearCloudModelPrefix) else { return nil }
         let underlying = String(modelID.dropFirst(Self.nearCloudModelPrefix.count))
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -328,8 +338,6 @@ struct ModelOption: Decodable, Identifiable, Hashable {
 
     var isEliteModel: Bool {
         let ids = [
-            "openai/gpt-5.5",
-            "anthropic/claude-opus-4-7",
             "anthropic/claude-sonnet-4-6",
             "openai/gpt-5.4",
             "google/gemini-3-pro",
@@ -339,7 +347,7 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             "google/gemini-2.5-pro",
             "anthropic/claude-opus-4-6",
             "anthropic/claude-sonnet-4-5",
-            "zai-org/GLM-5.1-FP8",
+            Self.nearPrivateDefaultModelID,
             "Qwen/Qwen3.5-122B-A10B",
             "Qwen/Qwen3.6-35B-A3B-FP8"
         ]
@@ -391,10 +399,6 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             return true
         }
 
-        if lowercasedID == "google/gemini-3.5-flash" {
-            return false
-        }
-
         if lowercased.contains("gpt-5.4") ||
             lowercased.contains("gpt-5.4-mini") ||
             lowercased.contains("gpt-4.1") ||
@@ -407,7 +411,7 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             lowercasedID.contains("/mini") ||
             lowercased.contains("nano") ||
             lowercased.contains("lite") ||
-            (lowercased.contains("flash") && !lowercasedID.contains("gemini-3.5-flash")) ||
+            lowercased.contains("flash") ||
             lowercased.contains("gemma") {
             return true
         }
@@ -477,7 +481,7 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             badges.append("Reasoning")
         }
         if isEliteModel {
-            badges.append("Frontier")
+            badges.append("Cloud")
         }
         if isCodeModel {
             badges.append("Code")

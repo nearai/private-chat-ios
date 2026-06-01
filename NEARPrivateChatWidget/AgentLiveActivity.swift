@@ -1,20 +1,25 @@
 #if canImport(ActivityKit)
 import ActivityKit
+import Foundation
 import SwiftUI
 import WidgetKit
 
 // MARK: - Lock Screen / banner presentation
 
 /// The Live Activity as shown on the Lock Screen and in the (rare) banner
-/// presentation. Light aesthetic: a soft tinted card, a sparkles glyph, the run
-/// title, the current stage, and a determinate progress bar with a "n/total"
-/// counter.
+/// presentation. Light aesthetic: a soft tinted card, a status glyph, the run
+/// title, the current stage, route/trust copy, and a determinate progress bar
+/// with a "n/total" counter.
 struct AgentLiveActivityLockScreenView: View {
     let context: ActivityViewContext<AgentActivityAttributes>
 
+    private var status: AgentLiveActivityStatus {
+        AgentLiveActivityStatus.resolve(title: context.attributes.title, stage: context.state.stage)
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "sparkles")
+            Image(systemName: status.symbolName)
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(.tint)
                 .frame(width: 30, height: 30)
@@ -31,12 +36,87 @@ struct AgentLiveActivityLockScreenView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
 
+                AgentLiveActivityStatusLine(status: status, showsOpenChat: true)
+
+                Text(status.trustText)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+
                 AgentLiveActivityProgress(state: context.state)
             }
         }
         .padding(14)
+        .widgetURL(AgentLiveActivityLinks.openChatURL)
         .activityBackgroundTint(Color.white.opacity(0.001)) // keep system light material
         .activitySystemActionForegroundColor(.primary)
+    }
+}
+
+// MARK: - Route and trust copy
+
+private enum AgentLiveActivityLinks {
+    static let openChatURL = URL(string: "nearprivatechat://chat")
+}
+
+private struct AgentLiveActivityStatus {
+    let primaryText: String
+    let trustText: String
+    let symbolName: String
+
+    static func resolve(title: String, stage: String) -> AgentLiveActivityStatus {
+        let text = "\(title) \(stage)".lowercased()
+
+        if text.contains("approval") {
+            return AgentLiveActivityStatus(
+                primaryText: "Waiting for approval",
+                trustText: "Open chat to approve or deny",
+                symbolName: "hand.raised"
+            )
+        }
+
+        if text.contains("hosted ironclaw") || text.contains("hosted") || text.contains("workstation") {
+            return AgentLiveActivityStatus(
+                primaryText: "Running on Hosted IronClaw",
+                trustText: "Separate trust boundary",
+                symbolName: "terminal"
+            )
+        }
+
+        if text.contains("ironclaw mobile") || text.contains("phone") || text.contains("mobile") {
+            return AgentLiveActivityStatus(
+                primaryText: "Running on phone",
+                trustText: "Phone route - no NEAR proof",
+                symbolName: "iphone"
+            )
+        }
+
+        return AgentLiveActivityStatus(
+            primaryText: "Current route",
+            trustText: "Proof shown when route supports it",
+            symbolName: "message"
+        )
+    }
+}
+
+private struct AgentLiveActivityStatusLine: View {
+    let status: AgentLiveActivityStatus
+    let showsOpenChat: Bool
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: status.symbolName)
+                .font(.caption2.weight(.semibold))
+            Text(status.primaryText)
+                .lineLimit(1)
+            Spacer(minLength: 6)
+            if showsOpenChat {
+                Text("Open chat")
+                    .lineLimit(1)
+            }
+        }
+        .font(.caption2.weight(.medium))
+        .foregroundStyle(.secondary)
     }
 }
 
@@ -76,14 +156,15 @@ struct AgentLiveActivity: Widget {
         ActivityConfiguration(for: AgentActivityAttributes.self) { context in
             AgentLiveActivityLockScreenView(context: context)
         } dynamicIsland: { context in
-            DynamicIsland {
+            let status = AgentLiveActivityStatus.resolve(title: context.attributes.title, stage: context.state.stage)
+            return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     Label {
                         Text(context.attributes.title)
                             .font(.caption.weight(.semibold))
                             .lineLimit(1)
                     } icon: {
-                        Image(systemName: "sparkles")
+                        Image(systemName: status.symbolName)
                             .foregroundStyle(.tint)
                     }
                 }
@@ -99,11 +180,16 @@ struct AgentLiveActivity: Widget {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                        AgentLiveActivityStatusLine(status: status, showsOpenChat: true)
+                        Text(status.trustText)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
                         AgentLiveActivityProgress(state: context.state)
                     }
                 }
             } compactLeading: {
-                Image(systemName: "sparkles")
+                Image(systemName: status.symbolName)
                     .foregroundStyle(.tint)
             } compactTrailing: {
                 Text("\(min(context.state.completed, context.state.total))/\(max(context.state.total, 0))")
@@ -111,9 +197,10 @@ struct AgentLiveActivity: Widget {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             } minimal: {
-                Image(systemName: "sparkles")
+                Image(systemName: status.symbolName)
                     .foregroundStyle(.tint)
             }
+            .widgetURL(AgentLiveActivityLinks.openChatURL)
             .keylineTint(.accentColor)
         }
     }

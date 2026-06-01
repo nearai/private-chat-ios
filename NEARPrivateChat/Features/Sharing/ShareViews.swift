@@ -1,29 +1,5 @@
 import SwiftUI
-
-private enum SharePublicLinkExpiry: String, CaseIterable, Identifiable {
-    case manual = "Manual disable"
-    case sevenDays = "7 days"
-    case thirtyDays = "30 days"
-
-    var id: String { rawValue }
-
-    var isAvailable: Bool {
-        self == .manual
-    }
-
-    static var availableCases: [SharePublicLinkExpiry] {
-        allCases.filter(\.isAvailable)
-    }
-
-    var availabilityDetail: String {
-        switch self {
-        case .manual:
-            return "Public links stay active until you disable them."
-        case .sevenDays, .thirtyDays:
-            return "Timed expiry is coming soon."
-        }
-    }
-}
+import UniformTypeIdentifiers
 
 struct ShareConversationView: View {
     @EnvironmentObject private var chatStore: ChatStore
@@ -39,9 +15,15 @@ struct ShareConversationView: View {
     @State private var permission: ShareGrantPermission = .read
     @State private var grantMode: ShareGrantMode = .people
     @State private var pendingDeleteID: String?
-    @State private var publicLinkExpiry: SharePublicLinkExpiry = .manual
     @State private var showingPublicLinkPreview = false
     @State private var showingDisablePublicLinkConfirmation = false
+    @State private var showingVerifiedExporter = false
+    @State private var showingProofReportExporter = false
+    @State private var showingSignedExportNotice = false
+    @State private var verifiedExportDocument = ConversationExportDocument()
+    @State private var verifiedExportFilename = "near-private-chat.signed.json"
+    @State private var proofReportDocument = ConversationExportDocument()
+    @State private var proofReportFilename = "near-private-chat-proof-report.json"
     @State private var pendingSensitiveShareGrant: SensitiveShareGrant?
 
     private enum ShareGrantMode: String, CaseIterable, Identifiable {
@@ -61,11 +43,18 @@ struct ShareConversationView: View {
     }
 
     private enum ShareGrantPermission: String, CaseIterable, Identifiable {
-        case read = "Read"
-        case write = "Write"
+        case read = "Read-only"
+        case write = "Can reply"
 
         var id: String { rawValue }
-        var apiValue: String { rawValue.lowercased() }
+        var apiValue: String {
+            switch self {
+            case .read:
+                return "read"
+            case .write:
+                return "write"
+            }
+        }
     }
 
     private enum SensitiveShareGrant {
@@ -142,7 +131,6 @@ struct ShareConversationView: View {
                     conversation: conversation,
                     messageCount: chatStore.messages.count,
                     sourceCount: publicLinkSourceCount,
-                    expiry: publicLinkExpiry,
                     attestationStatus: chatStore.currentAttestationStatus,
                     isWorking: isWorking,
                     onConfirm: {
@@ -180,6 +168,44 @@ struct ShareConversationView: View {
                 }
             } message: {
                 Text(shareGrantConfirmationMessage)
+            }
+            .confirmationDialog(
+                "Signed export identity",
+                isPresented: $showingSignedExportNotice,
+                titleVisibility: .visible
+            ) {
+                Button("Export Signed JSON") {
+                    prepareVerifiedJSONExport()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Signed JSON includes the transcript and route metadata, sealed with a stable on-device Keychain identity. Repeated exports from this device can be linked by the signing key id.")
+            }
+            .fileExporter(
+                isPresented: $showingVerifiedExporter,
+                document: verifiedExportDocument,
+                contentType: ConversationExportFormat.signedJSON.contentType,
+                defaultFilename: verifiedExportFilename
+            ) { result in
+                switch result {
+                case .success:
+                    chatStore.bannerMessage = "Signed JSON exported."
+                case let .failure(error):
+                    chatStore.bannerMessage = error.localizedDescription
+                }
+            }
+            .fileExporter(
+                isPresented: $showingProofReportExporter,
+                document: proofReportDocument,
+                contentType: ConversationExportFormat.json.contentType,
+                defaultFilename: proofReportFilename
+            ) { result in
+                switch result {
+                case .success:
+                    chatStore.bannerMessage = "Proof report exported."
+                case let .failure(error):
+                    chatStore.bannerMessage = error.localizedDescription
+                }
             }
         }
         .platformLargeDetent()
@@ -222,23 +248,7 @@ struct ShareConversationView: View {
                     .foregroundStyle(publicShareEnabled ? Color.brandBlue : .secondary)
             }
 
-            Menu {
-                ForEach(SharePublicLinkExpiry.availableCases) { expiry in
-                    Button {
-                        publicLinkExpiry = expiry
-                    } label: {
-                        Label(expiry.rawValue, systemImage: publicLinkExpiry == expiry ? "checkmark" : "clock")
-                    }
-                }
-            } label: {
-                Label("Expiry: \(publicLinkExpiry.rawValue)", systemImage: "clock")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .disabled(publicShareEnabled)
-
-            Text("Timed expiry is coming soon. Right now public links stay on until you disable them.")
+            Text("Public links are read-only, off by default, and expose this conversation to anyone with the URL until disabled.")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -283,15 +293,6 @@ struct ShareConversationView: View {
                 .controlSize(.large)
                 .disabled(chatStore.shareInfo?.canShare == false || isWorking)
             }
-
-            Button {
-                grantMode = .people
-            } label: {
-                Label("Invite People", systemImage: "person.badge.plus")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .disabled(chatStore.shareInfo?.canShare == false || isWorking)
         }
         .padding(12)
         .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -311,9 +312,9 @@ struct ShareConversationView: View {
                     .background(Color.trustVerified.opacity(0.13), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Verified export")
+                    Text("Signed export")
                         .font(.footnote.weight(.semibold))
-                    Text("Share the transcript with a signed proof bundle so recipients can verify model, route, nonce, and gateway.")
+                    Text("Signed JSON includes the transcript, route metadata, and what proof was available. The proof report alone does not include the conversation.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -322,21 +323,25 @@ struct ShareConversationView: View {
 
             HStack(spacing: 8) {
                 Button {
-                    chatStore.bannerMessage = "Verified JSON export prepared."
+                    showingSignedExportNotice = true
                 } label: {
-                    Label("Verified JSON", systemImage: "checkmark.shield")
+                    Label("Signed JSON", systemImage: "checkmark.shield")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.trustVerified)
+                .disabled(verifiedJSONExportUnavailableReason != nil)
+                .accessibilityHint(verifiedJSONExportUnavailableReason ?? "Exports signed transcript JSON.")
 
-                Button {
-                    chatStore.bannerMessage = "Proof JSON prepared."
-                } label: {
-                    Label("Proof JSON", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
+                proofJSONShareAction
+            }
+
+            if let reason = verifiedJSONExportUnavailableReason {
+                proofExportUnavailableText(reason)
+            }
+
+            if let reason = proofJSONExportUnavailableReason {
+                proofExportUnavailableText(reason)
             }
         }
         .padding(12)
@@ -345,6 +350,26 @@ struct ShareConversationView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.trustVerified.opacity(0.20), lineWidth: 1)
         }
+    }
+
+    @ViewBuilder
+    private var proofJSONShareAction: some View {
+        Button {
+            prepareProofReportExport()
+        } label: {
+            Label("Proof report", systemImage: "square.and.arrow.up")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .disabled(proofJSONExportUnavailableReason != nil)
+        .accessibilityHint(proofJSONExportUnavailableReason ?? "Exports only the cached proof report JSON.")
+    }
+
+    private func proofExportUnavailableText(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var grantAccessSection: some View {
@@ -359,7 +384,7 @@ struct ShareConversationView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 140)
+                .frame(width: 176)
             }
 
             Picker("Target", selection: $grantMode) {
@@ -638,7 +663,7 @@ struct ShareConversationView: View {
     private var shareGrantConfirmationMessage: String {
         let target = pendingSensitiveShareGrant?.label ?? "this target"
         if permission == .write {
-            return "Write access lets \(target) add messages to this conversation. Confirm this is intended."
+            return "\(target.capitalized) can reply in this conversation. Confirm this is intended."
         }
         return "Organization sharing can grant access broadly. Confirm the domain and permission before continuing."
     }
@@ -720,6 +745,68 @@ struct ShareConversationView: View {
         await chatStore.removeConversationShare(share, conversation: conversation)
     }
 
+    private var exportMessages: [ChatMessage] {
+        guard chatStore.selectedConversation?.id == conversation.id else { return [] }
+        return chatStore.messages
+    }
+
+    private var verifiedJSONExportUnavailableReason: String? {
+        if chatStore.selectedConversation?.id != conversation.id {
+            return "Open this conversation before exporting Signed JSON."
+        }
+        if exportMessages.isEmpty {
+            return "No transcript messages to export."
+        }
+        return nil
+    }
+
+    private var proofJSONExportUnavailableReason: String? {
+        guard chatStore.attestationSnapshot != nil else {
+            return "No cached proof report is available. Open Proof and fetch proof first."
+        }
+        guard chatStore.currentAttestationStatus.effectiveState() == .valid else {
+            return "Proof report is stale or not current for this private route. Open Proof and refresh proof first."
+        }
+        return nil
+    }
+
+    private func prepareVerifiedJSONExport() {
+        if let reason = verifiedJSONExportUnavailableReason {
+            chatStore.bannerMessage = reason
+            return
+        }
+
+        do {
+            verifiedExportDocument = try ConversationExportBuilder.document(
+                for: conversation,
+                messages: exportMessages,
+                format: .signedJSON,
+                signedContext: chatStore.signedTranscriptExportContext
+            )
+            verifiedExportFilename = ConversationExportBuilder.filename(
+                for: conversation,
+                format: .signedJSON
+            )
+            showingVerifiedExporter = true
+        } catch {
+            chatStore.bannerMessage = error.localizedDescription
+        }
+    }
+
+    private func prepareProofReportExport() {
+        if let reason = proofJSONExportUnavailableReason {
+            chatStore.bannerMessage = reason
+            return
+        }
+        guard let snapshot = chatStore.attestationSnapshot else {
+            chatStore.bannerMessage = "No cached proof report is available."
+            return
+        }
+        proofReportDocument = ConversationExportDocument(data: Data(snapshot.prettyJSON.utf8))
+        proofReportFilename = "near-private-chat-proof-report.json"
+        showingProofReportExporter = true
+    }
+
     private func shareDisplayName(_ share: ConversationShareInfo) -> String {
         if let recipient = share.recipient {
             return recipient.value
@@ -734,7 +821,7 @@ struct ShareConversationView: View {
     }
 
     private func shareSubtitle(_ share: ConversationShareInfo) -> String {
-        let permission = share.permission == "write" ? "Can write" : "Can read"
+        let permission = share.permission == "write" ? "Can reply" : "Read-only"
         switch share.shareType {
         case "direct":
             return "\(permission) · Direct"
@@ -805,7 +892,6 @@ private struct PublicLinkPreviewView: View {
     let conversation: ConversationSummary
     let messageCount: Int
     let sourceCount: Int
-    let expiry: SharePublicLinkExpiry
     let attestationStatus: AttestationStatus
     let isWorking: Bool
     let onConfirm: () async -> Void
@@ -842,15 +928,7 @@ private struct PublicLinkPreviewView: View {
                     SharePreviewRow(title: "Permission", value: "Read-only", symbolName: "eye")
                     SharePreviewRow(title: "Messages", value: "\(messageCount)", symbolName: "bubble.left.and.bubble.right")
                     SharePreviewRow(title: "Sources", value: sourceCount == 0 ? "None attached" : "\(sourceCount)", symbolName: "link")
-                    SharePreviewRow(title: "Expiry", value: expiry.rawValue, symbolName: "clock")
                     SharePreviewRow(title: "Account metadata", value: "Owner identity is not added to the link preview.", symbolName: "person.crop.circle.badge.xmark")
-                }
-
-                Section {
-                    Text(expiry.availabilityDetail)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Section {
@@ -1234,14 +1312,14 @@ struct NewProjectView: View {
                     VStack(alignment: .leading, spacing: 7) {
                         Text("Instructions")
                             .font(.headline)
-                        TextField("How should the assistant handle this workspace?", text: $instructions, axis: .vertical)
+                        TextField("How should the assistant use this Project?", text: $instructions, axis: .vertical)
                             .textFieldStyle(.plain)
                             .lineLimit(4...8)
                             .padding(12)
                             .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
                     }
 
-                    Text("Project files, links, memory, and saved outputs will travel with chats in this workspace.")
+                    Text("Project sources, instructions, notes, and saved outputs stay available to chats in this Project.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1382,7 +1460,7 @@ struct EditProjectView: View {
                     VStack(alignment: .leading, spacing: 7) {
                         Text("Instructions")
                             .font(.headline)
-                        TextField("How should the assistant handle this workspace?", text: $instructions, axis: .vertical)
+                        TextField("How should the assistant use this Project?", text: $instructions, axis: .vertical)
                             .textFieldStyle(.plain)
                             .lineLimit(4...8)
                             .padding(12)

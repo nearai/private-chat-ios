@@ -13,7 +13,7 @@ enum HomeOrchestrationFilter: String, CaseIterable, Identifiable {
         case .all:
             return "All"
         case .streams:
-            return "Streams"
+            return "Workflows"
         case .agents:
             return "Agents"
         case .projects:
@@ -26,7 +26,7 @@ enum HomeOrchestrationFilter: String, CaseIterable, Identifiable {
         case .all:
             return "square.grid.2x2"
         case .streams:
-            return "dot.radiowaves.left.and.right"
+            return "calendar.badge.clock"
         case .agents:
             return "sparkles"
         case .projects:
@@ -102,6 +102,7 @@ enum HomeOrchestrationAction: Equatable {
     case openAgentSettings
     case useAutoCouncil
     case newBriefing
+    case runSetupDefaults
     case stagePrompt(HomeStagedPrompt)
 }
 
@@ -160,7 +161,8 @@ enum HomeOrchestrationPlanner {
         councilModelNames: [String],
         hostedAgentAvailable: Bool,
         mobileAgentAvailable: Bool,
-        setupPlan: AppSetupPlan? = nil
+        setupPlan: AppSetupPlan? = nil,
+        includesSetupDefaultsCommand: Bool = false
     ) -> HomeOrchestrationPlan {
         let sortedBriefings = sorted(briefings: briefings)
         let sortedProjects = sorted(projects: projects, selectedProjectID: selectedProjectID)
@@ -222,7 +224,8 @@ enum HomeOrchestrationPlanner {
                 selectedProject: sortedProjects.first,
                 isCouncilModeEnabled: isCouncilModeEnabled,
                 defaultCouncilModelCount: defaultCouncilModelCount,
-                agentAvailable: hostedAgentAvailable || mobileAgentAvailable
+                agentAvailable: hostedAgentAvailable || mobileAgentAvailable,
+                includesSetupDefaultsCommand: includesSetupDefaultsCommand
             )
         )
     }
@@ -269,7 +272,8 @@ enum HomeOrchestrationPlanner {
         if names.isEmpty {
             subtitle = defaultModelCount > 1 ? "\(defaultModelCount) models available" : "Multi-model route"
         } else {
-            subtitle = names.prefix(3).joined(separator: " + ")
+            let count = min(names.count, 3)
+            subtitle = count == 1 ? "1 model selected" : "\(count) models selected"
         }
 
         let action: HomeOrchestrationAction = isEnabled
@@ -282,10 +286,10 @@ enum HomeOrchestrationPlanner {
         return HomeOrchestrationItem(
             id: "council-room",
             kind: .council,
-            title: isEnabled ? "Council room" : "Auto-Council",
+            title: isEnabled ? "Council room" : "Recommended Council",
             subtitle: subtitle,
             detail: isEnabled ? "Compare model perspectives before committing." : "Enable the default multi-model lineup.",
-            statusText: isEnabled ? "ready" : "available",
+            statusText: isEnabled ? "enabled" : "available",
             symbolName: "person.3.fill",
             tone: .violet,
             action: action
@@ -297,7 +301,7 @@ enum HomeOrchestrationPlanner {
         mobileAvailable: Bool,
         selectedProject: ChatProject?
     ) -> HomeOrchestrationItem {
-        let route = hostedAvailable ? "Hosted IronClaw" : "Phone agent"
+        let route = hostedAvailable ? "Hosted Agent" : "Phone Agent"
         let projectName = selectedProject?.name.nilIfBlank
         let detail = projectName.map { "Plan work from \($0) context." } ?? "Plan code, research, and tool work without sending yet."
         let prompt = projectName.map {
@@ -307,10 +311,10 @@ enum HomeOrchestrationPlanner {
         return HomeOrchestrationItem(
             id: "agent-builder",
             kind: .agent,
-            title: "Agent builder",
+            title: "Agent task",
             subtitle: route,
             detail: detail,
-            statusText: hostedAvailable ? "connected" : (mobileAvailable ? "local" : "ready"),
+            statusText: hostedAvailable ? "connected" : (mobileAvailable ? "phone" : "not set up"),
             symbolName: hostedAvailable ? "terminal" : "iphone",
             tone: .blue,
             action: .stagePrompt(HomeStagedPrompt(
@@ -351,7 +355,7 @@ enum HomeOrchestrationPlanner {
             title: project.name,
             subtitle: projectContextLabel(project),
             detail: projectDetail(project),
-            statusText: project.conversationIDs.isEmpty ? "workspace" : "\(project.conversationIDs.count) chats",
+            statusText: project.conversationIDs.isEmpty ? "project" : "\(project.conversationIDs.count) chats",
             symbolName: project.projectIconName,
             tone: .blue,
             action: .openProject(project.id)
@@ -374,17 +378,17 @@ enum HomeOrchestrationPlanner {
 
     private static func emptyStarterItem() -> HomeOrchestrationItem {
         HomeOrchestrationItem(
-            id: "starter-workboard",
+            id: "starter-actions",
             kind: .setup,
-            title: "Start a work stream",
-            subtitle: "Private chat, Council, agent, or briefing",
-            detail: "Stage the first prompt and keep the run editable.",
+            title: "Action scan",
+            subtitle: "Track, remind, schedule, brief",
+            detail: "Turn loose context into actions you can approve.",
             statusText: "new",
             symbolName: "sparkles.rectangle.stack",
             tone: .blue,
             action: .stagePrompt(HomeStagedPrompt(
-                prompt: "Help me choose the best first work stream for today: private answer, research brief, Council decision, or agent task.",
-                banner: "Work stream prompt ready."
+                prompt: "Turn the current context into useful next moves. Surface trackers, reminders, calendar-worthy items, decisions, risks, open questions, and the first action to stage.",
+                banner: "Action scan prompt ready."
             ))
         )
     }
@@ -405,12 +409,25 @@ enum HomeOrchestrationPlanner {
         selectedProject: ChatProject?,
         isCouncilModeEnabled: Bool,
         defaultCouncilModelCount: Int,
-        agentAvailable: Bool
+        agentAvailable: Bool,
+        includesSetupDefaultsCommand: Bool
     ) -> [HomeOrchestrationCommand] {
         var commands = [
             HomeOrchestrationCommand(
+                id: "actions",
+                title: "Find next actions",
+                symbolName: "checklist",
+                action: .stagePrompt(HomeStagedPrompt(
+                    prompt: selectedProject.map {
+                        "Use the \($0.name) project context to surface actionable next moves: trackers, reminders, calendar-worthy items, decisions, risks, open questions, and things I should care about. Include structured fields where known (source, date, time, recurrence, timezone, attendees, confidence), missing_fields, and exact commands. Emit a near-widget action_plan when helpful. Preview before creating anything."
+                    } ?? "Surface actionable next moves from the current context: trackers, reminders, calendar-worthy items, decisions, risks, open questions, and things I should care about. Include structured fields where known (source, date, time, recurrence, timezone, attendees, confidence), missing_fields, and exact commands. Emit a near-widget action_plan when helpful. Preview before creating anything.",
+                    projectID: selectedProject?.id,
+                    banner: "Action scan prompt ready."
+                ))
+            ),
+            HomeOrchestrationCommand(
                 id: "brief",
-                title: "Make brief",
+                title: "Create workflow",
                 symbolName: "doc.text.magnifyingglass",
                 action: .newBriefing
             ),
@@ -426,7 +443,7 @@ enum HomeOrchestrationPlanner {
             ),
             HomeOrchestrationCommand(
                 id: "patch",
-                title: "Plan patch",
+                title: "Plan changes",
                 symbolName: "hammer",
                 action: .stagePrompt(HomeStagedPrompt(
                     prompt: selectedProject.map {
@@ -437,6 +454,18 @@ enum HomeOrchestrationPlanner {
                 ))
             )
         ]
+
+        if includesSetupDefaultsCommand {
+            commands.insert(
+                HomeOrchestrationCommand(
+                    id: "setup-defaults",
+                    title: "Tune defaults",
+                    symbolName: "slider.horizontal.3",
+                    action: .runSetupDefaults
+                ),
+                at: 2
+            )
+        }
 
         if isCouncilModeEnabled {
             commands.append(
@@ -466,7 +495,7 @@ enum HomeOrchestrationPlanner {
             commands.append(
                 HomeOrchestrationCommand(
                     id: "agent",
-                    title: "Ask agent",
+                    title: "Run Agent",
                     symbolName: "terminal",
                     action: .stagePrompt(HomeStagedPrompt(
                         prompt: selectedProject.map {
@@ -481,7 +510,7 @@ enum HomeOrchestrationPlanner {
             commands.append(
                 HomeOrchestrationCommand(
                     id: "agent",
-                    title: "Connect agent",
+                    title: "Connect Agent",
                     symbolName: "point.3.connected.trianglepath.dotted",
                     action: .openAgentSettings
                 )
@@ -528,7 +557,7 @@ enum HomeOrchestrationPlanner {
             parts.append("\(liveBriefingCount) live")
         }
         if projectCount > 0 {
-            parts.append("\(projectCount) workspaces")
+            parts.append(projectCount == 1 ? "1 Project" : "\(projectCount) Projects")
         }
         if isCouncilAvailable {
             parts.append("Council")
@@ -555,6 +584,8 @@ enum HomeOrchestrationPlanner {
             return widget.comparison?.subtitle?.nilIfBlank ?? widget.note?.nilIfBlank
         case .newsBrief:
             return widget.newsBrief?.stories.first?.title.nilIfBlank ?? widget.newsBrief?.heading?.nilIfBlank
+        case .actionPlan:
+            return widget.actionPlan?.heading?.nilIfBlank ?? widget.actionPlan?.actions.first?.title.nilIfBlank
         case .generic:
             return widget.note?.nilIfBlank
         }
@@ -604,6 +635,8 @@ enum HomeOrchestrationPlanner {
             return tone(for: widget?.chart?.trend)
         case .newsBrief:
             return .blue
+        case .actionPlan:
+            return .green
         case .comparison:
             return .violet
         case .generic, .none:
@@ -632,6 +665,8 @@ enum HomeOrchestrationPlanner {
             return "tablecells"
         case .newsBrief:
             return "newspaper"
+        case .actionPlan:
+            return "checklist"
         case .generic, .none:
             return "doc.text"
         }
@@ -657,6 +692,7 @@ struct HomeOrchestrationSurface: View {
     let plan: HomeOrchestrationPlan
     let onAction: (HomeOrchestrationAction) -> Void
     @State private var selectedFilter: HomeOrchestrationFilter = .all
+    @State private var showsAllItems = false
 
     private let columns = [
         GridItem(.adaptive(minimum: 150), spacing: 10)
@@ -666,11 +702,13 @@ struct HomeOrchestrationSurface: View {
         plan.liveItems.filter { $0.matches(selectedFilter) }
     }
 
+    private var displayedItems: [HomeOrchestrationItem] {
+        showsAllItems ? visibleItems : Array(visibleItems.prefix(3))
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
-            commandStrip
-            filterStrip
             liveGrid
             scheduledSection
         }
@@ -681,7 +719,7 @@ struct HomeOrchestrationSurface: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Today")
+                    Text("Today")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.primary)
                 Text(plan.subtitle)
@@ -691,6 +729,8 @@ struct HomeOrchestrationSurface: View {
             }
 
             Spacer(minLength: 8)
+
+            filterMenu
 
             Button {
                 onAction(.newBriefing)
@@ -702,8 +742,34 @@ struct HomeOrchestrationSurface: View {
                     .background(Color.actionPrimary, in: Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("New briefing")
+            .accessibilityLabel("New workflow")
         }
+    }
+
+    private var filterMenu: some View {
+        Menu {
+            ForEach(HomeOrchestrationFilter.allCases) { filter in
+                Button {
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.86)) {
+                        selectedFilter = filter
+                        showsAllItems = false
+                    }
+                } label: {
+                    Label(filter.title, systemImage: filter.symbolName)
+                }
+            }
+        } label: {
+            Image(systemName: selectedFilter == .all ? "line.3.horizontal.decrease.circle" : selectedFilter.symbolName)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(selectedFilter == .all ? Color.textSecondary : Color.actionPrimary)
+                .frame(width: 32, height: 32)
+                .background(Color.appPanelBackground, in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(selectedFilter == .all ? Color.appBorder : Color.actionPrimary.opacity(0.25), lineWidth: 1)
+                }
+        }
+        .accessibilityLabel("Filter next actions")
     }
 
     private var commandStrip: some View {
@@ -763,7 +829,7 @@ struct HomeOrchestrationSurface: View {
     @ViewBuilder
     private var liveGrid: some View {
         if visibleItems.isEmpty {
-            Text("No work streams in this view.")
+            Text("No next actions in this view.")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(Color.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -771,11 +837,30 @@ struct HomeOrchestrationSurface: View {
                 .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         } else {
             LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
-                ForEach(visibleItems) { item in
+                ForEach(displayedItems) { item in
                     HomeOrchestrationCard(item: item) {
                         onAction(item.action)
                     }
                 }
+            }
+            if visibleItems.count > displayedItems.count {
+                Button {
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.86)) {
+                        showsAllItems = true
+                    }
+                } label: {
+                    Label("View \(visibleItems.count - displayedItems.count) more", systemImage: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.appBorder, lineWidth: 1)
+                        }
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -785,26 +870,32 @@ struct HomeOrchestrationSurface: View {
         if !plan.scheduledItems.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Scheduled")
+                    Text("Automations")
                         .font(.caption.weight(.semibold))
                         .textCase(.uppercase)
                         .foregroundStyle(Color.textSecondary)
                     Spacer(minLength: 8)
-                    Text("\(plan.scheduledItems.count) upcoming")
+                    Text("\(plan.scheduledItems.count) active")
                         .font(.caption2)
                         .foregroundStyle(Color.textTertiary)
                 }
 
                 VStack(spacing: 0) {
-                    ForEach(Array(plan.scheduledItems.enumerated()), id: \.element.id) { index, item in
+                    ForEach(Array(plan.scheduledItems.prefix(1).enumerated()), id: \.element.id) { _, item in
                         HomeOrchestrationScheduleRow(item: item) {
                             onAction(item.action)
                         }
-                        if index != plan.scheduledItems.count - 1 {
-                            Divider()
-                                .overlay(Color.appHairline)
-                                .padding(.leading, 48)
-                        }
+                    }
+                    if plan.scheduledItems.count > 1 {
+                        Divider()
+                            .overlay(Color.appHairline)
+                            .padding(.leading, 48)
+                        Text("+ \(plan.scheduledItems.count - 1) more automations")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Color.textTertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
                     }
                 }
                 .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -875,7 +966,7 @@ private struct HomeOrchestrationCard: View {
     private var accessibilityHint: String {
         switch item.kind {
         case .briefing, .project, .chat:
-            return "Opens this work stream."
+            return "Opens this item."
         case .council, .agent, .setup:
             return "Stages or prepares this agentic action without sending."
         }
@@ -921,7 +1012,7 @@ private struct HomeOrchestrationScheduleRow: View {
     }
 }
 
-private extension String {
+extension String {
     var nilIfBlank: String? {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed

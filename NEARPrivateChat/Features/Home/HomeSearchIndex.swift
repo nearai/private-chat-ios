@@ -44,7 +44,7 @@ enum HomeFilter: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .all: "All"
+        case .all: "Today"
         case .shared: "Shared"
         case .archived: "Archived"
         }
@@ -52,7 +52,7 @@ enum HomeFilter: String, CaseIterable, Identifiable {
 
     var symbolName: String {
         switch self {
-        case .all: "bubble.left.and.bubble.right"
+        case .all: "sparkles.rectangle.stack"
         case .shared: "person.2"
         case .archived: "archivebox"
         }
@@ -89,7 +89,7 @@ struct HomeProjectContextMatch: Identifiable, Hashable {
             case .link: "Link"
             case .note: "Note"
             case .instructions: "Instructions"
-            case .memory: "Memory"
+            case .memory: "Saved context"
             }
         }
 

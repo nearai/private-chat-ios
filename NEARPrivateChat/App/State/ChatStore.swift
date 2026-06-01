@@ -1,6 +1,14 @@
 import Foundation
+import CryptoKit
 #if canImport(PDFKit)
 import PDFKit
+#endif
+#if canImport(Vision) && canImport(ImageIO)
+import ImageIO
+import Vision
+#endif
+#if canImport(zlib)
+import zlib
 #endif
 
 @MainActor
@@ -34,6 +42,7 @@ final class ChatStore: ObservableObject {
     @Published var pendingDeleteConversation: ConversationSummary?
     @Published var pendingExternalDeepLink: AppDeepLinkAction?
     @Published var pendingHostedHandoffPreflight: HostedIronclawHandoffPreflight?
+    @Published var pendingProjectNoteSaveMessage: ChatMessage?
     @Published var selectedConversation: ConversationSummary?
     @Published var selectedProjectID: String? {
         didSet {
@@ -190,6 +199,7 @@ final class ChatStore: ObservableObject {
             persistCurrentDraftIfNeeded()
         }
     }
+    private var pendingSharedFileURLs: [String: URL] = [:]
     /// On-device extracted text for attached PDFs, keyed by the attachment id, so
     /// a question about the doc can inline only the most-relevant passages (local
     /// RAG) instead of relying on the model to read the whole uploaded file.
@@ -202,7 +212,9 @@ final class ChatStore: ObservableObject {
     private var pendingDocumentTextIDs: [String] = []
     private static let maxStagedDocumentChars = 200_000
     private static let maxStagedDocuments = 8
+    nonisolated private static let maxLocalTableBytes = 2 * 1024 * 1024
     private var pendingHostedHandoffContinuation: HostedHandoffContinuation?
+    private var pendingNearAccountTrackerSchedule: BriefingSchedule?
     private var currentUserMessageMetadata: MessageMetadata?
     private var storageAccountID = "signed-out"
     private var draftPersistenceScopeID = "home"
@@ -227,7 +239,8 @@ final class ChatStore: ObservableObject {
             let attachmentIDs = Set(attachments.map(\.id))
             let filteredLargePastes = pendingLargePasteTexts.filter { attachmentIDs.contains($0.key) }
             let filteredAttachments = attachments.filter { attachment in
-                !attachment.isLocalPendingText || filteredLargePastes[attachment.id] != nil
+                guard !attachment.isLocalPendingSharedFile else { return false }
+                return !attachment.isLocalPendingText || filteredLargePastes[attachment.id] != nil
             }
             return PersistedDraftState(
                 text: text,
@@ -237,7 +250,7 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    static let defaultModelID = "zai-org/GLM-5.1-FP8"
+    nonisolated static let defaultModelID = ModelOption.nearPrivateDefaultModelID
     private static let preferredDefaultModelDefaultsKey = "preferredDefaultModelID"
     private static let selectedModelDefaultsKey = "selectedModel"
     private static let councilModelDefaultsKey = "councilModelIDs"
@@ -264,7 +277,8 @@ final class ChatStore: ObservableObject {
     private static let projectsCacheFilename = "projects.json"
     private static let localMessagesCacheFilename = "local-conversation-messages.json"
     private static let ironclawThreadIDsCacheFilename = "ironclaw-thread-ids.json"
-    private static let maxFileUploadBytes = 10 * 1024 * 1024
+    nonisolated private static let maxFileUploadBytes = 10 * 1024 * 1024
+    nonisolated static let maxAttachmentUploadBytes = maxFileUploadBytes
     nonisolated private static let maxPDFTextExtractionBytes = 5 * 1024 * 1024
     nonisolated private static let maxPDFExtractedTextBytes = 10 * 1024 * 1024
     nonisolated private static let maxPDFExtractionPages = 40
@@ -286,25 +300,18 @@ final class ChatStore: ObservableObject {
     private static let openWeightDefaultMigrationKey = "openWeightDefaultMigrationV1"
     private static let signedOutStorageAccountID = "signed-out"
     private let preferredModelIDs = [
-        "zai-org/GLM-5.1-FP8",
-        "qwen/qwen3.7-max",
-        "anthropic/claude-opus-4-7",
-        "openai/gpt-5.5",
-        "google/gemini-3.5-flash",
+        ModelOption.nearPrivateDefaultModelID,
         "Qwen/Qwen3.5-122B-A10B",
         "Qwen/Qwen3.6-35B-A3B-FP8",
         "Qwen/Qwen3-30B-A3B-Instruct-2507",
         "openai/gpt-oss-120b",
         "Qwen/Qwen3-VL-30B-A3B-Instruct",
-        "moonshotai/kimi-k2.6",
         "moonshotai/Kimi-K2-Thinking",
         "moonshotai/Kimi-K2-Instruct",
         "MoonshotAI/Kimi-K2-Instruct",
         "deepseek-ai/DeepSeek-V3.2",
         "deepseek-ai/DeepSeek-V3.1",
         "deepseek-ai/DeepSeek-R1",
-        "openai/gpt-5.5",
-        "anthropic/claude-opus-4-7",
         "anthropic/claude-sonnet-4-6",
         "openai/gpt-5.4",
         "google/gemini-3-pro",
@@ -318,69 +325,19 @@ final class ChatStore: ObservableObject {
         "openai/o3",
         "openai/o4-mini"
     ]
-    private let nearCloudPreferredModelIDs = [
-        "anthropic/claude-opus-4-7",
-        "openai/gpt-5.5",
-        "qwen/qwen3.7-max",
-        "moonshotai/kimi-k2.6",
-        "google/gemini-3.5-flash",
-        "openai/gpt-oss-120b",
-        "anthropic/claude-opus-4-6",
-        "google/gemini-3-pro",
-        "google/gemini-2.5-pro",
-        "zai-org/GLM-5.1-FP8",
-        "Qwen/Qwen3.5-122B-A10B",
-        "Qwen/Qwen3.6-35B-A3B-FP8",
-        "Qwen/Qwen3-30B-A3B-Instruct-2507",
-        "openai/gpt-5.4",
-        "openai/gpt-5.2",
-        "openai/gpt-5.1",
-        "google/gemini-2.5-flash",
-        "google/gemini-3.1-flash-lite"
-    ]
+    private let nearCloudPreferredModelIDs: [String] = []
     private let defaultCouncilCandidateGroups = [
         [
-            "zai-org/GLM-latest",
-            "zai-org/GLM-5.1-FP8"
-        ],
-        [
-            "near-cloud/qwen3.7-max",
-            "near-cloud/qwen/qwen3.7-max",
-            "qwen/qwen3.7-max",
-            "Qwen/Qwen3.5-122B-A10B"
-        ],
-        [
-            "near-cloud/anthropic/claude-opus-4-7",
-            "anthropic/claude-opus-4-7",
-            "anthropic/claude-opus-4-6",
-            "anthropic/claude-sonnet-4-6"
-        ],
-        [
-            "near-cloud/openai/gpt-5.5",
-            "openai/gpt-5.5",
-            "near-cloud/openai/gpt-oss-120b",
-            "openai/gpt-oss-120b",
-            "openai/gpt-5.4"
-        ],
-        [
-            "near-cloud/moonshotai/kimi-k2.6",
-            "moonshotai/kimi-k2.6"
-        ],
-        [
-            "near-cloud/google/gemini-3.5-flash",
-            "google/gemini-3-pro",
-            "google/gemini-2.5-pro",
-            "google/gemini-3.5-flash"
+            ModelOption.nearPrivateDefaultModelID
         ]
     ]
     private let ironclawOpenWeightPreferredModelIDs = [
-        "zai-org/GLM-5.1-FP8",
+        ModelOption.nearPrivateDefaultModelID,
         "Qwen/Qwen3.5-122B-A10B",
         "Qwen/Qwen3.6-35B-A3B-FP8",
         "Qwen/Qwen3-30B-A3B-Instruct-2507",
         "openai/gpt-oss-120b",
         "Qwen/Qwen3-VL-30B-A3B-Instruct",
-        "moonshotai/kimi-k2.6",
         "moonshotai/Kimi-K2-Thinking",
         "moonshotai/Kimi-K2-Instruct",
         "MoonshotAI/Kimi-K2-Instruct",
@@ -503,6 +460,33 @@ final class ChatStore: ObservableObject {
 
     var selectedProjectNotes: [ProjectNote] {
         selectedProject?.notes ?? []
+    }
+
+    var projectContextRoutePreview: ProjectContextRoutePreview? {
+        guard let project = selectedProject else { return nil }
+        let semantics = sourceRoutingSemantics
+        let publicLinkCount = project.links.filter { link in
+            URL(string: link.urlString).map(URLSecurity.isPublicHTTPSURL) == true
+        }.count
+        let routeTitle = isCouncilModeEnabled ? activeCouncilRouteSummary : selectedRouteKind.disclosureTitle
+        return Self.projectContextRoutePreview(
+            fileCount: project.attachments.count,
+            linkCount: publicLinkCount,
+            noteCount: project.notes.count,
+            localOnlyNoteCount: project.notes.filter(\.isLocalOnly).count,
+            hasInstructions: !project.instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            hasMemory: !project.memorySummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            semantics: semantics,
+            routeTitle: routeTitle,
+            allowsLocalOnlyNotes: projectContextAllowsLocalOnlyNotes
+        )
+    }
+
+    private var projectContextAllowsLocalOnlyNotes: Bool {
+        if isCouncilModeEnabled {
+            return !activeCouncilHasExternalRoutes
+        }
+        return selectedRouteKind == .nearPrivate || selectedRouteKind == .ironclawMobile
     }
 
     func isMessageSavedToSelectedProject(_ message: ChatMessage) -> Bool {
@@ -649,6 +633,10 @@ final class ChatStore: ObservableObject {
         normalizedCouncilModels(from: councilModelIDs)
     }
 
+    var maxCouncilModelCount: Int {
+        Self.maxCouncilModels
+    }
+
     var councilModelNames: [String] {
         activeCouncilModels.map(\.displayName)
     }
@@ -686,6 +674,10 @@ final class ChatStore: ObservableObject {
         normalizedCouncilModels(from: defaultCouncilModelIDs())
     }
 
+    var councilCandidateModels: [ModelOption] {
+        rankedModels(from: chatModels.filter(isCouncilEligible))
+    }
+
     var setupRouteDefaults: SetupRouteDefaults {
         SetupRouteDefaults(
             privateModelID: usablePrivateSetupModelID(from: selectedModel) ?? preferredAvailableModel() ?? Self.defaultModelID,
@@ -713,9 +705,9 @@ final class ChatStore: ObservableObject {
                 subtitle: "Only NEAR Private or open-weight private routes.",
                 symbolName: "checkmark.shield.fill",
                 candidateGroups: [
-                    ["zai-org/GLM-latest", "zai-org/GLM-5.1-FP8"],
+                    [ModelOption.nearPrivateDefaultModelID],
                     ["Qwen/Qwen3.5-122B-A10B", "Qwen/Qwen3.6-35B-A3B-FP8", "Qwen/Qwen3-30B-A3B-Instruct-2507"],
-                    ["moonshotai/Kimi-K2-Thinking", "moonshotai/Kimi-K2-Instruct", "moonshotai/kimi-k2.6"],
+                    ["moonshotai/Kimi-K2-Thinking", "moonshotai/Kimi-K2-Instruct"],
                     ["deepseek-ai/DeepSeek-V3.2", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-R1"],
                     ["openai/gpt-oss-120b"]
                 ],
@@ -724,16 +716,10 @@ final class ChatStore: ObservableObject {
             ),
             councilPreset(
                 id: "cloud-frontier",
-                title: "Cloud Frontier",
-                subtitle: "Opus, GPT, Qwen, Kimi, and Gemini via NEAR AI Cloud.",
+                title: "Cloud models",
+                subtitle: "External models available through NEAR AI Cloud.",
                 symbolName: "cloud.fill",
-                candidateGroups: [
-                    ["near-cloud/anthropic/claude-opus-4-7", "anthropic/claude-opus-4-7"],
-                    ["near-cloud/openai/gpt-5.5", "openai/gpt-5.5"],
-                    ["near-cloud/qwen/qwen3.7-max", "near-cloud/qwen3.7-max", "qwen/qwen3.7-max"],
-                    ["near-cloud/moonshotai/kimi-k2.6", "moonshotai/kimi-k2.6"],
-                    ["near-cloud/google/gemini-3.5-flash", "google/gemini-3.5-flash"]
-                ],
+                candidateGroups: [],
                 candidateModels: cloudRouteModels.filter(isCouncilEligible),
                 fallbackModels: cloudRouteModels
             ),
@@ -743,10 +729,7 @@ final class ChatStore: ObservableObject {
                 subtitle: "Lower-latency scan before deeper synthesis.",
                 symbolName: "bolt.fill",
                 candidateGroups: [
-                    ["zai-org/GLM-5.1-FP8", "zai-org/GLM-latest"],
-                    ["near-cloud/google/gemini-3.5-flash", "google/gemini-3.5-flash"],
-                    ["near-cloud/qwen/qwen3.7-max", "qwen/qwen3.7-max"],
-                    ["near-cloud/openai/gpt-oss-120b", "openai/gpt-oss-120b"]
+                    [ModelOption.nearPrivateDefaultModelID]
                 ],
                 candidateModels: chatModels.filter(isCouncilEligible),
                 fallbackModels: chatModels.filter(isCouncilEligible)
@@ -755,17 +738,11 @@ final class ChatStore: ObservableObject {
     }
 
     var featuredPickerModels: [ModelOption] {
-        let featuredIDs = [
-            Self.defaultModelID,
-            "zai-org/GLM-5.1-FP8",
-            ModelOption.nearCloudModelID(for: "anthropic/claude-opus-4-7"),
-            ModelOption.nearCloudModelID(for: "openai/gpt-5.5"),
-            ModelOption.nearCloudModelID(for: "qwen/qwen3.7-max"),
-            ModelOption.nearCloudModelID(for: "moonshotai/kimi-k2.6"),
-            ModelOption.nearCloudModelID(for: "google/gemini-3.5-flash"),
-            ModelOption.ironclawModelID,
-            ModelOption.ironclawMobileModelID
-        ]
+        let featuredIDs =
+            [Self.defaultModelID] +
+            rankedModels(from: pickerModels.filter { !$0.isExternalModel }).prefix(2).map(\.id) +
+            rankedModels(from: cloudRouteModels).prefix(3).map(\.id) +
+            [ModelOption.ironclawModelID, ModelOption.ironclawMobileModelID]
         let available = pickerModels
         var output: [ModelOption] = []
 
@@ -865,6 +842,105 @@ final class ChatStore: ObservableObject {
         return AttestationStatus(snapshot: attestationSnapshot, selectedModelID: selectedModel)
     }
 
+    private func assistantTrustMetadata(
+        for modelID: String?,
+        webSearchUsed: Bool? = nil,
+        capturedAt: Date = Date()
+    ) -> MessageTrustMetadata {
+        let trimmedModelID = modelID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let routeKind = trimmedModelID.map(Self.routeKind(forModelID:)) ?? selectedRouteKind
+        let semantics = routingSemantics(for: routeKind)
+        let defaultWebSearch = semantics.modelNativeWebToolEnabledByDefault ||
+            semantics.appWebGroundingPolicy.isEnabledByDefault
+        let route = MessageRouteMetadata(
+            modelID: trimmedModelID,
+            routeKind: routeKind,
+            sourceMode: sourceMode,
+            webSearchEnabled: webSearchUsed ?? defaultWebSearch,
+            researchModeEnabled: researchModeEnabled,
+            projectContextIncluded: selectedProjectID != nil,
+            capturedAt: capturedAt
+        )
+        return MessageTrustMetadata(
+            route: route,
+            proof: assistantProofMetadata(
+                for: trimmedModelID,
+                routeKind: routeKind,
+                capturedAt: capturedAt
+            ),
+            capturedAt: capturedAt
+        )
+    }
+
+    private func assistantProofMetadata(
+        for modelID: String?,
+        routeKind: ChatRouteKind,
+        capturedAt: Date
+    ) -> MessageProofMetadata {
+        switch routeKind {
+        case .nearPrivate:
+            let status = AttestationStatus(snapshot: attestationSnapshot, selectedModelID: modelID)
+            let viewModel = ProofCapsuleViewModel(status: status, modelID: modelID, now: capturedAt)
+            let evidence = status.evidence
+            return MessageProofMetadata(
+                state: viewModel.state,
+                title: viewModel.state == .verified ? "Proof captured with answer" : viewModel.title,
+                detail: viewModel.state == .verified
+                    ? "A fresh proof report covering this route/model was available on this device when the answer was generated. It does not prove the answer is true."
+                    : viewModel.detail,
+                badge: viewModel.badge,
+                symbolName: viewModel.symbolName,
+                freshness: status.freshness(at: capturedAt)?.shortLabel,
+                reportHash: attestationSnapshot.map { Self.sha256Digest($0.prettyJSON) },
+                coveredModelCount: evidence?.coveredModelIDs.count ?? 0,
+                coversSelectedModel: modelID.map { status.covers(modelID: $0, at: capturedAt) },
+                capturedAt: capturedAt
+            )
+        case .nearCloud:
+            return MessageProofMetadata(
+                state: .proxied,
+                title: "Privacy proxy",
+                detail: "This answer used NEAR AI Cloud privacy proxy routing. Cloud answers do not carry NEAR Private proof.",
+                badge: "Privacy proxy",
+                symbolName: "eye.slash",
+                freshness: nil,
+                reportHash: nil,
+                coveredModelCount: 0,
+                coversSelectedModel: nil,
+                capturedAt: capturedAt
+            )
+        case .ironclawMobile, .ironclawHosted:
+            return MessageProofMetadata(
+                state: .unverified,
+                title: "Agent route",
+                detail: "This answer used Agent tooling. NEAR Private proof applies only when the underlying model route supplies it.",
+                badge: "Agent",
+                symbolName: "terminal",
+                freshness: nil,
+                reportHash: nil,
+                coveredModelCount: 0,
+                coversSelectedModel: nil,
+                capturedAt: capturedAt
+            )
+        }
+    }
+
+    private func refreshTrustMetadata(for messageID: String, modelID: String? = nil, webSearchUsed: Bool? = nil) {
+        updateMessage(messageID) { message in
+            guard message.role == .assistant else { return }
+            message.trustMetadata = assistantTrustMetadata(
+                for: modelID ?? message.model,
+                webSearchUsed: webSearchUsed ?? (!message.sources.isEmpty ? true : nil),
+                capturedAt: message.createdAt
+            )
+        }
+    }
+
+    nonisolated private static func sha256Digest(_ value: String) -> String {
+        let digest = SHA256.hash(data: Data(value.utf8))
+        return "sha256:" + digest.map { String(format: "%02x", $0) }.joined()
+    }
+
     func routingSemantics(for route: ChatRouteKind) -> ChatSourceRoutingSemantics {
         Self.sourceRoutingSemantics(
             sourceMode: sourceMode,
@@ -920,8 +996,8 @@ final class ChatStore: ObservableObject {
         }
         if isCouncilModeEnabled {
             return activeCouncilHasNearCloudRoutes
-                ? "Council includes NEAR AI Cloud models. Cloud legs use privacy proxy routing; all-private Council lineups can fetch verification proof."
-                : "Council is using NEAR Private models. Open Verification when you need a signed private-route report."
+                ? "Council includes NEAR AI Cloud models. Cloud legs use privacy proxy routing; all-private Council lineups can fetch proof reports."
+                : "Council is using NEAR Private models. Open Proof when you need a signed private-route report."
         }
         if selectedModelOption?.isIronclawMobileRuntime == true {
             return nil
@@ -938,11 +1014,11 @@ final class ChatStore: ObservableObject {
     var emptyStateSubtitle: String {
         if selectedModelOption?.isIronclawMobileRuntime == true {
             return ironclawRemoteWorkstationAvailable
-                ? "Use IronClaw Mobile for projects, files, research, and hosted workstation handoff for git, code, shell, and software tasks."
+                ? "Use IronClaw Mobile for projects, files, research, and Hosted IronClaw handoff for git, code, shell, and software tasks."
                 : "Use IronClaw Mobile for projects, files, research, source links, memory, and NEAR Private inference."
         }
         if selectedModelOption?.isIronclawHostedModel == true {
-            return "Run remote git, code, research, and shell-capable IronClaw work through the hosted endpoint."
+            return "Run remote git, code, research, and shell-capable Agent work through Hosted IronClaw."
         }
         if isCouncilModeEnabled {
             return activeCouncilHasNearCloudRoutes
@@ -980,7 +1056,7 @@ final class ChatStore: ObservableObject {
         }
         switch selectedProviderDisplayName {
         case "IronClaw":
-            return selectedModelOption?.isIronclawMobileRuntime == true ? "Ask IronClaw Mobile or the workstation" : "Ask the hosted IronClaw workstation"
+            return selectedModelOption?.isIronclawMobileRuntime == true ? "Ask IronClaw Mobile" : "Tell the Agent what to run"
         case "NEAR AI Cloud":
             return nearCloudKeyConfigured ? "Ask \(selectedModelDisplayName)" : "Connect NEAR AI Cloud"
         default:
@@ -1202,7 +1278,7 @@ final class ChatStore: ObservableObject {
         case .addNearCloudKey:
             showBanner("Connect NEAR AI Cloud in Account, then send again.")
         case .configureIronClawEndpoint:
-            showBanner("Configure the hosted IronClaw endpoint in Account, then send again.")
+            showBanner("Connect Hosted IronClaw in Account, then send again.")
         }
     }
 
@@ -1346,6 +1422,7 @@ final class ChatStore: ObservableObject {
         routeReadinessIssue = nil
         pendingAttachments = []
         pendingLargePasteTexts = [:]
+        pendingSharedFileURLs = [:]
         pendingDocumentTexts = [:]
         pendingDocumentTextIDs = []
         projects = []
@@ -1481,24 +1558,12 @@ final class ChatStore: ObservableObject {
                     nearCloudModels = routeModels
                 }
             }
-            if nearCloudModels.isEmpty {
-                nearCloudModels = Self.fallbackNearCloudModels()
-            }
             ensureSelectedModelIsAvailable(shouldShowBanner: false)
             normalizeCouncilSelection()
         } catch {
             if models.isEmpty {
-                models = [
-                    ModelOption(modelID: Self.defaultModelID, publicModel: true, metadata: nil),
-                    ModelOption(modelID: "anthropic/claude-opus-4-7", publicModel: true, metadata: nil),
-                    ModelOption(modelID: "google/gemini-3-pro", publicModel: true, metadata: nil),
-                    ModelOption(modelID: "openai/gpt-oss-120b", publicModel: true, metadata: nil),
-                    ModelOption(modelID: "Qwen/Qwen3-30B-A3B-Instruct-2507", publicModel: true, metadata: nil)
-                ]
+                models = ModelCatalogStore.fallbackPrivateModels()
                 normalizeCouncilSelection()
-            }
-            if nearCloudModels.isEmpty {
-                nearCloudModels = Self.fallbackNearCloudModels()
             }
             showBanner(error.localizedDescription)
         }
@@ -1635,9 +1700,26 @@ final class ChatStore: ObservableObject {
         }
         PendingShareStore.clear(fileURL)
         let text = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return false }
+        let sharedFiles = item.attachments.compactMap { attachment -> (attachment: PendingSharedAttachment, url: URL)? in
+            guard let url = PendingShareStore.fileURL(for: attachment, handoffFileURL: fileURL),
+                  FileManager.default.fileExists(atPath: url.path) else {
+                return nil
+            }
+            return (attachment, url)
+        }
+        guard !text.isEmpty || !sharedFiles.isEmpty else { return false }
         startNewConversation()
-        draft = String(text.prefix(AppDeepLinkAction.maxDraftCharacters))
+        draft = String(
+            (text.isEmpty ? "Turn these shared files into useful actions I can approve." : text)
+                .prefix(AppDeepLinkAction.maxDraftCharacters)
+        )
+        for sharedFile in sharedFiles {
+            stageSharedFileAttachment(
+                sharedFile.url,
+                displayName: sharedFile.attachment.fileName,
+                byteCount: sharedFile.attachment.byteCount
+            )
+        }
         AppHaptics.selection()
         return true
     }
@@ -1673,15 +1755,15 @@ final class ChatStore: ObservableObject {
         case .agent:
             route = "an IronClaw Mobile agent"
         case .verified:
-            route = "a verified private chat"
+            route = "a private chat with proof"
         }
         let source = action.sourceMode.map { " Source: \($0.title)." } ?? ""
         let research = action.researchMode ? " Research mode will be enabled." : ""
         let hostedBridge = action.hostedBridgeImport.map { bridge in
-            let host = bridge.host ?? "the hosted IronClaw endpoint"
+            let host = bridge.host ?? "Hosted IronClaw"
             let token = bridge.authToken == nil ? "" : " Token will be saved."
             let thread = bridge.threadID == nil ? "" : " Thread reuse will be configured."
-            let enabled = bridge.isEnabled ? " Hosted bridge for \(host) will be saved and enabled." : " Hosted bridge for \(host) will be saved."
+            let enabled = bridge.isEnabled ? " Agent connection for \(host) will be saved and enabled." : " Agent connection for \(host) will be saved."
             return "\(enabled)\(token)\(thread)"
         } ?? ""
         let prompt = action.draft == nil ? " No prompt will be added." : " A prompt will be staged but not sent."
@@ -1724,7 +1806,7 @@ final class ChatStore: ObservableObject {
             councilModelIDs = []
             clearAttestationState()
             if importedBridgeValidationMessage == nil {
-                showBanner(action.draft == nil ? "Verified private chat ready." : "Verified prompt ready.")
+                showBanner(action.draft == nil ? "Private chat with proof ready." : "Private prompt with proof ready.")
             }
         }
         openSelectedConversationToken = UUID()
@@ -1842,11 +1924,11 @@ final class ChatStore: ObservableObject {
         }
 
         if savedSettings.hasUsableHostedEndpoint {
-            ironclawStatusText = ironclawTokenConfigured ? "Hosted endpoint and token saved." : "Hosted endpoint saved."
-            showBanner(savedSettings.isEnabled ? "IronClaw hosted endpoint enabled." : "IronClaw endpoint saved.")
+            ironclawStatusText = ironclawTokenConfigured ? "Hosted IronClaw URL and token saved." : "Hosted IronClaw URL saved."
+            showBanner(savedSettings.isEnabled ? "Hosted IronClaw enabled." : "Agent connection saved.")
         } else {
-            ironclawStatusText = ironclawTokenConfigured ? "Endpoint token saved. Add hosted URL." : "Not connected"
-            showBanner("IronClaw settings saved.")
+            ironclawStatusText = ironclawTokenConfigured ? "Agent token saved. Add Hosted IronClaw URL." : "Not connected"
+            showBanner("Agent settings saved.")
         }
     }
 
@@ -1861,7 +1943,7 @@ final class ChatStore: ObservableObject {
             selectedModel = Self.defaultModelID
         }
         routeReadinessIssue = nil
-        showBanner("IronClaw disconnected.")
+        showBanner("Agent disconnected.")
     }
 
     func saveNearCloudAPIKey(_ apiKey: String) {
@@ -1900,8 +1982,8 @@ final class ChatStore: ObservableObject {
             nearCloudKeyConfigured = true
             routeReadinessIssue = nil
             let routeModels = Self.nearCloudRouteModels(from: fetchedCloud)
-            nearCloudModels = routeModels.isEmpty ? Self.fallbackNearCloudModels() : routeModels
-            showBanner("NEAR AI Cloud connected. \(nearCloudModels.count) models ready.")
+            nearCloudModels = routeModels
+            showBanner(routeModels.isEmpty ? "NEAR AI Cloud connected, but no models were returned." : "NEAR AI Cloud connected. \(routeModels.count) models ready.")
             return true
         } catch APIError.status(let code, _) where code == 404 || code == 405 {
             showBanner("Cloud auto-connect is not available yet. Open Cloud, create a key, then paste it here.")
@@ -1928,8 +2010,8 @@ final class ChatStore: ObservableObject {
             nearCloudKeyConfigured = true
             routeReadinessIssue = nil
             let routeModels = Self.nearCloudRouteModels(from: fetchedCloud)
-            nearCloudModels = routeModels.isEmpty ? Self.fallbackNearCloudModels() : routeModels
-            showBanner("NEAR AI Cloud connected. \(nearCloudModels.count) models ready.")
+            nearCloudModels = routeModels
+            showBanner(routeModels.isEmpty ? "NEAR AI Cloud connected, but no models were returned." : "NEAR AI Cloud connected. \(routeModels.count) models ready.")
             return true
         } catch {
             showBanner("NEAR AI Cloud key was not saved: \(Self.displayFailureMessage(error.localizedDescription))")
@@ -1949,7 +2031,7 @@ final class ChatStore: ObservableObject {
 
     func testIronclawConnection() async {
         guard ironclawSettings.hasUsableHostedEndpoint else {
-            let message = ironclawSettings.endpointValidationMessage ?? "Add a hosted HTTPS IronClaw endpoint first."
+            let message = ironclawSettings.endpointValidationMessage ?? "Add a Hosted IronClaw URL first."
             ironclawStatusText = message
             showBanner(message)
             return
@@ -1963,7 +2045,7 @@ final class ChatStore: ObservableObject {
             )
             ironclawStatusText = message
             await refreshIronclawTools()
-            showBanner("IronClaw reachable.")
+            showBanner("Hosted IronClaw reachable.")
         } catch {
             ironclawStatusText = error.localizedDescription
             showBanner(error.localizedDescription)
@@ -1972,7 +2054,7 @@ final class ChatStore: ObservableObject {
 
     func testIronclawWorkstation() async {
         guard ironclawSettings.hasUsableHostedEndpoint else {
-            let message = ironclawSettings.endpointValidationMessage ?? "Add a hosted HTTPS IronClaw endpoint first."
+            let message = ironclawSettings.endpointValidationMessage ?? "Add a Hosted IronClaw URL first."
             ironclawStatusText = message
             showBanner(message)
             return
@@ -1987,7 +2069,7 @@ final class ChatStore: ObservableObject {
             ironclawStatusText = message
             ironclawLastVerifiedAt = Date()
             await refreshIronclawTools()
-            showBanner("IronClaw workstation verified.")
+            showBanner("Hosted IronClaw tools checked.")
         } catch {
             let message = Self.displayFailureMessage(error.localizedDescription)
             ironclawStatusText = message
@@ -2016,8 +2098,8 @@ final class ChatStore: ObservableObject {
         diagnosticChecks = [
             AppDiagnosticCheck(title: "Model catalog", detail: "Checking NEAR Private API models.", state: .running),
             AppDiagnosticCheck(title: "Web grounding", detail: "Searching a live AI-news query.", state: .running),
-            AppDiagnosticCheck(title: "IronClaw bridge", detail: "Checking hosted endpoint and bearer token.", state: .running),
-            AppDiagnosticCheck(title: "IronClaw workstation", detail: "Verifying hosted shell/git tools.", state: .running),
+            AppDiagnosticCheck(title: "Agent connection", detail: "Checking Hosted IronClaw URL and bearer token.", state: .running),
+            AppDiagnosticCheck(title: "Hosted tools", detail: "Checking hosted shell/git tools.", state: .running),
             AppDiagnosticCheck(title: "NEAR AI Cloud", detail: nearCloudKeyConfigured ? "Connected." : "Not connected.", state: nearCloudKeyConfigured ? .passed : .warning)
         ]
         defer {
@@ -2060,13 +2142,13 @@ final class ChatStore: ObservableObject {
 
         guard ironclawSettings.hasUsableHostedEndpoint else {
             updateDiagnostic(
-                title: "IronClaw bridge",
-                detail: ironclawSettings.endpointValidationMessage ?? "Add a hosted HTTPS IronClaw endpoint.",
+                title: "Agent connection",
+                detail: ironclawSettings.endpointValidationMessage ?? "Add a Hosted IronClaw URL.",
                 state: .warning
             )
             updateDiagnostic(
-                title: "IronClaw workstation",
-                detail: "Add a hosted HTTPS IronClaw endpoint before testing tools.",
+                title: "Hosted tools",
+                detail: "Add a Hosted IronClaw URL before testing tools.",
                 state: .warning
             )
             return
@@ -2079,17 +2161,17 @@ final class ChatStore: ObservableObject {
                 authToken: loadIronclawAuthToken()
             )
             ironclawStatusText = message
-            updateDiagnostic(title: "IronClaw bridge", detail: message, state: .passed)
+            updateDiagnostic(title: "Agent connection", detail: message, state: .passed)
             bridgePassed = true
         } catch {
             let message = Self.displayFailureMessage(error.localizedDescription)
             ironclawStatusText = message
-            updateDiagnostic(title: "IronClaw bridge", detail: message, state: .failed)
+            updateDiagnostic(title: "Agent connection", detail: message, state: .failed)
         }
         guard bridgePassed else {
             updateDiagnostic(
-                title: "IronClaw workstation",
-                detail: "Bridge check failed before tool preflight.",
+                title: "Hosted tools",
+                detail: "Agent connection failed before tool preflight.",
                 state: .warning
             )
             return
@@ -2102,11 +2184,11 @@ final class ChatStore: ObservableObject {
             )
             ironclawStatusText = message
             ironclawLastVerifiedAt = Date()
-            updateDiagnostic(title: "IronClaw workstation", detail: message, state: message.contains("verified") ? .passed : .warning)
+            updateDiagnostic(title: "Hosted tools", detail: message, state: message.contains("checked") ? .passed : .warning)
         } catch {
             let message = Self.displayFailureMessage(error.localizedDescription)
             ironclawStatusText = message
-            updateDiagnostic(title: "IronClaw workstation", detail: message, state: .failed)
+            updateDiagnostic(title: "Hosted tools", detail: message, state: .failed)
         }
     }
 
@@ -2331,7 +2413,7 @@ final class ChatStore: ObservableObject {
 
     private static let setupGuideNoteTitle = "Setup guide"
     private static let setupPromptNoteTitle = "Starter prompts"
-    private static let setupSkillsNoteTitle = "IronClaw skills"
+    private static let setupSkillsNoteTitle = "Agent skills"
 
     private static func setupProjectStyle(for profile: UserSetupProfile) -> (iconName: String, paletteName: String) {
         if profile.useCases.contains(.buildAgents) {
@@ -2348,7 +2430,7 @@ final class ChatStore: ObservableObject {
 
     private static func setupGuideNoteText(for profile: UserSetupProfile) -> String {
         var lines = [
-            "This workspace was created from setup so your first chats can reuse the same sources, notes, and instructions.",
+            "This Project was created from setup so your first chats can reuse the same sources, notes, and instructions.",
             "",
             "Suggested next steps:"
         ]
@@ -2389,7 +2471,7 @@ final class ChatStore: ObservableObject {
         guard !skills.isEmpty else { return nil }
 
         var lines = [
-            "Suggested IronClaw skills for this workspace:",
+            "Suggested Agent skills for this Project:",
             ""
         ]
         lines.append(contentsOf: skills.map { "- \($0.title): \($0.summary)" })
@@ -2569,6 +2651,57 @@ final class ChatStore: ObservableObject {
         showBanner("Project link added.")
     }
 
+    func addSelectedProjectNote(title: String, text: String, isLocalOnly: Bool = false) {
+        guard let selectedProjectID,
+              let index = projects.firstIndex(where: { $0.id == selectedProjectID }) else {
+            showBanner("Select a project first.")
+            return
+        }
+        guard projects[index].notes.count < 20 else {
+            showBanner("This project already has enough notes.")
+            return
+        }
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else {
+            showBanner("Write a note first.")
+            return
+        }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let note = ProjectNote(
+            title: trimmedTitle.isEmpty ? Self.noteTitle(from: trimmedText) : String(trimmedTitle.prefix(80)),
+            text: Self.clipped(trimmedText, maxCharacters: 12_000),
+            isLocalOnly: isLocalOnly
+        )
+        projects[index].notes.insert(note, at: 0)
+        saveProjects()
+        showBanner(isLocalOnly ? "Local-only note added." : "Project note added.")
+    }
+
+    func updateSelectedProjectNote(_ note: ProjectNote, title: String, text: String, isLocalOnly: Bool) {
+        guard let selectedProjectID,
+              let projectIndex = projects.firstIndex(where: { $0.id == selectedProjectID }) else {
+            showBanner("Select a project first.")
+            return
+        }
+        guard let noteIndex = projects[projectIndex].notes.firstIndex(where: { $0.id == note.id }) else {
+            showBanner("Project note not found.")
+            return
+        }
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else {
+            showBanner("Write a note first.")
+            return
+        }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        var updatedNote = projects[projectIndex].notes[noteIndex]
+        updatedNote.title = trimmedTitle.isEmpty ? Self.noteTitle(from: trimmedText) : String(trimmedTitle.prefix(80))
+        updatedNote.text = Self.clipped(trimmedText, maxCharacters: 12_000)
+        updatedNote.isLocalOnly = isLocalOnly
+        projects[projectIndex].notes[noteIndex] = updatedNote
+        saveProjects()
+        showBanner(isLocalOnly ? "Local-only note updated." : "Project note updated.")
+    }
+
     func deleteProjectLink(_ link: ProjectLink) {
         guard let selectedProjectID,
               let index = projects.firstIndex(where: { $0.id == selectedProjectID }) else {
@@ -2583,13 +2716,85 @@ final class ChatStore: ObservableObject {
         guard message.role == .assistant else { return }
         guard let selectedProjectID,
               let index = projects.firstIndex(where: { $0.id == selectedProjectID }) else {
-            showBanner("Select a project before saving notes.")
+            pendingProjectNoteSaveMessage = message
+            showBanner("Create or choose a project to save this output.")
             return
         }
+        _ = saveMessageAsProjectNote(message, toProjectAt: index)
+    }
+
+    func requestProjectNoteSave(for message: ChatMessage) {
+        guard message.role == .assistant else { return }
+        guard !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            showBanner("No output to save.")
+            return
+        }
+        pendingProjectNoteSaveMessage = message
+    }
+
+    func saveMessageAsProjectNote(_ message: ChatMessage, toProjectID projectID: String) {
+        guard message.role == .assistant else { return }
+        guard let index = projects.firstIndex(where: { $0.id == projectID && !$0.isArchived }) else {
+            showBanner("Project not found.")
+            return
+        }
+        selectedProjectID = projects[index].id
+        if saveMessageAsProjectNote(message, toProjectAt: index) {
+            clearPendingProjectNoteSave()
+        }
+    }
+
+    func createProjectAndSaveMessageAsNote(
+        _ message: ChatMessage,
+        named name: String,
+        instructions: String = ""
+    ) {
+        guard message.role == .assistant else { return }
         let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
             showBanner("No output to save.")
             return
+        }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            showBanner("Name the project first.")
+            return
+        }
+
+        let project = ChatProject(
+            id: "project-\(UUID().uuidString)",
+            name: trimmed,
+            createdAt: Date(),
+            conversationIDs: selectedConversation.map { [$0.id] } ?? [],
+            instructions: instructions.trimmingCharacters(in: .whitespacesAndNewlines),
+            iconName: ProjectIcon.folder.symbolName,
+            paletteName: ProjectPalette.sky.rawValue
+        )
+        projects.insert(project, at: 0)
+        selectedProjectID = project.id
+        _ = saveMessageAsProjectNote(message, toProjectAt: 0)
+        clearPendingProjectNoteSave()
+    }
+
+    func clearPendingProjectNoteSave() {
+        pendingProjectNoteSaveMessage = nil
+    }
+
+    func suggestedProjectNameForSavedNote(_ message: ChatMessage) -> String {
+        if let conversationTitle = selectedConversation?.title.trimmingCharacters(in: .whitespacesAndNewlines),
+           !conversationTitle.isEmpty,
+           conversationTitle.localizedCaseInsensitiveCompare("New chat") != .orderedSame {
+            return String(conversationTitle.prefix(64))
+        }
+        return Self.noteTitle(from: message.text)
+    }
+
+    @discardableResult
+    private func saveMessageAsProjectNote(_ message: ChatMessage, toProjectAt index: Int) -> Bool {
+        let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            showBanner("No output to save.")
+            return false
         }
         let title = Self.noteTitle(from: text)
         let clippedText = Self.clipped(text, maxCharacters: 12_000)
@@ -2597,7 +2802,7 @@ final class ChatStore: ObservableObject {
             note.sourceMessageID == message.id || note.text == clippedText
         }) {
             showBanner("Already saved to \(projects[index].name).")
-            return
+            return true
         }
         let note = ProjectNote(
             title: title,
@@ -2610,6 +2815,7 @@ final class ChatStore: ObservableObject {
         }
         saveProjects()
         showBanner("Saved to \(projects[index].name).")
+        return true
     }
 
     func deleteProjectNote(_ note: ProjectNote) {
@@ -2641,7 +2847,7 @@ final class ChatStore: ObservableObject {
         saveProjects()
     }
 
-    func addAttachment(from url: URL) async {
+    func addAttachment(from url: URL, displayName: String? = nil) async {
         switch FileStore.promptAttachmentLimit(
             pendingCount: pendingAttachments.count,
             projectContextCount: activeProjectContextAttachments.count,
@@ -2657,12 +2863,68 @@ final class ChatStore: ObservableObject {
 
         attachmentUploadNotice = nil
         if let attachment = await uploadAttachment(from: url) {
+            var attachment = attachment
+            if let displayName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines), !displayName.isEmpty {
+                attachment.name = displayName
+            }
             let notice = attachmentUploadNotice
             attachmentUploadNotice = nil
             pendingAttachments.append(attachment)
             registerUploadedAttachment(attachment)
             showBanner(notice ?? "Attached \(attachment.name).")
         }
+    }
+
+    func stageTextAttachment(_ text: String, suggestedName: String = "pasted-text.txt") {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            showBanner("Clipboard has no text to attach.")
+            return
+        }
+        switch FileStore.promptAttachmentLimit(
+            pendingCount: pendingAttachments.count,
+            projectContextCount: activeProjectContextAttachments.count,
+            maxPromptAttachments: Self.maxPromptAttachments,
+            maxContextAttachments: Self.maxProjectAttachments
+        ) {
+        case .allowed:
+            break
+        case let .blocked(message):
+            showBanner(message)
+            return
+        }
+        guard trimmed.utf8.count <= Self.maxFileUploadBytes else {
+            showBanner("Text paste exceeds the 10 MB file cap.")
+            return
+        }
+        stageLargePasteForSend(trimmed, suggestedName: suggestedName)
+    }
+
+    private func stageSharedFileAttachment(
+        _ url: URL,
+        displayName: String,
+        byteCount: Int?
+    ) {
+        switch FileStore.promptAttachmentLimit(
+            pendingCount: pendingAttachments.count,
+            projectContextCount: activeProjectContextAttachments.count,
+            maxPromptAttachments: Self.maxPromptAttachments,
+            maxContextAttachments: Self.maxProjectAttachments
+        ) {
+        case .allowed:
+            break
+        case let .blocked(message):
+            showBanner(message)
+            return
+        }
+        let attachment = ChatAttachment(
+            id: "shared-file-\(UUID().uuidString)",
+            name: displayName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank ?? url.lastPathComponent,
+            kind: ChatAttachment.pendingSharedFileKind,
+            bytes: byteCount ?? ((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize)
+        )
+        pendingSharedFileURLs[attachment.id] = url
+        pendingAttachments.append(attachment)
     }
 
     func addProjectAttachment(from url: URL) async {
@@ -2687,10 +2949,30 @@ final class ChatStore: ObservableObject {
             let notice = attachmentUploadNotice
             attachmentUploadNotice = nil
             projects[projectIndex].attachments.append(attachment)
+            persistLocalTableRowsIfNeeded(attachment, toProjectAt: projectIndex)
             registerUploadedAttachment(attachment)
             saveProjects()
             showBanner(notice ?? "Added \(attachment.name) to \(projects[projectIndex].name).")
         }
+    }
+
+    private func persistLocalTableRowsIfNeeded(_ attachment: ChatAttachment, toProjectAt projectIndex: Int) {
+        guard attachment.kind == ChatAttachment.localTableKind,
+              let tableText = pendingDocumentTexts[attachment.id]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !tableText.isEmpty else {
+            return
+        }
+        let clippedText = Self.clipped(tableText, maxCharacters: 12_000)
+        let title = "Table rows: \(attachment.name)"
+        guard !projects[projectIndex].notes.contains(where: { note in
+            note.title == title || note.text == clippedText
+        }) else {
+            return
+        }
+        projects[projectIndex].notes.insert(
+            ProjectNote(title: title, text: clippedText, isLocalOnly: true),
+            at: 0
+        )
     }
 
     func refreshRemoteFiles(showErrors: Bool = true) async {
@@ -2797,6 +3079,7 @@ final class ChatStore: ObservableObject {
     }
 
     private func registerUploadedAttachment(_ attachment: ChatAttachment) {
+        guard !attachment.isLocalOnly else { return }
         guard !remoteFiles.contains(where: { $0.id == attachment.id }) else { return }
         remoteFiles.insert(
             RemoteFileInfo(
@@ -2837,8 +3120,113 @@ final class ChatStore: ObservableObject {
         defer { isUploadingAttachment = false }
 
         do {
+            let fileExtension = url.pathExtension.lowercased()
+            if fileExtension == "csv" || fileExtension == "tsv" {
+                if let extraction = Self.extractedDelimitedTableText(from: url, fileSize: fileSize) {
+                    let cappedText = String(extraction.text.prefix(Self.maxStagedDocumentChars))
+                    if keepDocumentsOnDevice {
+                        let localID = "local-table-\(UUID().uuidString)"
+                        stageDocumentText(cappedText, for: localID)
+                        attachmentUploadNotice = extraction.truncated ?
+                            "Kept capped table rows from \(url.lastPathComponent) on your device." :
+                            "Kept table rows from \(url.lastPathComponent) on your device."
+                        return ChatAttachment(
+                            id: localID,
+                            name: url.lastPathComponent,
+                            kind: ChatAttachment.localTableKind,
+                            bytes: fileSize
+                        )
+                    }
+                    let extractedFilename = Self.extractedTableFilename(for: url)
+                    do {
+                        var attachment = try await api.uploadTextFile(
+                            filename: extractedFilename,
+                            text: extraction.text
+                        )
+                        attachment.name = extractedFilename
+                        attachment.kind = "table_text"
+                        stageDocumentText(cappedText, for: attachment.id)
+                        attachmentUploadNotice = extraction.truncated ?
+                            "Attached capped table rows from \(url.lastPathComponent)." :
+                            "Attached table rows from \(url.lastPathComponent)."
+                        return attachment
+                    } catch {
+                        let localID = "local-table-\(UUID().uuidString)"
+                        stageDocumentText(cappedText, for: localID)
+                        attachmentUploadNotice = "Could not upload \(url.lastPathComponent), so table rows are kept on-device for this session."
+                        return ChatAttachment(
+                            id: localID,
+                            name: url.lastPathComponent,
+                            kind: ChatAttachment.localTableKind,
+                            bytes: fileSize
+                        )
+                    }
+                }
+                if Self.shouldKeepDelimitedTableOnDevice(
+                    fileExtension: fileExtension,
+                    keepDocumentsOnDevice: keepDocumentsOnDevice
+                ) {
+                    if let fileSize, fileSize > Self.maxLocalTableBytes {
+                        showBanner("CSV/TSV tables kept on-device must be 2 MB or smaller. Export the needed rows or paste the table.")
+                    } else {
+                        showBanner("Could not read table rows from \(url.lastPathComponent). Nothing was uploaded.")
+                    }
+                    return nil
+                }
+            } else if fileExtension == "xlsx" || fileExtension == "xls" {
+                if fileExtension == "xlsx",
+                   let extraction = Self.extractedSpreadsheetTableText(from: url, fileSize: fileSize) {
+                    let cappedText = String(extraction.text.prefix(Self.maxStagedDocumentChars))
+                    if keepDocumentsOnDevice {
+                        let localID = "local-table-\(UUID().uuidString)"
+                        stageDocumentText(cappedText, for: localID)
+                        attachmentUploadNotice = extraction.truncated ?
+                            "Kept capped workbook rows from \(url.lastPathComponent) on your device." :
+                            "Kept workbook rows from \(url.lastPathComponent) on your device."
+                        return ChatAttachment(
+                            id: localID,
+                            name: url.lastPathComponent,
+                            kind: ChatAttachment.localTableKind,
+                            bytes: fileSize
+                        )
+                    }
+                    let extractedFilename = Self.extractedTableFilename(for: url)
+                    do {
+                        var attachment = try await api.uploadTextFile(
+                            filename: extractedFilename,
+                            text: extraction.text
+                        )
+                        attachment.name = extractedFilename
+                        attachment.kind = "table_text"
+                        stageDocumentText(cappedText, for: attachment.id)
+                        attachmentUploadNotice = extraction.truncated ?
+                            "Attached capped workbook rows from \(url.lastPathComponent)." :
+                            "Attached workbook rows from \(url.lastPathComponent)."
+                        return attachment
+                    } catch {
+                        let localID = "local-table-\(UUID().uuidString)"
+                        stageDocumentText(cappedText, for: localID)
+                        attachmentUploadNotice = "Could not upload \(url.lastPathComponent), so workbook rows are kept on-device for this session."
+                        return ChatAttachment(
+                            id: localID,
+                            name: url.lastPathComponent,
+                            kind: ChatAttachment.localTableKind,
+                            bytes: fileSize
+                        )
+                    }
+                }
+                if keepDocumentsOnDevice {
+                    let kind = fileExtension == "xls" ? "Legacy XLS" : "XLSX"
+                    showBanner("Could not read \(kind) rows from \(url.lastPathComponent). Nothing was uploaded.")
+                    return nil
+                }
+                attachmentUploadNotice = fileExtension == "xls"
+                    ? "Attached legacy spreadsheet. For local row extraction, export XLSX, CSV, or TSV."
+                    : "Attached spreadsheet. Local row extraction was unavailable, so the workbook was uploaded as a file."
+            }
+
             #if canImport(PDFKit)
-            if url.pathExtension.lowercased() == "pdf" {
+            if fileExtension == "pdf" {
                 if let fileSize, fileSize <= Self.maxPDFTextExtractionBytes,
                    let extraction = await Self.pdfTextExtractionQueue.extract(from: url, fileSize: fileSize) {
                     let cappedText = String(extraction.text.prefix(Self.maxStagedDocumentChars))
@@ -2874,7 +3262,15 @@ final class ChatStore: ObservableObject {
                 }
             }
             #endif
-            return try await api.uploadFile(from: url)
+            let imageText = await Self.extractedImageTextIfAvailable(from: url, fileExtension: fileExtension)
+            var attachment = try await api.uploadFile(from: url)
+            if let imageText {
+                let cappedText = String(imageText.prefix(Self.maxStagedDocumentChars))
+                stageDocumentText(cappedText, for: attachment.id)
+                attachmentUploadNotice = "Attached \(url.lastPathComponent) and staged readable text from the image."
+                attachment.kind = attachment.kind.isEmpty ? "image" : attachment.kind
+            }
+            return attachment
         } catch {
             showBanner(error.localizedDescription)
             return nil
@@ -2934,35 +3330,72 @@ final class ChatStore: ObservableObject {
             current.utf8.count >= Self.largePasteThresholdBytes
     }
 
-    private func stageLargePasteForSend(_ text: String) {
+    private func stageLargePasteForSend(_ text: String, suggestedName: String? = nil) {
+        let trimmedName = suggestedName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let filename = trimmedName.isEmpty ? Self.largePasteFilename() : trimmedName
         let attachment = ChatAttachment(
             id: "local-paste-\(UUID().uuidString)",
-            name: Self.largePasteFilename(),
+            name: filename,
             kind: ChatAttachment.pendingTextKind,
             bytes: text.utf8.count
         )
         pendingLargePasteTexts[attachment.id] = text
         pendingAttachments.append(attachment)
-        showBanner("Large paste staged. It uploads only when you send.")
+        showBanner("Text staged. It uploads only when you send.")
+    }
+
+    private func applyPromptSourcePrivacyOverride(_ override: PromptSourcePrivacyOverride) {
+        guard !override.isEmpty else { return }
+        if override.blocksWeb {
+            webSearchEnabled = false
+            researchModeEnabled = false
+        }
+        if override.prefersFileOnly, sourceMode != .files {
+            sourceMode = .files
+        }
+        guard override.requiresPrivateRoute else { return }
+        if isCouncilModeEnabled {
+            councilModelIDs = []
+        }
+        if selectedRouteKind != .nearPrivate,
+           let privateModel = preferredAvailableModel() {
+            selectedModel = privateModel
+            clearAttestationState()
+            showBanner("Kept this turn on the private route.")
+        }
     }
 
     private func resolvePromptAttachmentsForSend(_ promptAttachments: [ChatAttachment]) async throws -> [ChatAttachment] {
         var resolved: [ChatAttachment] = []
         var uploadedLocalIDs: [String] = []
+        var uploadedSharedFileIDs: [String] = []
         for attachment in promptAttachments {
-            guard let text = pendingLargePasteTexts[attachment.id] else {
+            if let text = pendingLargePasteTexts[attachment.id] {
+                isUploadingAttachment = true
+                defer { isUploadingAttachment = false }
+                let uploaded = try await api.uploadTextFile(filename: attachment.name, text: text)
+                resolved.append(uploaded)
+                registerUploadedAttachment(uploaded)
+                uploadedLocalIDs.append(attachment.id)
+            } else if let fileURL = pendingSharedFileURLs[attachment.id] {
+                isUploadingAttachment = true
+                defer { isUploadingAttachment = false }
+                var uploaded = try await api.uploadFile(from: fileURL)
+                uploaded.name = attachment.name
+                resolved.append(uploaded)
+                registerUploadedAttachment(uploaded)
+                uploadedSharedFileIDs.append(attachment.id)
+            } else {
                 resolved.append(attachment)
-                continue
             }
-            isUploadingAttachment = true
-            defer { isUploadingAttachment = false }
-            let uploaded = try await api.uploadTextFile(filename: attachment.name, text: text)
-            resolved.append(uploaded)
-            registerUploadedAttachment(uploaded)
-            uploadedLocalIDs.append(attachment.id)
         }
         for id in uploadedLocalIDs {
             pendingLargePasteTexts.removeValue(forKey: id)
+        }
+        for id in uploadedSharedFileIDs {
+            if let fileURL = pendingSharedFileURLs.removeValue(forKey: id) {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
         }
         return resolved
     }
@@ -2973,6 +3406,498 @@ final class ChatStore: ObservableObject {
             .replacingOccurrences(of: ":", with: "-")
             .replacingOccurrences(of: ".", with: "-")
         return "large-paste-\(stamp).txt"
+    }
+
+    nonisolated private static func extractedTableFilename(for url: URL) -> String {
+        let basename = url.deletingPathExtension().lastPathComponent
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let safeBasename = basename.isEmpty ? "table" : basename
+        return "\(safeBasename)-table-text.txt"
+    }
+
+    struct TableTextExtractionResult: Sendable {
+        var text: String
+        var truncated: Bool
+    }
+
+    nonisolated static func shouldKeepDelimitedTableOnDevice(
+        fileExtension: String,
+        keepDocumentsOnDevice: Bool
+    ) -> Bool {
+        keepDocumentsOnDevice && (fileExtension == "csv" || fileExtension == "tsv")
+    }
+
+    nonisolated static func extractedDelimitedTableText(from url: URL, fileSize: Int?) -> TableTextExtractionResult? {
+        if let fileSize, fileSize > maxLocalTableBytes {
+            return nil
+        }
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return extractedDelimitedTableText(
+            data: data,
+            filename: url.lastPathComponent,
+            delimiter: url.pathExtension.lowercased() == "tsv" ? "\t" : ","
+        )
+    }
+
+    nonisolated static func extractedDelimitedTableText(data: Data, filename: String, delimiter: Character) -> TableTextExtractionResult? {
+        guard data.count <= maxLocalTableBytes,
+              let rawText = Self.string(fromDelimitedTableData: data) else {
+            return nil
+        }
+        return extractedDelimitedTableText(rawText: rawText, filename: filename, delimiter: delimiter)
+    }
+
+    nonisolated static func extractedDelimitedTableText(rawText: String, filename: String, delimiter: Character) -> TableTextExtractionResult? {
+        let rows = parseDelimitedRows(rawText, delimiter: delimiter)
+        guard !rows.isEmpty else { return nil }
+        let maxRows = 220
+        let normalized = rows.prefix(maxRows).map { row in
+            row.map(Self.normalizedTableCell).joined(separator: " | ")
+        }
+        .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !normalized.isEmpty else { return nil }
+
+        let header = "Extracted table rows from \(filename):"
+        let body = normalized.enumerated().map { index, row in
+            "Row \(index + 1): \(row)"
+        }.joined(separator: "\n")
+        return TableTextExtractionResult(
+            text: "\(header)\n\(body)",
+            truncated: rows.count > maxRows
+        )
+    }
+
+    nonisolated static func extractedSpreadsheetTableText(from url: URL, fileSize: Int?) -> TableTextExtractionResult? {
+        if let fileSize, fileSize > maxFileUploadBytes {
+            return nil
+        }
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return extractedSpreadsheetTableText(data: data, filename: url.lastPathComponent)
+    }
+
+    nonisolated static func extractedSpreadsheetTableText(data: Data, filename: String) -> TableTextExtractionResult? {
+        guard data.count <= maxFileUploadBytes,
+              let archive = XLSXArchive(data: data) else {
+            return nil
+        }
+
+        let sharedStrings = xlsxSharedStrings(from: archive.textEntry("xl/sharedStrings.xml"))
+        let sheetRefs = xlsxSheetReferences(
+            workbookXML: archive.textEntry("xl/workbook.xml"),
+            relationshipsXML: archive.textEntry("xl/_rels/workbook.xml.rels")
+        )
+        guard !sheetRefs.isEmpty else { return nil }
+
+        let maxRowsPerSheet = 80
+        let maxWorkbookRows = 900
+        var emittedRows = 0
+        var output: [String] = ["Extracted workbook rows from \(filename):"]
+        var truncated = false
+
+        for sheet in sheetRefs {
+            guard emittedRows < maxWorkbookRows,
+                  let xml = archive.textEntry(sheet.path) else {
+                if emittedRows >= maxWorkbookRows { truncated = true }
+                continue
+            }
+
+            let rows = xlsxRows(from: xml, sharedStrings: sharedStrings)
+            let normalized = rows.compactMap { row -> (Int, String)? in
+                let cells = row.values.map(normalizedTableCell)
+                    .filter { !$0.isEmpty }
+                guard !cells.isEmpty else { return nil }
+                return (row.number, cells.joined(separator: " | "))
+            }
+            guard !normalized.isEmpty else { continue }
+
+            output.append("")
+            output.append("Sheet \"\(sheet.name)\":")
+            for (index, row) in normalized.prefix(maxRowsPerSheet).enumerated() {
+                guard emittedRows < maxWorkbookRows else {
+                    truncated = true
+                    break
+                }
+                output.append("Row \(row.0): \(row.1)")
+                emittedRows += 1
+                if index == maxRowsPerSheet - 1, normalized.count > maxRowsPerSheet {
+                    truncated = true
+                }
+            }
+        }
+
+        guard emittedRows > 0 else { return nil }
+        return TableTextExtractionResult(text: output.joined(separator: "\n"), truncated: truncated)
+    }
+
+    nonisolated private static func xlsxSharedStrings(from xml: String?) -> [String] {
+        guard let xml else { return [] }
+        return xmlMatches(pattern: #"<si\b[^>]*>(.*?)</si>"#, in: xml).map { item in
+            let parts = xmlMatches(pattern: #"<t\b[^>]*>(.*?)</t>"#, in: item)
+            return parts.map(xmlDecodedText).joined()
+        }
+    }
+
+    nonisolated private static func xlsxSheetReferences(
+        workbookXML: String?,
+        relationshipsXML: String?
+    ) -> [(name: String, path: String)] {
+        guard let workbookXML else { return [] }
+        let relationshipTargets = xlsxRelationshipTargets(from: relationshipsXML)
+        return xmlMatches(pattern: #"<sheet\b[^>]*/?>"#, in: workbookXML).compactMap { tag in
+            let attributes = xmlAttributes(in: tag)
+            guard let rawName = attributes["name"] else { return nil }
+            let name = xmlDecodedText(rawName)
+            let relationshipID = attributes["r:id"] ?? attributes["id"]
+            let rawPath = relationshipID.flatMap { relationshipTargets[$0] }
+                ?? attributes["sheetId"].map { "worksheets/sheet\($0).xml" }
+            guard let rawPath else { return nil }
+            let path = rawPath.hasPrefix("xl/") ? rawPath : "xl/\(rawPath)"
+            return (name: name, path: path.replacingOccurrences(of: "//", with: "/"))
+        }
+    }
+
+    nonisolated private static func xlsxRelationshipTargets(from xml: String?) -> [String: String] {
+        guard let xml else { return [:] }
+        return xmlMatches(pattern: #"<Relationship\b[^>]*/?>"#, in: xml).reduce(into: [String: String]()) { result, tag in
+            let attributes = xmlAttributes(in: tag)
+            guard let id = attributes["Id"], let target = attributes["Target"] else { return }
+            result[id] = target
+        }
+    }
+
+    nonisolated private static func xlsxRows(
+        from xml: String,
+        sharedStrings: [String]
+    ) -> [(number: Int, values: [String])] {
+        xmlMatches(pattern: #"<row\b[^>]*>.*?</row>"#, in: xml).compactMap { rowXML -> (Int, [String])? in
+            let rowTag = xmlMatches(pattern: #"^<row\b[^>]*>"#, in: rowXML).first ?? ""
+            let rowNumber = Int(xmlAttributes(in: rowTag)["r"] ?? "") ?? 0
+            var cells: [(Int, String)] = []
+            for cellXML in xmlMatches(pattern: #"<c\b[^>]*(?<!/)>.*?</c>"#, in: rowXML) {
+                guard let cellTag = xmlMatches(pattern: #"^<c\b[^>]*>"#, in: cellXML).first else { continue }
+                let attributes = xmlAttributes(in: cellTag)
+                let column = attributes["r"].flatMap(xlsxColumnIndex(from:)) ?? cells.count + 1
+                guard let value = xlsxCellValue(from: cellXML, attributes: attributes, sharedStrings: sharedStrings),
+                      !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    continue
+                }
+                cells.append((column, value))
+            }
+            let values = cells.sorted { $0.0 < $1.0 }.map(\.1)
+            guard !values.isEmpty else { return nil }
+            return (number: rowNumber == 0 ? 1 : rowNumber, values: values)
+        }
+    }
+
+    nonisolated private static func xlsxCellValue(
+        from cellXML: String,
+        attributes: [String: String],
+        sharedStrings: [String]
+    ) -> String? {
+        if attributes["t"] == "inlineStr" {
+            let parts = xmlMatches(pattern: #"<t\b[^>]*>(.*?)</t>"#, in: cellXML)
+            return parts.map(xmlDecodedText).joined()
+        }
+        guard let rawValue = xmlMatches(pattern: #"<v\b[^>]*>(.*?)</v>"#, in: cellXML).first else {
+            return nil
+        }
+        let decoded = xmlDecodedText(rawValue)
+        if attributes["t"] == "s",
+           let index = Int(decoded),
+           sharedStrings.indices.contains(index) {
+            return sharedStrings[index]
+        }
+        return decoded
+    }
+
+    nonisolated private static func xlsxColumnIndex(from cellReference: String) -> Int? {
+        var result = 0
+        var sawLetter = false
+        for scalar in cellReference.uppercased().unicodeScalars {
+            guard scalar.value >= 65, scalar.value <= 90 else { break }
+            sawLetter = true
+            result = result * 26 + Int(scalar.value - 64)
+        }
+        return sawLetter ? result : nil
+    }
+
+    nonisolated private static func xmlMatches(pattern: String, in text: String) -> [String] {
+        guard let regex = try? NSRegularExpression(
+            pattern: pattern,
+            options: [.dotMatchesLineSeparators, .caseInsensitive]
+        ) else {
+            return []
+        }
+        let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.matches(in: text, range: nsRange).compactMap { match in
+            let captureIndex = match.numberOfRanges > 1 ? 1 : 0
+            guard let range = Range(match.range(at: captureIndex), in: text) else { return nil }
+            return String(text[range])
+        }
+    }
+
+    nonisolated private static func xmlAttributes(in tag: String) -> [String: String] {
+        guard let regex = try? NSRegularExpression(pattern: #"([A-Za-z_:][A-Za-z0-9_:.\-]*)\s*=\s*"([^"]*)""#) else {
+            return [:]
+        }
+        let nsRange = NSRange(tag.startIndex..<tag.endIndex, in: tag)
+        return regex.matches(in: tag, range: nsRange).reduce(into: [String: String]()) { result, match in
+            guard match.numberOfRanges >= 3,
+                  let keyRange = Range(match.range(at: 1), in: tag),
+                  let valueRange = Range(match.range(at: 2), in: tag) else {
+                return
+            }
+            result[String(tag[keyRange])] = xmlDecodedText(String(tag[valueRange]))
+        }
+    }
+
+    nonisolated private static func xmlDecodedText(_ text: String) -> String {
+        var decoded = text
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&apos;", with: "'")
+            .replacingOccurrences(of: "&amp;", with: "&")
+        guard let regex = try? NSRegularExpression(pattern: #"&#(x?[0-9A-Fa-f]+);"#) else {
+            return decoded
+        }
+        let matches = regex.matches(in: decoded, range: NSRange(decoded.startIndex..<decoded.endIndex, in: decoded))
+        for match in matches.reversed() {
+            guard let fullRange = Range(match.range(at: 0), in: decoded),
+                  let valueRange = Range(match.range(at: 1), in: decoded) else {
+                continue
+            }
+            let rawValue = String(decoded[valueRange])
+            let radix = rawValue.hasPrefix("x") ? 16 : 10
+            let digits = rawValue.hasPrefix("x") ? String(rawValue.dropFirst()) : rawValue
+            guard let scalarValue = UInt32(digits, radix: radix),
+                  let scalar = UnicodeScalar(scalarValue) else {
+                continue
+            }
+            decoded.replaceSubrange(fullRange, with: String(Character(scalar)))
+        }
+        return decoded
+    }
+
+    nonisolated private struct XLSXArchive {
+        let entries: [String: Data]
+
+        init?(data: Data) {
+            guard let entries = Self.entries(from: data), !entries.isEmpty else {
+                return nil
+            }
+            self.entries = entries
+        }
+
+        func textEntry(_ path: String) -> String? {
+            guard let data = entries[path] else { return nil }
+            return String(data: data, encoding: .utf8)
+        }
+
+        private static func entries(from data: Data) -> [String: Data]? {
+            guard let end = endOfCentralDirectory(in: data) else { return nil }
+            let entryCount = Int(littleUInt16(data, at: end + 10) ?? 0)
+            guard let centralDirectoryOffset = littleUInt32(data, at: end + 16).map(Int.init) else {
+                return nil
+            }
+
+            var offset = centralDirectoryOffset
+            var result: [String: Data] = [:]
+            for _ in 0..<entryCount {
+                guard littleUInt32(data, at: offset) == 0x0201_4b50,
+                      let method = littleUInt16(data, at: offset + 10),
+                      let compressedSize = littleUInt32(data, at: offset + 20).map(Int.init),
+                      let uncompressedSize = littleUInt32(data, at: offset + 24).map(Int.init),
+                      let filenameLength = littleUInt16(data, at: offset + 28).map(Int.init),
+                      let extraLength = littleUInt16(data, at: offset + 30).map(Int.init),
+                      let commentLength = littleUInt16(data, at: offset + 32).map(Int.init),
+                      let localHeaderOffset = littleUInt32(data, at: offset + 42).map(Int.init) else {
+                    return nil
+                }
+                let nameStart = offset + 46
+                let nameEnd = nameStart + filenameLength
+                guard nameEnd <= data.count,
+                      let name = String(data: data[nameStart..<nameEnd], encoding: .utf8) else {
+                    return nil
+                }
+                if !name.hasSuffix("/") {
+                    guard let entryData = entryData(
+                        in: data,
+                        localHeaderOffset: localHeaderOffset,
+                        method: method,
+                        compressedSize: compressedSize,
+                        uncompressedSize: uncompressedSize
+                    ) else {
+                        return nil
+                    }
+                    result[name] = entryData
+                }
+                offset = nameEnd + extraLength + commentLength
+            }
+            return result
+        }
+
+        private static func entryData(
+            in data: Data,
+            localHeaderOffset: Int,
+            method: UInt16,
+            compressedSize: Int,
+            uncompressedSize: Int
+        ) -> Data? {
+            guard littleUInt32(data, at: localHeaderOffset) == 0x0403_4b50,
+                  let filenameLength = littleUInt16(data, at: localHeaderOffset + 26).map(Int.init),
+                  let extraLength = littleUInt16(data, at: localHeaderOffset + 28).map(Int.init) else {
+                return nil
+            }
+            let payloadStart = localHeaderOffset + 30 + filenameLength + extraLength
+            let payloadEnd = payloadStart + compressedSize
+            guard payloadStart >= 0, payloadEnd <= data.count else { return nil }
+            let payload = data[payloadStart..<payloadEnd]
+            switch method {
+            case 0:
+                return Data(payload)
+            case 8:
+                return inflateRawDeflate(payload, expectedSize: uncompressedSize)
+            default:
+                return nil
+            }
+        }
+
+        private static func endOfCentralDirectory(in data: Data) -> Int? {
+            let signature: UInt32 = 0x0605_4b50
+            let lowerBound = max(0, data.count - 65_557)
+            guard data.count >= 22, lowerBound <= data.count - 22 else { return nil }
+            for offset in stride(from: data.count - 22, through: lowerBound, by: -1) {
+                if littleUInt32(data, at: offset) == signature {
+                    return offset
+                }
+            }
+            return nil
+        }
+
+        private static func littleUInt16(_ data: Data, at offset: Int) -> UInt16? {
+            guard offset >= 0, offset + 2 <= data.count else { return nil }
+            return data.withUnsafeBytes { rawBuffer in
+                let bytes = rawBuffer.bindMemory(to: UInt8.self)
+                return UInt16(bytes[offset]) | (UInt16(bytes[offset + 1]) << 8)
+            }
+        }
+
+        private static func littleUInt32(_ data: Data, at offset: Int) -> UInt32? {
+            guard offset >= 0, offset + 4 <= data.count else { return nil }
+            return data.withUnsafeBytes { rawBuffer in
+                let bytes = rawBuffer.bindMemory(to: UInt8.self)
+                return UInt32(bytes[offset]) |
+                    (UInt32(bytes[offset + 1]) << 8) |
+                    (UInt32(bytes[offset + 2]) << 16) |
+                    (UInt32(bytes[offset + 3]) << 24)
+            }
+        }
+
+        private static func inflateRawDeflate(_ data: Data.SubSequence, expectedSize: Int) -> Data? {
+            #if canImport(zlib)
+            guard !data.isEmpty || expectedSize == 0 else { return nil }
+            var stream = z_stream()
+            guard inflateInit2_(&stream, -MAX_WBITS, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size)) == Z_OK else {
+                return nil
+            }
+            defer { inflateEnd(&stream) }
+
+            var input = Data(data)
+            var output = Data(count: max(expectedSize, 1))
+            let status: Int32 = input.withUnsafeMutableBytes { inputBuffer in
+                output.withUnsafeMutableBytes { outputBuffer in
+                    stream.next_in = inputBuffer.bindMemory(to: Bytef.self).baseAddress
+                    stream.avail_in = uInt(inputBuffer.count)
+                    stream.next_out = outputBuffer.bindMemory(to: Bytef.self).baseAddress
+                    stream.avail_out = uInt(outputBuffer.count)
+                    return inflate(&stream, Z_FINISH)
+                }
+            }
+            guard status == Z_STREAM_END else { return nil }
+            output.removeSubrange(Int(stream.total_out)..<output.count)
+            return output
+            #else
+            return nil
+            #endif
+        }
+    }
+
+    nonisolated private static func string(fromDelimitedTableData data: Data) -> String? {
+        if let text = String(data: data, encoding: .utf8) {
+            return text
+        }
+        if let text = String(data: data, encoding: .utf16) {
+            return text
+        }
+        if let text = String(data: data, encoding: .utf16LittleEndian) {
+            return text
+        }
+        if let text = String(data: data, encoding: .utf16BigEndian) {
+            return text
+        }
+        return String(data: data, encoding: .isoLatin1)
+    }
+
+    nonisolated static func parseDelimitedRows(_ text: String, delimiter: Character) -> [[String]] {
+        var rows: [[String]] = []
+        var row: [String] = []
+        var cell = ""
+        var isInsideQuotedCell = false
+        var index = text.startIndex
+
+        func appendCell() {
+            row.append(cell)
+            cell = ""
+        }
+
+        func appendRowIfNeeded() {
+            appendCell()
+            if row.contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
+                rows.append(row)
+            }
+            row = []
+        }
+
+        while index < text.endIndex {
+            let character = text[index]
+            if character == "\"" {
+                let next = text.index(after: index)
+                if isInsideQuotedCell, next < text.endIndex, text[next] == "\"" {
+                    cell.append("\"")
+                    index = text.index(after: next)
+                    continue
+                }
+                isInsideQuotedCell.toggle()
+            } else if character == delimiter, !isInsideQuotedCell {
+                appendCell()
+            } else if (character == "\n" || character == "\r"), !isInsideQuotedCell {
+                if character == "\r" {
+                    let next = text.index(after: index)
+                    if next < text.endIndex, text[next] == "\n" {
+                        index = next
+                    }
+                }
+                appendRowIfNeeded()
+            } else {
+                cell.append(character)
+            }
+            index = text.index(after: index)
+        }
+
+        if !cell.isEmpty || !row.isEmpty {
+            appendRowIfNeeded()
+        }
+        return rows
+    }
+
+    nonisolated private static func normalizedTableCell(_ cell: String) -> String {
+        cell
+            .replacingOccurrences(of: "\r\n", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     #if canImport(PDFKit)
@@ -3067,9 +3992,41 @@ final class ChatStore: ObservableObject {
     }
     #endif
 
+    nonisolated static func extractedImageTextIfAvailable(from url: URL, fileExtension: String) async -> String? {
+        #if canImport(Vision) && canImport(ImageIO)
+        let supported = ["jpg", "jpeg", "png", "heic", "heif", "tiff", "tif", "webp"]
+        guard supported.contains(fileExtension.lowercased()) else { return nil }
+        return await Task.detached(priority: .utility) {
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+                return nil
+            }
+            let request = VNRecognizeTextRequest()
+            request.recognitionLevel = .accurate
+            request.usesLanguageCorrection = true
+            let handler = VNImageRequestHandler(cgImage: image, options: [:])
+            do {
+                try handler.perform([request])
+            } catch {
+                return nil
+            }
+            let text = (request.results ?? [])
+                .compactMap { $0.topCandidates(1).first?.string }
+                .joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? nil : text
+        }.value
+        #else
+        return nil
+        #endif
+    }
+
     func removePendingAttachment(_ attachment: ChatAttachment) {
         pendingAttachments.removeAll { $0.id == attachment.id }
         pendingLargePasteTexts.removeValue(forKey: attachment.id)
+        if let fileURL = pendingSharedFileURLs.removeValue(forKey: attachment.id) {
+            try? FileManager.default.removeItem(at: fileURL)
+        }
         showBanner("Attachment removed.")
     }
 
@@ -3497,11 +4454,11 @@ final class ChatStore: ObservableObject {
 
     func refreshAttestationReport() async {
         if isCouncilModeEnabled, activeCouncilHasExternalRoutes {
-            showBanner("Verification proof is available for all-private Council lineups. Remove NEAR AI Cloud models to fetch proof.")
+            showBanner("Proof is available for all-private Council lineups. Remove NEAR AI Cloud models to fetch proof.")
             return
         }
         guard selectedRouteKind == .nearPrivate else {
-            showBanner("Verification proof is available for NEAR Private models.")
+            showBanner("Proof is available for NEAR Private models.")
             return
         }
         isLoadingAttestation = true
@@ -3566,6 +4523,7 @@ final class ChatStore: ObservableObject {
         messages = snapshot.messages
         shareInfo = nil
         pendingAttachments = []
+        pendingSharedFileURLs = [:]
         draft = ""
         sharedPreview = nil
         openSelectedConversationToken = UUID()
@@ -3764,32 +4722,79 @@ final class ChatStore: ObservableObject {
     func composeWidgetFollowUp(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        // A "Track this" follow-up acts immediately (one tap → a tracker); any
-        // other follow-up prefills the composer for the user to refine and send.
-        switch QuickIntentParser.parse(trimmed) {
-        case .createTracker, .trackLast:
-            draft = trimmed
-            sendDraft()
-        default:
-            draft = trimmed
-            AppHaptics.selection()
+        draft = trimmed
+        AppHaptics.selection()
+    }
+
+    func createTracker(fromWidgetAction action: WidgetActionItem) {
+        guard let draft = action.appActionDraft() else {
+            showBanner("This action cannot become a tracker yet.")
+            return
         }
+        guard draft.isReady else {
+            let missing = draft.missingFields.prefix(3).joined(separator: ", ")
+            showBanner("Add \(missing) before saving this tracker.")
+            if let command = draft.command {
+                self.draft = command
+                AppHaptics.selection()
+            }
+            return
+        }
+
+        let briefing = Briefing(
+            title: draft.title,
+            prompt: draft.prompt,
+            schedule: draft.schedule,
+            kind: .customPrompt
+        )
+        onCreateTracker?(briefing)
+        activityLog.record("Created tracker “\(draft.title)” from action card · \(draft.confirmation)")
+
+        let sourceLine = draft.source.map { "\nSource: \($0)" } ?? ""
+        let createdAt = Date()
+        let message = ChatMessage(
+            id: "local-assistant-\(UUID().uuidString)",
+            role: .assistant,
+            text: "Created a tracker — **\(draft.confirmation)**. It runs on schedule and lands in Trackers; open it any time to Run now, change, or delete it.\(sourceLine)",
+            model: selectedModel,
+            createdAt: createdAt,
+            status: "completed",
+            responseID: nil,
+            isStreaming: false,
+            trustMetadata: assistantTrustMetadata(for: selectedModel, capturedAt: createdAt)
+        )
+        messages.append(message)
+        if let conversationID = selectedConversation?.id {
+            saveLocalMessages(for: conversationID)
+        }
+        showBanner("Tracker created.")
+        AppHaptics.selection()
     }
 
     /// Runs a briefing prompt headlessly in a throwaway conversation and returns
     /// the structured widget the model produced (falling back to a generic text
     /// widget). Used by the BriefingStore runner; returns nil on any failure.
-    /// The agentic Daily Brief: every active tracker's latest value + a live
-    /// market snapshot (auth-free), composed into one digest. Shared by the
-    /// on-demand "brief me" intent and the scheduled .dailyBrief tracker.
+    /// The agentic Daily Brief: active automations plus any relevant live signal
+    /// snapshot, composed into one digest. Shared by the on-demand "brief me"
+    /// intent and the scheduled .dailyBrief automation.
     private func briefDigestWidget() async -> MessageWidget? {
         let trackers = trackersProvider?() ?? []
-        async let ethPrice = LiveDataService.coinUSDPrice(coinID: "ethereum")
-        async let btcPrice = LiveDataService.coinUSDPrice(coinID: "bitcoin")
-        let (eth, btc) = await (ethPrice, btcPrice)
         var market: [(label: String, value: String)] = []
-        if let eth { market.append((label: "ETH", value: LiveDataService.usdPriceString(eth))) }
-        if let btc { market.append((label: "BTC", value: LiveDataService.usdPriceString(btc))) }
+        let wantsMarketSnapshot = trackers.contains { tracker in
+            switch tracker.kind {
+            case .ethPrice, .cryptoPrice, .stockPrice, .watchlist:
+                return true
+            case .customPrompt, .nearAccount, .dailyNews, .dailyBrief:
+                return false
+            }
+        }
+        if wantsMarketSnapshot {
+            async let ethPrice = LiveDataService.coinUSDPrice(coinID: "ethereum")
+            async let btcPrice = LiveDataService.coinUSDPrice(coinID: "bitcoin")
+            let (eth, btc) = await (ethPrice, btcPrice)
+            if let eth { market.append((label: "ETH", value: LiveDataService.usdPriceString(eth))) }
+            if let btc { market.append((label: "BTC", value: LiveDataService.usdPriceString(btc))) }
+        }
         return BriefDigest.compose(trackers: trackers, market: market)
     }
 
@@ -4077,9 +5082,11 @@ final class ChatStore: ObservableObject {
 
         func appendAssistant(text: String, widget: MessageWidget? = nil, streaming: Bool = false) -> String {
             let id = "local-assistant-\(UUID().uuidString)"
+            let createdAt = Date()
             var message = ChatMessage(
-                id: id, role: .assistant, text: text, model: model, createdAt: Date(),
-                status: streaming ? "searching" : "completed", responseID: nil, isStreaming: streaming
+                id: id, role: .assistant, text: text, model: model, createdAt: createdAt,
+                status: streaming ? "searching" : "completed", responseID: nil, isStreaming: streaming,
+                trustMetadata: assistantTrustMetadata(for: model, capturedAt: createdAt)
             )
             message.widget = widget
             messages.append(message)
@@ -4100,8 +5107,8 @@ final class ChatStore: ObservableObject {
             onCreateTracker?(briefing)
             activityLog.record("Created tracker “\(spec.title)” · \(spec.confirmation)")
             let trackerBody = spec.condition != nil
-                ? "Set up an alert — **\(spec.confirmation)**. I’ll check on that cadence and notify you the first time it triggers, then pause it so I don’t repeat. It lives on your Today tab; reopen it any time to re-arm, change, or delete it."
-                : "Created a tracker — **\(spec.confirmation)**. It runs on schedule and lands on your Today tab; open it any time to Run now, change it, or delete it."
+                ? "Set up an alert — **\(spec.confirmation)**. I’ll check on that cadence and notify you the first time it triggers, then pause it so I don’t repeat. It lives in Trackers; reopen it any time to re-arm, change, or delete it."
+                : "Created a tracker — **\(spec.confirmation)**. It runs on schedule and lands in Trackers; open it any time to Run now, change it, or delete it."
             _ = appendAssistant(text: trackerBody)
             AppHaptics.selection()
         case let .trackLast(schedule):
@@ -4121,13 +5128,16 @@ final class ChatStore: ObservableObject {
                 )
                 onCreateTracker?(briefing)
                 activityLog.record("Created tracker “\(title)” from “track that”")
-                _ = appendAssistant(text: "On it — I’ll track **\(title)** (\(schedule.scheduleLabel)) and surface it on your Today tab. It builds a chart as it runs; reopen it any time to Run now, change, or delete.")
+                _ = appendAssistant(text: "On it — I’ll track **\(title)** (\(schedule.scheduleLabel)) and surface it in Trackers. It builds a chart as it runs; reopen it any time to Run now, change, or delete.")
                 AppHaptics.selection()
             } else {
                 _ = appendAssistant(text: "I’m not sure what to track yet — ask me something first (like “what’s the price of a Rolex GMT Master II”), then say “track that.”")
             }
         case .nearAccount(nil):
             _ = appendAssistant(text: "Sure — what’s your NEAR account? Tell me the id (e.g. **yourname.near**) and I’ll pull its balance and holdings.")
+        case let .requestNearAccountTracker(schedule):
+            pendingNearAccountTrackerSchedule = schedule
+            _ = appendAssistant(text: "Sure — which NEAR account should I track? Send the account id (for example **yourname.near**) and I’ll create the recurring tracker for \(schedule.scheduleLabel.lowercased()).")
         case let .remember(text):
             if memoryStore.add(text) != nil {
                 _ = appendAssistant(text: "Got it — I’ll remember that:\n\n> \(text)\n\nIt stays on your device and I’ll use it when it’s relevant. Ask “what do you remember” any time.")
@@ -4260,9 +5270,11 @@ final class ChatStore: ObservableObject {
             status: "completed", responseID: nil, isStreaming: false
         ))
         let pendingID = "local-assistant-\(UUID().uuidString)"
+        let pendingCreatedAt = Date()
         let pending = ChatMessage(
             id: pendingID, role: .assistant, text: "Working on \(intents.count) lookups…",
-            model: model, createdAt: Date(), status: "searching", responseID: nil, isStreaming: true
+            model: model, createdAt: pendingCreatedAt, status: "searching", responseID: nil, isStreaming: true,
+            trustMetadata: assistantTrustMetadata(for: model, capturedAt: pendingCreatedAt)
         )
         messages.append(pending)
         currentAssistantMessageID = pendingID
@@ -4284,9 +5296,11 @@ final class ChatStore: ObservableObject {
                 self.agentActivity.update(stage: "Lookup \(completed) of \(intents.count)", completed: completed)
                 guard let widget else { continue }
                 produced = true
+                let createdAt = Date()
                 var message = ChatMessage(
                     id: "local-assistant-\(UUID().uuidString)", role: .assistant, text: "",
-                    model: model, createdAt: Date(), status: "completed", responseID: nil, isStreaming: false
+                    model: model, createdAt: createdAt, status: "completed", responseID: nil, isStreaming: false,
+                    trustMetadata: self.assistantTrustMetadata(for: model, capturedAt: createdAt)
                 )
                 message.widget = widget
                 self.messages.append(message)
@@ -4336,10 +5350,47 @@ final class ChatStore: ObservableObject {
             return await LiveDataService.unitConvertWidget(value: value, from: from, to: to)
         case let .define(word):
             return await LiveDataService.defineWidget(word: word)
-        case .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .setDocumentPrivacy, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker, .trackLast:
+        case .math, .dateMath, .tipSplit, .remember, .recallMemory, .forget, .forgetAutoLearned, .setMemoryCapture, .setDocumentPrivacy, .activityLog, .listTrackers, .capabilities, .searchHistory, .createReminder, .createTracker, .requestNearAccountTracker, .trackLast:
             // Handled synchronously in handleQuickIntent — never fetched here.
             return nil
         }
+    }
+
+    private func completePendingNearAccountTracker(account: String, schedule: BriefingSchedule, prompt: String) {
+        pendingNearAccountTrackerSchedule = nil
+        let model = selectedModel
+        messages.append(ChatMessage(
+            id: "local-user-\(UUID().uuidString)",
+            role: .user,
+            text: prompt,
+            model: model,
+            createdAt: Date(),
+            status: "completed",
+            responseID: nil,
+            isStreaming: false
+        ))
+        let briefing = Briefing(
+            title: "NEAR account",
+            prompt: "Track NEAR account \(account).",
+            schedule: schedule,
+            kind: .nearAccount,
+            accountID: account
+        )
+        onCreateTracker?(briefing)
+        activityLog.record("Created tracker “NEAR account” · NEAR account · \(account) · \(schedule.scheduleLabel)")
+        let assistantCreatedAt = Date()
+        messages.append(ChatMessage(
+            id: "local-assistant-\(UUID().uuidString)",
+            role: .assistant,
+            text: "Created a tracker — **NEAR account · \(account) · \(schedule.scheduleLabel)**. It runs on schedule and lands in Trackers; open it any time to Run now, change it, or delete it.",
+            model: model,
+            createdAt: assistantCreatedAt,
+            status: "completed",
+            responseID: nil,
+            isStreaming: false,
+            trustMetadata: assistantTrustMetadata(for: model, capturedAt: assistantCreatedAt)
+        ))
+        AppHaptics.selection()
     }
 
     /// Passively records durable self-facts the user disclosed in an ordinary
@@ -4366,12 +5417,29 @@ final class ChatStore: ObservableObject {
         let text = Self.normalizedDraftInput(draft).trimmingCharacters(in: .whitespacesAndNewlines)
         let promptAttachments = pendingAttachments
         let pendingLargePasteTextsSnapshot = pendingLargePasteTexts
+        let pendingSharedFileURLsSnapshot = pendingSharedFileURLs
         let attachments = activeAttachments(promptAttachments: promptAttachments)
         guard (!text.isEmpty || !attachments.isEmpty), !isStreaming else { return }
+        let promptSourceOverride = Self.promptSourcePrivacyOverride(
+            for: text,
+            hasAttachments: !attachments.isEmpty
+        )
+        applyPromptSourcePrivacyOverride(promptSourceOverride)
 
-        // Prompt-driven live answers: recognized data questions ("eth price",
-        // "how is my near account") and "create a tracker…" commands are handled
-        // locally with real public-API data — generative chat without sign-in.
+        // Prompt-driven quick tools: recognized public-data questions and staged
+        // tracker commands run locally before sign-in. General model chat still
+        // goes through the authenticated send path below.
+        if attachments.isEmpty,
+           let pendingSchedule = pendingNearAccountTrackerSchedule {
+            if let account = QuickIntentParser.extractAccount(from: text.lowercased()) {
+                removePersistedDraft(for: draftPersistenceScopeID)
+                draft = ""
+                routeReadinessIssue = nil
+                completePendingNearAccountTracker(account: account, schedule: pendingSchedule, prompt: text)
+                return
+            }
+            pendingNearAccountTrackerSchedule = nil
+        }
         if attachments.isEmpty, let intents = QuickIntentParser.parseCompound(text) {
             removePersistedDraft(for: draftPersistenceScopeID)
             draft = ""
@@ -4389,7 +5457,15 @@ final class ChatStore: ObservableObject {
             return
         }
 
-        if let preflight = hostedHandoffPreflightIfNeeded(text: text, promptAttachments: promptAttachments),
+        let preflightText = ActionSurfacePlanner.augmentedPrompt(
+            text: text,
+            attachmentNames: activeAttachments(promptAttachments: promptAttachments).map(\.name),
+            sourceInstruction: promptSourceOverride.sourceInstruction(
+                attachmentNames: activeAttachments(promptAttachments: promptAttachments).map(\.name)
+            )
+        )
+        routeCurrentPromptIfNeeded(preflightText, attachments: attachments)
+        if let preflight = hostedHandoffPreflightIfNeeded(text: preflightText, promptAttachments: promptAttachments),
            approvedHostedHandoffFingerprint != preflight.fingerprint {
             pendingHostedHandoffContinuation = .draft
             pendingHostedHandoffPreflight = preflight
@@ -4410,7 +5486,8 @@ final class ChatStore: ObservableObject {
             await self?.sendResolvedDraft(
                 text: text,
                 promptAttachments: promptAttachments,
-                pendingLargePasteTextsSnapshot: pendingLargePasteTextsSnapshot
+                pendingLargePasteTextsSnapshot: pendingLargePasteTextsSnapshot,
+                pendingSharedFileURLsSnapshot: pendingSharedFileURLsSnapshot
             )
         }
     }
@@ -4428,6 +5505,9 @@ final class ChatStore: ObservableObject {
         case let .edit(message, replacementText):
             editAndResend(message, replacementText: replacementText)
         case let .directSend(text, attachments, previousResponseIDOverride, initiator, appendUserMessage):
+            draft = ""
+            pendingAttachments = []
+            pendingSharedFileURLs = [:]
             streamTask = Task { [weak self] in
                 _ = await self?.send(
                     text,
@@ -4469,8 +5549,13 @@ final class ChatStore: ObservableObject {
             if !selectedProject.memorySummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 disclosedItems.append("Project memory")
             }
-            if !selectedProject.notes.isEmpty {
-                disclosedItems.append("Saved notes: \(min(selectedProject.notes.count, 6))")
+            let hostedNotes = Self.projectNotesForPrompt(selectedProject.notes, allowLocalOnly: false)
+            if !hostedNotes.isEmpty {
+                disclosedItems.append("Saved notes: \(min(hostedNotes.count, 6))")
+            }
+            let omittedLocalOnlyNotes = selectedProject.notes.count - hostedNotes.count
+            if omittedLocalOnlyNotes > 0 {
+                disclosedItems.append("Local-only notes stay on this phone: \(omittedLocalOnlyNotes)")
             }
             let publicLinks = selectedProject.links.filter { link in
                 URL(string: link.urlString).map(URLSecurity.isPublicHTTPSURL) == true
@@ -4485,11 +5570,14 @@ final class ChatStore: ObservableObject {
 
         let attachmentFingerprint = promptAttachments.map(\.id).joined(separator: "|")
         let projectFingerprint = selectedProject.map { project in
-            [
+            let hostedNotes = Self.projectNotesForPrompt(project.notes, allowLocalOnly: false)
+            return [
                 project.id,
                 project.instructions,
                 project.memorySummary,
-                project.notes.map(\.id).joined(separator: "|"),
+                hostedNotes.map { note in
+                    [note.id, note.title, note.text].joined(separator: "\u{1F}")
+                }.joined(separator: "|"),
                 project.links.map(\.urlString).joined(separator: "|"),
                 project.attachments.map(\.id).joined(separator: "|")
             ].joined(separator: "|")
@@ -4553,7 +5641,8 @@ final class ChatStore: ObservableObject {
     private func sendResolvedDraft(
         text: String,
         promptAttachments: [ChatAttachment],
-        pendingLargePasteTextsSnapshot: [String: String]
+        pendingLargePasteTextsSnapshot: [String: String],
+        pendingSharedFileURLsSnapshot: [String: URL]
     ) async {
         do {
             let resolvedPromptAttachments = try await resolvePromptAttachmentsForSend(promptAttachments)
@@ -4563,15 +5652,18 @@ final class ChatStore: ObservableObject {
                 draft = text
                 pendingAttachments = promptAttachments
                 pendingLargePasteTexts = pendingLargePasteTextsSnapshot
+                pendingSharedFileURLs = pendingSharedFileURLsSnapshot
             }
         } catch is CancellationError {
             draft = text
             pendingAttachments = promptAttachments
             pendingLargePasteTexts = pendingLargePasteTextsSnapshot
+            pendingSharedFileURLs = pendingSharedFileURLsSnapshot
         } catch {
             draft = text
             pendingAttachments = promptAttachments
             pendingLargePasteTexts = pendingLargePasteTextsSnapshot
+            pendingSharedFileURLs = pendingSharedFileURLsSnapshot
             showBanner(Self.displayFailureMessage(error.localizedDescription))
         }
     }
@@ -4601,16 +5693,276 @@ final class ChatStore: ObservableObject {
     }
 
     func stopWaitingForCouncil(batchID: String?) {
-        guard let batchID,
-              isStreaming,
-              currentCouncilAssistantMessageIDs.contains(where: { messageID in
-                  messages.first(where: { $0.id == messageID })?.councilBatchID == batchID
-              }) else {
+        guard let batchID, isStreaming else {
+            return
+        }
+        let activeMessages = currentCouncilAssistantMessageIDs.compactMap { messageID in
+            messages.first(where: { $0.id == messageID && $0.councilBatchID == batchID })
+        }
+        guard !activeMessages.isEmpty else {
+            showBanner("That Council batch is not running.")
+            return
+        }
+        if activeMessages.allSatisfy({ Self.isCouncilSynthesisModelID($0.model) }) {
             cancelStream()
+            showBanner("Stopped Council synthesis.")
             return
         }
         councilStopRequestedBatchID = batchID
         showBanner("Stopping slow Council legs. Completed answers will be synthesized.")
+    }
+
+    func sendCouncilRoomFollowUp(_ text: String, batchID: String?, target: CouncilTarget) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard !isStreaming else {
+            showBanner("Wait for the current run to finish first.")
+            return
+        }
+        guard let conversation = selectedConversation else {
+            showBanner("Open a Council conversation first.")
+            return
+        }
+
+        let batchMessages = councilMessages(for: batchID)
+        let modelIDs: [String]
+        switch target {
+        case .room:
+            modelIDs = Self.councilBatchModelIDs(from: batchMessages, batchID: batchID)
+        case let .model(id):
+            modelIDs = [id]
+        }
+        guard !modelIDs.isEmpty else {
+            showBanner("No Council model is available for this follow-up.")
+            return
+        }
+        guard councilRoutesAreReady(modelIDs) else { return }
+
+        let previousResponseID: String?
+        let previousAnswer: String?
+        switch target {
+        case .room:
+            previousResponseID = Self.latestCouncilResponseID(in: batchMessages)
+            previousAnswer = nil
+        case let .model(id):
+            previousResponseID = Self.latestResponseID(in: batchMessages, modelID: id)
+            previousAnswer = Self.latestAnswerText(in: batchMessages, modelID: id)
+        }
+
+        routeReadinessIssue = nil
+        streamTask = Task { [weak self] in
+            await self?.runCouncilRoomFollowUp(
+                text: trimmed,
+                target: target,
+                conversation: conversation,
+                modelIDs: modelIDs,
+                previousResponseID: previousResponseID,
+                previousAnswer: previousAnswer
+            )
+        }
+    }
+
+    func synthesizeCouncilBatch(batchID: String?) {
+        guard let batchID else {
+            showBanner("Open a Council batch first.")
+            return
+        }
+        if isStreaming {
+            stopWaitingForCouncil(batchID: batchID)
+            return
+        }
+        guard let conversation = selectedConversation else {
+            showBanner("Open a Council conversation first.")
+            return
+        }
+        let batchMessages = councilMessages(for: batchID)
+        let modelIDs = Self.councilBatchModelIDs(from: batchMessages, batchID: batchID)
+        let successfulResults = Self.councilStreamResults(from: batchMessages, batchID: batchID)
+        guard successfulResults.count > 1, !modelIDs.isEmpty else {
+            showBanner("Need at least two completed Council answers to synthesize.")
+            return
+        }
+        guard councilRoutesAreReady([successfulResults.first?.modelID ?? selectedModel]) else { return }
+
+        let originalPrompt = Self.councilBatchPrompt(from: batchMessages) ?? "Synthesize this Council batch."
+        routeReadinessIssue = nil
+        streamTask = Task { [weak self] in
+            guard let self else { return }
+            self.isStreaming = true
+            self.currentAssistantMessageID = nil
+            self.currentCouncilAssistantMessageIDs = []
+            let previousResponseID = Self.latestCouncilResponseID(in: batchMessages)
+            defer {
+                self.isStreaming = false
+                self.currentAssistantMessageID = nil
+                self.currentCouncilAssistantMessageIDs = []
+                self.councilStopRequestedBatchID = nil
+                self.streamTask = nil
+            }
+            await self.synthesizeCouncilTurn(
+                prompt: originalPrompt,
+                routedPrompt: originalPrompt,
+                conversationID: conversation.id,
+                previousResponseID: previousResponseID,
+                batchID: batchID,
+                modelIDs: modelIDs,
+                successfulResults: successfulResults
+            )
+            self.saveLocalMessages(for: conversation.id)
+            self.scheduleConversationListRefresh()
+            self.showBanner("Council synthesis updated.")
+        }
+    }
+
+    private func councilMessages(for batchID: String?) -> [ChatMessage] {
+        guard let batchID, !batchID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return []
+        }
+        return messages.filter { $0.councilBatchID == batchID }
+    }
+
+    private func councilRoutesAreReady(_ modelIDs: [String]) -> Bool {
+        let needsNearCloud = modelIDs.contains { Self.routeKind(forModelID: $0) == .nearCloud }
+        if needsNearCloud, !nearCloudKeyConfigured {
+            showBanner("Connect NEAR AI Cloud in Account before asking that Council model.")
+            return false
+        }
+        let needsHosted = modelIDs.contains { $0 == ModelOption.ironclawModelID }
+        if needsHosted, !ironclawRemoteWorkstationAvailable {
+            showBanner(hostedIronclawReadinessMessage ?? "Configure Hosted Agent before asking that Council model.")
+            return false
+        }
+        return true
+    }
+
+    nonisolated static func councilBatchModelIDs(from messages: [ChatMessage], batchID: String?) -> [String] {
+        uniqueCouncilModelIDs(
+            from: messages.filter { message in
+                (batchID == nil || message.councilBatchID == batchID) &&
+                    message.role == .assistant &&
+                    !isCouncilSynthesisModelID(message.model)
+            }
+        )
+    }
+
+    nonisolated static func councilBatchPrompt(from messages: [ChatMessage]) -> String? {
+        let prompt = messages
+            .filter { $0.role == .user }
+            .sorted { $0.createdAt < $1.createdAt }
+            .first?
+            .text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return prompt?.isEmpty == false ? prompt : nil
+    }
+
+    nonisolated static func councilTargetedPrompt(
+        text: String,
+        modelDisplayName: String,
+        previousAnswer: String? = nil
+    ) -> String {
+        let previousAnswerBlock: String
+        if let previousAnswer = previousAnswer?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !previousAnswer.isEmpty {
+            let clippedPreviousAnswer = previousAnswer.count > 4_000
+                ? "\(previousAnswer.prefix(4_000))..."
+                : previousAnswer
+            previousAnswerBlock = """
+
+            Your previous Council answer:
+            \(clippedPreviousAnswer)
+            """
+        } else {
+            previousAnswerBlock = ""
+        }
+        return """
+        You are \(modelDisplayName) responding as a single selected member of an LLM Council.
+        Answer the user's follow-up directly from your own perspective. Do not claim to speak for the whole council unless the user asks you to compare against prior answers.
+        \(previousAnswerBlock)
+
+        User follow-up:
+        \(text)
+        """
+    }
+
+    private static func councilStreamResults(from messages: [ChatMessage], batchID: String) -> [CouncilStreamResult] {
+        messages
+            .filter { message in
+                message.councilBatchID == batchID &&
+                    message.hasUsableCouncilAnswer &&
+                    !isCouncilSynthesisModelID(message.model)
+            }
+            .compactMap { message -> CouncilStreamResult? in
+                guard let modelID = message.model?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !modelID.isEmpty else {
+                    return nil
+                }
+                return CouncilStreamResult(
+                    modelID: modelID,
+                    messageID: message.id,
+                    didComplete: true,
+                    failureSummary: nil
+                )
+            }
+    }
+
+    private static func latestCouncilResponseID(in messages: [ChatMessage]) -> String? {
+        latestResponseID(
+            in: messages.filter { !isCouncilSynthesisModelID($0.model) }
+        )
+    }
+
+    private static func latestResponseID(in messages: [ChatMessage], modelID: String) -> String? {
+        latestResponseID(
+            in: messages.filter { message in
+                message.model?.trimmingCharacters(in: .whitespacesAndNewlines) == modelID
+            }
+        )
+    }
+
+    private static func latestAnswerText(in messages: [ChatMessage], modelID: String) -> String? {
+        let answer = messages
+            .filter { message in
+                message.role == .assistant &&
+                    message.model?.trimmingCharacters(in: .whitespacesAndNewlines) == modelID &&
+                    !isCouncilSynthesisModelID(message.model)
+            }
+            .sorted { $0.createdAt < $1.createdAt }
+            .last?
+            .text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return answer?.isEmpty == false ? answer : nil
+    }
+
+    private static func latestResponseID(in messages: [ChatMessage]) -> String? {
+        messages
+            .sorted { $0.createdAt < $1.createdAt }
+            .compactMap(\.responseID)
+            .last
+    }
+
+    nonisolated private static func uniqueCouncilModelIDs(from messages: [ChatMessage]) -> [String] {
+        var seen = Set<String>()
+        var ids: [String] = []
+        for message in messages.sorted(by: { $0.createdAt < $1.createdAt }) {
+            guard let modelID = message.model?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !modelID.isEmpty,
+                  !seen.contains(modelID) else {
+                continue
+            }
+            seen.insert(modelID)
+            ids.append(modelID)
+        }
+        return ids
+    }
+
+    nonisolated private static func isCouncilSynthesisModelID(_ modelID: String?) -> Bool {
+        guard let modelID = modelID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !modelID.isEmpty else {
+            return false
+        }
+        return modelID == ModelOption.llmCouncilSynthesisModelID ||
+            modelID.localizedCaseInsensitiveContains("council/synthesis") ||
+            modelID.localizedCaseInsensitiveContains("synthesis")
     }
 
     func copyCurrentTranscript() {
@@ -4646,7 +5998,7 @@ final class ChatStore: ObservableObject {
                 return
             }
             Clipboard.copy(json)
-            showBanner("Signed answer copied. Device key ID may link repeated exports.")
+            showBanner("Device-signed snippet copied. Verifies export integrity, not answer truth; device key ID may link repeated exports.")
         } catch {
             showBanner(Self.displayFailureMessage(error.localizedDescription))
         }
@@ -4677,6 +6029,7 @@ final class ChatStore: ObservableObject {
         let attachments = activeAttachments(promptAttachments: promptAttachments)
         let parentResponseID = message.previousResponseID ??
             messages[..<assistantIndex].last(where: { $0.role == .assistant })?.responseID
+        routeCurrentPromptIfNeeded(userMessage.text, attachments: attachments)
         if let preflight = hostedHandoffPreflightIfNeeded(text: userMessage.text, promptAttachments: promptAttachments),
            approvedHostedHandoffFingerprint != preflight.fingerprint {
             pendingHostedHandoffContinuation = .regenerate(message)
@@ -4716,6 +6069,7 @@ final class ChatStore: ObservableObject {
         let promptAttachments = promptOnlyAttachments(from: message.attachments)
         let attachments = activeAttachments(promptAttachments: promptAttachments)
         let parentResponseID = message.previousResponseID
+        routeCurrentPromptIfNeeded(text, attachments: attachments)
         if let preflight = hostedHandoffPreflightIfNeeded(text: text, promptAttachments: promptAttachments),
            approvedHostedHandoffFingerprint != preflight.fingerprint {
             pendingHostedHandoffContinuation = .edit(message, replacementText)
@@ -4742,7 +6096,7 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    /// Prepends a "relevant excerpts" block from any attached PDF whose text we
+    /// Prepends a "relevant excerpts" block from any attached document/table text
     /// staged on-device, ranked against the user's question. No-op when there's
     /// no staged doc, no question, or nothing relevant — so it never disturbs a
     /// plain turn.
@@ -4765,7 +6119,120 @@ final class ChatStore: ObservableObject {
               let context = DocumentChunker.contextBlock(for: question, in: documents, topK: 4) else {
             return prompt
         }
-        return "\(context)\n\nUsing those excerpts (and the attached file) where relevant:\n\(prompt)"
+        return "\(context)\n\nUsing those excerpts (and the attached file or table) where relevant:\n\(prompt)"
+    }
+
+    struct LocalDocumentContextPayload: Sendable, Equatable {
+        var text: String
+        var isTable: Bool
+    }
+
+    struct PromptSourcePrivacyOverride: Equatable {
+        var blocksWeb: Bool = false
+        var prefersFileOnly: Bool = false
+        var requiresPrivateRoute: Bool = false
+
+        var isEmpty: Bool {
+            !blocksWeb && !prefersFileOnly && !requiresPrivateRoute
+        }
+
+        func sourceInstruction(attachmentNames: [String]) -> String? {
+            guard blocksWeb || prefersFileOnly || requiresPrivateRoute else { return nil }
+            let names = attachmentNames
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if prefersFileOnly {
+                let source = names.isEmpty
+                    ? "Use only the attached or selected file context already present in this turn."
+                    : "Use only these attached files: \(names.joined(separator: ", "))."
+                return "\(source) Do not browse, use live web, pull saved links, or add unstated project context."
+            }
+            if blocksWeb {
+                return "Do not browse or use live web. Use the conversation, attached files, and selected project sources already present."
+            }
+            if requiresPrivateRoute {
+                return "Keep this turn on the private route; do not hand it to hosted or cloud routes."
+            }
+            return nil
+        }
+    }
+
+    nonisolated static func promptSourcePrivacyOverride(
+        for prompt: String,
+        hasAttachments: Bool = false
+    ) -> PromptSourcePrivacyOverride {
+        let normalized = " " + prompt
+            .lowercased()
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines) + " "
+        let looseNormalized = " " + prompt
+            .lowercased()
+            .replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines) + " "
+
+        func hasPhrase(_ phrase: String) -> Bool {
+            let loosePhrase = phrase
+                .lowercased()
+                .replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalized.contains(" \(phrase) ") ||
+                (!loosePhrase.isEmpty && looseNormalized.contains(" \(loosePhrase) "))
+        }
+
+        let blocksWeb = [
+            "no web", "without web", "no browsing", "do not browse", "don't browse",
+            "do not search the web", "don't search the web", "no internet",
+            "offline only", "do not use web", "don't use web",
+            "do not go online", "don't go online", "do not look up", "don't look up"
+        ].contains(where: hasPhrase)
+
+        let fileOnly = [
+            "only this file", "only the attached file", "only attached file",
+            "use only attached", "use only this attached", "attached file only",
+            "file only", "from this file only", "from the attached file only",
+            "only this sheet", "only this spreadsheet", "only this workbook"
+        ].contains(where: { phrase in
+            normalized.contains(phrase)
+        }) || (hasAttachments && blocksWeb && normalized.contains(" only "))
+
+        let requiresPrivate = [
+            "keep it private", "keep this private", "private only", "stay private",
+            "do not use cloud", "don't use cloud", "no cloud", "no hosted",
+            "do not use hosted", "don't use hosted", "do not send to hosted",
+            "do not send this to hosted", "don't send this to hosted",
+            "do not send to cloud", "do not send this to cloud", "don't send this to cloud",
+            "on device only", "local only"
+        ].contains(where: hasPhrase)
+
+        return PromptSourcePrivacyOverride(
+            blocksWeb: blocksWeb || fileOnly,
+            prefersFileOnly: fileOnly,
+            requiresPrivateRoute: requiresPrivate
+        )
+    }
+
+    nonisolated static func localDocumentQuery(userText: String, actionSurfaceText: String) -> String {
+        let trimmed = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? actionSurfaceText : trimmed
+    }
+
+    nonisolated static func localDocumentContextBlock(
+        for query: String,
+        payloads: [LocalDocumentContextPayload],
+        topK: Int = 5
+    ) -> String? {
+        let documents = payloads.map(\.text)
+        if let context = DocumentChunker.contextBlock(for: query, in: documents, topK: topK) {
+            return context
+        }
+
+        let tablePreviews = payloads
+            .filter { $0.isTable }
+            .flatMap { DocumentChunker.chunk($0.text).prefix(2) }
+            .prefix(topK)
+        guard !tablePreviews.isEmpty else { return nil }
+        let joined = tablePreviews.joined(separator: "\n\n– – –\n\n")
+        return "Relevant excerpts from the attached table(s):\n\"\"\"\n\(joined)\n\"\"\""
     }
 
     /// Whether on-device document excerpts (privacy-mode docs) may be inlined
@@ -4781,6 +6248,70 @@ final class ChatStore: ObservableObject {
         return RoutePlanner.routeKind(forModelID: singleModelID) == .nearPrivate
     }
 
+    nonisolated static func projectNotesForPrompt(_ notes: [ProjectNote], allowLocalOnly: Bool) -> [ProjectNote] {
+        notes.filter { allowLocalOnly || !$0.isLocalOnly }
+    }
+
+    static func projectContextRoutePreview(
+        fileCount: Int,
+        linkCount: Int,
+        noteCount: Int,
+        localOnlyNoteCount: Int,
+        hasInstructions: Bool,
+        hasMemory: Bool,
+        semantics: ChatSourceRoutingSemantics,
+        routeTitle: String,
+        allowsLocalOnlyNotes: Bool
+    ) -> ProjectContextRoutePreview {
+        let includesProjectContext = semantics.attachesSavedLinkSourcePack ||
+            semantics.attachesProjectFileSourcePack ||
+            semantics.isResearch
+        let includedNoteCount = includesProjectContext
+            ? max(0, noteCount - (allowsLocalOnlyNotes ? 0 : localOnlyNoteCount))
+            : 0
+        let routedNoteCount = min(includedNoteCount, 6)
+        let routedLinkCount = min(linkCount, 12)
+        var parts: [String] = []
+
+        if semantics.modelNativeWebToolEnabledByDefault || semantics.appWebGroundingPolicy.isEnabledByDefault {
+            parts.append("live web")
+        }
+        if includesProjectContext, hasInstructions {
+            parts.append("instructions")
+        }
+        if includesProjectContext, hasMemory {
+            parts.append("memory")
+        }
+        if semantics.attachesProjectFileSourcePack, fileCount > 0 {
+            parts.append(contextCountLabel(fileCount, singular: "file"))
+        }
+        if semantics.attachesSavedLinkSourcePack, routedLinkCount > 0 {
+            parts.append(contextCountLabel(routedLinkCount, singular: "link"))
+        }
+        if routedNoteCount > 0 {
+            parts.append(contextCountLabel(routedNoteCount, singular: "note"))
+        }
+
+        let title = parts.isEmpty
+            ? "Next answer has no Project sources selected."
+            : "Next answer can use \(parts.joined(separator: ", "))."
+        let omittedLocalOnlyNotes = includesProjectContext && !allowsLocalOnlyNotes ? localOnlyNoteCount : 0
+        let detail = omittedLocalOnlyNotes > 0
+            ? "Local-only notes stay on phone for \(routeTitle)."
+            : nil
+
+        return ProjectContextRoutePreview(
+            title: title,
+            detail: detail,
+            symbolName: detail == nil ? "scope" : "iphone",
+            usesAttentionStyle: detail != nil
+        )
+    }
+
+    private static func contextCountLabel(_ count: Int, singular: String) -> String {
+        "\(count) \(singular)\(count == 1 ? "" : "s")"
+    }
+
     private func send(
         _ text: String,
         attachments: [ChatAttachment],
@@ -4789,7 +6320,17 @@ final class ChatStore: ObservableObject {
         appendUserMessage: Bool = true
     ) async -> Bool {
         let promptAttachments = promptOnlyAttachments(from: attachments)
-        if let preflight = hostedHandoffPreflightIfNeeded(text: text, promptAttachments: promptAttachments),
+        let promptSourceOverride = Self.promptSourcePrivacyOverride(
+            for: text,
+            hasAttachments: !attachments.isEmpty
+        )
+        applyPromptSourcePrivacyOverride(promptSourceOverride)
+        let actionSurfaceText = ActionSurfacePlanner.augmentedPrompt(
+            text: text,
+            attachmentNames: attachments.map(\.name),
+            sourceInstruction: promptSourceOverride.sourceInstruction(attachmentNames: attachments.map(\.name))
+        )
+        if let preflight = hostedHandoffPreflightIfNeeded(text: actionSurfaceText, promptAttachments: promptAttachments),
            approvedHostedHandoffFingerprint != preflight.fingerprint {
             pendingHostedHandoffContinuation = .directSend(
                 text: text,
@@ -4824,6 +6365,18 @@ final class ChatStore: ObservableObject {
             }
             ensureSelectedModelIsAvailable(shouldShowBanner: true)
             routeCurrentPromptIfNeeded(text, attachments: attachments)
+            if let preflight = hostedHandoffPreflightIfNeeded(text: actionSurfaceText, promptAttachments: promptAttachments),
+               approvedHostedHandoffFingerprint != preflight.fingerprint {
+                pendingHostedHandoffContinuation = .directSend(
+                    text: text,
+                    attachments: attachments,
+                    previousResponseIDOverride: previousResponseIDOverride,
+                    initiator: initiator,
+                    appendUserMessage: appendUserMessage
+                )
+                pendingHostedHandoffPreflight = preflight
+                return false
+            }
             if let issue = currentRouteReadinessIssue(for: text, appendUserMessage: appendUserMessage) {
                 blockSendForRouteReadiness(issue)
                 return false
@@ -4836,7 +6389,7 @@ final class ChatStore: ObservableObject {
             // scan, and council synthesis) — excerpts are inlined only on the
             // single-model, non-mission send below.
             let mission = phoneAgentMissionPromptIfNeeded(for: text)
-            var routedText = mission ?? text
+            var routedText = mission ?? actionSurfaceText
             let existingConversation = selectedConversation
             let requestedModel = selectedModel
             let requestModel = requestedModel
@@ -4853,10 +6406,23 @@ final class ChatStore: ObservableObject {
             // leave the device for a third party. Mirrors the memory gate in
             // `activeSystemPrompt`.
             let apiAttachments = attachments.filter { !$0.isLocalOnly }
-            let localDocs = attachments.filter { $0.isLocalOnly }.compactMap { pendingDocumentTexts[$0.id] }
-            if !localDocs.isEmpty {
+            let localDocPayloads = attachments.compactMap { attachment -> LocalDocumentContextPayload? in
+                guard attachment.isLocalOnly,
+                      let text = pendingDocumentTexts[attachment.id] else {
+                    return nil
+                }
+                return LocalDocumentContextPayload(
+                    text: text,
+                    isTable: attachment.kind == ChatAttachment.localTableKind
+                )
+            }
+            if !localDocPayloads.isEmpty {
                 if Self.localDocsAllowedForRoute(councilModelIDs: councilModelIDs, singleModelID: requestModel) {
-                    if let context = DocumentChunker.contextBlock(for: text, in: localDocs, topK: 4) {
+                    let localDocQuery = Self.localDocumentQuery(
+                        userText: text,
+                        actionSurfaceText: actionSurfaceText
+                    )
+                    if let context = Self.localDocumentContextBlock(for: localDocQuery, payloads: localDocPayloads, topK: 4) {
                         routedText = "\(context)\n\nUsing those excerpts (my attached on-device document) where relevant:\n\(routedText)"
                     }
                 } else {
@@ -4870,7 +6436,7 @@ final class ChatStore: ObservableObject {
                 organizePhoneAgentConversationIfNeeded(
                     conversation: conversation,
                     originalText: text,
-                    routedText: mission ?? text
+                    routedText: mission ?? actionSurfaceText
                 )
                 try await sendCouncilTurn(
                     text: text,
@@ -4897,16 +6463,18 @@ final class ChatStore: ObservableObject {
                 attachments: attachments,
                 metadata: currentUserMessageMetadata
             )
+            let assistantCreatedAt = Date()
             let assistantMessage = ChatMessage(
                 id: "local-assistant-\(UUID().uuidString)",
                 role: .assistant,
                 text: "",
                 model: requestModel,
-                createdAt: Date(),
+                createdAt: assistantCreatedAt,
                 status: "streaming",
                 responseID: nil,
                 previousResponseID: previousResponseID,
-                isStreaming: true
+                isStreaming: true,
+                trustMetadata: assistantTrustMetadata(for: requestModel, capturedAt: assistantCreatedAt)
             )
             currentAssistantMessageID = assistantMessage.id
             if appendUserMessage {
@@ -4920,7 +6488,7 @@ final class ChatStore: ObservableObject {
             organizePhoneAgentConversationIfNeeded(
                 conversation: conversation,
                 originalText: text,
-                routedText: mission ?? text
+                routedText: mission ?? actionSurfaceText
             )
 
             // Uploaded-doc focus injection uses apiAttachments (non-local); any
@@ -4943,6 +6511,11 @@ final class ChatStore: ObservableObject {
                 if messages[index].status != "failed", messages[index].status != "approval" {
                     messages[index].status = "completed"
                 }
+                messages[index].trustMetadata = assistantTrustMetadata(
+                    for: finalModel,
+                    webSearchUsed: !messages[index].sources.isEmpty ? true : nil,
+                    capturedAt: messages[index].createdAt
+                )
             }
 
             if Self.isExternalModel(finalModel) {
@@ -5001,17 +6574,19 @@ final class ChatStore: ObservableObject {
             metadata: currentUserMessageMetadata
         )
         let assistantMessages = modelIDs.enumerated().map { offset, modelID in
-            ChatMessage(
+            let createdAt = Date().addingTimeInterval(Double(offset) * 0.01)
+            return ChatMessage(
                 id: "local-council-\(offset)-\(UUID().uuidString)",
                 role: .assistant,
                 text: "",
                 model: modelID,
-                createdAt: Date().addingTimeInterval(Double(offset) * 0.01),
+                createdAt: createdAt,
                 status: "streaming",
                 responseID: nil,
                 previousResponseID: previousResponseID,
                 councilBatchID: batchID,
-                isStreaming: true
+                isStreaming: true,
+                trustMetadata: assistantTrustMetadata(for: modelID, capturedAt: createdAt)
             )
         }
         let assistantIDByModel = zip(modelIDs, assistantMessages.map(\.id)).reduce(into: [String: String]()) { mapping, pair in
@@ -5126,6 +6701,7 @@ final class ChatStore: ObservableObject {
                 routedPrompt: routedText,
                 conversationID: conversation.id,
                 previousResponseID: previousResponseID,
+                batchID: batchID,
                 modelIDs: modelIDs,
                 successfulResults: successfulResults
             )
@@ -5144,6 +6720,123 @@ final class ChatStore: ObservableObject {
             showBanner("Council finished with \(successfulResults.count) answers.")
         }
         scheduleConversationListRefresh()
+    }
+
+    private func runCouncilRoomFollowUp(
+        text: String,
+        target: CouncilTarget,
+        conversation: ConversationSummary,
+        modelIDs: [String],
+        previousResponseID: String?,
+        previousAnswer: String?
+    ) async {
+        isStreaming = true
+        currentAssistantMessageID = nil
+        currentCouncilAssistantMessageIDs = []
+        defer {
+            isStreaming = false
+            currentAssistantMessageID = nil
+            currentCouncilAssistantMessageIDs = []
+            councilStopRequestedBatchID = nil
+            streamTask = nil
+        }
+
+        do {
+            switch target {
+            case .room:
+                try await sendCouncilTurn(
+                    text: text,
+                    routedText: text,
+                    attachments: [],
+                    conversation: conversation,
+                    modelIDs: modelIDs,
+                    previousResponseID: previousResponseID,
+                    initiator: "council_room_followup"
+                )
+            case let .model(id):
+                try await sendTargetedCouncilFollowUp(
+                    text: text,
+                    modelID: id,
+                    conversation: conversation,
+                    previousResponseID: previousResponseID,
+                    previousAnswer: previousAnswer
+                )
+            }
+            saveLocalMessages(for: conversation.id)
+            scheduleConversationListRefresh()
+        } catch is CancellationError {
+            cancelStream()
+        } catch {
+            showBanner(Self.displayFailureMessage(error.localizedDescription))
+        }
+    }
+
+    private func sendTargetedCouncilFollowUp(
+        text: String,
+        modelID: String,
+        conversation: ConversationSummary,
+        previousResponseID: String?,
+        previousAnswer: String?
+    ) async throws {
+        let batchID = "council-target-\(UUID().uuidString)"
+        let modelName = modelDisplayName(for: modelID)
+        let userMessage = ChatMessage(
+            id: "local-user-\(UUID().uuidString)",
+            role: .user,
+            text: "To \(modelName): \(text)",
+            model: modelID,
+            createdAt: Date(),
+            status: "completed",
+            responseID: nil,
+            previousResponseID: previousResponseID,
+            councilBatchID: batchID,
+            isStreaming: false,
+            metadata: currentUserMessageMetadata
+        )
+        let assistantID = "local-council-target-\(UUID().uuidString)"
+        let assistantCreatedAt = Date().addingTimeInterval(0.01)
+        let assistantMessage = ChatMessage(
+            id: assistantID,
+            role: .assistant,
+            text: "",
+            model: modelID,
+            createdAt: assistantCreatedAt,
+            status: "streaming",
+            responseID: nil,
+            previousResponseID: previousResponseID,
+            councilBatchID: batchID,
+            isStreaming: true,
+            trustMetadata: assistantTrustMetadata(for: modelID, capturedAt: assistantCreatedAt)
+        )
+        messages.append(userMessage)
+        messages.append(assistantMessage)
+        currentCouncilAssistantMessageIDs = [assistantID]
+        showBanner("Asking \(modelName).")
+
+        do {
+            try await streamResponse(
+                model: modelID,
+                text: Self.councilTargetedPrompt(
+                    text: text,
+                    modelDisplayName: modelName,
+                    previousAnswer: previousAnswer
+                ),
+                attachments: [],
+                conversationID: conversation.id,
+                previousResponseID: previousResponseID,
+                initiator: "council_room_targeted_followup",
+                assistantMessageID: assistantID
+            )
+            finishAssistantMessage(assistantID)
+            showBanner("\(modelName) answered.")
+        } catch {
+            await apply(
+                streamEvent: .failed(Self.modelFailureSummary(error)),
+                conversationID: conversation.id,
+                assistantMessageID: assistantID
+            )
+            throw error
+        }
     }
 
     private func waitForCouncilStopSignal(batchID: String) async -> CouncilStreamResult {
@@ -5165,6 +6858,7 @@ final class ChatStore: ObservableObject {
         routedPrompt: String,
         conversationID: String,
         previousResponseID: String?,
+        batchID: String?,
         modelIDs: [String],
         successfulResults: [CouncilStreamResult]
     ) async {
@@ -5187,18 +6881,25 @@ final class ChatStore: ObservableObject {
         guard responses.count > 1 else { return }
 
         let synthesisID = "local-council-synthesis-\(UUID().uuidString)"
+        let synthesisCreatedAt = Date().addingTimeInterval(0.2)
         let synthesisMessage = ChatMessage(
             id: synthesisID,
             role: .assistant,
             text: "",
             model: ModelOption.llmCouncilSynthesisModelID,
-            createdAt: Date().addingTimeInterval(0.2),
+            createdAt: synthesisCreatedAt,
             status: "streaming",
             responseID: nil,
             previousResponseID: previousResponseID,
+            councilBatchID: batchID,
             isStreaming: true,
             searchQuery: prompt,
-            sources: councilSources
+            sources: councilSources,
+            trustMetadata: assistantTrustMetadata(
+                for: ModelOption.llmCouncilSynthesisModelID,
+                webSearchUsed: !councilSources.isEmpty,
+                capturedAt: synthesisCreatedAt
+            )
         )
         currentCouncilAssistantMessageIDs.append(synthesisID)
         messages.append(synthesisMessage)
@@ -5348,7 +7049,7 @@ final class ChatStore: ObservableObject {
             guard settings.isEnabled, settings.hasUsableHostedEndpoint else {
                 let message = settings.hasUsableHostedEndpoint
                     ? "Turn on Hosted Agent in Account before sending."
-                    : settings.endpointValidationMessage ?? "Add a hosted HTTPS IronClaw endpoint first."
+                    : settings.endpointValidationMessage ?? "Add a Hosted IronClaw URL first."
                 throw APIError.status(0, message)
             }
             let webContext = try await appWebGroundingContextIfNeeded(
@@ -5445,12 +7146,12 @@ final class ChatStore: ObservableObject {
             updateCurrentExchange(to: ModelOption.ironclawModelID, shouldClearText: false)
             selectedModel = ModelOption.ironclawModelID
             let handoffMessage = """
-            **IronClaw workstation handoff**
-            This needs hosted git/code/shell/research tools, so I am running it on the IronClaw workstation. Local iOS project actions above stay attached to this run.
+            **Hosted IronClaw handoff**
+            This needs hosted git/code/shell/research tools, so I am running it through Hosted IronClaw. Local iOS project actions above stay attached to this run.
 
             """
             await apply(streamEvent: .textDelta(handoffMessage), conversationID: conversationID, assistantMessageID: assistantMessageID)
-            showBanner("IronClaw Mobile handed this to the hosted workstation.")
+            showBanner("IronClaw Mobile handed this to Hosted IronClaw.")
             do {
                 try await streamResponse(
                     model: ModelOption.ironclawModelID,
@@ -5568,6 +7269,9 @@ final class ChatStore: ObservableObject {
     }
 
     private func shouldEnableModelNativeWebTool(model: String, prompt: String) -> Bool {
+        guard !Self.promptSourcePrivacyOverride(for: prompt).blocksWeb else {
+            return false
+        }
         let semantics = routingSemantics(for: Self.routeKind(forModelID: model))
         return semantics.modelNativeWebToolPolicy.resolves(
             benefitsFromSearch: Self.promptBenefitsFromAppSearch(prompt),
@@ -5576,6 +7280,9 @@ final class ChatStore: ObservableObject {
     }
 
     private func shouldUseAppWebGrounding(model: String, prompt: String) -> Bool {
+        guard !Self.promptSourcePrivacyOverride(for: prompt).blocksWeb else {
+            return false
+        }
         let route = Self.routeKind(forModelID: model)
         let semantics = routingSemantics(for: route)
         guard semantics.appWebGroundingPolicy != .never else { return false }
@@ -5650,9 +7357,14 @@ final class ChatStore: ObservableObject {
             if !memory.isEmpty {
                 lines.append("- Project memory: \(Self.clipped(memory, maxCharacters: 1_500))")
             }
-            if !selectedProject.notes.isEmpty {
-                let notes = selectedProject.notes.prefix(6).map { "\($0.title): \(Self.clipped($0.text, maxCharacters: 300))" }
+            let hostedNotes = Self.projectNotesForPrompt(selectedProject.notes, allowLocalOnly: false)
+            if !hostedNotes.isEmpty {
+                let notes = hostedNotes.prefix(6).map { "\($0.title): \(Self.clipped($0.text, maxCharacters: 300))" }
                 lines.append("- Project notes: \(notes.joined(separator: " | "))")
+            }
+            let omittedLocalOnlyNotes = selectedProject.notes.count - hostedNotes.count
+            if omittedLocalOnlyNotes > 0 {
+                lines.append("- Local-only project notes omitted for Hosted IronClaw: \(omittedLocalOnlyNotes)")
             }
             let publicLinks = selectedProject.links.filter { link in
                 URL(string: link.urlString).map(URLSecurity.isPublicHTTPSURL) == true
@@ -5662,14 +7374,14 @@ final class ChatStore: ObservableObject {
                 lines.append("- Source links: \(links.joined(separator: " | "))")
             }
             if !selectedProject.attachments.isEmpty {
-                lines.append("- Project files available by name in the app context: \(selectedProject.attachments.map(\.name).joined(separator: ", "))")
+                lines.append("- Project files available as untrusted filename labels: \(Self.quotedUntrustedMetadataLabels(selectedProject.attachments.map(\.name)))")
             }
         }
         if !promptAttachments.isEmpty {
             if lines.isEmpty {
                 lines.append("iOS prompt context:")
             }
-            lines.append("- Prompt files attached by name: \(promptAttachments.map(\.name).joined(separator: ", "))")
+            lines.append("- Prompt files attached as untrusted filename labels: \(Self.quotedUntrustedMetadataLabels(promptAttachments.map(\.name)))")
         }
         if lines.isEmpty { return "" }
         lines.append("- Focus: \(sourceModeDetail)")
@@ -5682,8 +7394,8 @@ final class ChatStore: ObservableObject {
         }
         return """
         IronClaw iOS coding-agent task.
-        Please run the requested local workstation task now.
-        You MUST use local workstation tools before answering. For git, code, shell, tests, files, repo setup, or filesystem requests, call shell, file, grep, or apply_patch first.
+        Please run the requested Hosted IronClaw task now.
+        You MUST use hosted tools before answering. For git, code, shell, tests, files, repo setup, or filesystem requests, call shell, file, grep, or apply_patch first.
         When calling shell, pass the JSON parameter named command, singular, containing one shell script string.
         If a tool call fails because of parameter shape, retry the same turn with the corrected parameter before giving a final answer.
         Do not answer "I am not sure" when a local tool can be run. If a tool is unavailable, say exactly which local tool failed.
@@ -5760,7 +7472,7 @@ final class ChatStore: ObservableObject {
     }
 
     private static func agentMissionConversationTitle(from text: String) -> String? {
-        let missionMarkers = ["Hosted IronClaw Mission:", "IronClaw Agent Mission:"]
+        let missionMarkers = ["Hosted IronClaw Mission:", "Agent Mission:"]
         guard missionMarkers.contains(where: { text.localizedCaseInsensitiveContains($0) }) else {
             return nil
         }
@@ -5996,6 +7708,11 @@ final class ChatStore: ObservableObject {
             if message.sources.isEmpty {
                 message.sources = Self.inferredSources(from: message.text)
             }
+            message.trustMetadata = assistantTrustMetadata(
+                for: message.model,
+                webSearchUsed: !message.sources.isEmpty ? true : nil,
+                capturedAt: message.createdAt
+            )
         }
     }
 
@@ -6323,11 +8040,11 @@ final class ChatStore: ObservableObject {
         transitionDraftScopeToCurrentSelection(loadDraft: true)
 
         if loadedIronclawSettings.hasUsableHostedEndpoint {
-            ironclawStatusText = ironclawTokenConfigured ? "Hosted endpoint and token saved." : "Hosted endpoint saved."
+            ironclawStatusText = ironclawTokenConfigured ? "Hosted IronClaw URL and token saved." : "Hosted IronClaw URL saved."
         } else if loadedIronclawSettings.hasEndpoint {
-            ironclawStatusText = loadedIronclawSettings.endpointValidationMessage ?? "Endpoint needs attention."
+            ironclawStatusText = loadedIronclawSettings.endpointValidationMessage ?? "Agent connection needs attention."
         } else if ironclawTokenConfigured {
-            ironclawStatusText = "Endpoint token saved. Add hosted URL."
+            ironclawStatusText = "Agent token saved. Add Hosted IronClaw URL."
         } else {
             ironclawStatusText = "Not connected"
         }
@@ -6738,7 +8455,6 @@ final class ChatStore: ObservableObject {
     nonisolated private static func isExternalModel(_ modelID: String) -> Bool {
         modelID == ModelOption.ironclawModelID ||
             modelID == ModelOption.ironclawMobileModelID ||
-            modelID == ModelOption.nearCloudQwenMaxModelID ||
             modelID.hasPrefix(ModelOption.nearCloudModelPrefix)
     }
 
@@ -6863,25 +8579,54 @@ final class ChatStore: ObservableObject {
         saveIronclawThreadIDCache(cache)
     }
 
-    private static func promptNeedsLiveWeb(_ prompt: String) -> Bool {
+    nonisolated static func promptNeedsLiveWeb(_ prompt: String) -> Bool {
+        guard !promptSourcePrivacyOverride(for: prompt).blocksWeb else {
+            return false
+        }
         let lowercased = prompt.lowercased()
         let triggers = [
             "latest",
             "current",
+            "currently",
             "today",
             "right now",
             "this week",
             "recent",
+            "fresh",
+            "live",
+            "up to date",
+            "up-to-date",
+            "as of",
             "news",
             "web search",
             "search the web",
+            "deep search",
+            "deep research",
+            "research",
+            "look up",
+            "investigate",
+            "from sources",
+            "source-backed",
             "browse",
             "cite",
+            "citations",
             "citation",
             "sources",
             "source links"
         ]
-        return triggers.contains { lowercased.contains($0) }
+        if triggers.contains(where: { lowercased.contains($0) }) {
+            return true
+        }
+
+        let valueCue = [
+            "price", "prices", "value", "worth", "quote", "rate",
+            "market cap", "floor price", "trading at"
+        ].contains { lowercased.contains($0) }
+        let liveAskCue = [
+            "what", "how much", "find", "look up", "track", "monitor",
+            "watch", "price of", "value of", "cost of", "quote for"
+        ].contains { lowercased.contains($0) }
+        return valueCue && liveAskCue
     }
 
     private static func promptRequestsCouncil(_ prompt: String) -> Bool {
@@ -6935,12 +8680,13 @@ final class ChatStore: ObservableObject {
             modelWords.contains { lowercased.contains($0) }
     }
 
-    private static func promptNeedsRemoteWorkstation(_ prompt: String) -> Bool {
+    nonisolated static func promptNeedsRemoteWorkstation(_ prompt: String) -> Bool {
         let lowercased = prompt
             .lowercased()
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !lowercased.isEmpty else { return false }
+        guard !promptForbidsRemoteWorkstation(lowercased) else { return false }
 
         let explicitAgentPhrases = [
             "use ironclaw",
@@ -7058,6 +8804,71 @@ final class ChatStore: ObservableObject {
         return hasAction && hasTarget
     }
 
+    private nonisolated static func promptForbidsRemoteWorkstation(_ lowercased: String) -> Bool {
+        let hardStops = [
+            "do not run",
+            "don't run",
+            "dont run",
+            "do not execute",
+            "don't execute",
+            "dont execute",
+            "do not use tools",
+            "don't use tools",
+            "dont use tools",
+            "without using tools",
+            "without running",
+            "no tool use",
+            "no tools",
+            "no shell",
+            "no terminal",
+            "do not modify",
+            "don't modify",
+            "dont modify",
+            "do not edit",
+            "don't edit",
+            "dont edit",
+            "do not make changes",
+            "don't make changes",
+            "dont make changes"
+        ]
+        if hardStops.contains(where: { lowercased.contains($0) }) {
+            return true
+        }
+
+        let explanationOnlyPhrases = [
+            "just tell me how",
+            "only tell me how",
+            "tell me how to",
+            "explain how to",
+            "walk me through",
+            "give me instructions",
+            "give me a plan",
+            "make a plan"
+        ]
+        return explanationOnlyPhrases.contains { lowercased.contains($0) } &&
+            (lowercased.contains("repo") ||
+                lowercased.contains("code") ||
+                lowercased.contains("test") ||
+                lowercased.contains("xcode") ||
+                lowercased.contains("terminal") ||
+                lowercased.contains("shell"))
+    }
+
+    nonisolated static func modelAfterHostedAutoRoute(
+        selectedModelID: String,
+        text: String,
+        hostedIronclawAvailable: Bool
+    ) -> String {
+        guard selectedModelID != ModelOption.ironclawModelID,
+              selectedModelID != ModelOption.ironclawMobileModelID,
+              !promptSourcePrivacyOverride(for: text).requiresPrivateRoute,
+              promptNeedsRemoteWorkstation(text),
+              hostedIronclawAvailable else {
+            return selectedModelID
+        }
+        return ModelOption.ironclawModelID
+    }
+
     private func phoneAgentMissionPromptIfNeeded(for text: String) -> String? {
         guard selectedModel == ModelOption.ironclawModelID || selectedModel == ModelOption.ironclawMobileModelID else {
             return nil
@@ -7073,7 +8884,7 @@ final class ChatStore: ObservableObject {
         guard !trimmed.isEmpty else {
             return nil
         }
-        if trimmed.localizedCaseInsensitiveContains("IronClaw Agent Mission:") ||
+        if trimmed.localizedCaseInsensitiveContains("Agent Mission:") ||
             trimmed.localizedCaseInsensitiveContains("Hosted IronClaw Mission:") {
             return nil
         }
@@ -7106,10 +8917,9 @@ final class ChatStore: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let prefixes = [
             "Hosted IronClaw:",
-            "Hosted IronClaw agent:",
-            "IronClaw agent:",
+            "IronClaw Mobile:",
             "Agent mission:",
-            "Phone agent:",
+            "On-device Agent:",
             "Agent:"
         ]
         for prefix in prefixes where trimmed.lowercased().hasPrefix(prefix.lowercased()) {
@@ -7166,7 +8976,7 @@ final class ChatStore: ObservableObject {
         }
 
         if projects[projectIndex].instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            projects[projectIndex].instructions = "Repo-backed IronClaw agent workspace. Use saved repo, issue, PR, and source links for follow-up research, code edits, tests, and triage for \(projectName)."
+            projects[projectIndex].instructions = "Repo-backed Agent Project. Use saved repo, issue, PR, and source links for follow-up research, code edits, tests, and triage for \(projectName)."
         }
 
         saveProjects()
@@ -7555,20 +9365,27 @@ final class ChatStore: ObservableObject {
     }
 
     private func routeCurrentPromptIfNeeded(_ text: String, attachments: [ChatAttachment]) {
-        if selectedModel != ModelOption.ironclawModelID,
-           selectedModel != ModelOption.ironclawMobileModelID,
-           Self.promptNeedsRemoteWorkstation(text),
-           ironclawRemoteWorkstationAvailable {
-            selectedModel = ModelOption.ironclawModelID
-            clearAttestationState()
-            showBanner("Switched to IronClaw because this prompt needs hosted agent tools.")
+        let sourceOverride = Self.promptSourcePrivacyOverride(for: text, hasAttachments: !attachments.isEmpty)
+        applyPromptSourcePrivacyOverride(sourceOverride)
+        if !sourceOverride.requiresPrivateRoute {
+            let hostedRoutedModel = Self.modelAfterHostedAutoRoute(
+                selectedModelID: selectedModel,
+                text: text,
+                hostedIronclawAvailable: ironclawRemoteWorkstationAvailable
+            )
+            if hostedRoutedModel != selectedModel {
+                selectedModel = hostedRoutedModel
+                clearAttestationState()
+                showBanner("Switched to IronClaw because this prompt needs hosted agent tools.")
+                return
+            }
+        }
+
+        if !sourceOverride.requiresPrivateRoute, routeCouncilIfNeeded(text) {
             return
         }
 
-        if routeCouncilIfNeeded(text) {
-            return
-        }
-
+        guard !sourceOverride.blocksWeb else { return }
         guard selectedModelOption?.isNearCloudModel == true,
               Self.promptNeedsLiveWeb(text),
               !shouldUseAppWebGrounding(model: selectedModel, prompt: text),
@@ -7795,9 +9612,6 @@ final class ChatStore: ObservableObject {
            let cloudModelID = model.nearCloudUnderlyingModelID {
             return cloudModelID
         }
-        if modelID == ModelOption.nearCloudQwenMaxModelID {
-            return "qwen/qwen3.7-max"
-        }
         guard modelID.hasPrefix(ModelOption.nearCloudModelPrefix) else { return nil }
         let cloudID = String(modelID.dropFirst(ModelOption.nearCloudModelPrefix.count))
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -7858,6 +9672,10 @@ final class ChatStore: ObservableObject {
         }
 
         messages[assistantIndex].model = model
+        messages[assistantIndex].trustMetadata = assistantTrustMetadata(
+            for: model,
+            capturedAt: messages[assistantIndex].createdAt
+        )
         if shouldClearText {
             messages[assistantIndex].text = ""
         }
@@ -7906,7 +9724,7 @@ final class ChatStore: ObservableObject {
                 results.append(IronclawMobileToolResult(
                     callName: call.name,
                     status: .completed,
-                    summary: "Read the current iPhone workspace state.",
+                    summary: "Read the current iPhone Project/chat state.",
                     detail: snapshot.summary
                 ))
 
@@ -8691,11 +10509,11 @@ final class ChatStore: ObservableObject {
     }
 
     private static var gatewayStatusFailureMessage: String {
-        "IronClaw accepted the request, but the bridge only returned gateway status instead of a final answer. Start or repair the IronClaw bridge, then retry."
+        "IronClaw accepted the request, but Hosted IronClaw only returned gateway status instead of a final answer. Start or repair the Agent connection, then retry."
     }
 
     private static var staleRunFailureMessage: String {
-        "This run was interrupted or timed out before visible output arrived. Retry the message with a reachable model or IronClaw bridge."
+        "This run was interrupted or timed out before visible output arrived. Retry the message with a reachable model or Agent connection."
     }
 
     private static func isTransportOnlyGatewayText(_ text: String) -> Bool {
@@ -8725,13 +10543,13 @@ final class ChatStore: ObservableObject {
         }
 
         if lowercased.contains("chat route needs a valid ironclaw token") {
-            return "IronClaw is reachable, but the endpoint token is missing or invalid. Open Account and test the IronClaw integration."
+            return "Hosted IronClaw is reachable, but the Agent token is missing or invalid. Open Account and test the Agent connection."
         }
 
         if lowercased.contains("tool 'http' failed") &&
             lowercased.contains("request returned redirect") &&
             lowercased.contains("blocked to prevent ssrf") {
-            return "IronClaw's web fetch tool hit a redirect and blocked it as an SSRF precaution. Upgrade or restart the hosted bridge on IronClaw 0.28.2 or newer, then retry."
+            return "IronClaw's web fetch tool hit a redirect and blocked it as an SSRF precaution. Upgrade or restart Hosted IronClaw 0.28.2 or newer, then retry."
         }
 
         if lowercased.contains("tool error") || lowercased.contains("tool '") || lowercased.contains("tool \"") {
@@ -8743,7 +10561,7 @@ final class ChatStore: ObservableObject {
         }
 
         if lowercased.contains("not authenticated") || lowercased.contains("unauthorized") {
-            return "Authentication failed. Sign in again, then retry the request."
+            return "Sign in to chat about anything with the general assistant."
         }
 
         return trimmed.isEmpty ? "The request failed." : trimmed
@@ -8807,6 +10625,11 @@ final class ChatStore: ObservableObject {
         guard let project = selectedProject else {
             return basePrompt
         }
+        guard sourceRoutingSemantics.attachesSavedLinkSourcePack ||
+            sourceRoutingSemantics.attachesProjectFileSourcePack ||
+            sourceRoutingSemantics.isResearch else {
+            return basePrompt
+        }
 
         let projectInstructions = project.instructions.trimmingCharacters(in: .whitespacesAndNewlines)
         let projectMemory = project.memorySummary.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -8817,7 +10640,7 @@ final class ChatStore: ObservableObject {
                 "- \(link.displayTitle): \(link.urlString)"
             }
             .joined(separator: "\n") : ""
-        let projectNotes = project.notes
+        let projectNotes = Self.projectNotesForPrompt(project.notes, allowLocalOnly: memoryAllowed)
             .prefix(6)
             .map { note in
                 "- \(note.title): \(Self.clipped(note.text, maxCharacters: 900))"
@@ -8893,7 +10716,8 @@ final class ChatStore: ObservableObject {
             return """
             Focus: Web.
             - Use web search for current or source-backed answers.
-            - Include active project files, saved links, notes, and prompt attachments when they are relevant to the question.
+            - Include prompt attachments when provided.
+            - Do not include saved Project links, notes, or files unless the user changes Source Mode.
             """
         case .links:
             return """
@@ -8958,6 +10782,18 @@ final class ChatStore: ObservableObject {
         guard text.count > maxCharacters else { return text }
         let endIndex = text.index(text.startIndex, offsetBy: maxCharacters)
         return "\(text[..<endIndex])..."
+    }
+
+    private static func quotedUntrustedMetadataLabels(_ labels: [String]) -> String {
+        labels.map { label in
+            let cleaned = label
+                .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let bounded = cleaned.isEmpty ? "Untitled" : String(cleaned.prefix(160))
+            let escaped = bounded.replacingOccurrences(of: "\"", with: "\\\"")
+            return "\"\(escaped)\""
+        }
+        .joined(separator: ", ")
     }
 
     private static func normalizedProjectLinkURL(_ rawURL: String) -> URL? {
@@ -9090,9 +10926,9 @@ final class ChatStore: ObservableObject {
         - Chat move, rename, pin, and archive actions.
         - Web-search, source-mode, and research-mode switching.
 
-        Hosted workstation handoff:
-        - When the hosted IronClaw endpoint is connected, Mobile can hand off git, code editing, tests, shell, package installation, and repo work to that remote workstation and keep the answer in this chat.
-        - The hosted workstation is expected to provide sandboxed shell, git, file read/write, grep, and patch tools; Account diagnostics can verify those tools before a serious run.
+        Hosted IronClaw handoff:
+        - When Hosted IronClaw is connected, Mobile can hand off git, code editing, tests, shell, package installation, and repo work and keep the answer in this chat.
+        - Hosted IronClaw is expected to provide sandboxed shell, git, file read/write, grep, and patch tools; Account diagnostics can check those tools before a serious run.
 
         Not available locally inside the iOS sandbox:
         - Shell commands, Docker, Postgres, arbitrary host filesystem access, local LAN gateways, desktop daemons, and unsandboxed MCP/WASM tool execution.
@@ -9423,11 +11259,15 @@ final class ChatStore: ObservableObject {
         routeReadinessIssue = nil
         pendingAttachments = []
         pendingLargePasteTexts = [:]
+        pendingSharedFileURLs = [:]
         pendingDocumentTexts = [:]
         pendingDocumentTextIDs = []
         selectedProjectID = data.project.id
         selectedModel = Self.defaultModelID
-        councilModelIDs = [Self.defaultModelID, ModelOption.nearCloudQwenMaxModelID, "near-cloud/anthropic/claude-opus-4-7"]
+        councilModelIDs = data.models
+            .filter { !$0.isIronclawModel }
+            .prefix(Self.maxCouncilModels)
+            .map(\.id)
         webSearchEnabled = false
         sourceMode = .auto
         researchModeEnabled = false
@@ -9458,9 +11298,11 @@ final class ChatStore: ObservableObject {
             messages = []
             selectedProjectID = nil
             pendingAttachments = []
-            sourceMode = .web
-            webSearchEnabled = true
-            draft = "Is the war in Iran ending as of today?"
+            pendingSharedFileURLs = [:]
+            councilModelIDs = [Self.defaultModelID]
+            sourceMode = .auto
+            webSearchEnabled = false
+            draft = "Turn this screenshot or file into actions I can approve."
         case .agent:
             selectedConversation = nil
             messages = []
@@ -9526,7 +11368,7 @@ final class ChatStore: ObservableObject {
             sendDraft()
         case .chatStarters:
             // Empty new chat with council off so the default live-data starter
-            // chips show (ETH price / My NEAR / Today's news / Daily tracker).
+            // chips show current data/tracker examples without seeding Home.
             selectedConversation = nil
             selectedProjectID = nil
             messages = []
@@ -9547,7 +11389,7 @@ final class ChatStore: ObservableObject {
                     await self?.runLiveCouncilBriefingDemo()
                 }
             }
-        case .chat, .councilOutput, .cloudModels, .council, .councilRoom, .threaded, .liveData, .project, .share:
+        case .chat, .briefingBuilder, .councilOutput, .cloudModels, .council, .councilRoom, .threaded, .liveData, .project, .share:
             selectedConversation = data.primaryConversation
             messages = data.messages
             draft = ""
@@ -9675,6 +11517,8 @@ final class ChatStore: ObservableObject {
         let conversationID = "demo-conversation-iran-council"
         let glmConversationID = "demo-conversation-glm-private"
         let councilBatchID = "demo-council-iran-status"
+        let demoIndependentModelA = "near-cloud/demo-independent-model-a"
+        let demoIndependentModelB = "near-cloud/demo-independent-model-b"
         let created = now.addingTimeInterval(-11 * 60)
         let project = ChatProject(
             id: projectID,
@@ -9799,18 +11643,18 @@ final class ChatStore: ObservableObject {
             role: .assistant,
             text: """
             ## Direct answer
-            The best answer is: not over, but closer to an off-ramp. GLM reads the AP/PBS overview as evidence that a deal is emerging [1][2]. Qwen Max focuses on whether the reported framework and Strait of Hormuz terms actually get implemented [3][4]. Opus keeps the caution high because fresh military activity and the Israel-Hezbollah front can still break the diplomatic track [5][6].
+            The best answer is: not over, but closer to an off-ramp. The private model reads the AP/PBS overview as evidence that a deal is emerging [1][2]. Independent model A focuses on whether the reported framework and Strait of Hormuz terms actually get implemented [3][4]. Independent model B keeps the caution high because fresh military activity and the Israel-Hezbollah front can still break the diplomatic track [5][6].
 
             ## What the council agrees on
             Nobody should say the war is already over. The supported statement is narrower: talks appear close to an agreement, but the outcome still depends on a signed/finalized deal, implementation of the Hormuz reopening, and containment of related military fronts [1][3][5][6].
 
             ## How the models vary
-            - GLM 5.1: weighs the broad AP/PBS explainer coverage and calls this a possible endgame, not a settled peace [1][2].
-            - Qwen Max: reads the deal-specific reporting as an implementation checklist: final text, Hormuz reopening, and follow-on negotiations [3][4].
-            - Claude Opus: reads the security reporting as a warning that diplomacy is still exposed to military and regional shocks [5][6].
+            - Private model: weighs the broad AP/PBS explainer coverage and calls this a possible endgame, not a settled peace [1][2].
+            - Independent model A: reads the deal-specific reporting as an implementation checklist: final text, Hormuz reopening, and follow-on negotiations [3][4].
+            - Independent model B: reads the security reporting as a warning that diplomacy is still exposed to military and regional shocks [5][6].
 
             ## Disagreements or uncertainty
-            The disagreement is about confidence. GLM is the most optimistic because the overview reporting points to a possible deal. Qwen Max is conditional because a framework is not the same as implementation. Opus is the least willing to call it ending while strike reports and spillover risks remain live.
+            The disagreement is about confidence. The private model is the most optimistic because the overview reporting points to a possible deal. Independent model A is conditional because a framework is not the same as implementation. Independent model B is the least willing to call it ending while strike reports and spillover risks remain live.
             """,
             model: ModelOption.llmCouncilSynthesisModelID,
             createdAt: created.addingTimeInterval(18),
@@ -9826,7 +11670,7 @@ final class ChatStore: ObservableObject {
             id: "demo-assistant-glm",
             role: .assistant,
             text: """
-            ## GLM 5.1
+            ## Private model
             The AP/PBS overview supports "possible endgame," not "ended" [1][2]. I would answer that the war appears closer to a diplomatic off-ramp, but the claim should stay bounded until there is a final agreement and visible implementation.
             """,
             model: Self.defaultModelID,
@@ -9843,10 +11687,10 @@ final class ChatStore: ObservableObject {
             id: "demo-assistant-qwen-large",
             role: .assistant,
             text: """
-            ## Qwen Max
+            ## Independent model A
             The deal-specific reporting makes this an implementation question [1][2]. If the framework is finalized and the Strait of Hormuz reopening actually starts, then "ending" becomes plausible. If those milestones slip, the headline is only diplomatic momentum.
             """,
-            model: ModelOption.nearCloudQwenMaxModelID,
+            model: demoIndependentModelA,
             createdAt: created.addingTimeInterval(20),
             firstTokenAt: created.addingTimeInterval(21.7),
             status: "completed",
@@ -9860,10 +11704,10 @@ final class ChatStore: ObservableObject {
             id: "demo-assistant-opus",
             role: .assistant,
             text: """
-            ## Claude Opus 4.7
+            ## Independent model B
             I would be careful with the word "ending." Diplomatic signals can coexist with active coercion. Fresh strike reporting and the Israel-Hezbollah front mean the safer answer is: negotiations may be near an off-ramp, but the conflict is not reliably settled yet [1][2].
             """,
-            model: "near-cloud/anthropic/claude-opus-4-7",
+            model: demoIndependentModelB,
             createdAt: created.addingTimeInterval(21),
             firstTokenAt: created.addingTimeInterval(22.4),
             status: "completed",
@@ -9925,17 +11769,17 @@ final class ChatStore: ObservableObject {
         )
 
         let models = [
-            demoModel(Self.defaultModelID, displayName: "GLM 5.1", description: "Default private route with verification.", verifiable: true),
-            demoModel(ModelOption.nearCloudQwenMaxModelID, displayName: "Qwen Max", description: "Frontier model through NEAR Cloud privacy proxy.", verifiable: false),
-            demoModel("near-cloud/anthropic/claude-opus-4-7", displayName: "Claude Opus 4.7", description: "Claude Opus through NEAR Cloud privacy proxy.", verifiable: false),
+            demoModel(Self.defaultModelID, displayName: "NEAR Private model", description: "Default private route with proof.", verifiable: true),
+            demoModel(demoIndependentModelA, displayName: "Independent model A", description: "Cloud model through NEAR Cloud privacy proxy.", verifiable: false),
+            demoModel(demoIndependentModelB, displayName: "Independent model B", description: "Cloud model through NEAR Cloud privacy proxy.", verifiable: false),
             demoModel(ModelOption.ironclawMobileModelID, displayName: "IronClaw Mobile", description: "Phone-safe agent runtime.", verifiable: false),
-            demoModel(ModelOption.ironclawModelID, displayName: "Hosted IronClaw", description: "Connected workstation agent.", verifiable: false)
+            demoModel(ModelOption.ironclawModelID, displayName: "Hosted IronClaw", description: "Connected hosted Agent.", verifiable: false)
         ]
-        let nearCloudModels = Self.fallbackNearCloudModels()
+        let nearCloudModels = models.filter { $0.isNearCloudModel }
         let attestation = AttestationSnapshot(
             nonce: "demo-\(Int(now.timeIntervalSince1970))",
             signingAlgorithm: "ed25519 + Intel TDX quote",
-            model: "GLM-5.1-FP8",
+            model: "NEAR Private default",
             coveredModelIDs: [Self.defaultModelID],
             fetchedAt: now.addingTimeInterval(-45),
             chatGatewayAddress: "tee-gateway.near.ai",
@@ -9945,9 +11789,9 @@ final class ChatStore: ObservableObject {
             {
               "nonce": "demo-\(Int(now.timeIntervalSince1970))",
               "gateway": "tee-gateway.near.ai",
-              "model": "GLM-5.1-FP8",
+              "model": "NEAR Private default",
               "covered_models": [
-                "zai-org/GLM-5.1-FP8"
+                "\(Self.defaultModelID)"
               ],
               "quote": "demo-intel-tdx-quote",
               "signature": "demo-ed25519-signature"

@@ -17,7 +17,7 @@ struct HostedHandoffPreflightSheet: View {
                             .background(Color.brandBlue.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Run on hosted IronClaw?")
+                            Text("Run on Hosted IronClaw?")
                                 .font(.title3.weight(.semibold))
                             Text("This sends the prompt and selected phone context to \(preflight.destinationHost).")
                                 .font(.subheadline)
@@ -56,7 +56,7 @@ struct HostedHandoffPreflightSheet: View {
                             chatStore.confirmHostedHandoff(preflight)
                             dismiss()
                         } label: {
-                            Label("Run on workstation", systemImage: "terminal")
+                            Label("Run on Hosted IronClaw", systemImage: "terminal")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
@@ -65,7 +65,7 @@ struct HostedHandoffPreflightSheet: View {
                             chatStore.cancelHostedHandoff()
                             dismiss()
                         } label: {
-                            Text("Keep on phone")
+                            Text("Stay in this chat")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
@@ -180,7 +180,7 @@ struct IronclawApprovalCard: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This only applies to the hosted IronClaw scope returned by the endpoint. Powerful command, file, network, and credential tools still require per-run approval on phone.")
+            Text("This only applies to the Hosted IronClaw scope returned by the Agent connection. Powerful command, file, network, and credential tools still require per-run approval on phone.")
         }
         .confirmationDialog(
             "Open external site?",
@@ -231,7 +231,7 @@ struct IronclawApprovalCard: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 6) {
-                Label("Hosted workstation", systemImage: "terminal")
+                Label("Hosted IronClaw", systemImage: "terminal")
                 Label("Credential gated", systemImage: "lock.shield")
             }
             .font(.caption2.weight(.semibold))

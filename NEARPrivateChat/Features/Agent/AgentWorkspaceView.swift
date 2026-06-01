@@ -2,7 +2,9 @@ import SwiftUI
 
 struct AgentWorkspaceView: View {
     @EnvironmentObject private var chatStore: ChatStore
+    @EnvironmentObject private var sessionStore: SessionStore
     @Environment(\.dismiss) private var dismiss
+    @State private var showingAccountSettings = false
 
     var body: some View {
         NavigationStack {
@@ -14,7 +16,9 @@ struct AgentWorkspaceView: View {
                     } else {
                         AgentWorkspaceHeader()
                             .environmentObject(chatStore)
-                        AgentWorkspaceSetupPanel()
+                        AgentWorkspaceSetupPanel {
+                            showingAccountSettings = true
+                        }
                     }
                 }
                 .padding(.horizontal, 18)
@@ -31,6 +35,11 @@ struct AgentWorkspaceView: View {
                         dismiss()
                     }
                 }
+            }
+            .sheet(isPresented: $showingAccountSettings) {
+                AccountSettingsView(initialDeepLink: .ironclawAgent, onRunSetupAgain: {})
+                    .environmentObject(chatStore)
+                    .environmentObject(sessionStore)
             }
         }
         .platformLargeDetent()
@@ -53,7 +62,7 @@ private struct AgentWorkspaceHeader: View {
                     Text("Connect Agent")
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.primary)
-                    Text("Connect a hosted IronClaw workstation, then launch repo, research, and code tasks from your phone.")
+                    Text("Connect Hosted IronClaw, then launch repo, research, and code tasks from your phone.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -61,7 +70,7 @@ private struct AgentWorkspaceHeader: View {
             }
 
             ChipFlowLayout(spacing: 7, lineSpacing: 7) {
-                StatusChip(title: chatStore.ironclawRemoteWorkstationAvailable ? "Workstation on" : "Workstation off", symbolName: "server.rack", isPrimary: chatStore.ironclawRemoteWorkstationAvailable)
+                StatusChip(title: chatStore.ironclawRemoteWorkstationAvailable ? "Hosted on" : "Hosted off", symbolName: "server.rack", isPrimary: chatStore.ironclawRemoteWorkstationAvailable)
                 StatusChip(title: chatStore.ironclawToolNames.isEmpty ? "Shell + git" : "\(chatStore.ironclawToolNames.count) tools", symbolName: "terminal", isPrimary: chatStore.ironclawRemoteWorkstationAvailable)
                 StatusChip(title: chatStore.ironclawTokenConfigured ? "Token saved" : "Token needed", symbolName: "key", isPrimary: false)
                 StatusChip(title: "Phone controlled", symbolName: "iphone", isPrimary: false)
@@ -71,15 +80,25 @@ private struct AgentWorkspaceHeader: View {
 }
 
 private struct AgentWorkspaceSetupPanel: View {
+    let onConnectHostedIronclaw: () -> Void
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Connect IronClaw", systemImage: "server.rack")
+            Label("Connect Agent", systemImage: "server.rack")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.primary)
-            Text("Add a hosted HTTPS endpoint and token in Account settings. Local LAN gateways are not shown as phone-ready routes.")
+            Text("Add a Hosted IronClaw URL and token in Account settings. Local LAN gateways are not shown as phone-ready routes.")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            Button {
+                onConnectHostedIronclaw()
+            } label: {
+                Label("Connect Hosted IronClaw", systemImage: "point.3.connected.trianglepath.dotted")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.brandBlue)
         }
         .padding(12)
         .frame(maxWidth: 460, alignment: .leading)
@@ -101,7 +120,7 @@ private struct AgentWorkspacePrinciples: View {
 
     private let rows: [Principle] = [
         Principle(title: "Ask", symbolName: "text.badge.plus", detail: "If a repo, issue, or task brief is missing, the agent asks before mutating anything."),
-        Principle(title: "Inspect", symbolName: "magnifyingglass", detail: "The workstation checks files, git status, stack, and safe test commands first."),
+        Principle(title: "Inspect", symbolName: "magnifyingglass", detail: "Hosted IronClaw checks files, git status, stack, and safe test commands first."),
         Principle(title: "Report", symbolName: "doc.text", detail: "Every run should return commands, changed files, tests, and remaining risk.")
     ]
 
@@ -219,7 +238,7 @@ private struct AgentMissionControlPanel: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(chatStore.isTestingIronclawWorkstation)
-                .accessibilityLabel("Verify IronClaw workstation")
+                .accessibilityLabel("Check Hosted IronClaw")
             }
         }
     }
@@ -340,7 +359,7 @@ private struct AgentMissionControlPanel: View {
                 Button {
                     launch()
                 } label: {
-                    Label("Run", systemImage: "arrow.up")
+                    Label("Review & Run", systemImage: "arrow.up")
                         .font(.caption.weight(.semibold))
                         .labelStyle(.titleAndIcon)
                         .foregroundStyle(Color.brandBlack)
@@ -350,7 +369,7 @@ private struct AgentMissionControlPanel: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(trimmedMissionBrief.isEmpty)
-                .accessibilityLabel("Launch IronClaw agent")
+                .accessibilityLabel("Review and run Agent")
             }
         }
         .padding(14)
@@ -483,7 +502,7 @@ private struct AgentMissionControlPanel: View {
 
     private var agentReadinessTitle: String {
         if chatStore.isTestingIronclawWorkstation {
-            return "Checking hosted workstation"
+            return "Checking Hosted IronClaw"
         }
         if availableCapabilities.isEmpty {
             return "Describe the outcome; the app will pick the route"
@@ -623,7 +642,7 @@ private struct IronclawAgentReadinessPanel: View {
             }
             .buttonStyle(.plain)
             .disabled(chatStore.isTestingIronclawWorkstation || !chatStore.ironclawRemoteWorkstationAvailable)
-            .accessibilityLabel("Verify IronClaw tools")
+            .accessibilityLabel("Check Hosted IronClaw tools")
         }
         .padding(12)
         .frame(maxWidth: 460, alignment: .leading)
@@ -669,7 +688,7 @@ private struct IronclawAgentReadinessPanel: View {
         }
         if let verifiedAt = chatStore.ironclawLastVerifiedAt {
             if chatStore.ironclawToolNames.isEmpty {
-                return "Shell and git verified at \(verifiedAt.formatted(date: .omitted, time: .shortened))"
+                return "Shell and git checked at \(verifiedAt.formatted(date: .omitted, time: .shortened))"
             }
             return "\(chatStore.ironclawToolNames.count) tools: \(toolbeltSummary)"
         }
@@ -677,9 +696,9 @@ private struct IronclawAgentReadinessPanel: View {
             return "\(chatStore.ironclawToolNames.count) tools available: \(toolbeltSummary)"
         }
         if chatStore.ironclawRemoteWorkstationAvailable {
-            return "Hosted endpoint connected; tools need verification"
+            return "Hosted IronClaw connected; tools need a check"
         }
-        return "Hosted endpoint not connected"
+        return "Hosted IronClaw not connected"
     }
 
     private var toolbeltSummary: String {
@@ -695,7 +714,7 @@ private struct IronclawAgentReadinessPanel: View {
         let present = labels.compactMap { name, label in
             available.contains(name) ? label : nil
         }
-        return present.isEmpty ? "toolbelt verified" : present.joined(separator: " · ")
+        return present.isEmpty ? "toolbelt checked" : present.joined(separator: " · ")
     }
 
 }

@@ -29,6 +29,9 @@ enum BriefingSharedStore {
     /// out-of-process extension and the app can both reach it.
     static let pendingShareFileName = "pending-share.json"
 
+    /// Files/images copied by the share extension before the app picks them up.
+    static let pendingShareAttachmentsDirectoryName = "pending-share-attachments"
+
     /// Shared App Group container, or `nil` if the entitlement is missing (e.g.
     /// a stripped build). Callers fall back to a local directory.
     static func containerURL() -> URL? {
@@ -43,21 +46,62 @@ enum BriefingSharedStore {
     }
 }
 
-/// A single item handed off from the share extension to the app: the selected
-/// text or URL the user shared, plus when it was captured. Tiny and Codable so
+/// A copied file/image handed off from the share extension to the app. The
+/// `relativePath` is rooted at the shared `NEARPrivateChat` directory so the
+/// JSON never needs to store absolute App Group paths.
+struct PendingSharedAttachment: Codable, Equatable {
+    var fileName: String
+    var typeIdentifier: String?
+    var relativePath: String
+    var byteCount: Int?
+
+    init(
+        fileName: String,
+        typeIdentifier: String? = nil,
+        relativePath: String,
+        byteCount: Int? = nil
+    ) {
+        self.fileName = fileName
+        self.typeIdentifier = typeIdentifier
+        self.relativePath = relativePath
+        self.byteCount = byteCount
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case fileName, typeIdentifier, relativePath, byteCount
+    }
+
+    // Forgiving decode: incomplete attachment entries are ignored by readers.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.fileName = (try? c.decode(String.self, forKey: .fileName)) ?? "Shared file"
+        self.typeIdentifier = try? c.decode(String.self, forKey: .typeIdentifier)
+        self.relativePath = (try? c.decode(String.self, forKey: .relativePath)) ?? ""
+        self.byteCount = try? c.decode(Int.self, forKey: .byteCount)
+    }
+}
+
+/// A single item handed off from the share extension to the app: selected text,
+/// URLs, copied files/images, and when they were captured. Tiny and Codable so
 /// the extension (which never links the app's full model graph) can write it
 /// and the app can read it. Both targets compile this file.
 struct PendingSharedItem: Codable, Equatable {
     var text: String
     var createdAt: Date
+    var attachments: [PendingSharedAttachment]
 
-    init(text: String, createdAt: Date = Date()) {
+    init(
+        text: String,
+        createdAt: Date = Date(),
+        attachments: [PendingSharedAttachment] = []
+    ) {
         self.text = text
         self.createdAt = createdAt
+        self.attachments = attachments
     }
 
     enum CodingKeys: String, CodingKey {
-        case text, createdAt
+        case text, createdAt, attachments
     }
 
     // Forgiving decode: a file written by an older/newer build still loads.
@@ -65,6 +109,7 @@ struct PendingSharedItem: Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.text = (try? c.decode(String.self, forKey: .text)) ?? ""
         self.createdAt = (try? c.decode(Date.self, forKey: .createdAt)) ?? Date()
+        self.attachments = (try? c.decode([PendingSharedAttachment].self, forKey: .attachments)) ?? []
     }
 }
 
@@ -72,9 +117,46 @@ struct PendingSharedItem: Codable, Equatable {
 /// calls `write`; the app calls `read` then `clear` on activation. A `fileURL`
 /// is injectable so unit tests don't need the real App Group container.
 enum PendingShareStore {
+    static let maxPendingAttachmentBytes = 10 * 1024 * 1024
+
     /// Default hand-off file location inside the App Group container.
     static func defaultFileURL() -> URL? {
         BriefingSharedStore.sharedFileURL(BriefingSharedStore.pendingShareFileName)
+    }
+
+    static func sharedDirectoryURL(for fileURL: URL? = defaultFileURL()) -> URL? {
+        if let fileURL {
+            return fileURL.deletingLastPathComponent()
+        }
+        return BriefingSharedStore.containerURL()?
+            .appendingPathComponent(BriefingSharedStore.directoryName, isDirectory: true)
+    }
+
+    static func attachmentDirectoryURL(for fileURL: URL? = defaultFileURL()) -> URL? {
+        sharedDirectoryURL(for: fileURL)?
+            .appendingPathComponent(
+                BriefingSharedStore.pendingShareAttachmentsDirectoryName,
+                isDirectory: true
+            )
+    }
+
+    static func relativeAttachmentPath(for fileName: String) -> String {
+        "\(BriefingSharedStore.pendingShareAttachmentsDirectoryName)/\(UUID().uuidString)-\(fileName)"
+    }
+
+    static func fileURL(for attachment: PendingSharedAttachment, handoffFileURL: URL? = defaultFileURL()) -> URL? {
+        let relativePath = attachment.relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !relativePath.isEmpty,
+              !relativePath.hasPrefix("/"),
+              !relativePath.split(separator: "/").contains(where: { $0 == ".." }),
+              let directory = sharedDirectoryURL(for: handoffFileURL) else {
+            return nil
+        }
+        let candidate = directory.appendingPathComponent(relativePath)
+            .standardizedFileURL
+        let directoryPath = directory.standardizedFileURL.path
+        guard candidate.path.hasPrefix(directoryPath) else { return nil }
+        return candidate
     }
 
     /// Persists a pending shared item, creating the container subfolder if
@@ -102,7 +184,15 @@ enum PendingShareStore {
               let item = try? JSONDecoder.briefingSnapshot.decode(PendingSharedItem.self, from: data)
         else { return nil }
         let trimmed = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
+        let readableAttachments = item.attachments.filter {
+            Self.fileURL(for: $0, handoffFileURL: fileURL) != nil
+        }
+        guard !trimmed.isEmpty || !readableAttachments.isEmpty else { return nil }
+        if readableAttachments.count != item.attachments.count {
+            var repaired = item
+            repaired.attachments = readableAttachments
+            return repaired
+        }
         return item
     }
 

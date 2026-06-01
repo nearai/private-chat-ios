@@ -11,19 +11,19 @@ enum UserSetupUseCase: String, CaseIterable, Codable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .privateChat: "Private Chat"
-        case .research: "Research"
-        case .buildAgents: "Build Agents"
-        case .teamProjects: "Projects"
+        case .privateChat: "Ask privately"
+        case .research: "Research with sources"
+        case .buildAgents: "Run an Agent"
+        case .teamProjects: "Work in a Project"
         }
     }
 
     var subtitle: String {
         switch self {
-        case .privateChat: "Fast private answers, web when useful."
-        case .research: "Current sources, citations, and memos."
-        case .buildAgents: "Plan code, PR, and test work from project context."
-        case .teamProjects: "Files, links, saved outputs, and shared context."
+        case .privateChat: "Fast private answers, web only when useful."
+        case .research: "Current sources, citations, and saveable memos."
+        case .buildAgents: "Plan code, PR, and test work from Project context."
+        case .teamProjects: "Files, links, notes, and shared context."
         }
     }
 
@@ -43,9 +43,9 @@ enum UserSetupUseCase: String, CaseIterable, Codable, Identifiable, Hashable {
         case .research:
             return "Research Room"
         case .buildAgents:
-            return "Build Workspace"
+            return "Build Project"
         case .teamProjects:
-            return "Project Workspace"
+            return "Project Hub"
         }
     }
 
@@ -54,11 +54,11 @@ enum UserSetupUseCase: String, CaseIterable, Codable, Identifiable, Hashable {
         case .privateChat:
             return "Keep answers direct, private, and practical. Use live web only when the question depends on current facts."
         case .research:
-            return "Prioritize dated sources, citations, contradictions, and a concise recommendation. Save strong outputs as project notes."
+            return "Prioritize dated sources, citations, contradictions, and a concise recommendation. Save strong outputs as Project notes."
         case .buildAgents:
-            return "Use project files, pull requests, issues, and source links to plan careful code work. Do not suggest destructive changes unless explicitly requested."
+            return "Use Project files, pull requests, issues, and source links to plan careful code work. Do not suggest destructive changes unless explicitly requested."
         case .teamProjects:
-            return "Use project files, saved source links, memory, and saved outputs before broad web. Keep context tidy and ask only when a missing source blocks progress."
+            return "Use Project files, saved source links, notes, and saved outputs before broad web. Keep context tidy and ask only when a missing source blocks progress."
         }
     }
 
@@ -71,7 +71,7 @@ enum UserSetupUseCase: String, CaseIterable, Codable, Identifiable, Hashable {
         case .buildAgents:
             return "Plan the first repo task: what to inspect, what to change, and which focused tests should run."
         case .teamProjects:
-            return "Help me set up this project workspace: what files, links, instructions, and first chat should I add?"
+            return "Help me set up this Project: what files, links, instructions, and first chat should I add?"
         }
     }
 
@@ -146,8 +146,8 @@ enum UserSetupContextStyle: String, CaseIterable, Codable, Identifiable, Hashabl
     var title: String {
         switch self {
         case .simple: "Automatic"
-        case .project: "Project Memory"
-        case .files: "Files First"
+        case .project: "Project context"
+        case .files: "Files first"
         }
     }
 
@@ -202,7 +202,7 @@ enum UserSetupExperienceMode: String, CaseIterable, Codable, Identifiable, Hasha
 
     var subtitle: String {
         switch self {
-        case .beginner: "Start with private chat, sources, and proof. Advanced routes stay available later."
+        case .beginner: "Start with private chat, sources, and proof display. Optional capabilities stay available later."
         case .power: "Show agents, Council, Cloud models, and developer controls from day one."
         }
     }
@@ -228,7 +228,7 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
         case .privateQuestion: "Private question"
         case .researchBrief: "Research brief"
         case .agentMission: "Agent mission"
-        case .projectWorkspace: "Project workspace"
+        case .projectWorkspace: "Project"
         }
     }
 
@@ -241,7 +241,7 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
         case .agentMission:
             return "Launch a phone-safe agent planning draft."
         case .projectWorkspace:
-            return "Open a project-first workspace draft with saved context."
+            return "Open a project-first draft with saved context."
         }
     }
 
@@ -254,7 +254,7 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
         case .agentMission:
             return "Plan a phone-launched agent task for a repo or research project"
         case .projectWorkspace:
-            return "Set up a shared project workspace with files, links, and reusable instructions"
+            return "Set up a shared Project with files, links, and reusable instructions"
         }
     }
 
@@ -263,7 +263,7 @@ enum UserSetupStarterPreset: String, CaseIterable, Codable, Identifiable, Hashab
         case .privateQuestion: "Help me think through a private question."
         case .researchBrief: "Create a sourced brief on the latest developments in AI."
         case .agentMission: "Plan a phone-launched agent task for a repo or research project."
-        case .projectWorkspace: "Help me set up this project workspace: what files, links, instructions, and first chat should I add?"
+        case .projectWorkspace: "Help me set up this Project: what files, links, instructions, and first chat should I add?"
         }
     }
 
@@ -490,7 +490,7 @@ struct UserSetupProfile: Codable, Hashable {
         if useCases.contains(.teamProjects) {
             return UserSetupUseCase.teamProjects.starterProjectName
         }
-        return contextStyle == .project ? "Project Workspace" : nil
+        return contextStyle == .project ? "Project Hub" : nil
     }
 
     var setupProjectInstructions: String {
@@ -505,7 +505,7 @@ struct UserSetupProfile: Codable, Hashable {
         var sections: [String] = []
         if orderedUseCases.count > 1 {
             let titles = orderedUseCases.map(\.title).joined(separator: ", ")
-            sections.append("This workspace was configured for: \(titles).")
+            sections.append("This Project was configured for: \(titles).")
         }
         sections.append(contentsOf: instructionBlocks)
         if !goal.isEmpty {
@@ -739,7 +739,7 @@ struct UserSetupProfile: Codable, Hashable {
                         prompt: "What files, links, notes, or instructions should I add first for this goal: \(goal)"
                     ),
                     SetupPromptSuggestion(
-                        title: "First workspace chat",
+                        title: "First Project chat",
                         symbolName: "bubble.left.and.bubble.right",
                         prompt: "Draft the best first project chat prompt for this goal: \(goal)"
                     )
@@ -749,7 +749,7 @@ struct UserSetupProfile: Codable, Hashable {
                 SetupPromptSuggestion(
                     title: "Project setup",
                     symbolName: "folder.badge.gearshape",
-                    prompt: "Help me set up this project workspace: what files, links, instructions, and first chat should I add?"
+                    prompt: "Help me set up this Project: what files, links, instructions, and first chat should I add?"
                 ),
                 SetupPromptSuggestion(
                     title: "Find missing context",
@@ -814,7 +814,7 @@ struct UserSetupProfile: Codable, Hashable {
         case .buildAgents:
             primaryPrompt = goal.isEmpty ? "Plan the first repo task" : "Plan the first repo task for this goal"
         case .teamProjects:
-            primaryPrompt = goal.isEmpty ? "Help me set up this project workspace" : "Help me organize this project and next actions for this goal"
+            primaryPrompt = goal.isEmpty ? "Help me set up this Project" : "Help me organize this Project and next actions for this goal"
         }
 
         var qualifiers: [String] = []
@@ -860,7 +860,7 @@ struct UserSetupProfile: Codable, Hashable {
         case .buildAgents:
             return "Start plan"
         case .teamProjects:
-            return "Start workspace"
+            return "Start Project"
         }
     }
 
@@ -871,7 +871,7 @@ struct UserSetupProfile: Codable, Hashable {
 
         var seeds = [
             SetupWorkspaceSeed(
-                title: "Workspace",
+                title: "Project",
                 detail: "\(starterProjectName) opens as the active project for your first chats.",
                 symbolName: "folder.badge.plus"
             ),
@@ -953,6 +953,32 @@ struct UserSetupProfile: Codable, Hashable {
         self.useCase = useCases.setupPrimaryUseCase
     }
 
+    mutating func applyUseCaseSelectionDefaults(
+        editedWeb: Bool,
+        editedIronclaw: Bool,
+        editedCouncil: Bool,
+        editedContextStyle: Bool
+    ) {
+        let selected = Set(useCases)
+        useCase = useCases.setupPrimaryUseCase
+        if !editedWeb {
+            wantsWeb = selected.contains(.research)
+        }
+        if !editedIronclaw {
+            wantsIronclaw = experienceMode == .power && selected.contains(.buildAgents)
+        }
+        if !editedCouncil {
+            wantsCouncil = experienceMode == .power && selected.contains(.research) && !wantsIronclaw
+        }
+        if !editedContextStyle {
+            if selected.contains(.research) || selected.contains(.buildAgents) || selected.contains(.teamProjects) {
+                contextStyle = .project
+            } else {
+                contextStyle = .simple
+            }
+        }
+    }
+
     mutating func applyStarterPreset(_ preset: UserSetupStarterPreset) {
         useCase = preset.useCase
         useCases = [preset.useCase]
@@ -984,7 +1010,7 @@ enum AppSetupModelRoute: String, Codable, Hashable {
         switch self {
         case .privateModel: "Private model"
         case .council: "LLM Council"
-        case .ironclaw: "IronClaw agent"
+        case .ironclaw: "Agent"
         }
     }
 
@@ -1106,7 +1132,7 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
     }
 
     var launchCardMetadata: [String] {
-        var items = [modelRoute.title, focusMode.title]
+        var items = [modelRoute.title, focusMode.setupMetadataTitle]
         if let starterProjectName {
             items.append(starterProjectName)
         }
@@ -1230,7 +1256,7 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
         case .buildAgents:
             return "Plan a build task"
         case .teamProjects:
-            return "Create a project workspace"
+            return "Create a Project"
         }
     }
 
@@ -1294,6 +1320,15 @@ struct AppSetupPlan: Codable, Hashable, Identifiable {
     }
 }
 
+private extension ChatSourceMode {
+    var setupMetadataTitle: String {
+        switch self {
+        case .all: "Project"
+        default: title
+        }
+    }
+}
+
 struct AppSetupRouteDetailContent: Codable, Hashable {
     let title: String
     let summary: String
@@ -1308,21 +1343,25 @@ extension AppSetupPlan {
         case .privateModel:
             guard let label = labels.first else { return nil }
             return AppSetupRouteDetailContent(
-                title: "Starter model",
-                summary: label,
-                symbolName: "sparkles"
+                title: "NEAR Private route",
+                summary: "\(label) · attested when proof is fresh.",
+                symbolName: "lock.shield"
             )
         case .council:
             guard !labels.isEmpty else { return nil }
             return AppSetupRouteDetailContent(
                 title: labels.count > 2 ? "Council lineup (\(labels.count))" : "Council lineup",
-                summary: labels.joined(separator: " + "),
+                summary: "\(labels.joined(separator: " + ")) · proof depends on the selected models.",
                 symbolName: "square.grid.2x2"
             )
         case .ironclaw:
+            let usesHosted = expectedRouteModelIDs.contains(ModelOption.ironclawModelID)
+            let label = labels.first ?? (usesHosted ? "Hosted IronClaw" : "IronClaw Mobile")
             return AppSetupRouteDetailContent(
-                title: "Starter runtime",
-                summary: labels.first ?? "IronClaw Mobile",
+                title: "IronClaw route",
+                summary: usesHosted
+                    ? "\(label) · Hosted Agent connection sends work outside this phone."
+                    : "\(label) · phone agent route, outside NEAR Private proof.",
                 symbolName: "terminal"
             )
         }
@@ -1365,7 +1404,7 @@ extension AppSetupPlan {
 
         return CapabilityNextStep(
             title: "Finish agent setup",
-            detail: "This quick start opens private chat first. Connect a hosted IronClaw endpoint to use repo, shell, or approval-gated agent work.",
+            detail: "This quick start opens private chat first. Connect Hosted IronClaw to use repo, shell, or approval-gated Agent work.",
             actionTitle: "Connect Agent",
             kind: .openAgent
         )
@@ -1465,10 +1504,10 @@ enum SetupRestorePlanner {
             if runtime.selectedProjectName != starterProjectName {
                 return SetupRestoreState(
                     needsRestore: true,
-                    summaryText: "\"\(starterProjectName)\" is not active right now. Restore saved setup to reopen that workspace.",
+                    summaryText: "\"\(starterProjectName)\" is not active right now. Restore saved setup to reopen that Project.",
                     differences: [
                         SetupRestoreDifference(
-                            title: "Workspace",
+                            title: "Project",
                             savedValue: starterProjectName,
                             currentValue: runtime.selectedProjectName ?? "No active project"
                         )
@@ -1481,7 +1520,7 @@ enum SetupRestorePlanner {
                 summaryText: "A project is active, but your saved setup starts without project memory.",
                 differences: [
                     SetupRestoreDifference(
-                        title: "Workspace",
+                        title: "Project",
                         savedValue: "No active project",
                         currentValue: runtime.selectedProjectName ?? "No active project"
                     )
@@ -1667,7 +1706,7 @@ enum CapabilityNextStepPlanner {
         case .hostedIronclawEndpointRequired:
             return CapabilityNextStep(
                 title: "Connect hosted agent",
-                detail: "Phone-safe agent skills are ready, but workstation routes need a hosted HTTPS IronClaw endpoint.",
+                detail: "Phone-safe Agent skills are ready, but hosted Agent routes need a Hosted IronClaw URL.",
                 actionTitle: "Connect Agent",
                 kind: .openAgent
             )
@@ -1675,8 +1714,8 @@ enum CapabilityNextStepPlanner {
             if autoCouncilReady {
                 return CapabilityNextStep(
                     title: "Restore the Council lineup",
-                    detail: "Auto-Council can repopulate a working lineup so you can compare models without rebuilding it by hand.",
-                    actionTitle: "Use Auto-Council",
+                    detail: "Recommended Council can repopulate a working lineup so you can compare models without rebuilding it by hand.",
+                    actionTitle: "Use recommended Council",
                     kind: .useAutoCouncil
                 )
             }
@@ -1687,7 +1726,7 @@ enum CapabilityNextStepPlanner {
         if setupPlan.agentEnabled && !currentRoute.isIronclawRoute && !hostedIronclawAvailable {
             return CapabilityNextStep(
                 title: "Finish agent setup",
-                detail: "Your defaults expect agent work. Connect a hosted workstation when you need repo, shell, or approval-gated tasks.",
+                detail: "Your defaults expect Agent work. Connect Hosted IronClaw when you need repo, shell, or approval-gated tasks.",
                 actionTitle: "Connect Agent",
                 kind: .openAgent
             )
@@ -1695,9 +1734,9 @@ enum CapabilityNextStepPlanner {
 
         if setupPlan.councilEnabled && autoCouncilReady {
             return CapabilityNextStep(
-                title: "Try Auto-Council",
+                title: "Try recommended Council",
                 detail: "Your defaults favor multi-model comparison. Start with the ready lineup and customize later if needed.",
-                actionTitle: "Use Auto-Council",
+                actionTitle: "Use recommended Council",
                 kind: .useAutoCouncil
             )
         }
@@ -1706,7 +1745,7 @@ enum CapabilityNextStepPlanner {
             return CapabilityNextStep(
                 title: "Check private proof",
                 detail: "Private chat is ready now. Fetch or refresh proof when you need signed route evidence for the current model.",
-                actionTitle: "Open Security",
+                actionTitle: "Open Proof report",
                 kind: .openSecurity
             )
         }

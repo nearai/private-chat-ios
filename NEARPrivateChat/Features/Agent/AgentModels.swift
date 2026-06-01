@@ -75,8 +75,8 @@ struct IronclawSkillProfile: Codable, Identifiable, Hashable {
             )
         case "project-setup":
             return prompt(
-                "Set up this project workspace.",
-                "Turn this into a tracked workspace",
+                "Set up this Project.",
+                "Turn this into a tracked Project",
                 suffix: "Identify the files, links, instructions, and first task the project should contain, then suggest the cleanest next action."
             )
         case "developer-setup":
@@ -228,7 +228,7 @@ enum IronclawSkillCatalog {
         IronclawSkillProfile(
             id: "project-setup",
             title: "Project Setup",
-            summary: "Turn a repo or new idea into a tracked workspace.",
+            summary: "Turn a repo or new idea into a tracked Project.",
             symbolName: "folder.badge.gearshape",
             keywords: ["setup", "set up", "clone", "bootstrap", "new project", "repo"]
         ),
@@ -242,7 +242,7 @@ enum IronclawSkillCatalog {
         IronclawSkillProfile(
             id: "new-project",
             title: "New Project",
-            summary: "Shape a fresh workspace, scope, and first milestone.",
+            summary: "Shape a fresh Project, scope, and first milestone.",
             symbolName: "sparkles.rectangle.stack",
             keywords: ["new project", "start a project", "greenfield", "workspace", "organize project"]
         ),
@@ -386,7 +386,7 @@ enum IronclawSkillCatalog {
         guard !skills.isEmpty else { return "" }
         let lines = skills.map { "- \($0.id): \($0.summary)" }.joined(separator: "\n")
         return """
-        IronClaw skills to consider:
+        Agent skills to consider:
         \(lines)
 
         Select the useful skills internally. Do not print the routing unless the user asks how the agent chose its approach.
@@ -465,7 +465,7 @@ struct IronclawPendingGate: Codable, Hashable, Identifiable {
         }
         if description.localizedCaseInsensitiveContains("gate: authentication") ||
             description.localizedCaseInsensitiveContains("requires authentication") {
-            return "Add a credential for \(authenticationDisplayName) so the hosted IronClaw workstation can continue this tool call."
+            return "Add a credential for \(authenticationDisplayName) so Hosted IronClaw can continue this tool call."
         }
         return description
     }
@@ -498,7 +498,7 @@ struct IronclawPendingGate: Codable, Hashable, Identifiable {
 
     var alwaysUnavailableReason: String? {
         guard allowsAlways, isHighRiskAlwaysApproval else { return nil }
-        return "Always is disabled on phone for powerful workstation tools. Approve each run so command, network, file, and credential access stays scoped."
+        return "Always is disabled on phone for powerful hosted tools. Approve each run so command, network, file, and credential access stays scoped."
     }
 
     private static func redactedParameterPreview(_ parameters: String) -> String {
@@ -797,16 +797,16 @@ struct IronclawSettings: Codable, Hashable {
     var endpointValidationMessage: String? {
         let trimmed = normalizedBaseURL
         guard !trimmed.isEmpty else {
-            return "Add a hosted HTTPS IronClaw endpoint first."
+            return "Add a Hosted IronClaw URL first."
         }
         guard let url = URL(string: trimmed),
               let scheme = url.scheme?.lowercased(),
               let host = url.host?.lowercased(),
               !host.isEmpty else {
-            return "Enter a valid hosted HTTPS IronClaw endpoint."
+            return "Enter a valid Hosted IronClaw HTTPS URL."
         }
         if Self.retiredLocalDefaults.contains(trimmed) || !URLSecurity.isPublicHost(host) {
-            return "Use a hosted HTTPS IronClaw endpoint. LAN gateways are local development only."
+            return "Use a Hosted IronClaw HTTPS URL. LAN gateways are local development only."
         }
         guard scheme == "https" else {
             return "IronClaw on iPhone requires HTTPS, not a local HTTP gateway."

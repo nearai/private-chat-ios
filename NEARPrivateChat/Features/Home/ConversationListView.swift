@@ -15,6 +15,8 @@ struct ConversationListView: View {
     @State private var editingProject: ChatProject?
     @State private var showingNewBriefing = false
     @State private var openedBriefing: Briefing?
+    @State private var homeLaunchDraft = ""
+    @State private var selectedHomeLaunchSuggestionID: String?
     let onOpenChat: () -> Void
     let onStartNewChat: () -> Void
     let onRunSetupAgain: () -> Void
@@ -91,11 +93,9 @@ struct ConversationListView: View {
     }
 
     private var pendingSetupLaunchCard: SetupLaunchCardState? {
-        guard let savedSetupState,
-              UserSetupStorage.hasPendingLaunchCard(for: savedSetupState.accountID) else {
-            return nil
-        }
-        return savedSetupState
+        // Setup remains available from Home commands, Account, and saved skills
+        // in the workboard, but stale pending setup state must not preempt Home.
+        nil
     }
 
     private var savedSetupState: SetupLaunchCardState? {
@@ -123,27 +123,14 @@ struct ConversationListView: View {
     }
 
     private var emptyHomeSetupState: SetupLaunchCardState? {
-        guard searchQuery.isEmpty,
-              filteredConversations.isEmpty,
-              filteredProjects.isEmpty,
-              filteredProjectContextMatches.isEmpty,
-              pendingSetupLaunchCard == nil else {
-            return nil
-        }
-        return savedSetupState
+        nil
     }
 
     private var shouldShowFirstRunSetupCard: Bool {
-        guard searchQuery.isEmpty,
-              filteredConversations.isEmpty,
-              filteredProjects.isEmpty,
-              filteredProjectContextMatches.isEmpty,
-              pendingSetupLaunchCard == nil,
-              savedSetupState == nil,
-              let accountID = sessionStore.setupAccountID else {
-            return false
-        }
-        return UserSetupStorage.needsFirstRunSetup(for: accountID)
+        // The v2 Home surface is the orchestration workboard. First-run setup is
+        // available from Home and Account, but it should never preempt Home or
+        // make the app feel like the older setup-led flow.
+        false
     }
 
     private var shouldShowHomeTrustCard: Bool {
@@ -151,7 +138,7 @@ struct ConversationListView: View {
     }
 
     private var shouldPrioritizeSetupOverToday: Bool {
-        pendingSetupLaunchCard != nil || emptyHomeSetupState != nil || shouldShowFirstRunSetupCard
+        false
     }
 
     private var homeTrustCardViewModel: ProofCapsuleViewModel {
@@ -159,7 +146,7 @@ struct ConversationListView: View {
             return ProofCapsuleViewModel(
                 state: .proxied,
                 title: "Privacy proxy route",
-                detail: "NEAR AI Cloud anonymizes your prompt to the provider before forwarding. Anonymized routes do not carry NEAR Private verification.",
+                detail: "NEAR AI Cloud anonymizes your prompt to the provider before forwarding. Anonymized routes do not carry NEAR Private proof.",
                 badge: "Privacy proxy",
                 symbolName: "eye.slash"
             )
@@ -169,7 +156,7 @@ struct ConversationListView: View {
             return ProofCapsuleViewModel(
                 state: .unknown,
                 title: "Hosted agent route",
-                detail: "Hosted IronClaw uses its own trust boundary. Open Security when you need the current route summary before handing work off.",
+                detail: "Hosted IronClaw uses its own trust boundary. Open Proof report when you need the current route summary before handing work off.",
                 badge: "Hosted route",
                 symbolName: "terminal"
             )
@@ -178,9 +165,9 @@ struct ConversationListView: View {
         if chatStore.selectedModelOption?.isIronclawMobileRuntime == true {
             return ProofCapsuleViewModel(
                 state: .private_,
-                title: "Phone agent route",
+                title: "IronClaw Mobile route",
                 detail: "IronClaw Mobile runs on the phone. Switch back to a NEAR Private model whenever you need signed private-route proof.",
-                badge: "On-device agent",
+                badge: "On-device Agent",
                 symbolName: "iphone"
             )
         }
@@ -220,7 +207,7 @@ struct ConversationListView: View {
         if chatStore.isLoadingAttestation {
             return "Checking proof"
         }
-        return shouldFetchHomeAttestation ? "Fetch proof" : "Open Security"
+        return shouldFetchHomeAttestation ? "Fetch proof" : "Open Proof report"
     }
 
     private var homeTrustActionSymbolName: String {
@@ -256,18 +243,6 @@ struct ConversationListView: View {
         )
     }
 
-    private var hasProjectSearchResults: Bool {
-        !filteredProjectContextMatches.isEmpty
-    }
-
-    private var hasVisibleProjects: Bool {
-        !filteredProjects.isEmpty
-    }
-
-    private var allHomeHasVisibleContent: Bool {
-        !filteredConversations.isEmpty || hasVisibleProjects || hasProjectSearchResults
-    }
-
     private var homeOrchestrationPlan: HomeOrchestrationPlan {
         HomeOrchestrationPlanner.make(
             briefings: briefingStore.briefings,
@@ -281,8 +256,78 @@ struct ConversationListView: View {
             councilModelNames: chatStore.councilModelNames,
             hostedAgentAvailable: chatStore.ironclawRemoteWorkstationAvailable,
             mobileAgentAvailable: chatStore.agentModels.contains { $0.id == ModelOption.ironclawMobileModelID },
-            setupPlan: savedSetupState?.plan
+            setupPlan: savedSetupState?.plan,
+            includesSetupDefaultsCommand: true
         )
+    }
+
+    private var homeInboxSectionPlan: HomeInboxSectionPlan {
+        HomeInboxSectionPlan(
+            selectedFilter: selectedHomeFilter,
+            searchQuery: searchQuery,
+            activeConversationCount: filteredConversations.count,
+            activeProjectCount: filteredProjects.count,
+            projectContextMatchCount: filteredProjectContextMatches.count,
+            sharedWithMeCount: filteredSharedWithMe.count,
+            archivedConversationCount: filteredArchivedConversations.count,
+            archivedProjectCount: filteredArchivedProjects.count
+        )
+    }
+
+    private var shouldShowDefaultWorkSurface: Bool {
+        selectedHomeFilter == .all && searchQuery.isEmpty
+    }
+
+    private var shouldShowHomeFilterControls: Bool {
+        selectedHomeFilter != .all || !searchQuery.isEmpty
+    }
+
+    private var shouldShowDefaultRecentRail: Bool {
+        shouldShowDefaultWorkSurface && !resumeConversations.isEmpty
+    }
+
+    private var homeLaunchSubtitle: String {
+        if let projectName = chatStore.selectedProject?.name.nilIfBlank {
+            return "\(projectName) context is active. Chat, research, files, trackers, proof, and agent handoff all start from one prompt."
+        }
+        return "Chat, research, files, trackers, proof, and agent handoff all start from one prompt."
+    }
+
+    private var homeLaunchSuggestions: [EmptyChatStarterSuggestion] {
+        Array(EmptyChatStarterCoordinator.suggestions(for: chatStore).prefix(5))
+    }
+
+    private var selectedHomeLaunchSuggestion: EmptyChatStarterSuggestion? {
+        homeLaunchSuggestions.first { $0.id == selectedHomeLaunchSuggestionID }
+    }
+
+    private var homeLaunchActionTitle: String {
+        guard let suggestion = selectedHomeLaunchSuggestion else {
+            return "Prepare chat"
+        }
+        switch suggestion.action {
+        case .agent:
+            return "Prepare agent prompt"
+        case .research:
+            return "Prepare research"
+        case .project:
+            return "Prepare file action"
+        case .council:
+            return "Prepare Council"
+        case .trust:
+            return "Prepare proof view"
+        case .draft:
+            return "Prepare \(suggestion.title.lowercased())"
+        }
+    }
+
+    private var homeLaunchActionSymbolName: String {
+        selectedHomeLaunchSuggestion?.symbolName ?? "arrow.up.right.circle.fill"
+    }
+
+    private var homeLaunchActionEnabled: Bool {
+        selectedHomeLaunchSuggestion != nil ||
+        !homeLaunchDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
@@ -296,7 +341,7 @@ struct ConversationListView: View {
             )
 
             if isSearchVisible || !searchText.isEmpty {
-                SidebarSearchField(text: $searchText, prompt: "Search chats")
+                SidebarSearchField(text: $searchText, prompt: "Search chats, projects, and sources")
                     .padding(.horizontal, 16)
                     .padding(.top, 4)
                     .padding(.bottom, 6)
@@ -305,14 +350,6 @@ struct ConversationListView: View {
 
             ScrollView {
                 LazyVStack(spacing: 14) {
-                    if searchQuery.isEmpty, !shouldPrioritizeSetupOverToday {
-                        HomeOrchestrationSurface(
-                            plan: homeOrchestrationPlan,
-                            onAction: runHomeOrchestrationAction
-                        )
-                        .padding(.top, 12)
-                    }
-
                     if let pendingSetupLaunchCard, searchQuery.isEmpty {
                         SetupLaunchCard(
                             plan: pendingSetupLaunchCard.plan,
@@ -341,7 +378,23 @@ struct ConversationListView: View {
                         .padding(.top, 12)
                     }
 
-                    if hasProjectSearchResults {
+                    if shouldShowHomeFilterControls {
+                        homeFilterControls
+                    }
+
+                    if shouldShowDefaultWorkSurface {
+                        homePromptCaptureCard
+                            .padding(.horizontal, 16)
+                            .padding(.top, 8)
+                    }
+
+                    homeWorkboardSurface
+
+                    if shouldShowDefaultWorkSurface {
+                        homeLibraryShortcuts
+                    }
+
+                    if homeInboxSectionPlan.showsProjectContext {
                         VStack(spacing: 8) {
                             HomeSectionHeader(title: "Project context")
 
@@ -366,7 +419,7 @@ struct ConversationListView: View {
                         .padding(.top, pendingSetupLaunchCard == nil ? 12 : 0)
                     }
 
-                    if hasVisibleProjects {
+                    if homeInboxSectionPlan.showsProjects {
                         VStack(spacing: 8) {
                             HomeSectionHeader(
                                 title: searchQuery.isEmpty ? "Projects" : "Project matches",
@@ -424,7 +477,7 @@ struct ConversationListView: View {
                         .padding(.horizontal, 16)
                     }
 
-                    if filteredConversations.isEmpty {
+                    if homeInboxSectionPlan.showsActiveSetupEmptyState {
                         if let emptyHomeSetupState {
                             VStack(spacing: 14) {
                                 SavedSetupHomeCard(
@@ -467,10 +520,10 @@ struct ConversationListView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 16)
                             .padding(.top, 12)
-                        } else if !allHomeHasVisibleContent {
+                        } else if homeInboxSectionPlan.showsActiveSearchEmptyState {
                             VStack(spacing: 14) {
                                 ClaudeHomeEmptyState(
-                                    title: searchQuery.isEmpty ? "Verifiably Yours." : "No matching chats or projects",
+                                    title: searchQuery.isEmpty ? "Start a private chat" : "No matching chats or projects",
                                     showsAction: searchQuery.isEmpty,
                                     action: openNewChat
                                 )
@@ -483,52 +536,21 @@ struct ConversationListView: View {
                         }
                     }
 
-                    if !filteredConversations.isEmpty {
-                        if hasVisibleProjects || hasProjectSearchResults {
-                            HomeSectionHeader(title: searchQuery.isEmpty ? "Chats" : "Chat matches")
-                                .padding(.horizontal, 16)
+                    if homeInboxSectionPlan.showsConversations {
+                        if shouldShowDefaultRecentRail {
+                            homeRecentChatsSection
+                        } else {
+                            fullChatHistorySection
                         }
-
-                        LazyVStack(spacing: 0) {
-                            ForEach(Array(filteredConversations.enumerated()), id: \.element.id) { index, conversation in
-                                Button {
-                                    openConversation(conversation)
-                                } label: {
-                                    ClaudeThreadRow(
-                                        conversation: conversation,
-                                        preview: previewText(for: conversation),
-                                        isLast: index == filteredConversations.count - 1
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                                .contextMenu {
-                                    Button {
-                                        chatStore.togglePinConversation(conversation)
-                                    } label: {
-                                        Label(conversation.isPinned ? "Unpin" : "Pin", systemImage: conversation.isPinned ? "pin.slash" : "pin")
-                                    }
-                                    Button {
-                                        chatStore.archiveConversation(conversation)
-                                    } label: {
-                                        Label("Archive", systemImage: "archivebox")
-                                    }
-                                    Button(role: .destructive) {
-                                        chatStore.requestDeleteConversation(conversation)
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.top, pendingSetupLaunchCard == nil ? 0 : 4)
-                        .padding(.horizontal, 16)
-                        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(Color.appBorder, lineWidth: 1)
-                        }
-                        .padding(.bottom, 28)
                     }
+
+                    sharedWithMeSection
+
+                    archivedProjectsSection
+
+                    archivedConversationsSection
+
+                    filteredEmptyStateSection
                 }
             }
             .refreshable {
@@ -542,8 +564,21 @@ struct ConversationListView: View {
                 .environmentObject(chatStore)
         }
         .sheet(isPresented: $showingProjectFiles) {
-            ProjectFilesView()
-                .environmentObject(chatStore)
+            ProjectFilesView(
+                onOpenConversation: { conversation in
+                    showingProjectFiles = false
+                    DispatchQueue.main.async {
+                        openConversation(conversation)
+                    }
+                },
+                onStagePrompt: { prompt in
+                    showingProjectFiles = false
+                    DispatchQueue.main.async {
+                        stageProjectPrompt(prompt)
+                    }
+                }
+            )
+            .environmentObject(chatStore)
         }
         .sheet(item: $editingProject) { project in
             EditProjectView(project: project)
@@ -586,6 +621,320 @@ struct ConversationListView: View {
                 await chatStore.refreshSharedWithMe(showErrors: false)
             }
         }
+    }
+
+    private var homeFilterControls: some View {
+        HomeFilterStrip(
+            selectedFilter: $selectedHomeFilter,
+            counts: filterCounts,
+            onSelect: selectHomeFilter
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, searchQuery.isEmpty ? 0 : 12)
+    }
+
+    @ViewBuilder
+    private var homeWorkboardSurface: some View {
+        if homeInboxSectionPlan.showsWorkboard, !shouldPrioritizeSetupOverToday {
+            HomeOrchestrationSurface(
+                plan: homeOrchestrationPlan,
+                onAction: runHomeOrchestrationAction
+            )
+        }
+    }
+
+    private var homeLibraryShortcuts: some View {
+        HStack(spacing: 8) {
+            homeLibraryShortcut(
+                title: "Shared",
+                count: filteredSharedWithMe.count,
+                symbolName: "person.2",
+                filter: .shared
+            )
+
+            homeLibraryShortcut(
+                title: "Archive",
+                count: filteredArchivedConversations.count + filteredArchivedProjects.count,
+                symbolName: "archivebox",
+                filter: .archived
+            )
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private func homeLibraryShortcut(title: String, count: Int, symbolName: String, filter: HomeFilter) -> some View {
+        Button {
+            AppHaptics.selection()
+            selectHomeFilter(filter)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: symbolName)
+                    .font(.caption.weight(.bold))
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Text("\(count)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.textTertiary)
+                    .lineLimit(1)
+            }
+            .foregroundStyle(Color.textSecondary)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity)
+            .frame(height: 40)
+            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.appBorder, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title), \(count) items")
+    }
+
+    private var homeRecentChatsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HomeSectionHeader(title: "Recent chats")
+            HomeRecentsRow(
+                conversations: resumeConversations,
+                projectNameForConversation: projectName(for:),
+                onOpenConversation: openConversation
+            )
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 28)
+    }
+
+    private var fullChatHistorySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HomeSectionHeader(title: searchQuery.isEmpty ? "Chat history" : "Chat matches")
+
+            LazyVStack(spacing: 0) {
+                ForEach(Array(filteredConversations.enumerated()), id: \.element.id) { index, conversation in
+                    Button {
+                        openConversation(conversation)
+                    } label: {
+                        ClaudeThreadRow(
+                            conversation: conversation,
+                            preview: previewText(for: conversation),
+                            isLast: index == filteredConversations.count - 1
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button {
+                            chatStore.togglePinConversation(conversation)
+                        } label: {
+                            Label(conversation.isPinned ? "Unpin" : "Pin", systemImage: conversation.isPinned ? "pin.slash" : "pin")
+                        }
+                        Button {
+                            chatStore.archiveConversation(conversation)
+                        } label: {
+                            Label("Archive", systemImage: "archivebox")
+                        }
+                        Button(role: .destructive) {
+                            chatStore.requestDeleteConversation(conversation)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.appBorder, lineWidth: 1)
+            }
+        }
+        .padding(.top, pendingSetupLaunchCard == nil ? 0 : 4)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 28)
+    }
+
+    @ViewBuilder
+    private var sharedWithMeSection: some View {
+        if homeInboxSectionPlan.showsSharedWithMe {
+            VStack(spacing: 8) {
+                HomeSectionHeader(
+                    title: searchQuery.isEmpty ? "Shared With Me" : "Shared matches",
+                    actionTitle: chatStore.isLoadingSharedWithMe ? nil : "Refresh",
+                    actionSymbolName: "arrow.clockwise",
+                    action: sharedRefreshAction
+                )
+
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(filteredSharedWithMe.enumerated()), id: \.element.id) { index, item in
+                        NavigationLink(value: item) {
+                            SharedWithMeRow(item: item)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.plain)
+
+                        if index != filteredSharedWithMe.count - 1 {
+                            Divider()
+                                .padding(.leading, 54)
+                        }
+                    }
+                }
+                .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.appBorder, lineWidth: 1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 28)
+        }
+    }
+
+    @ViewBuilder
+    private var archivedProjectsSection: some View {
+        if homeInboxSectionPlan.showsArchivedProjects {
+            VStack(spacing: 8) {
+                HomeSectionHeader(title: searchQuery.isEmpty ? "Archived Projects" : "Archived project matches")
+
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(filteredArchivedProjects.enumerated()), id: \.element.id) { index, project in
+                        Button {
+                            chatStore.unarchiveProject(project)
+                        } label: {
+                            ProjectRow(
+                                title: project.name,
+                                subtitle: archivedProjectSubtitle(project),
+                                symbolName: project.projectIconName,
+                                isSelected: false,
+                                tintColor: project.tintColor,
+                                tintBackground: project.tintBackgroundColor
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button {
+                                chatStore.unarchiveProject(project)
+                            } label: {
+                                Label("Restore Project", systemImage: "arrow.uturn.backward")
+                            }
+                        }
+
+                        if index != filteredArchivedProjects.count - 1 {
+                            Divider()
+                                .padding(.leading, 54)
+                        }
+                    }
+                }
+                .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.appBorder, lineWidth: 1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+        }
+    }
+
+    @ViewBuilder
+    private var archivedConversationsSection: some View {
+        if homeInboxSectionPlan.showsArchivedConversations {
+            VStack(spacing: 8) {
+                HomeSectionHeader(title: searchQuery.isEmpty ? "Archived Chats" : "Archived chat matches")
+
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(filteredArchivedConversations.enumerated()), id: \.element.id) { index, conversation in
+                        Button {
+                            chatStore.unarchiveConversation(conversation)
+                        } label: {
+                            ClaudeThreadRow(
+                                conversation: conversation,
+                                preview: "Tap to restore this archived chat.",
+                                isLast: index == filteredArchivedConversations.count - 1
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button {
+                                chatStore.unarchiveConversation(conversation)
+                            } label: {
+                                Label("Restore Chat", systemImage: "arrow.uturn.backward")
+                            }
+                            Button(role: .destructive) {
+                                chatStore.requestDeleteConversation(conversation)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+                .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.appBorder, lineWidth: 1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 28)
+        }
+    }
+
+    @ViewBuilder
+    private var filteredEmptyStateSection: some View {
+        if homeInboxSectionPlan.showsSharedEmptyState {
+            HomeInboxEmptyState(
+                title: chatStore.isLoadingSharedWithMe ? "Loading shared chats" : (searchQuery.isEmpty ? "No shared chats" : "No shared matches"),
+                subtitle: sharedEmptyStateSubtitle,
+                symbolName: "person.2.slash",
+                isLoading: chatStore.isLoadingSharedWithMe,
+                actionTitle: chatStore.isLoadingSharedWithMe ? nil : "Refresh",
+                actionSymbolName: "arrow.clockwise",
+                action: sharedRefreshAction
+            )
+            .padding(.horizontal, 16)
+            .padding(.bottom, 28)
+        } else if homeInboxSectionPlan.showsArchivedEmptyState {
+            HomeInboxEmptyState(
+                title: searchQuery.isEmpty ? "No archived items" : "No archived matches",
+                subtitle: searchQuery.isEmpty ? "Archived chats and projects will collect here." : "Try another search or switch filters.",
+                symbolName: "archivebox"
+            )
+            .padding(.horizontal, 16)
+            .padding(.bottom, 28)
+        }
+    }
+
+    private var sharedEmptyStateSubtitle: String {
+        if chatStore.isLoadingSharedWithMe {
+            return "Checking shared conversations."
+        }
+        if searchQuery.isEmpty {
+            return "Conversations shared with you will collect here."
+        }
+        return "Try another search or switch filters."
+    }
+
+    private var sharedRefreshAction: (() -> Void)? {
+        guard !chatStore.isLoadingSharedWithMe else { return nil }
+        return {
+            _ = Task { await chatStore.refreshSharedWithMe() }
+        }
+    }
+
+    private var homePromptCaptureCard: some View {
+        HomePromptCaptureCard(
+            subtitle: homeLaunchSubtitle,
+            draft: $homeLaunchDraft,
+            suggestions: homeLaunchSuggestions,
+            selectedSuggestionID: selectedHomeLaunchSuggestionID,
+            selectedProjectName: chatStore.selectedProject?.name,
+            actionTitle: homeLaunchActionTitle,
+            actionSymbolName: homeLaunchActionSymbolName,
+            actionEnabled: homeLaunchActionEnabled,
+            onSelectSuggestion: toggleHomeLaunchSuggestion,
+            onSubmit: runHomeLaunchPrompt
+        )
     }
 
     private func openNewChat() {
@@ -673,6 +1022,9 @@ struct ConversationListView: View {
         case .newBriefing:
             AppHaptics.selection()
             showingNewBriefing = true
+        case .runSetupDefaults:
+            AppHaptics.lightImpact()
+            onRunSetupAgain()
         case .stagePrompt(let stagedPrompt):
             stageHomeOrchestrationPrompt(stagedPrompt)
         }
@@ -696,12 +1048,102 @@ struct ConversationListView: View {
         onStartNewChat()
     }
 
+    private func stageProjectPrompt(_ prompt: String) {
+        guard !chatStore.isStreaming else {
+            chatStore.bannerMessage = "Finish or cancel the current response before staging a project prompt."
+            return
+        }
+
+        chatStore.startNewConversation()
+        chatStore.draft = prompt
+        chatStore.bannerMessage = "Project prompt ready."
+        AppHaptics.selection()
+        onStartNewChat()
+    }
+
+    private func toggleHomeLaunchSuggestion(_ suggestion: EmptyChatStarterSuggestion) {
+        AppHaptics.selection()
+        if selectedHomeLaunchSuggestionID == suggestion.id {
+            selectedHomeLaunchSuggestionID = nil
+        } else {
+            selectedHomeLaunchSuggestionID = suggestion.id
+        }
+    }
+
+    private func runHomeLaunchPrompt() {
+        guard !chatStore.isStreaming else {
+            chatStore.bannerMessage = "Finish or cancel the current response before staging a new prompt."
+            return
+        }
+
+        let trimmedDraft = homeLaunchDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let suggestion = selectedHomeLaunchSuggestion
+        guard suggestion != nil || !trimmedDraft.isEmpty else { return }
+
+        if let suggestion, !prepareHomeLaunchIntent(suggestion) {
+            return
+        }
+
+        chatStore.startNewConversation()
+        chatStore.draft = stagedHomeLaunchPrompt(prefix: suggestion?.prompt, draft: trimmedDraft)
+        chatStore.bannerMessage = suggestion.map { "\($0.title) prompt ready." } ?? "Prompt ready."
+        homeLaunchDraft = ""
+        selectedHomeLaunchSuggestionID = nil
+        AppHaptics.selection()
+        onStartNewChat()
+    }
+
+    private func prepareHomeLaunchIntent(_ suggestion: EmptyChatStarterSuggestion) -> Bool {
+        switch suggestion.action {
+        case .draft:
+            return true
+        case .research:
+            chatStore.selectSourceMode(.web)
+            if !chatStore.selectedRouteUsesNearCloud, !chatStore.researchModeEnabled {
+                chatStore.toggleResearchMode()
+            }
+            return true
+        case .project:
+            chatStore.selectSourceMode(chatStore.selectedProject == nil ? .files : .all)
+            guard chatStore.selectedProject != nil else {
+                showingProjectFiles = true
+                chatStore.bannerMessage = "Choose files or a Project, then prepare the prompt."
+                return false
+            }
+            return true
+        case .council:
+            chatStore.useDefaultCouncilLineup()
+            return true
+        case .agent:
+            if chatStore.agentModels.contains(where: { $0.id == ModelOption.ironclawMobileModelID }) {
+                chatStore.selectModel(ModelOption.ironclawMobileModelID)
+            } else if chatStore.ironclawRemoteWorkstationAvailable {
+                chatStore.selectModel(ModelOption.ironclawModelID)
+            }
+            return true
+        case .trust:
+            if chatStore.selectedProject != nil {
+                chatStore.selectSourceMode(.all)
+            } else {
+                chatStore.selectSourceMode(.web)
+                if !chatStore.selectedRouteUsesNearCloud, !chatStore.researchModeEnabled {
+                    chatStore.toggleResearchMode()
+                }
+            }
+            return true
+        }
+    }
+
+    private func stagedHomeLaunchPrompt(prefix: String?, draft: String) -> String {
+        let trimmedPrefix = prefix?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedPrefix.isEmpty else { return draft }
+        guard !draft.isEmpty else { return trimmedPrefix }
+        guard !draft.hasPrefix(trimmedPrefix) else { return draft }
+        return "\(trimmedPrefix) \(draft)"
+    }
+
     private var filterCounts: [HomeFilter: Int] {
-        [
-            .all: chatStore.allVisibleConversations.count,
-            .shared: chatStore.sharedWithMe.count,
-            .archived: chatStore.archivedConversations.count + chatStore.archivedProjects.count
-        ]
+        homeInboxSectionPlan.filterCounts
     }
 
     private func selectHomeFilter(_ filter: HomeFilter) {
