@@ -7222,7 +7222,7 @@ extension PrivateChatCoreTests {
     // MARK: - Adversarial review battery (post-audit regression guards)
     // Each group encodes a bug class the audit surfaced: input-discard,
     // false-positive capture, and the privacy-route gate. They exist so the
-    // "this shit doesn't happen again" promise is enforced by CI, not vigilance.
+    // prevention promise is enforced by CI, not vigilance.
 
     func testWeatherRejectsFigurativeNonPlaces() {
         // INPUT-DISCARD/false-positive: " in <abstract noun>" must not geocode.

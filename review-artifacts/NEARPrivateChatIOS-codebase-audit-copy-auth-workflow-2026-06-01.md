@@ -9,6 +9,18 @@ This pass is shippable for review. I did not find a blocking regression in the c
 
 The worktree now has a coherent theme: private chat stays the default, external routes are disclosed more plainly, raw auth failures are hidden behind actionable Account copy, Home stages actions before sending, and the app preserves broader “turn any context into useful work” behavior instead of hardcoding one workflow.
 
+## Local Re-Audit Pass
+
+Ran directly in this checkout at `2026-06-01 19:12 CEST` after the user asked whether the audit had actually been run, not just written up.
+
+- Compared the full branch against `origin/main` and reviewed the active delta shape with `git diff --stat origin/main...HEAD` and `git log origin/main..HEAD`.
+- Re-scanned auth, route, proof, speculative-model, Home-launch, setup, attachment, Soul prompt, legal-placeholder, and stale-copy surfaces with `rg`.
+- Re-read the high-risk implementation areas: `PrivateChatAPI`, `ChatStore`, `SoulPromptComposer`, `SetupSoulPromptBuilder`, `EmptyChatStarterCoordinator`, `ConversationListView`, `FileModels`, and `LiveDataService`.
+- Linted all app, share-extension, and widget plists with `plutil`.
+- Ran Xcode static analysis for the app target with `xcodebuild analyze -scheme NEARPrivateChat -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO`; it completed with `ANALYZE SUCCEEDED`.
+
+The re-audit found one non-functional cleanup: an unprofessional regression-test comment. It has been rewritten so the test suite does not carry sloppy copy into review.
+
 ## What Changed
 
 - Cleaned copy across onboarding, Account, Home, chat, model picker, sharing, proof, files, widgets, and Agent surfaces.
@@ -56,8 +68,10 @@ No blocker found. The pass removes a lot of overlong/legalistic copy and reduces
 ## Verification
 
 - `xcodebuild test -scheme NEARPrivateChat -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:NEARPrivateChatTests/PrivateChatCoreTests`
+- `xcodebuild analyze -scheme NEARPrivateChat -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO`
 - `scripts/build-simulator.sh`
 - `git diff --check`
+- `plutil -lint NEARPrivateChat/Info.plist NEARPrivateChatShareExtension/Info.plist NEARPrivateChatWidget/Info.plist`
 - Product-source copy scan for stale auth/proof/Hosted Agent/speculative-model strings.
 - Simulator install + launch smoke on iPhone 17 Pro.
 
