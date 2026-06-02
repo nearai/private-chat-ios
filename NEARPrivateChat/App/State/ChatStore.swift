@@ -2621,6 +2621,28 @@ final class ChatStore: ObservableObject {
         return briefingWidget(from: synthesized ?? first.1, title: briefing.title)
     }
 
+    private func localIntentExecutionEnvironment() -> ChatLocalIntentExecutor.Environment {
+        ChatLocalIntentExecutor.Environment(
+            memoryStore: memoryStore,
+            activityLog: activityLog,
+            trackers: { [weak self] in self?.trackersProvider?() ?? [] },
+            createTracker: { [weak self] briefing in self?.onCreateTracker?(briefing) },
+            setPassiveMemoryEnabled: { [weak self] enabled in self?.passiveMemoryEnabled = enabled },
+            setKeepDocumentsOnDevice: { [weak self] onDevice in self?.keepDocumentsOnDevice = onDevice },
+            searchHistory: { [weak self] query in
+                guard let self else { return [] }
+                return ConversationHistorySearch.search(
+                    query: query,
+                    cache: self.loadLocalMessageCache(),
+                    conversations: self.conversations
+                )
+            },
+            scheduleReminder: { reminder in
+                BriefingStore.schedulePersonalReminder(title: reminder.title, date: reminder.date)
+            }
+        )
+    }
+
     /// Answers a recognized prompt locally: data questions render a live widget,
     /// "create a tracker…" creates a scheduled briefing. No chat backend needed.
     private func handleQuickIntent(_ intent: QuickIntent, prompt: String) {
@@ -2639,90 +2661,24 @@ final class ChatStore: ObservableObject {
             }
         }
 
-        switch intent {
-        case let .createTracker(spec):
-            let briefing = ChatLocalIntentBriefingFactory.trackerBriefing(for: spec, fallbackPrompt: prompt)
-            onCreateTracker?(briefing)
-            activityLog.record(ChatLocalIntentBriefingFactory.trackerActivitySummary(for: spec))
-            _ = appendAssistant(text: ChatLocalIntentResponseFormatter.trackerCreated(spec: spec))
-            AppHaptics.selection()
-        case let .trackLast(schedule):
-            // Track whatever the previous question was about. handleQuickIntent
-            // already appended this "track that" turn, so the prior user message
-            // (dropLast) is the question to track.
-            let priorText = messages.filter { $0.role == .user }.dropLast().last?.text
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if let draft = ChatLocalIntentBriefingFactory.trackLastDraft(priorUserText: priorText, schedule: schedule) {
-                onCreateTracker?(draft.briefing)
-                activityLog.record(ChatLocalIntentBriefingFactory.trackLastActivitySummary(title: draft.title))
-                _ = appendAssistant(text: ChatLocalIntentResponseFormatter.trackLastCreated(title: draft.title, schedule: schedule))
+        let priorUserText = messages.filter { $0.role == .user }.dropLast().last?.text
+        if let result = ChatLocalIntentExecutor.execute(
+            intent: intent,
+            prompt: prompt,
+            priorUserText: priorUserText,
+            environment: localIntentExecutionEnvironment()
+        ) {
+            if let schedule = result.pendingNearAccountTrackerSchedule {
+                pendingNearAccountTrackerSchedule = schedule
+            }
+            _ = appendAssistant(text: result.assistantText)
+            if result.shouldHaptic {
                 AppHaptics.selection()
-            } else {
-                _ = appendAssistant(text: ChatLocalIntentResponseFormatter.trackLastNeedsSubject)
             }
-        case .nearAccount(nil):
-            _ = appendAssistant(text: ChatLocalIntentResponseFormatter.nearAccountPrompt)
-        case let .requestNearAccountTracker(schedule):
-            pendingNearAccountTrackerSchedule = schedule
-            _ = appendAssistant(text: ChatLocalIntentResponseFormatter.nearAccountTrackerPrompt(schedule: schedule))
-        case let .remember(text):
-            if memoryStore.add(text) != nil {
-                _ = appendAssistant(text: ChatLocalIntentResponseFormatter.remembered(text))
-            } else {
-                _ = appendAssistant(text: ChatLocalIntentResponseFormatter.alreadyRemembered)
-            }
-            AppHaptics.selection()
-        case .recallMemory:
-            _ = appendAssistant(text: ChatLocalIntentResponseFormatter.memoryRecall(memoryStore.items))
-        case let .forget(text):
-            if let text {
-                let removed = memoryStore.remove(matching: text)
-                _ = appendAssistant(text: ChatLocalIntentResponseFormatter.forgot(matching: text, removed: removed))
-            } else {
-                memoryStore.clear()
-                activityLog.clear()
-                _ = appendAssistant(text: ChatLocalIntentResponseFormatter.forgotAll)
-            }
-            AppHaptics.selection()
-        case .forgetAutoLearned:
-            let removed = memoryStore.removeInferred()
-            _ = appendAssistant(text: ChatLocalIntentResponseFormatter.forgotAutoLearned(removed: removed))
-            AppHaptics.selection()
-        case let .setMemoryCapture(enabled):
-            passiveMemoryEnabled = enabled
-            _ = appendAssistant(text: ChatLocalIntentResponseFormatter.memoryCapture(enabled: enabled))
-            AppHaptics.selection()
-        case let .setDocumentPrivacy(onDevice):
-            keepDocumentsOnDevice = onDevice
-            _ = appendAssistant(text: ChatLocalIntentResponseFormatter.documentPrivacy(onDevice: onDevice))
-            AppHaptics.selection()
-        case .activityLog:
-            _ = appendAssistant(text: ChatLocalIntentResponseFormatter.activityLog(activityLog.entries))
-        case .listTrackers:
-            _ = appendAssistant(text: TrackerListFormatter.summary(for: trackersProvider?() ?? []))
-        case .capabilities:
-            _ = appendAssistant(text: QuickIntentParser.capabilitiesText())
-        case let .math(expression, result):
-            _ = appendAssistant(text: "\(expression) = **\(result)**")
-            AppHaptics.selection()
-        case let .dateMath(_, answer):
-            _ = appendAssistant(text: answer)
-            AppHaptics.selection()
-        case let .tipSplit(summary):
-            _ = appendAssistant(text: summary)
-            AppHaptics.selection()
-        case let .searchHistory(query):
-            let hits = ConversationHistorySearch.search(
-                query: query,
-                cache: loadLocalMessageCache(),
-                conversations: conversations
-            )
-            _ = appendAssistant(text: ChatLocalIntentResponseFormatter.searchHistory(query: query, hits: hits))
-        case let .createReminder(reminder):
-            BriefingStore.schedulePersonalReminder(title: reminder.title, date: reminder.date)
-            activityLog.record("Set reminder: \(reminder.title)")
-            _ = appendAssistant(text: ChatLocalIntentResponseFormatter.reminderCreated(reminder))
-            AppHaptics.selection()
+            return
+        }
+
+        switch intent {
         default:
             let id = appendAssistant(text: "", streaming: true)
             currentAssistantMessageID = id
@@ -2817,17 +2773,21 @@ final class ChatStore: ObservableObject {
         pendingNearAccountTrackerSchedule = nil
         let model = selectedModel
         messages.append(ChatLocalIntentTranscriptWriter.userMessage(text: prompt, model: model))
-        let briefing = ChatLocalIntentBriefingFactory.nearAccountBriefing(account: account, schedule: schedule)
-        onCreateTracker?(briefing)
-        activityLog.record(ChatLocalIntentBriefingFactory.nearAccountActivitySummary(account: account, schedule: schedule))
+        let result = ChatLocalIntentExecutor.completePendingNearAccountTracker(
+            account: account,
+            schedule: schedule,
+            environment: localIntentExecutionEnvironment()
+        )
         let assistantCreatedAt = Date()
         messages.append(ChatLocalIntentTranscriptWriter.assistantMessage(
-            text: ChatLocalIntentResponseFormatter.nearAccountTrackerCreated(account: account, schedule: schedule),
+            text: result.assistantText,
             model: model,
             createdAt: assistantCreatedAt,
             trustMetadata: assistantTrustMetadata(for: model, capturedAt: assistantCreatedAt)
         ))
-        AppHaptics.selection()
+        if result.shouldHaptic {
+            AppHaptics.selection()
+        }
     }
 
     /// Passively records durable self-facts the user disclosed in an ordinary
@@ -2836,18 +2796,12 @@ final class ChatStore: ObservableObject {
     /// auto-learned, and stored as `.inferred` so recall labels it. Only genuinely
     /// new facts are logged; re-stating a known fact is a no-op.
     private func captureInferredMemory(from text: String) {
-        guard passiveMemoryEnabled else { return }
-        let learned = QuickIntentParser.inferredFacts(from: text)
-        guard !learned.isEmpty else { return }
-        var stored: [String] = []
-        for fact in learned {
-            let isNew = !memoryStore.items.contains { $0.text.caseInsensitiveCompare(fact) == .orderedSame }
-            if memoryStore.add(fact, source: .inferred) != nil, isNew {
-                stored.append(fact)
-            }
-        }
-        guard !stored.isEmpty else { return }
-        activityLog.record("Noted from chat: \(stored.joined(separator: "; "))")
+        ChatLocalIntentExecutor.captureInferredMemory(
+            from: text,
+            memoryStore: memoryStore,
+            activityLog: activityLog,
+            isEnabled: passiveMemoryEnabled
+        )
     }
 
     func sendDraft() {

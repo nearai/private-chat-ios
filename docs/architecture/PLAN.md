@@ -117,7 +117,8 @@ Last updated: 2026-06-02.
 - Phase 16-AJ is complete for local intent transcript construction ownership: `ChatLocalIntentTranscriptWriter` now owns local user/assistant message construction and the streaming assistant pending-message status. `ChatStore` still decides when to append those messages and executes local intent side effects.
 - Phase 16-AK is complete for local intent response formatting ownership: `ChatLocalIntentResponseFormatter` now owns local intent confirmation, memory, activity-log, history-search, reminder, and fetch-failure response copy. `ChatStore` still decides when to execute side effects and append/update transcript turns.
 - Phase 16-AL is complete for local intent briefing construction ownership: `ChatLocalIntentBriefingFactory` now owns tracker briefing creation, "track that" draft construction, NEAR-account tracker briefing creation, and the related activity-log summary strings. `ChatStore` still invokes tracker creation callbacks and owns local intent side-effect timing.
-- Current Phase 16-AL size checkpoint: `ChatStore.swift` is 6464 lines, `ChatLocalIntentDispatcher.swift` is 46 lines, `ChatLocalIntentWidgetService.swift` is 39 lines, `ChatLocalIntentTranscriptWriter.swift` is 70 lines, `ChatLocalIntentResponseFormatter.swift` is 118 lines, `ChatLocalIntentBriefingFactory.swift` is 58 lines, `LiveDataService.swift` is 3599 lines, `ChatSessionStores.swift` is 330 lines, `ChatSendCoordinator.swift` is 599 lines, `ConversationStore.swift` is 388 lines, `ChatMessageLoadCoordinator.swift` is 143 lines, `MessageRepository.swift` is 433 lines, `ProjectContextViews.swift` is 723 lines, `ProjectContextSupportViews.swift` is 740 lines, `ProjectStore.swift` is 859 lines, `AgentStore.swift` is 783 lines, and `SecurityView.swift` is 976 lines. The next safe slice is extracting a narrow local-intent execution owner for memory/privacy/reminder/tracker side effects; do not start by ripping out `ChatSendCoordinatorHost`.
+- Phase 16-AM is complete for local intent side-effect execution ownership: `ChatLocalIntentExecutor` now owns synchronous memory/privacy/reminder/tracker/account tracker side effects plus local math/history/activity responses. `ChatStore` still chooses transcript append/update timing and owns async widget fetch task wiring.
+- Current Phase 16-AM size checkpoint: `ChatStore.swift` is 6418 lines, `ChatLocalIntentExecutor.swift` is 164 lines, `ChatLocalIntentDispatcher.swift` is 46 lines, `ChatLocalIntentWidgetService.swift` is 39 lines, `ChatLocalIntentTranscriptWriter.swift` is 70 lines, `ChatLocalIntentResponseFormatter.swift` is 118 lines, `ChatLocalIntentBriefingFactory.swift` is 58 lines, `LiveDataService.swift` is 3599 lines, `ChatSessionStores.swift` is 330 lines, `ChatSendCoordinator.swift` is 599 lines, `ConversationStore.swift` is 388 lines, `ChatMessageLoadCoordinator.swift` is 143 lines, `MessageRepository.swift` is 433 lines, `ProjectContextViews.swift` is 723 lines, `ProjectContextSupportViews.swift` is 740 lines, `ProjectStore.swift` is 859 lines, `AgentStore.swift` is 783 lines, and `SecurityView.swift` is 976 lines. The next safe slice is extracting a narrow local-intent orchestration owner for transcript append/update timing around executor and widget results; do not start by ripping out `ChatSendCoordinatorHost`.
 
 ## Phase 0: Freeze And Map
 
@@ -624,7 +625,8 @@ Status:
 - Phase 16-AJ complete: local transcript message construction moved to `ChatLocalIntentTranscriptWriter`, including pending streaming assistant messages for compound lookups.
 - Phase 16-AK complete: local intent confirmation, memory, activity-log, history-search, reminder, and fetch-failure response copy moved to `ChatLocalIntentResponseFormatter`.
 - Phase 16-AL complete: tracker briefing creation, "track that" briefing drafts, NEAR-account tracker briefing creation, and related activity-log summary strings moved to `ChatLocalIntentBriefingFactory`.
-- `ChatStore.swift` is 6464 lines. The next safe slice is extracting a narrow local-intent execution owner for memory/privacy/reminder/tracker side effects; do not start by ripping out `ChatSendCoordinatorHost`.
+- Phase 16-AM complete: synchronous local-intent execution side effects moved to `ChatLocalIntentExecutor`; `ChatStore` still owns transcript append/update timing and async widget task wiring.
+- `ChatStore.swift` is 6418 lines. The next safe slice is extracting a narrow local-intent orchestration owner for transcript append/update timing around executor and widget results; do not start by ripping out `ChatSendCoordinatorHost`.
 
 Actions:
 
@@ -687,6 +689,7 @@ Recent validation:
 - Phase 16-AJ: focused local-intent dispatcher/widget-service/transcript-writer and pending NEAR-account send tests passed; `git diff --check` and `scripts/build-simulator.sh` passed.
 - Phase 16-AK: focused local-intent formatter/dispatcher/widget-service/transcript-writer tests passed; `git diff --check` and `scripts/build-simulator.sh` passed.
 - Phase 16-AL: focused local-intent briefing-factory/formatter/dispatcher/widget-service/transcript-writer tests passed after making the NEAR-account schedule assertion locale-safe.
+- Phase 16-AM: focused local-intent executor/formatter/briefing-factory tests passed; `git diff --check` and `scripts/build-simulator.sh` passed.
 
 ## Phase Order Rationale
 

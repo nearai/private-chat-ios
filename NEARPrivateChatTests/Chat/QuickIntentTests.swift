@@ -613,6 +613,100 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(text.contains("notification even if the app is closed"))
     }
 
+    @MainActor
+    func testChatLocalIntentExecutorOwnsMemorySideEffects() {
+        let memoryStore = MemoryStore(fileURL: temporaryJSONFileURL())
+        let activityLog = AgentActivityLog(fileURL: temporaryJSONFileURL())
+        var passiveMemoryEnabled = true
+        var keepDocumentsOnDevice = false
+        let environment = ChatLocalIntentExecutor.Environment(
+            memoryStore: memoryStore,
+            activityLog: activityLog,
+            trackers: { [] },
+            createTracker: { _ in XCTFail("Memory intent should not create trackers.") },
+            setPassiveMemoryEnabled: { passiveMemoryEnabled = $0 },
+            setKeepDocumentsOnDevice: { keepDocumentsOnDevice = $0 },
+            searchHistory: { _ in [] },
+            scheduleReminder: { _ in XCTFail("Memory intent should not schedule reminders.") }
+        )
+
+        let remembered = ChatLocalIntentExecutor.execute(
+            intent: .remember(text: "I prefer concise answers"),
+            prompt: "remember that I prefer concise answers",
+            priorUserText: nil,
+            environment: environment
+        )
+        XCTAssertTrue(remembered?.assistantText.contains("I’ll remember") == true)
+        XCTAssertTrue(remembered?.shouldHaptic == true)
+        XCTAssertEqual(memoryStore.items.map(\.text), ["I prefer concise answers"])
+
+        let disabled = ChatLocalIntentExecutor.execute(
+            intent: .setMemoryCapture(enabled: false),
+            prompt: "stop learning about me",
+            priorUserText: nil,
+            environment: environment
+        )
+        XCTAssertFalse(passiveMemoryEnabled)
+        XCTAssertTrue(disabled?.assistantText.contains("Passive memory is off") == true)
+
+        let privacy = ChatLocalIntentExecutor.execute(
+            intent: .setDocumentPrivacy(onDevice: true),
+            prompt: "keep documents on device",
+            priorUserText: nil,
+            environment: environment
+        )
+        XCTAssertTrue(keepDocumentsOnDevice)
+        XCTAssertTrue(privacy?.assistantText.contains("Private document mode is on") == true)
+    }
+
+    @MainActor
+    func testChatLocalIntentExecutorOwnsTrackerSideEffects() throws {
+        let memoryStore = MemoryStore(fileURL: temporaryJSONFileURL())
+        let activityLog = AgentActivityLog(fileURL: temporaryJSONFileURL())
+        var createdTrackers: [Briefing] = []
+        let environment = ChatLocalIntentExecutor.Environment(
+            memoryStore: memoryStore,
+            activityLog: activityLog,
+            trackers: { createdTrackers },
+            createTracker: { createdTrackers.append($0) },
+            setPassiveMemoryEnabled: { _ in },
+            setKeepDocumentsOnDevice: { _ in },
+            searchHistory: { _ in [] },
+            scheduleReminder: { _ in XCTFail("Tracker intent should not schedule reminders.") }
+        )
+        let spec = TrackerSpec(
+            title: "Rolex GMT Master II",
+            kind: .customPrompt,
+            subject: nil,
+            schedule: .daily(hour: 8, minute: 0),
+            council: false,
+            confirmation: "Rolex GMT Master II · Daily · 8:00 AM",
+            prompt: "Track Rolex GMT Master II pricing.",
+            condition: nil
+        )
+
+        let result = ChatLocalIntentExecutor.execute(
+            intent: .createTracker(spec),
+            prompt: "track Rolex prices daily",
+            priorUserText: nil,
+            environment: environment
+        )
+        XCTAssertEqual(createdTrackers.first?.title, "Rolex GMT Master II")
+        XCTAssertTrue(activityLog.entries.first?.summary.contains("Created tracker") == true)
+        XCTAssertTrue(result?.assistantText.contains("Created a tracker") == true)
+        XCTAssertTrue(result?.shouldHaptic == true)
+
+        let schedule = BriefingSchedule.weekdays(hour: 7, minute: 30)
+        let pending = ChatLocalIntentExecutor.completePendingNearAccountTracker(
+            account: "codex.near",
+            schedule: schedule,
+            environment: environment
+        )
+        XCTAssertEqual(createdTrackers.last?.kind, .nearAccount)
+        XCTAssertEqual(createdTrackers.last?.accountID, "codex.near")
+        XCTAssertTrue(pending.assistantText.contains("NEAR account · codex.near"))
+    }
+
     func testChatLocalIntentBriefingFactoryBuildsTrackerBriefings() {
         let spec = TrackerSpec(
             title: "Rolex GMT Master II",
@@ -666,4 +760,9 @@ extension PrivateChatCoreTests {
             "Created tracker “NEAR account” · NEAR account · codex.near · \(schedule.scheduleLabel)"
         )
     }
+}
+
+private func temporaryJSONFileURL() -> URL {
+    FileManager.default.temporaryDirectory
+        .appendingPathComponent("near-private-chat-test-\(UUID().uuidString).json")
 }

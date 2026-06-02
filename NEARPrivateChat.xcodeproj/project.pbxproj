@@ -199,6 +199,7 @@
 		9F2C1A83E6F74E53A6D1D05B /* ChatLocalIntentTranscriptWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2C1A82E6F74E53A6D1D05B /* ChatLocalIntentTranscriptWriter.swift */; };
 		9F2C1A85E6F74E53A6D1D05B /* ChatLocalIntentResponseFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2C1A84E6F74E53A6D1D05B /* ChatLocalIntentResponseFormatter.swift */; };
 		9F2C1A87E6F74E53A6D1D05B /* ChatLocalIntentBriefingFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2C1A86E6F74E53A6D1D05B /* ChatLocalIntentBriefingFactory.swift */; };
+		9F2C1A89E6F74E53A6D1D05B /* ChatLocalIntentExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2C1A88E6F74E53A6D1D05B /* ChatLocalIntentExecutor.swift */; };
 		F1000000000000000000000A /* SetupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000000A /* SetupModels.swift */; };
 		AC1000000000000000000001 /* SetupUseCases.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000001 /* SetupUseCases.swift */; };
 		AC1000000000000000000002 /* UserSetupStarterPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000002 /* UserSetupStarterPreset.swift */; };
@@ -477,6 +478,7 @@
 		9F2C1A82E6F74E53A6D1D05B /* ChatLocalIntentTranscriptWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentTranscriptWriter.swift; sourceTree = "<group>"; };
 		9F2C1A84E6F74E53A6D1D05B /* ChatLocalIntentResponseFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentResponseFormatter.swift; sourceTree = "<group>"; };
 		9F2C1A86E6F74E53A6D1D05B /* ChatLocalIntentBriefingFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentBriefingFactory.swift; sourceTree = "<group>"; };
+		9F2C1A88E6F74E53A6D1D05B /* ChatLocalIntentExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentExecutor.swift; sourceTree = "<group>"; };
 		F2000000000000000000000A /* SetupModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupModels.swift; sourceTree = "<group>"; };
 		AC2000000000000000000001 /* SetupUseCases.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupUseCases.swift; sourceTree = "<group>"; };
 		AC2000000000000000000002 /* UserSetupStarterPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSetupStarterPreset.swift; sourceTree = "<group>"; };
@@ -924,6 +926,7 @@
 				9F2C1A82E6F74E53A6D1D05B /* ChatLocalIntentTranscriptWriter.swift */,
 				9F2C1A84E6F74E53A6D1D05B /* ChatLocalIntentResponseFormatter.swift */,
 				9F2C1A86E6F74E53A6D1D05B /* ChatLocalIntentBriefingFactory.swift */,
+				9F2C1A88E6F74E53A6D1D05B /* ChatLocalIntentExecutor.swift */,
 				C20000000000000000000010 /* ComposerState.swift */,
 				C20000000000000000000012 /* ChatSessionStores.swift */,
 				F2A800000100000000000000 /* ChatSendCoordinator.swift */,
@@ -1688,6 +1691,7 @@
 				9F2C1A83E6F74E53A6D1D05B /* ChatLocalIntentTranscriptWriter.swift in Sources */,
 				9F2C1A85E6F74E53A6D1D05B /* ChatLocalIntentResponseFormatter.swift in Sources */,
 				9F2C1A87E6F74E53A6D1D05B /* ChatLocalIntentBriefingFactory.swift in Sources */,
+				9F2C1A89E6F74E53A6D1D05B /* ChatLocalIntentExecutor.swift in Sources */,
 				F1000000000000000000000A /* SetupModels.swift in Sources */,
 				AC1000000000000000000001 /* SetupUseCases.swift in Sources */,
 				AC1000000000000000000002 /* UserSetupStarterPreset.swift in Sources */,
