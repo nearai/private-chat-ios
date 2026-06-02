@@ -34,9 +34,7 @@ reference verifier for automation and older browsers.
 
 ## Format
 
-The schema is in `schema/near-private-chat-transcript-v1.schema.json`. The
-long-form format, canonicalization, signature, and threat model notes are in
-`../docs/signed-transcript-export.md`.
+The schema is in `schema/near-private-chat-transcript-v1.schema.json`.
 
 ## Fixtures
 

@@ -4,12 +4,6 @@ This folder is for real simulator capture only.
 
 Do not generate mock screens, narrated storyboards, captions, callouts, or text overlays. The demo must be the actual iOS simulator running the actual app.
 
-Canonical spec:
-
-```bash
-review-artifacts/NEARPrivateChatIOS-supademo-one-cut-video-spec-2026-05-25.md
-```
-
 Run:
 
 ```bash

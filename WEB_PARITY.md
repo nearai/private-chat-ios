@@ -1,6 +1,6 @@
 # Web Parity Ledger
 
-Source of truth: public `nearai/private-chat`, cloned locally at `/Users/abhishekvaidyanathan/Documents/Playground/output/upstream-private-chat`.
+Source of truth: public upstream `nearai/private-chat`.
 
 This ledger is intentionally blunt: every feature confirmed in the web repo is either implemented, partially implemented, or queued with the upstream evidence path.
 

@@ -115,41 +115,6 @@ For a physical iPhone, connect the phone over USB, unlock it, trust the Mac, ena
 
 The app registers the custom callback scheme `nearprivatechat://auth`. Production sign-in uses PKCE authorization-code callbacks with an active state verifier; bearer-token callbacks are rejected by the app. The debug token-paste path is internal-only and shown only in debug builds.
 
-## Current Machine
-
-This Mac is now configured with:
-
-- Xcode `26.5` at `/Applications/Xcode.app`
-- iOS `26.5` simulator runtime
-- A successful simulator build with `CODE_SIGNING_ALLOWED=NO`
-
-The latest clean simulator screenshots are at:
-
-```txt
-/Users/abhishekvaidyanathan/Documents/Playground/output/near-private-chat-ios-2026-05-22-current.png
-/Users/abhishekvaidyanathan/Documents/Playground/output/playwright/near-private-chat-final-list.png
-/Users/abhishekvaidyanathan/Documents/Playground/output/playwright/near-private-chat-final-chat.png
-/Users/abhishekvaidyanathan/Documents/Playground/output/playwright/near-private-chat-final-model-picker.png
-```
-
-The current source-only share archive is at:
-
-```txt
-/Users/abhishekvaidyanathan/Documents/Playground/output/NEARPrivateChatIOS-source-2026-05-22.zip
-```
-
-The HTML visual preview is at:
-
-```txt
-/Users/abhishekvaidyanathan/Documents/Playground/NEARPrivateChatIOS/Preview/ios-preview.html
-```
-
-The web-app parity ledger is at:
-
-```txt
-/Users/abhishekvaidyanathan/Documents/Playground/NEARPrivateChatIOS/WEB_PARITY.md
-```
-
 ## Manual Xcode Steps
 
 1. Open `NEARPrivateChat.xcodeproj`.
