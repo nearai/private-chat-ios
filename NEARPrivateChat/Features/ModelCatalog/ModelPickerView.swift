@@ -58,7 +58,7 @@ struct ModelPickerView: View {
     }
 
     private var cloudModelChoices: [ModelOption] {
-        modelCatalogStore.cloudModels
+        modelCatalogStore.rankedModels(from: allPickerModels.filter { $0.isNearCloudModel })
     }
 
     private var selectedSingleModelID: String? {
@@ -120,9 +120,7 @@ struct ModelPickerView: View {
                 }
             }
             .task {
-                if modelCatalogStore.models.isEmpty {
-                    await chatStore.refreshModels(loadCloudCatalog: chatStore.nearCloudKeyConfigured)
-                }
+                await chatStore.refreshModels(loadCloudCatalog: chatStore.nearCloudKeyConfigured)
             }
         }
         .platformLargeDetent()

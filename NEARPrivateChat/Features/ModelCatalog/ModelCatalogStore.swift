@@ -941,6 +941,42 @@ final class ModelCatalogStore: ObservableObject {
                     modelIcon: nil,
                     aliases: ["NEAR Private", "verified", "private", "GLM"]
                 )
+            ),
+            ModelOption(
+                modelID: "Qwen/Qwen3.5-122B-A10B",
+                publicModel: true,
+                metadata: ModelOption.Metadata(
+                    verifiable: true,
+                    contextLength: nil,
+                    modelDisplayName: "Qwen3.5 122B A10B",
+                    modelDescription: "NEAR Private open-weight reasoning route with proof support.",
+                    modelIcon: nil,
+                    aliases: ["Qwen", "private", "open-weight", "reasoning"]
+                )
+            ),
+            ModelOption(
+                modelID: "Qwen/Qwen3.6-35B-A3B-FP8",
+                publicModel: true,
+                metadata: ModelOption.Metadata(
+                    verifiable: true,
+                    contextLength: nil,
+                    modelDisplayName: "Qwen 3.6 35B A3B FP8",
+                    modelDescription: "NEAR Private open-weight fast reasoning route with proof support.",
+                    modelIcon: nil,
+                    aliases: ["Qwen", "private", "open-weight", "fast"]
+                )
+            ),
+            ModelOption(
+                modelID: "moonshotai/kimi-k2.6",
+                publicModel: true,
+                metadata: ModelOption.Metadata(
+                    verifiable: false,
+                    contextLength: nil,
+                    modelDisplayName: "Kimi K2.6",
+                    modelDescription: "NEAR Private catalog route. Proof availability depends on the current backend report.",
+                    modelIcon: nil,
+                    aliases: ["Kimi", "Moonshot", "private"]
+                )
             )
         ]
     }

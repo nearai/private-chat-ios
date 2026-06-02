@@ -112,6 +112,24 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(qwenOnlyCatalog.modelDisplayName(for: "zai-org/GLM-5.1-FP8"), "GLM 5.1")
     }
 
+    func testFallbackPrivateCatalogIncludesSelectableAlternatives() {
+        let catalog = ModelCatalogStore()
+        let pickerIDs = Set(catalog.pickerModels.map(\.id))
+
+        XCTAssertTrue(pickerIDs.contains(ModelOption.nearPrivateDefaultModelID))
+        XCTAssertTrue(pickerIDs.contains("Qwen/Qwen3.5-122B-A10B"))
+        XCTAssertTrue(pickerIDs.contains("Qwen/Qwen3.6-35B-A3B-FP8"))
+        XCTAssertTrue(pickerIDs.contains("moonshotai/kimi-k2.6"))
+
+        XCTAssertTrue(catalog.selectModel("Qwen/Qwen3.5-122B-A10B"))
+        XCTAssertEqual(catalog.selectedModel, "Qwen/Qwen3.5-122B-A10B")
+        XCTAssertEqual(catalog.selectedRouteKind, .nearPrivate)
+
+        XCTAssertTrue(catalog.selectModel("moonshotai/kimi-k2.6"))
+        XCTAssertEqual(catalog.selectedModel, "moonshotai/kimi-k2.6")
+        XCTAssertEqual(catalog.selectedRouteKind, .nearPrivate)
+    }
+
     func testModelSelectionSurfaceIncludesPrivateAgentAndCloudRoutes() {
         let qwen = ModelOption(modelID: "Qwen/Qwen3.5-122B-A10B", publicModel: true, metadata: nil)
         let kimi = ModelOption(modelID: "moonshotai/Kimi-K2-Instruct", publicModel: true, metadata: nil)
@@ -147,6 +165,45 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(catalog.selectModel(ModelOption.nearPrivateDefaultModelID))
         XCTAssertEqual(catalog.selectedRouteKind, .nearPrivate)
         XCTAssertEqual(catalog.selectedModelDisplayName, "GLM 5.1")
+    }
+
+    func testCurrentCloudCatalogModelsRemainIndividuallySelectable() {
+        let currentCloudModels = [
+            ModelOption(
+                modelID: "anthropic/claude-opus-4-7",
+                publicModel: true,
+                metadata: ModelOption.Metadata(
+                    verifiable: false,
+                    contextLength: 1_000_000,
+                    modelDisplayName: "Claude Opus 4.7",
+                    modelDescription: "Current Cloud catalog model.",
+                    modelIcon: nil,
+                    aliases: ["opus-4-7"]
+                )
+            ),
+            ModelOption(
+                modelID: "google/gemini-2.5-flash",
+                publicModel: true,
+                metadata: ModelOption.Metadata(
+                    verifiable: false,
+                    contextLength: 1_000_000,
+                    modelDisplayName: "Gemini 2.5 Flash",
+                    modelDescription: "Current Cloud catalog model.",
+                    modelIcon: nil,
+                    aliases: ["gemini-2.5-flash"]
+                )
+            )
+        ]
+        let cloudRoutes = ModelCatalogStore.nearCloudRouteModels(from: currentCloudModels)
+        let catalog = ModelCatalogStore(nearCloudModels: cloudRoutes)
+        let pickerIDs = Set(catalog.pickerModels.map(\.id))
+
+        for route in cloudRoutes {
+            XCTAssertTrue(pickerIDs.contains(route.id), "\(route.id) should be visible and selectable in the picker")
+            XCTAssertTrue(catalog.selectModel(route.id), "\(route.id) should select from the picker")
+            XCTAssertEqual(catalog.selectedModel, route.id)
+            XCTAssertEqual(catalog.selectedRouteKind, .nearCloud)
+        }
     }
 
     func testProjectIdentityCatalogSupportsSearchablePhoneChoices() {
