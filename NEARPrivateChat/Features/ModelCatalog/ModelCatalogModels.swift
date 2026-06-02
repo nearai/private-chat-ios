@@ -150,10 +150,10 @@ struct ModelOption: Decodable, Identifiable, Hashable {
     let modelID: String
     let publicModel: Bool?
     let metadata: Metadata?
+    static let nearPrivateDefaultModelID = "zai-org/GLM-5.1-FP8"
     static let ironclawModelID = "ironclaw/agent"
     static let ironclawMobileModelID = "ironclaw/mobile-runtime"
     static let nearCloudModelPrefix = "near-cloud/"
-    static let nearCloudQwenMaxModelID = "near-cloud/qwen3.7-max"
     static let llmCouncilSynthesisModelID = "llm-council/synthesis"
 
     var id: String { modelID }
@@ -169,14 +169,18 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             if let modelDisplayName = sanitizedModelDisplayName {
                 return modelDisplayName
             }
-            if isNearCloudQwenMaxModel {
-                return "Qwen 3.7 Max"
+            if let familyName = Self.providerFamilyName(for: nearCloudUnderlyingModelID ?? modelID) {
+                return "\(familyName) model"
             }
+            return "NEAR AI Cloud model"
         }
         if modelID == Self.llmCouncilSynthesisModelID {
             return "Council Synthesis"
         }
-        return sanitizedModelDisplayName ?? modelID
+        if let metadataName = sanitizedModelDisplayName {
+            return metadataName
+        }
+        return Self.humanize(modelID: modelID)
     }
 
     private var sanitizedModelDisplayName: String? {
@@ -185,6 +189,76 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             return nil
         }
         return value
+    }
+
+    /// Turn a fully-qualified model id into a readable label by dropping the
+    /// provider prefix and numeric-precision suffix. Falls back to the raw
+    /// trailing segment if no recognisable pattern is present.
+    static func humanize(modelID: String) -> String {
+        let trailing = modelID.split(separator: "/").last.map(String.init) ?? modelID
+        let precisionSuffixes = ["-FP8", "-FP16", "-INT8", "-INT4", "-BF16", "-Q4", "-Q8", "-Q4_K_M", "-Q5_K_M"]
+        var trimmed = trailing
+        for suffix in precisionSuffixes where trimmed.uppercased().hasSuffix(suffix) {
+            trimmed = String(trimmed.dropLast(suffix.count))
+            break
+        }
+        // Family-version split keeps compact model labels readable without
+        // exposing provider paths.
+        let parts = trimmed.split(separator: "-").map(String.init)
+        guard !parts.isEmpty else { return trailing }
+        let humanized = parts.enumerated().map { index, part -> String in
+            let lowercasedPart = part.lowercased()
+            let knownAcronyms: Set<String> = ["ai", "api", "glm", "gpt", "llm", "oss", "vl"]
+            if knownAcronyms.contains(lowercasedPart) {
+                return lowercasedPart.uppercased()
+            }
+            // Preserve all-caps family acronyms (GLM, GPT, LLM, etc.) and
+            // version segments that mix digits + dots (5.1, 4.7, k2).
+            if index == 0, part.uppercased() == part, part.count <= 4 {
+                return part
+            }
+            if part.first?.isLetter == false {
+                return part
+            }
+            if part.contains("."),
+               let firstLetter = part.firstIndex(where: { $0.isLetter }),
+               let firstDigit = part.firstIndex(where: { $0.isNumber }),
+               firstLetter < firstDigit {
+                let family = String(part[..<firstDigit])
+                let version = String(part[firstDigit...])
+                let familyLabel = family.prefix(1).uppercased() + family.dropFirst()
+                if family.count == 1 {
+                    return familyLabel.uppercased() + version.uppercased()
+                }
+                return "\(familyLabel) \(version.uppercased())"
+            }
+            if part.contains(".") {
+                return part
+            }
+            // Title-case otherwise.
+            return part.prefix(1).uppercased() + part.dropFirst()
+        }
+        return humanized.joined(separator: " ")
+    }
+
+    static func providerFamilyName(for modelID: String) -> String? {
+        let lowercased = modelID.lowercased()
+        if lowercased.contains("anthropic") || lowercased.contains("claude") {
+            return "Anthropic"
+        }
+        if lowercased.contains("openai") || lowercased.contains("gpt") || lowercased.contains("o3") || lowercased.contains("o4") {
+            return "OpenAI"
+        }
+        if lowercased.contains("qwen") {
+            return "Qwen"
+        }
+        if lowercased.contains("moonshot") || lowercased.contains("kimi") {
+            return "Moonshot"
+        }
+        if lowercased.contains("google") || lowercased.contains("gemini") {
+            return "Google"
+        }
+        return nil
     }
 
     var isVerifiable: Bool {
@@ -204,13 +278,8 @@ struct ModelOption: Decodable, Identifiable, Hashable {
         isIronclawHostedModel || isIronclawMobileRuntime
     }
 
-    var isNearCloudQwenMaxModel: Bool {
-        modelID == Self.nearCloudQwenMaxModelID ||
-            nearCloudUnderlyingModelID?.localizedCaseInsensitiveCompare("qwen/qwen3.7-max") == .orderedSame
-    }
-
     var isNearCloudModel: Bool {
-        modelID == Self.nearCloudQwenMaxModelID || modelID.hasPrefix(Self.nearCloudModelPrefix)
+        modelID.hasPrefix(Self.nearCloudModelPrefix)
     }
 
     var isExternalModel: Bool {
@@ -218,9 +287,6 @@ struct ModelOption: Decodable, Identifiable, Hashable {
     }
 
     var nearCloudUnderlyingModelID: String? {
-        if modelID == Self.nearCloudQwenMaxModelID {
-            return "qwen/qwen3.7-max"
-        }
         guard modelID.hasPrefix(Self.nearCloudModelPrefix) else { return nil }
         let underlying = String(modelID.dropFirst(Self.nearCloudModelPrefix.count))
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -272,8 +338,6 @@ struct ModelOption: Decodable, Identifiable, Hashable {
 
     var isEliteModel: Bool {
         let ids = [
-            "openai/gpt-5.5",
-            "anthropic/claude-opus-4-7",
             "anthropic/claude-sonnet-4-6",
             "openai/gpt-5.4",
             "google/gemini-3-pro",
@@ -283,7 +347,7 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             "google/gemini-2.5-pro",
             "anthropic/claude-opus-4-6",
             "anthropic/claude-sonnet-4-5",
-            "zai-org/GLM-5.1-FP8",
+            Self.nearPrivateDefaultModelID,
             "Qwen/Qwen3.5-122B-A10B",
             "Qwen/Qwen3.6-35B-A3B-FP8"
         ]
@@ -319,6 +383,13 @@ struct ModelOption: Decodable, Identifiable, Hashable {
         let lowercasedID = comparableID.lowercased()
         let lowercased = searchText.lowercased()
 
+        if isNearCloudModel {
+            return lowercased.contains("embedding") ||
+                lowercased.contains("reranker") ||
+                lowercased.contains("whisper") ||
+                lowercased.contains("flux")
+        }
+
         if [
             "openai/gpt-5",
             "openai/gpt-5.1",
@@ -335,10 +406,6 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             return true
         }
 
-        if lowercasedID == "google/gemini-3.5-flash" {
-            return false
-        }
-
         if lowercased.contains("gpt-5.4") ||
             lowercased.contains("gpt-5.4-mini") ||
             lowercased.contains("gpt-4.1") ||
@@ -351,7 +418,7 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             lowercasedID.contains("/mini") ||
             lowercased.contains("nano") ||
             lowercased.contains("lite") ||
-            (lowercased.contains("flash") && !lowercasedID.contains("gemini-3.5-flash")) ||
+            lowercased.contains("flash") ||
             lowercased.contains("gemma") {
             return true
         }
@@ -414,14 +481,14 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             badges.append("Agent")
             badges.append("Hosted")
         } else if isNearCloudModel {
-            badges.append("NEAR Cloud")
+            badges.append("NEAR AI Cloud")
             badges.append("Not attested")
         }
         if isRecommendedReasoningModel {
             badges.append("Reasoning")
         }
         if isEliteModel {
-            badges.append("Frontier")
+            badges.append("Cloud")
         }
         if isCodeModel {
             badges.append("Code")

@@ -1,33 +1,14 @@
 import SwiftUI
-
-private enum SharePublicLinkExpiry: String, CaseIterable, Identifiable {
-    case manual = "Manual disable"
-    case sevenDays = "7 days"
-    case thirtyDays = "30 days"
-
-    var id: String { rawValue }
-
-    var isAvailable: Bool {
-        self == .manual
-    }
-
-    static var availableCases: [SharePublicLinkExpiry] {
-        allCases.filter(\.isAvailable)
-    }
-
-    var availabilityDetail: String {
-        switch self {
-        case .manual:
-            return "Public links stay active until you disable them."
-        case .sevenDays, .thirtyDays:
-            return "Timed expiry is coming soon."
-        }
-    }
-}
+import UniformTypeIdentifiers
 
 struct ShareConversationView: View {
-    @EnvironmentObject private var chatStore: ChatStore
+    @EnvironmentObject private var modelCatalogStore: ModelCatalogStore
+    @EnvironmentObject private var projectStore: ProjectStore
+    @EnvironmentObject private var conversationStore: ConversationStore
+    @EnvironmentObject private var securityStore: SecurityStore
+    @EnvironmentObject private var shareStore: ShareStore
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var transcriptStore: ChatTranscriptStore
     let conversation: ConversationSummary
     @State private var isWorking = false
     @State private var inviteTarget = ""
@@ -39,10 +20,21 @@ struct ShareConversationView: View {
     @State private var permission: ShareGrantPermission = .read
     @State private var grantMode: ShareGrantMode = .people
     @State private var pendingDeleteID: String?
-    @State private var publicLinkExpiry: SharePublicLinkExpiry = .manual
     @State private var showingPublicLinkPreview = false
     @State private var showingDisablePublicLinkConfirmation = false
+    @State private var showingVerifiedExporter = false
+    @State private var showingProofReportExporter = false
+    @State private var showingSignedExportNotice = false
+    @State private var verifiedExportDocument = ConversationExportDocument()
+    @State private var verifiedExportFilename = "near-private-chat.signed.json"
+    @State private var proofReportDocument = ConversationExportDocument()
+    @State private var proofReportFilename = "near-private-chat-proof-report.json"
     @State private var pendingSensitiveShareGrant: SensitiveShareGrant?
+
+    init(conversation: ConversationSummary, transcriptStore: ChatTranscriptStore) {
+        self.conversation = conversation
+        _transcriptStore = ObservedObject(wrappedValue: transcriptStore)
+    }
 
     private enum ShareGrantMode: String, CaseIterable, Identifiable {
         case people = "People"
@@ -61,11 +53,18 @@ struct ShareConversationView: View {
     }
 
     private enum ShareGrantPermission: String, CaseIterable, Identifiable {
-        case read = "Read"
-        case write = "Write"
+        case read = "Read-only"
+        case write = "Can reply"
 
         var id: String { rawValue }
-        var apiValue: String { rawValue.lowercased() }
+        var apiValue: String {
+            switch self {
+            case .read:
+                return "read"
+            case .write:
+                return "write"
+            }
+        }
     }
 
     private enum SensitiveShareGrant {
@@ -83,15 +82,15 @@ struct ShareConversationView: View {
     }
 
     private var publicURL: URL? {
-        chatStore.publicURL(for: conversation)
+        shareStore.publicURL(for: conversation)
     }
 
     private var publicShareEnabled: Bool {
-        chatStore.shareInfo?.publicShare != nil
+        shareStore.shareInfo?.publicShare != nil
     }
 
     private var accessShares: [ConversationShareInfo] {
-        chatStore.shareInfo?.shares.filter { !$0.isPublic } ?? []
+        shareStore.shareInfo?.shares.filter { !$0.isPublic } ?? []
     }
 
     var body: some View {
@@ -104,10 +103,10 @@ struct ShareConversationView: View {
                     grantAccessSection
                     accessListSection
 
-                    if chatStore.isLoadingShareInfo || isWorking {
+                if shareStore.isLoadingShareInfo || isWorking {
                         HStack(spacing: 10) {
                             ProgressView()
-                            Text("Updating share settings")
+                            Text("Updating share")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
@@ -130,20 +129,19 @@ struct ShareConversationView: View {
                 }
             }
             .task {
-                await chatStore.loadShares(for: conversation)
-                await chatStore.refreshShareGroups(showErrors: false)
+                await shareStore.loadShares(for: conversation)
+                await shareStore.refreshShareGroups(showErrors: false)
                 ensureSelectedGroup()
             }
-            .onChange(of: chatStore.shareGroups) {
+            .onChange(of: shareStore.shareGroups) {
                 ensureSelectedGroup()
             }
             .sheet(isPresented: $showingPublicLinkPreview) {
                 PublicLinkPreviewView(
                     conversation: conversation,
-                    messageCount: chatStore.messages.count,
+                    messageCount: transcriptStore.messages.count,
                     sourceCount: publicLinkSourceCount,
-                    expiry: publicLinkExpiry,
-                    attestationStatus: chatStore.currentAttestationStatus,
+                    attestationStatus: currentAttestationStatus,
                     isWorking: isWorking,
                     onConfirm: {
                         await enablePublicShare()
@@ -155,15 +153,15 @@ struct ShareConversationView: View {
                 isPresented: $showingDisablePublicLinkConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("Disable Public Link", role: .destructive) {
+                Button("Disable link", role: .destructive) {
                     Task { await disablePublicShare() }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("People with the public URL will lose read-only access.")
+                Text("Anyone with the URL loses access.")
             }
             .confirmationDialog(
-                "Confirm shared access",
+                "Confirm access",
                 isPresented: Binding(
                     get: { pendingSensitiveShareGrant != nil },
                     set: { if !$0 { pendingSensitiveShareGrant = nil } }
@@ -181,6 +179,44 @@ struct ShareConversationView: View {
             } message: {
                 Text(shareGrantConfirmationMessage)
             }
+            .confirmationDialog(
+                "Signed export",
+                isPresented: $showingSignedExportNotice,
+                titleVisibility: .visible
+            ) {
+                Button("Export Signed JSON") {
+                    prepareVerifiedJSONExport()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Signs the transcript and route metadata with a stable on-device key. Repeated exports from this device share one signing key id and can be linked.")
+            }
+            .fileExporter(
+                isPresented: $showingVerifiedExporter,
+                document: verifiedExportDocument,
+                contentType: ConversationExportFormat.signedJSON.contentType,
+                defaultFilename: verifiedExportFilename
+            ) { result in
+                switch result {
+                case .success:
+                    shareStore.showBanner("Signed JSON exported.")
+                case let .failure(error):
+                    shareStore.showBanner(error.localizedDescription)
+                }
+            }
+            .fileExporter(
+                isPresented: $showingProofReportExporter,
+                document: proofReportDocument,
+                contentType: ConversationExportFormat.json.contentType,
+                defaultFilename: proofReportFilename
+            ) { result in
+                switch result {
+                case .success:
+                    shareStore.showBanner("Proof report exported.")
+                case let .failure(error):
+                    shareStore.showBanner(error.localizedDescription)
+                }
+            }
         }
         .platformLargeDetent()
     }
@@ -197,7 +233,7 @@ struct ShareConversationView: View {
                 Text(conversation.title)
                     .font(.headline)
                     .lineLimit(2)
-                Text(chatStore.shareInfo?.canShare == false ? "View existing access." : "Invite people, organizations, or publish a read-only link.")
+                Text(shareStore.shareInfo?.canShare == false ? "View existing access." : "Invite people or publish a read-only link.")
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -222,23 +258,7 @@ struct ShareConversationView: View {
                     .foregroundStyle(publicShareEnabled ? Color.brandBlue : .secondary)
             }
 
-            Menu {
-                ForEach(SharePublicLinkExpiry.availableCases) { expiry in
-                    Button {
-                        publicLinkExpiry = expiry
-                    } label: {
-                        Label(expiry.rawValue, systemImage: publicLinkExpiry == expiry ? "checkmark" : "clock")
-                    }
-                }
-            } label: {
-                Label("Expiry: \(publicLinkExpiry.rawValue)", systemImage: "clock")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .disabled(publicShareEnabled)
-
-            Text("Timed expiry is coming soon. Right now public links stay on until you disable them.")
+            Text("Read-only. Anyone with the URL can read this Conversation until you disable the link.")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -255,7 +275,7 @@ struct ShareConversationView: View {
                 HStack(spacing: 8) {
                     Button {
                         Clipboard.copy(publicURL.absoluteString)
-                        chatStore.bannerMessage = "Link copied."
+                        shareStore.showBanner("Link copied.")
                     } label: {
                         Label("Copy", systemImage: "doc.on.doc")
                             .frame(maxWidth: .infinity)
@@ -275,23 +295,14 @@ struct ShareConversationView: View {
                 Button {
                     showingPublicLinkPreview = true
                 } label: {
-                    Label("Review Public Link", systemImage: "eye")
+                    Label("Review link", systemImage: "eye")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.brandBlue)
                 .controlSize(.large)
-                .disabled(chatStore.shareInfo?.canShare == false || isWorking)
+                .disabled(shareStore.shareInfo?.canShare == false || isWorking)
             }
-
-            Button {
-                grantMode = .people
-            } label: {
-                Label("Invite People", systemImage: "person.badge.plus")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .disabled(chatStore.shareInfo?.canShare == false || isWorking)
         }
         .padding(12)
         .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -311,9 +322,9 @@ struct ShareConversationView: View {
                     .background(Color.trustVerified.opacity(0.13), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Verified export")
+                    Text("Signed export")
                         .font(.footnote.weight(.semibold))
-                    Text("Share the transcript with a signed proof bundle so recipients can verify model, route, nonce, and gateway.")
+                    Text("Signed JSON includes the transcript, route metadata, and the Attestation that was available. The proof report omits the transcript.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -322,21 +333,25 @@ struct ShareConversationView: View {
 
             HStack(spacing: 8) {
                 Button {
-                    chatStore.bannerMessage = "Verified JSON export prepared."
+                    showingSignedExportNotice = true
                 } label: {
-                    Label("Verified JSON", systemImage: "checkmark.shield")
+                    Label("Signed JSON", systemImage: "checkmark.shield")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.trustVerified)
+                .disabled(verifiedJSONExportUnavailableReason != nil)
+                .accessibilityHint(verifiedJSONExportUnavailableReason ?? "Exports signed transcript JSON.")
 
-                Button {
-                    chatStore.bannerMessage = "Proof JSON prepared."
-                } label: {
-                    Label("Proof JSON", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
+                proofJSONShareAction
+            }
+
+            if let reason = verifiedJSONExportUnavailableReason {
+                proofExportUnavailableText(reason)
+            }
+
+            if let reason = proofJSONExportUnavailableReason {
+                proofExportUnavailableText(reason)
             }
         }
         .padding(12)
@@ -345,6 +360,26 @@ struct ShareConversationView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.trustVerified.opacity(0.20), lineWidth: 1)
         }
+    }
+
+    @ViewBuilder
+    private var proofJSONShareAction: some View {
+        Button {
+            prepareProofReportExport()
+        } label: {
+            Label("Proof report", systemImage: "square.and.arrow.up")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .disabled(proofJSONExportUnavailableReason != nil)
+        .accessibilityHint(proofJSONExportUnavailableReason ?? "Exports the cached proof report.")
+    }
+
+    private func proofExportUnavailableText(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var grantAccessSection: some View {
@@ -359,7 +394,7 @@ struct ShareConversationView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 140)
+                .frame(width: 176)
             }
 
             Picker("Target", selection: $grantMode) {
@@ -388,7 +423,7 @@ struct ShareConversationView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.brandBlue)
-                .disabled(inviteTarget.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isWorking || chatStore.shareInfo?.canShare == false)
+                .disabled(inviteTarget.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isWorking || shareStore.shareInfo?.canShare == false)
             case .group:
                 groupAccessControls
             case .organization:
@@ -403,12 +438,12 @@ struct ShareConversationView: View {
                 Button {
                     requestShareGrant(.organization)
                 } label: {
-                    Label("Share Organization", systemImage: "building.2.crop.circle")
+                    Label("Share org", systemImage: "building.2.crop.circle")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.brandBlue)
-                .disabled(organizationPattern.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isWorking || chatStore.shareInfo?.canShare == false)
+                .disabled(organizationPattern.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isWorking || shareStore.shareInfo?.canShare == false)
             }
         }
         .padding(12)
@@ -422,7 +457,7 @@ struct ShareConversationView: View {
     private var accessListSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("People With Access", systemImage: "person.2")
+                Label("People with access", systemImage: "person.2")
                     .font(.footnote.weight(.semibold))
                 Spacer()
                 Text("\(accessShares.count)")
@@ -431,7 +466,7 @@ struct ShareConversationView: View {
             }
 
             if accessShares.isEmpty {
-                Text("Only you can access this conversation unless the public link is enabled.")
+                Text("Only you, until you invite people or enable the public link.")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -458,7 +493,7 @@ struct ShareConversationView: View {
 
     private var groupAccessControls: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if chatStore.isLoadingShareGroups {
+            if shareStore.isLoadingShareGroups {
                 HStack(spacing: 8) {
                     ProgressView()
                         .controlSize(.small)
@@ -466,13 +501,13 @@ struct ShareConversationView: View {
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
-            } else if chatStore.shareGroups.isEmpty {
-                Text("Create a reusable group for frequent collaborators.")
+            } else if shareStore.shareGroups.isEmpty {
+                Text("Create a reusable group for people you share with often.")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
             } else {
                 Picker("Share Group", selection: $selectedGroupID) {
-                    ForEach(chatStore.shareGroups) { group in
+                    ForEach(shareStore.shareGroups) { group in
                         Text("\(group.name) · \(group.members.count)").tag(group.id)
                     }
                 }
@@ -486,10 +521,10 @@ struct ShareConversationView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.brandBlue)
-                .disabled(selectedGroupID.isEmpty || isWorking || chatStore.shareInfo?.canShare == false)
+                .disabled(selectedGroupID.isEmpty || isWorking || shareStore.shareInfo?.canShare == false)
 
                 VStack(spacing: 0) {
-                    ForEach(chatStore.shareGroups) { group in
+                    ForEach(shareStore.shareGroups) { group in
                         HStack(spacing: 10) {
                             Image(systemName: "person.3")
                                 .font(.caption.weight(.bold))
@@ -515,7 +550,7 @@ struct ShareConversationView: View {
                             .disabled(isWorking)
                             .accessibilityLabel("Edit Share Group")
                             Button(role: .destructive) {
-                                Task { await chatStore.deleteShareGroup(group) }
+                                Task { await shareStore.deleteShareGroup(group) }
                             } label: {
                                 Image(systemName: "trash")
                             }
@@ -525,7 +560,7 @@ struct ShareConversationView: View {
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
-                        if group.id != chatStore.shareGroups.last?.id {
+                        if group.id != shareStore.shareGroups.last?.id {
                             Divider()
                                 .padding(.leading, 42)
                         }
@@ -577,7 +612,7 @@ struct ShareConversationView: View {
                 groupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
                 groupMembers.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
                 isWorking ||
-                chatStore.shareInfo?.canShare == false
+                shareStore.shareInfo?.canShare == false
             )
         }
     }
@@ -614,7 +649,7 @@ struct ShareConversationView: View {
                 }
             }
             .buttonStyle(.plain)
-            .disabled(isWorking || pendingDeleteID != nil || chatStore.shareInfo?.canShare == false)
+            .disabled(isWorking || pendingDeleteID != nil || shareStore.shareInfo?.canShare == false)
             .accessibilityLabel("Remove access")
         }
         .padding(.horizontal, 10)
@@ -624,7 +659,7 @@ struct ShareConversationView: View {
     private func enablePublicShare() async {
         isWorking = true
         defer { isWorking = false }
-        if let url = await chatStore.enablePublicShare(for: conversation) {
+        if let url = await shareStore.enablePublicShare(for: conversation) {
             Clipboard.copy(url.absoluteString)
         }
     }
@@ -632,15 +667,15 @@ struct ShareConversationView: View {
     private func disablePublicShare() async {
         isWorking = true
         defer { isWorking = false }
-        await chatStore.disablePublicShare(for: conversation)
+        await shareStore.disablePublicShare(for: conversation)
     }
 
     private var shareGrantConfirmationMessage: String {
         let target = pendingSensitiveShareGrant?.label ?? "this target"
         if permission == .write {
-            return "Write access lets \(target) add messages to this conversation. Confirm this is intended."
+            return "\(target.capitalized) can reply in this Conversation."
         }
-        return "Organization sharing can grant access broadly. Confirm the domain and permission before continuing."
+        return "Org sharing grants access to a whole domain. Check the domain and permission."
     }
 
     private func requestShareGrant(_ grant: SensitiveShareGrant) {
@@ -665,7 +700,7 @@ struct ShareConversationView: View {
     private func grantPeopleAccess() async {
         isWorking = true
         defer { isWorking = false }
-        await chatStore.grantDirectShare(
+        await shareStore.grantDirectShare(
             rawRecipients: inviteTarget,
             permission: permission.apiValue,
             conversation: conversation
@@ -676,7 +711,7 @@ struct ShareConversationView: View {
     private func grantOrganizationAccess() async {
         isWorking = true
         defer { isWorking = false }
-        await chatStore.grantOrganizationShare(
+        await shareStore.grantOrganizationShare(
             emailPattern: organizationPattern,
             permission: permission.apiValue,
             conversation: conversation
@@ -688,13 +723,13 @@ struct ShareConversationView: View {
         isWorking = true
         defer { isWorking = false }
         if let editingShareGroup {
-            await chatStore.updateShareGroup(editingShareGroup, name: groupName, rawMembers: groupMembers)
+            await shareStore.updateShareGroup(editingShareGroup, name: groupName, rawMembers: groupMembers)
             cancelShareGroupEditing()
             ensureSelectedGroup()
             return
         }
 
-        await chatStore.createShareGroup(name: groupName, rawMembers: groupMembers)
+        await shareStore.createShareGroup(name: groupName, rawMembers: groupMembers)
         groupName = ""
         groupMembers = ""
         ensureSelectedGroup()
@@ -703,7 +738,7 @@ struct ShareConversationView: View {
     private func grantSelectedGroupAccess() async {
         isWorking = true
         defer { isWorking = false }
-        await chatStore.grantGroupShare(
+        await shareStore.grantGroupShare(
             groupID: selectedGroupID,
             permission: permission.apiValue,
             conversation: conversation
@@ -717,7 +752,69 @@ struct ShareConversationView: View {
             pendingDeleteID = nil
             isWorking = false
         }
-        await chatStore.removeConversationShare(share, conversation: conversation)
+        await shareStore.removeConversationShare(share, conversation: conversation)
+    }
+
+    private var exportMessages: [ChatMessage] {
+        guard conversationStore.selectedConversation?.id == conversation.id else { return [] }
+        return transcriptStore.messages
+    }
+
+    private var verifiedJSONExportUnavailableReason: String? {
+        if conversationStore.selectedConversation?.id != conversation.id {
+            return "Open this Conversation to export Signed JSON."
+        }
+        if exportMessages.isEmpty {
+            return "No messages to export."
+        }
+        return nil
+    }
+
+    private var proofJSONExportUnavailableReason: String? {
+        guard securityStore.attestationSnapshot != nil else {
+            return "No proof report cached. Open Proof and fetch it first."
+        }
+        guard currentAttestationStatus.effectiveState() == .valid else {
+            return "Proof report is stale for this route. Open Proof and refresh it."
+        }
+        return nil
+    }
+
+    private func prepareVerifiedJSONExport() {
+        if let reason = verifiedJSONExportUnavailableReason {
+            shareStore.showBanner(reason)
+            return
+        }
+
+        do {
+            verifiedExportDocument = try ConversationExportBuilder.document(
+                for: conversation,
+                messages: exportMessages,
+                format: .signedJSON,
+                signedContext: signedTranscriptExportContext
+            )
+            verifiedExportFilename = ConversationExportBuilder.filename(
+                for: conversation,
+                format: .signedJSON
+            )
+            showingVerifiedExporter = true
+        } catch {
+            shareStore.showBanner(error.localizedDescription)
+        }
+    }
+
+    private func prepareProofReportExport() {
+        if let reason = proofJSONExportUnavailableReason {
+            shareStore.showBanner(reason)
+            return
+        }
+        guard let snapshot = securityStore.attestationSnapshot else {
+            shareStore.showBanner("No proof report cached.")
+            return
+        }
+        proofReportDocument = ConversationExportDocument(data: Data(snapshot.prettyJSON.utf8))
+        proofReportFilename = "near-private-chat-proof-report.json"
+        showingProofReportExporter = true
     }
 
     private func shareDisplayName(_ share: ConversationShareInfo) -> String {
@@ -728,13 +825,13 @@ struct ShareConversationView: View {
             return pattern
         }
         if let groupID = share.groupID {
-            return chatStore.shareGroups.first(where: { $0.id == groupID })?.name ?? "Group \(groupID)"
+            return shareStore.shareGroups.first(where: { $0.id == groupID })?.name ?? "Group \(groupID)"
         }
         return share.shareType.capitalized
     }
 
     private func shareSubtitle(_ share: ConversationShareInfo) -> String {
-        let permission = share.permission == "write" ? "Can write" : "Can read"
+        let permission = share.permission == "write" ? "Can reply" : "Read-only"
         switch share.shareType {
         case "direct":
             return "\(permission) · Direct"
@@ -761,8 +858,8 @@ struct ShareConversationView: View {
     }
 
     private func ensureSelectedGroup() {
-        if selectedGroupID.isEmpty || !chatStore.shareGroups.contains(where: { $0.id == selectedGroupID }) {
-            selectedGroupID = chatStore.shareGroups.first?.id ?? ""
+        if selectedGroupID.isEmpty || !shareStore.shareGroups.contains(where: { $0.id == selectedGroupID }) {
+            selectedGroupID = shareStore.shareGroups.first?.id ?? ""
         }
     }
 
@@ -786,691 +883,32 @@ struct ShareConversationView: View {
     }
 
     private var publicLinkSourceCount: Int {
-        chatStore.activeProjectContextAttachments.count + chatStore.activeProjectContextLinks.count
-    }
-}
-
-private extension ShareInviteRecipient {
-    var displayName: String {
-        value
+        let semantics = sourceRoutingSemantics
+        let attachmentCount = semantics.attachesProjectFileSourcePack ? projectStore.selectedProjectAttachments.count : 0
+        let linkCount = semantics.attachesSavedLinkSourcePack ? projectStore.selectedProjectLinks.count : 0
+        return attachmentCount + linkCount
     }
 
-    var shareSheetFieldValue: String {
-        value
-    }
-}
-
-private struct PublicLinkPreviewView: View {
-    @Environment(\.dismiss) private var dismiss
-    let conversation: ConversationSummary
-    let messageCount: Int
-    let sourceCount: Int
-    let expiry: SharePublicLinkExpiry
-    let attestationStatus: AttestationStatus
-    let isWorking: Bool
-    let onConfirm: () async -> Void
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: "globe")
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(Color.primaryAction)
-                                .frame(width: 42, height: 42)
-                                .background(Color.primaryAction.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(conversation.title)
-                                    .font(.headline)
-                                    .lineLimit(2)
-                                Text("Anyone with the URL can read this conversation until you disable the link.")
-                                    .font(.footnote.weight(.medium))
-                                    .foregroundStyle(Color.textSecondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-
-                        AttestationStatusBadge(status: attestationStatus, modelID: nil)
-                    }
-                    .padding(.vertical, 4)
-                }
-
-                Section("Preview") {
-                    SharePreviewRow(title: "Permission", value: "Read-only", symbolName: "eye")
-                    SharePreviewRow(title: "Messages", value: "\(messageCount)", symbolName: "bubble.left.and.bubble.right")
-                    SharePreviewRow(title: "Sources", value: sourceCount == 0 ? "None attached" : "\(sourceCount)", symbolName: "link")
-                    SharePreviewRow(title: "Expiry", value: expiry.rawValue, symbolName: "clock")
-                    SharePreviewRow(title: "Account metadata", value: "Owner identity is not added to the link preview.", symbolName: "person.crop.circle.badge.xmark")
-                }
-
-                Section {
-                    Text(expiry.availabilityDetail)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Section {
-                    Button {
-                        Task {
-                            await onConfirm()
-                            dismiss()
-                        }
-                    } label: {
-                        Label("Create Public Link", systemImage: "link.badge.plus")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.primaryAction)
-                    .disabled(isWorking)
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .background(Color.surface)
-            .navigationTitle("Public Link Preview")
-            .platformInlineNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-        .platformMediumDetent()
-    }
-}
-
-private struct SharePreviewRow: View {
-    let title: String
-    let value: String
-    let symbolName: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: symbolName)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(Color.primaryAction)
-                .frame(width: 28, height: 28)
-                .background(Color.primaryAction.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                Text(value)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Color.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(.vertical, 3)
-    }
-}
-
-struct ShareGroupsView: View {
-    @EnvironmentObject private var chatStore: ChatStore
-    @Environment(\.dismiss) private var dismiss
-    @State private var groupName = ""
-    @State private var groupMembers = ""
-    @State private var editingShareGroup: ShareGroupInfo?
-    @State private var isWorking = false
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    HStack(spacing: 12) {
-                        Image(systemName: "person.3")
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(Color.brandBlue)
-                            .frame(width: 42, height: 42)
-                            .background(Color.appBlueTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Share Groups")
-                                .font(.headline)
-                            Text("Reusable collaborator sets for conversation sharing.")
-                                .font(.footnote.weight(.medium))
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-
-                Section("Groups") {
-                    if chatStore.isLoadingShareGroups {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("Loading groups")
-                                .foregroundStyle(.secondary)
-                        }
-                    } else if chatStore.shareGroups.isEmpty {
-                        ContentUnavailableView("No share groups", systemImage: "person.3")
-                            .frame(maxWidth: .infinity)
-                            .listRowSeparator(.hidden)
-                    } else {
-                        ForEach(chatStore.shareGroups) { group in
-                            HStack(spacing: 10) {
-                                Image(systemName: "person.3")
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(Color.brandBlue)
-                                    .frame(width: 30, height: 30)
-                                    .background(Color.appBlueTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(group.name)
-                                        .font(.subheadline.weight(.semibold))
-                                        .lineLimit(1)
-                                    Text(shareGroupSubtitle(group))
-                                        .font(.caption.weight(.medium))
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-
-                                Spacer(minLength: 0)
-
-                                Button {
-                                    beginEditing(group)
-                                } label: {
-                                    Image(systemName: "pencil")
-                                }
-                                .buttonStyle(.borderless)
-                                .disabled(isWorking)
-                                .accessibilityLabel("Edit Share Group")
-
-                                Button(role: .destructive) {
-                                    Task { await delete(group) }
-                                } label: {
-                                    Image(systemName: "trash")
-                                }
-                                .buttonStyle(.borderless)
-                                .disabled(isWorking)
-                                .accessibilityLabel("Delete Share Group")
-                            }
-                            .padding(.vertical, 3)
-                        }
-                    }
-                }
-
-                Section(editingShareGroup == nil ? "Create Group" : "Edit Group") {
-                    if let editingShareGroup {
-                        HStack {
-                            Label("Editing \(editingShareGroup.name)", systemImage: "pencil")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(Color.brandBlue)
-                                .lineLimit(1)
-                            Spacer(minLength: 0)
-                            Button("Cancel") {
-                                cancelEditing()
-                            }
-                            .font(.caption.weight(.semibold))
-                        }
-                    }
-
-                    TextField("Group name", text: $groupName)
-                        .textFieldStyle(.plain)
-                        .padding(11)
-                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                    TextField("email@company.com, alice.near", text: $groupMembers, axis: .vertical)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.emailAddress)
-                        .lineLimit(2...4)
-                        .textFieldStyle(.plain)
-                        .padding(11)
-                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                    Button {
-                        Task { await saveGroup() }
-                    } label: {
-                        Label(editingShareGroup == nil ? "Create Group" : "Save Group", systemImage: editingShareGroup == nil ? "plus" : "checkmark")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.brandBlue)
-                    .disabled(saveDisabled)
-                }
-            }
-            .navigationTitle("Share Groups")
-            .platformInlineNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-            .task {
-                await chatStore.refreshShareGroups(showErrors: false)
-            }
-        }
-        .platformMediumDetent()
+    private var sourceRoutingSemantics: ChatSourceRoutingSemantics {
+        modelCatalogStore.sourceRoutingSemantics(for: modelCatalogStore.selectedRouteKind)
     }
 
-    private var saveDisabled: Bool {
-        groupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-            groupMembers.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-            isWorking
-    }
-
-    private func saveGroup() async {
-        isWorking = true
-        defer { isWorking = false }
-
-        if let editingShareGroup {
-            await chatStore.updateShareGroup(editingShareGroup, name: groupName, rawMembers: groupMembers)
-            cancelEditing()
-        } else {
-            await chatStore.createShareGroup(name: groupName, rawMembers: groupMembers)
-            groupName = ""
-            groupMembers = ""
-        }
-    }
-
-    private func delete(_ group: ShareGroupInfo) async {
-        isWorking = true
-        defer { isWorking = false }
-        await chatStore.deleteShareGroup(group)
-        if editingShareGroup?.id == group.id {
-            cancelEditing()
-        }
-    }
-
-    private func beginEditing(_ group: ShareGroupInfo) {
-        editingShareGroup = group
-        groupName = group.name
-        groupMembers = group.members.map(\.shareSheetFieldValue).joined(separator: ", ")
-    }
-
-    private func cancelEditing() {
-        editingShareGroup = nil
-        groupName = ""
-        groupMembers = ""
-    }
-
-    private func shareGroupSubtitle(_ group: ShareGroupInfo) -> String {
-        let count = "\(group.members.count) member\(group.members.count == 1 ? "" : "s")"
-        let preview = group.members.prefix(2).map(\.displayName).joined(separator: ", ")
-        guard !preview.isEmpty else { return count }
-        return "\(count) · \(preview)\(group.members.count > 2 ? ", +" : "")"
-    }
-}
-
-struct RenameConversationView: View {
-    @EnvironmentObject private var chatStore: ChatStore
-    @Environment(\.dismiss) private var dismiss
-    @State private var title = ""
-    @State private var isWorking = false
-
-    var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Conversation Title")
-                    .font(.headline)
-                TextField("Title", text: $title)
-                    .textFieldStyle(.plain)
-                    .padding(12)
-                    .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
-                Spacer()
-            }
-            .padding()
-            .navigationTitle("Rename")
-            .platformInlineNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        Task { await save() }
-                    }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isWorking)
-                }
-            }
-            .onAppear {
-                title = chatStore.selectedConversationTitle
-            }
-        }
-        .platformMediumDetent()
-    }
-
-    private func save() async {
-        isWorking = true
-        defer { isWorking = false }
-        await chatStore.renameSelectedConversation(to: title)
-        dismiss()
-    }
-}
-
-struct NewProjectView: View {
-    @EnvironmentObject private var chatStore: ChatStore
-    @Environment(\.dismiss) private var dismiss
-    @State private var name = ""
-    @State private var instructions = ""
-    @State private var selectedPalette: ProjectPalette = .sky
-    @State private var selectedIcon: ProjectIcon = .folder
-    @State private var iconSearchText = ""
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    ProjectIdentityPreview(
-                        title: trimmedName.isEmpty ? "Untitled Project" : trimmedName,
-                        subtitle: instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Sources, files, instructions, and notes" : "Instructions ready",
-                        symbolName: selectedIcon.symbolName,
-                        tintColor: selectedPalette.tintColor,
-                        backgroundColor: selectedPalette.backgroundColor
-                    )
-
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text("Project Name")
-                            .font(.headline)
-                        TextField("Launch research", text: $name)
-                            .textFieldStyle(.plain)
-                            .padding(12)
-                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Identity")
-                            .font(.headline)
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(ProjectPalette.allCases) { palette in
-                                    Button {
-                                        selectedPalette = palette
-                                    } label: {
-                                        Circle()
-                                            .fill(palette.tintColor)
-                                            .frame(width: 30, height: 30)
-                                            .overlay {
-                                                Circle()
-                                                    .stroke(selectedPalette == palette ? Color.primary : Color.clear, lineWidth: 2)
-                                            }
-                                            .padding(3)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel("\(palette.label) project color")
-                                }
-                            }
-                        }
-
-                        TextField("Search icons", text: $iconSearchText)
-                            .textFieldStyle(.plain)
-                            .padding(.horizontal, 12)
-                            .frame(height: 40)
-                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
-
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 48), spacing: 8)], spacing: 8) {
-                            ForEach(filteredProjectIcons) { icon in
-                                Button {
-                                    selectedIcon = icon
-                                } label: {
-                                    Image(systemName: icon.symbolName)
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(selectedIcon == icon ? selectedPalette.tintColor : .secondary)
-                                        .frame(height: 42)
-                                        .frame(maxWidth: .infinity)
-                                        .background(
-                                            selectedIcon == icon ? selectedPalette.backgroundColor : Color.appSecondaryBackground,
-                                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        )
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("\(icon.label) project icon")
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text("Instructions")
-                            .font(.headline)
-                        TextField("How should the assistant handle this workspace?", text: $instructions, axis: .vertical)
-                            .textFieldStyle(.plain)
-                            .lineLimit(4...8)
-                            .padding(12)
-                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
-                    }
-
-                    Text("Project files, links, memory, and saved outputs will travel with chats in this workspace.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .navigationTitle("New Project")
-            .platformInlineNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
-                        chatStore.createProject(
-                            named: name,
-                            instructions: instructions,
-                            iconName: selectedIcon.symbolName,
-                            paletteName: selectedPalette.rawValue
-                        )
-                        dismiss()
-                    }
-                    .disabled(trimmedName.isEmpty)
-                }
-            }
-        }
-        .platformMediumDetent()
-    }
-
-    private var trimmedName: String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var filteredProjectIcons: [ProjectIcon] {
-        ProjectIcon.allCases.filter { $0.matches(iconSearchText) }
-    }
-
-}
-
-struct EditProjectView: View {
-    @EnvironmentObject private var chatStore: ChatStore
-    @Environment(\.dismiss) private var dismiss
-    let project: ChatProject
-    @State private var name: String
-    @State private var instructions: String
-    @State private var selectedPalette: ProjectPalette
-    @State private var selectedIcon: ProjectIcon
-    @State private var iconSearchText = ""
-
-    init(project: ChatProject) {
-        self.project = project
-        _name = State(initialValue: project.name)
-        _instructions = State(initialValue: project.instructions)
-        _selectedPalette = State(initialValue: project.projectPalette)
-        _selectedIcon = State(
-            initialValue: ProjectIcon.allCases.first { $0.symbolName == project.projectIconName } ?? .folder
+    private var currentAttestationStatus: AttestationStatus {
+        securityStore.currentAttestationStatus(
+            selectedModelID: modelCatalogStore.selectedModel,
+            selectedRouteKind: modelCatalogStore.selectedRouteKind,
+            isCouncilModeEnabled: modelCatalogStore.isCouncilModeEnabled,
+            activeCouncilHasExternalRoutes: modelCatalogStore.activeCouncilHasExternalRoutes
         )
     }
 
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    ProjectIdentityPreview(
-                        title: trimmedName.isEmpty ? project.name : trimmedName,
-                        subtitle: projectSubtitle,
-                        symbolName: selectedIcon.symbolName,
-                        tintColor: selectedPalette.tintColor,
-                        backgroundColor: selectedPalette.backgroundColor
-                    )
-
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text("Project Name")
-                            .font(.headline)
-                        TextField("Project name", text: $name)
-                            .textFieldStyle(.plain)
-                            .padding(12)
-                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Color")
-                            .font(.headline)
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(ProjectPalette.allCases) { palette in
-                                    Button {
-                                        selectedPalette = palette
-                                    } label: {
-                                        Circle()
-                                            .fill(palette.tintColor)
-                                            .frame(width: 30, height: 30)
-                                            .overlay {
-                                                Circle()
-                                                    .stroke(selectedPalette == palette ? Color.primary : Color.clear, lineWidth: 2)
-                                            }
-                                            .padding(3)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel("\(palette.label) project color")
-                                }
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Icon")
-                            .font(.headline)
-                        TextField("Search icons", text: $iconSearchText)
-                            .textFieldStyle(.plain)
-                            .padding(.horizontal, 12)
-                            .frame(height: 40)
-                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
-
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 48), spacing: 8)], spacing: 8) {
-                            ForEach(filteredProjectIcons) { icon in
-                                Button {
-                                    selectedIcon = icon
-                                } label: {
-                                    Image(systemName: icon.symbolName)
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(selectedIcon == icon ? selectedPalette.tintColor : .secondary)
-                                        .frame(height: 42)
-                                        .frame(maxWidth: .infinity)
-                                        .background(
-                                            selectedIcon == icon ? selectedPalette.backgroundColor : Color.appSecondaryBackground,
-                                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        )
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("\(icon.label) project icon")
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text("Instructions")
-                            .font(.headline)
-                        TextField("How should the assistant handle this workspace?", text: $instructions, axis: .vertical)
-                            .textFieldStyle(.plain)
-                            .lineLimit(4...8)
-                            .padding(12)
-                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
-                    }
-                }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .navigationTitle("Edit Project")
-            .platformInlineNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        chatStore.updateProject(
-                            project.id,
-                            name: name,
-                            iconName: selectedIcon.symbolName,
-                            paletteName: selectedPalette.rawValue,
-                            instructions: instructions
-                        )
-                        dismiss()
-                    }
-                    .disabled(trimmedName.isEmpty)
-                }
-            }
-        }
-        .platformMediumDetent()
-    }
-
-    private var trimmedName: String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var filteredProjectIcons: [ProjectIcon] {
-        ProjectIcon.allCases.filter { $0.matches(iconSearchText) }
-    }
-
-    private var projectSubtitle: String {
-        var parts: [String] = []
-        if !project.conversationIDs.isEmpty {
-            parts.append("\(project.conversationIDs.count) chat\(project.conversationIDs.count == 1 ? "" : "s")")
-        }
-        let sourceCount = project.links.count + project.attachments.count
-        if sourceCount > 0 {
-            parts.append("\(sourceCount) source\(sourceCount == 1 ? "" : "s")")
-        }
-        return parts.isEmpty ? "Project identity and instructions" : parts.joined(separator: " / ")
-    }
-}
-
-private struct ProjectIdentityPreview: View {
-    let title: String
-    let subtitle: String
-    let symbolName: String
-    let tintColor: Color
-    let backgroundColor: Color
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbolName)
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(tintColor)
-                .frame(width: 42, height: 42)
-                .background(backgroundColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.headline)
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(Color.textSecondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .background(Color.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.border, lineWidth: 1)
-        }
+    private var signedTranscriptExportContext: SignedTranscriptExportContext {
+        return securityStore.signedTranscriptExportContext(
+            selectedProviderDisplayName: modelCatalogStore.selectedProviderDisplayName,
+            selectedRouteUsesNearCloud: modelCatalogStore.selectedRouteUsesNearCloud,
+            selectedModelIsIronclawMobileRuntime: modelCatalogStore.selectedModelOption?.isIronclawMobileRuntime == true,
+            sourceRoutingSemantics: sourceRoutingSemantics,
+            projectID: projectStore.selectedProjectID
+        )
     }
 }

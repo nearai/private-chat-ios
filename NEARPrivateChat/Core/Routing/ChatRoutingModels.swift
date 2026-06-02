@@ -1,6 +1,36 @@
 import Foundation
 import SwiftUI
 
+struct ChatPromptSourcePrivacyOverride: Equatable {
+    var blocksWeb: Bool = false
+    var prefersFileOnly: Bool = false
+    var requiresPrivateRoute: Bool = false
+
+    var isEmpty: Bool {
+        !blocksWeb && !prefersFileOnly && !requiresPrivateRoute
+    }
+
+    func sourceInstruction(attachmentNames: [String]) -> String? {
+        guard blocksWeb || prefersFileOnly || requiresPrivateRoute else { return nil }
+        let names = attachmentNames
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if prefersFileOnly {
+            let source = names.isEmpty
+                ? "Use only the attached or selected file context already present in this turn."
+                : "Use only these attached files: \(names.joined(separator: ", "))."
+            return "\(source) Do not browse, use live web, pull saved links, or add unstated project context."
+        }
+        if blocksWeb {
+            return "Do not browse or use live web. Use the conversation, attached files, and selected project sources already present."
+        }
+        if requiresPrivateRoute {
+            return "Keep this turn on the private route; do not hand it to hosted or cloud routes."
+        }
+        return nil
+    }
+}
+
 enum ChatSourceMode: String, CaseIterable, Codable, Identifiable, Hashable {
     case auto
     case web
@@ -16,7 +46,7 @@ enum ChatSourceMode: String, CaseIterable, Codable, Identifiable, Hashable {
         case .web: "Web"
         case .links: "Links"
         case .files: "Files"
-        case .all: "Project"
+        case .all: "Web + Files"
         }
     }
 
@@ -26,7 +56,7 @@ enum ChatSourceMode: String, CaseIterable, Codable, Identifiable, Hashable {
         case .web: "Web"
         case .links: "Links"
         case .files: "Files"
-        case .all: "Project"
+        case .all: "Web + Files"
         }
     }
 
@@ -43,10 +73,10 @@ enum ChatSourceMode: String, CaseIterable, Codable, Identifiable, Hashable {
     var detail: String {
         switch self {
         case .auto: "Use files and web when helpful."
-        case .web: "Use live web first."
+        case .web: "Use live web and prompt attachments."
         case .links: "Use saved source links."
         case .files: "Use project and prompt files."
-        case .all: "Use live sources, project files, and saved links."
+        case .all: "Use live web, project files, saved links, and prompt attachments."
         }
     }
 }
@@ -59,6 +89,45 @@ enum ChatRouteKind: String, Hashable {
 
     var isIronclawRoute: Bool {
         self == .ironclawMobile || self == .ironclawHosted
+    }
+
+    var disclosureTitle: String {
+        switch self {
+        case .nearPrivate:
+            return "NEAR Private"
+        case .nearCloud:
+            return "NEAR AI Cloud"
+        case .ironclawMobile:
+            return "IronClaw Mobile"
+        case .ironclawHosted:
+            return "Hosted IronClaw"
+        }
+    }
+
+    var disclosureBadge: String {
+        switch self {
+        case .nearPrivate:
+            return "Proof when fetched"
+        case .nearCloud:
+            return "External API · outside proof"
+        case .ironclawMobile:
+            return "IronClaw Mobile · outside proof"
+        case .ironclawHosted:
+            return "Agent connection"
+        }
+    }
+
+    var disclosureSymbolName: String {
+        switch self {
+        case .nearPrivate:
+            return "lock.shield"
+        case .nearCloud:
+            return "cloud"
+        case .ironclawMobile:
+            return "iphone"
+        case .ironclawHosted:
+            return "terminal"
+        }
     }
 }
 
@@ -144,8 +213,8 @@ struct ChatSourceRoutingSemantics: Hashable {
             focus: focus,
             modelNativeWebToolPolicy: supportsNativeWebTool ? sourceWebPolicy : .never,
             appWebGroundingPolicy: supportsAppGrounding ? appGroundingPolicy : .never,
-            attachesSavedLinkSourcePack: focus == .auto || focus == .web || focus == .links || focus == .project || focus == .research,
-            attachesProjectFileSourcePack: focus == .auto || focus == .web || focus == .files || focus == .project || focus == .research,
+            attachesSavedLinkSourcePack: focus == .auto || focus == .links || focus == .project || focus == .research,
+            attachesProjectFileSourcePack: focus == .auto || focus == .files || focus == .project || focus == .research,
             attachesPromptFiles: true
         )
     }

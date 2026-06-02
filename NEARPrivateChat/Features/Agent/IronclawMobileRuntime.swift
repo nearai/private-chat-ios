@@ -134,9 +134,9 @@ final class IronclawMobileRuntime {
         - Use NEAR Private inference for the actual model call.
         - Use the app-side live web source pack when supplied; otherwise use web search when enabled by the app and the user asks for current information.
         - Use attached files and active project context when present.
-        - Produce action-oriented answers with clear formatting, headings only when useful, and concise source-aware reasoning.
+        - Produce action-oriented answers with the app-supported Markdown subset: concise headings, lists, tables, fenced code, links, bold, italic, and blockquotes when useful.
         - Lead with the answer. Then add dated evidence, tradeoffs, and next actions only when they help.
-        - Never emit fake tool calls, XML tool tags, raw JSON tool requests, or capability disclaimers after the app has supplied sources.
+        - Never emit fake tool calls, XML tool tags, HTML, Mermaid, LaTeX/math-only markup, raw JSON tool requests, or capability disclaimers after the app has supplied sources.
 
         Available mobile capabilities:
         - NEAR Private chat model execution.
@@ -145,9 +145,9 @@ final class IronclawMobileRuntime {
         - Local conversation/project context from the iOS app sandbox.
         - Native iOS tool execution for local projects, source links, project memory, project notes, chat organization, file context promotion, source modes, research mode, and web-search settings.
 
-        Remote workstation behavior:
-        - The app can hand off git, code editing, tests, shell, package installation, and repo work to a configured hosted IronClaw workstation before this mobile runtime call.
-        - If this prompt reached the mobile runtime, no hosted handoff was run for this turn. Be clear about the local iOS limit, then give the best mobile-safe plan or ask the user to connect/run the hosted workstation route.
+        Hosted IronClaw behavior:
+        - The app can hand off git, code editing, tests, shell, package installation, and repo work to a configured Hosted IronClaw connection before this mobile runtime call.
+        - If this prompt reached the mobile runtime, no hosted handoff was run for this turn. Be clear about the local iOS limit, then give the best mobile-safe plan or ask the user to connect/run Hosted IronClaw.
 
         Unavailable locally on iOS:
         - Shell commands, arbitrary host filesystem access, Docker, Postgres, LAN gateways, background desktop daemons, and unsandboxed MCP tools.

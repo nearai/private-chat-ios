@@ -21,15 +21,22 @@ struct RootView: View {
         .preferredColorScheme(chatStore.appearancePreference.preferredColorScheme)
         .onAppear {
             refreshLegalTermsAcceptance()
-            refreshSetupPresentation()
         }
         .onChange(of: sessionStore.session?.token) { _, _ in
             refreshLegalTermsAcceptance()
-            refreshSetupPresentation()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .legalTermsAcceptanceDidChange)) { _ in
+            if sessionStore.isSignedIn, sessionStore.setupAccountID != nil {
+                // Promote AuthView's pending acceptance into the per-account
+                // record so we exit the AuthView branch on the next render.
+                acceptLegalTermsForCurrentAccount()
+            } else {
+                refreshLegalTermsAcceptance()
+            }
         }
         .onChange(of: sessionStore.setupAccountID) { oldAccountID, accountID in
             refreshLegalTermsAcceptance(previousAccountID: oldAccountID, currentAccountID: accountID)
-            refreshSetupPresentation(previousAccountID: oldAccountID)
+            migrateSetupStorageIfNeeded(previousAccountID: oldAccountID)
         }
         .sheet(
             isPresented: Binding(
@@ -43,10 +50,7 @@ struct RootView: View {
         ) {
             if let accountID = presentedSetupAccountID {
                 UserSetupView(
-                    initialProfile: UserSetupStorage.presentationProfile(
-                        for: accountID,
-                        currentDefaults: currentSetupProfile
-                    ),
+                    initialProfile: setupDefaultsTuningProfile(for: accountID),
                     readiness: setupReadinessSnapshot,
                     onComplete: { profile in
                         completeSetup(profile, for: accountID)
@@ -75,19 +79,30 @@ struct RootView: View {
 
     @ViewBuilder
     private var authenticatedRoot: some View {
-        if sessionStore.isSignedIn {
-            if legalTermsAccepted {
-                AppShellView {
-                    beginSetupRerun()
-                }
-            } else {
-                LegalTermsRequiredView {
-                    acceptLegalTermsForCurrentAccount()
-                }
+        // v2 Claude Design Auth: a signed-in user whose terms have not been
+        // accepted falls back to AuthView (terms-pending state) rather than
+        // routing to a separate LegalTermsRequiredView. AuthView writes the
+        // pending acceptance to LegalTermsAcceptanceStore and posts
+        // `.legalTermsAcceptanceDidChange`; RootView promotes it for the
+        // current account on receipt.
+        if sessionStore.isSignedIn && (legalTermsAccepted || Self.isDebugInteractiveSession) {
+            AppShellView {
+                beginSetupRerun()
             }
         } else {
             AuthView()
         }
+    }
+
+    /// DEBUG interactive testing (launched with the env token, no demo flag):
+    /// skip the per-account legal-terms gate so the real app opens straight to
+    /// Home. Never true in a normal build/run.
+    private static var isDebugInteractiveSession: Bool {
+        #if DEBUG
+        return DebugBackend.isEnabled && !DemoCapture.isEnabled
+        #else
+        return false
+        #endif
     }
 
     private var currentSetupProfile: UserSetupProfile {
@@ -114,21 +129,28 @@ struct RootView: View {
 
     private func beginSetupRerun() {
         guard sessionStore.isSignedIn, let accountID = sessionStore.setupAccountID else { return }
-        UserSetupStorage.clearCompletion(for: accountID)
+        // Setup is optional defaults tuning now; completion state changes only
+        // after the user saves or explicitly keeps current defaults.
         UserSetupStorage.clearPendingLaunchCard(for: accountID)
         presentedSetupAccountID = accountID
     }
 
+    private func setupDefaultsTuningProfile(for accountID: String) -> UserSetupProfile {
+        UserSetupStorage.load(for: accountID) ?? currentSetupProfile
+    }
+
     private func completeSetup(_ profile: UserSetupProfile, for accountID: String) {
-        let normalized = profile.normalizedForDefaults
-        UserSetupStorage.saveWithoutPendingLaunchCard(normalized, for: accountID)
+        let savedProfile = chatStore.setupProfileSnapshot(profile)
+        UserSetupStorage.saveWithoutPendingLaunchCard(savedProfile, for: accountID)
         presentedSetupAccountID = nil
-        recordSetupTelemetry(profile: normalized, outcome: .completed)
-        chatStore.applySetupProfile(normalized)
+        recordSetupTelemetry(profile: savedProfile, outcome: .completed)
+        chatStore.applySetupProfile(savedProfile)
     }
 
     private func skipSetup(for accountID: String) {
-        let profile = UserSetupStorage.presentationProfile(for: accountID, currentDefaults: currentSetupProfile)
+        let profile = chatStore.setupProfileSnapshot(
+            setupDefaultsTuningProfile(for: accountID)
+        )
         UserSetupStorage.saveWithoutPendingLaunchCard(profile, for: accountID)
         presentedSetupAccountID = nil
         recordSetupTelemetry(profile: profile, outcome: .skipped)
@@ -167,30 +189,14 @@ struct RootView: View {
         guard let accountID = sessionStore.setupAccountID else { return }
         LegalTermsAcceptanceStore.acceptCurrentVersion(for: accountID)
         legalTermsAccepted = true
-        refreshSetupPresentation()
     }
 
-    private func refreshSetupPresentation(previousAccountID: String? = nil) {
-        guard sessionStore.isSignedIn, let accountID = sessionStore.setupAccountID else {
-            presentedSetupAccountID = nil
-            return
-        }
-
-        guard LegalTermsAcceptanceStore.hasAcceptedCurrentVersion(for: accountID) else {
-            presentedSetupAccountID = nil
-            return
-        }
-
+    private func migrateSetupStorageIfNeeded(previousAccountID: String?) {
+        guard sessionStore.isSignedIn, let accountID = sessionStore.setupAccountID else { return }
         if let previousAccountID, previousAccountID != accountID {
             UserSetupStorage.migrate(from: previousAccountID, to: accountID)
         } else if let presentedSetupAccountID, presentedSetupAccountID != accountID {
             UserSetupStorage.migrate(from: presentedSetupAccountID, to: accountID)
-        }
-
-        if !UserSetupStorage.isCompleted(for: accountID) {
-            presentedSetupAccountID = accountID
-        } else if presentedSetupAccountID == accountID {
-            presentedSetupAccountID = nil
         }
     }
 }

@@ -31,6 +31,8 @@
 	<string>1</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -45,5 +47,30 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>ai.near.privatechat.briefings.refresh</string>
+	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Used only while you dictate a message. Audio is converted to text and never stored.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Used only when you choose Camera in the composer.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Used only for photos you pick in the composer.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Used only when you confirm an action card to add a calendar event.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Used only when you confirm an action card to add a calendar event.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Used only when you confirm an action card to add a reminder.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Used only when you confirm an action card to add a reminder.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Converts your dictation to text so you can compose by voice.</string>
 </dict>
 </plist>

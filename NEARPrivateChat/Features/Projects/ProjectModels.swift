@@ -36,26 +36,69 @@ struct ProjectLink: Identifiable, Codable, Hashable {
     }
 }
 
-struct ProjectNote: Identifiable, Codable, Hashable {
+struct ProjectNote: Identifiable, Codable, Hashable, Sendable {
     var id: String
     var title: String
     var text: String
     var createdAt: Date
     var sourceMessageID: String?
+    var isLocalOnly: Bool
+
+    var projectContextStatusTitle: String {
+        isLocalOnly ? "Local-only" : "Can route"
+    }
+
+    var projectContextStatusSymbolName: String {
+        isLocalOnly ? "iphone" : "arrow.up.forward.circle"
+    }
+
+    var projectContextStatusDescription: String {
+        isLocalOnly
+            ? "Stays off Hosted IronClaw and cloud routes."
+            : "Available when Project notes are included."
+    }
 
     init(
         id: String = "note-\(UUID().uuidString)",
         title: String,
         text: String,
         createdAt: Date = Date(),
-        sourceMessageID: String? = nil
+        sourceMessageID: String? = nil,
+        isLocalOnly: Bool = false
     ) {
         self.id = id
         self.title = title
         self.text = text
         self.createdAt = createdAt
         self.sourceMessageID = sourceMessageID
+        self.isLocalOnly = isLocalOnly
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case text
+        case createdAt
+        case sourceMessageID
+        case isLocalOnly
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        text = try container.decode(String.self, forKey: .text)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        sourceMessageID = try container.decodeIfPresent(String.self, forKey: .sourceMessageID)
+        isLocalOnly = try container.decodeIfPresent(Bool.self, forKey: .isLocalOnly) ?? false
+    }
+}
+
+struct ProjectContextRoutePreview: Equatable, Sendable {
+    var title: String
+    var detail: String?
+    var symbolName: String
+    var usesAttentionStyle: Bool
 }
 
 enum ProjectPalette: String, CaseIterable, Codable, Identifiable {
@@ -86,13 +129,13 @@ enum ProjectPalette: String, CaseIterable, Codable, Identifiable {
     var tintColor: Color {
         switch self {
         case .sky: Color.primaryAction
-        case .mint: Color(red: 0.0, green: 0.56, blue: 0.42)
-        case .teal: Color(red: 0.0, green: 0.48, blue: 0.62)
-        case .violet: Color(red: 0.42, green: 0.34, blue: 0.90)
-        case .indigo: Color(red: 0.24, green: 0.31, blue: 0.82)
-        case .rose: Color(red: 0.82, green: 0.24, blue: 0.42)
-        case .amber: Color(red: 0.78, green: 0.45, blue: 0.02)
-        case .slate: Color(red: 0.28, green: 0.33, blue: 0.38)
+        case .mint: Color.proofVerified
+        case .teal: Color.brandSky
+        case .violet: Color.purple
+        case .indigo: Color.indigo
+        case .rose: Color.pink
+        case .amber: Color.proofStale
+        case .slate: Color.textSecondary
         }
     }
 
@@ -230,6 +273,7 @@ struct ChatProject: Identifiable, Codable, Hashable {
     var id: String
     var name: String
     var createdAt: Date
+    var archivedAt: Date?
     var conversationIDs: [String]
     var attachments: [ChatAttachment]
     var instructions: String
@@ -243,6 +287,7 @@ struct ChatProject: Identifiable, Codable, Hashable {
         id: String,
         name: String,
         createdAt: Date,
+        archivedAt: Date? = nil,
         conversationIDs: [String],
         attachments: [ChatAttachment] = [],
         instructions: String = "",
@@ -255,6 +300,7 @@ struct ChatProject: Identifiable, Codable, Hashable {
         self.id = id
         self.name = name
         self.createdAt = createdAt
+        self.archivedAt = archivedAt
         self.conversationIDs = conversationIDs
         self.attachments = attachments
         self.instructions = instructions
@@ -269,6 +315,7 @@ struct ChatProject: Identifiable, Codable, Hashable {
         case id
         case name
         case createdAt
+        case archivedAt
         case conversationIDs
         case attachments
         case instructions
@@ -284,6 +331,7 @@ struct ChatProject: Identifiable, Codable, Hashable {
         id = try container.decode(String.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
+        archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
         conversationIDs = try container.decode([String].self, forKey: .conversationIDs)
         attachments = try container.decodeIfPresent([ChatAttachment].self, forKey: .attachments) ?? []
         instructions = try container.decodeIfPresent(String.self, forKey: .instructions) ?? ""
@@ -314,5 +362,9 @@ struct ChatProject: Identifiable, Codable, Hashable {
 
     var tintBackgroundColor: Color {
         projectPalette.backgroundColor
+    }
+
+    var isArchived: Bool {
+        archivedAt != nil
     }
 }

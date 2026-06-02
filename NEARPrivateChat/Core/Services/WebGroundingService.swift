@@ -97,7 +97,7 @@ final class WebGroundingService {
 
         let ranked = Self.ranked(Self.unique(combined).compactMap(Self.publicHTTPSResult), query: query).prefix(8)
         guard !ranked.isEmpty else {
-            throw APIError.status(0, "No web search results were returned.")
+            throw APIError.status(0, "No web results found.")
         }
         return WebGroundingContext(query: query, fetchedAt: Date(), results: Array(ranked))
     }

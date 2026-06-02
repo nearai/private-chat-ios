@@ -1,9 +1,19 @@
 import SwiftUI
 
 struct SharedConversationSheet: View {
-    @EnvironmentObject private var chatStore: ChatStore
+    @EnvironmentObject private var shareStore: ShareStore
     @Environment(\.dismiss) private var dismiss
     @State private var linkText = ""
+    let onOpenForWriting: ((SharedConversationSnapshot) -> Void)?
+    let onCopyAndContinue: ((SharedConversationSnapshot) -> Void)?
+
+    init(
+        onOpenForWriting: ((SharedConversationSnapshot) -> Void)? = nil,
+        onCopyAndContinue: ((SharedConversationSnapshot) -> Void)? = nil
+    ) {
+        self.onOpenForWriting = onOpenForWriting
+        self.onCopyAndContinue = onCopyAndContinue
+    }
 
     var body: some View {
         NavigationStack {
@@ -17,18 +27,18 @@ struct SharedConversationSheet: View {
 
                     HStack(spacing: 10) {
                         Button {
-                            Task { await chatStore.openSharedConversation(from: linkText) }
+                            Task { await shareStore.openSharedConversation(from: linkText) }
                         } label: {
                             Label("Open", systemImage: "arrow.down.doc")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.brandBlue)
-                        .disabled(linkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || chatStore.isLoadingSharedPreview)
+                        .disabled(linkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || shareStore.isLoadingSharedPreview)
 
                         Button {
                             linkText = ""
-                            chatStore.closeSharedPreview()
+                            shareStore.closeSharedPreview()
                         } label: {
                             Image(systemName: "xmark")
                                 .frame(width: 40, height: 34)
@@ -37,7 +47,7 @@ struct SharedConversationSheet: View {
                         .accessibilityLabel("Clear")
                     }
 
-                    if chatStore.isLoadingSharedPreview {
+                    if shareStore.isLoadingSharedPreview {
                         HStack(spacing: 10) {
                             ProgressView()
                             Text("Loading conversation")
@@ -50,13 +60,17 @@ struct SharedConversationSheet: View {
 
                 Divider()
 
-                if let snapshot = chatStore.sharedPreview {
-                    SharedConversationPreview(snapshot: snapshot)
+                if let snapshot = shareStore.sharedPreview {
+                    SharedConversationPreview(
+                        snapshot: snapshot,
+                        onOpenForWriting: onOpenForWriting,
+                        onCopyAndContinue: onCopyAndContinue
+                    )
                 } else {
                     ContentUnavailableView(
                         "Open a shared conversation",
                         systemImage: "link",
-                        description: Text("Paste a public or shared NEAR AI Private Chat link.")
+                        description: Text("Paste a public or shared NEAR Private Chat link.")
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -75,8 +89,10 @@ struct SharedConversationSheet: View {
 }
 
 private struct SharedConversationPreview: View {
-    @EnvironmentObject private var chatStore: ChatStore
+    @EnvironmentObject private var shareStore: ShareStore
     let snapshot: SharedConversationSnapshot
+    let onOpenForWriting: ((SharedConversationSnapshot) -> Void)?
+    let onCopyAndContinue: ((SharedConversationSnapshot) -> Void)?
 
     private var transcript: String {
         snapshot.messages
@@ -156,7 +172,7 @@ private struct SharedConversationPreview: View {
                             .padding(.top, 48)
                     } else {
                         ForEach(snapshot.messages) { message in
-                            MessageBubble(message: message, chatStore: chatStore)
+                            SharedPreviewMessageBubble(message: message)
                                 .id(message.id)
                         }
                     }
@@ -170,17 +186,21 @@ private struct SharedConversationPreview: View {
 
     @ViewBuilder
     private var previewActions: some View {
-        if snapshot.canWrite {
+        if snapshot.canWrite, let onOpenForWriting {
             SharedPreviewActionButton(title: "Open chat", systemImage: "square.and.pencil", isPrimary: true) {
-                chatStore.openSharedPreviewForWriting()
+                onOpenForWriting(snapshot)
+                shareStore.closeSharedPreview()
             }
             .accessibilityLabel("Open shared conversation for writing")
         }
 
-        SharedPreviewActionButton(title: "Copy & Continue", systemImage: "doc.on.doc", isPrimary: false) {
-            chatStore.cloneSharedPreviewToChat()
+        if let onCopyAndContinue {
+            SharedPreviewActionButton(title: "Copy & Continue", systemImage: "doc.on.doc", isPrimary: false) {
+                onCopyAndContinue(snapshot)
+                shareStore.closeSharedPreview()
+            }
+            .accessibilityLabel("Copy and Continue")
         }
-        .accessibilityLabel("Copy and Continue")
 
         SharedPreviewActionButton(title: "Copy text", systemImage: "doc.text", isPrimary: false) {
             Clipboard.copy(transcript)
@@ -189,32 +209,107 @@ private struct SharedConversationPreview: View {
     }
 }
 
+private struct SharedPreviewMessageBubble: View {
+    let message: ChatMessage
+    @State private var tappedSource: SourceSheetPresentation?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            if message.role == .user {
+                Spacer(minLength: 36)
+            }
+
+            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 8) {
+                header
+
+                if message.role == .assistant && !message.sources.isEmpty {
+                    SourceCarousel(sources: message.sources) { tappedIndex in
+                        tappedSource = SourceSheetPresentation(
+                            index: tappedIndex,
+                            source: message.sources[tappedIndex]
+                        )
+                    }
+                }
+
+                messageText
+            }
+            .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
+
+            if message.role != .user {
+                Spacer(minLength: 36)
+            }
+        }
+        .sheet(item: $tappedSource) { presentation in
+            SourceSheet(index: presentation.index + 1, source: presentation.source)
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            Text(message.role == .user ? "You" : message.modelDisplayName)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            if let author = message.authorDisplayLabel {
+                MetadataPill(title: author, symbolName: "person.crop.circle", isPrimary: false)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var messageText: some View {
+        if message.role == .assistant {
+            MarkdownMessageText(text: message.text.isEmpty ? " " : message.text, sources: message.sources)
+                .foregroundStyle(.primary)
+        } else {
+            Text(message.text.isEmpty ? " " : message.text)
+                .font(.body)
+                .lineSpacing(7)
+                .textSelection(.enabled)
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+    }
+}
+
 private struct SharedWithMeView: View {
-    @EnvironmentObject private var chatStore: ChatStore
+    @EnvironmentObject private var shareStore: ShareStore
     @Environment(\.dismiss) private var dismiss
+    let onOpenForWriting: ((SharedConversationSnapshot) -> Void)?
+    let onCopyAndContinue: ((SharedConversationSnapshot) -> Void)?
+
+    init(
+        onOpenForWriting: ((SharedConversationSnapshot) -> Void)? = nil,
+        onCopyAndContinue: ((SharedConversationSnapshot) -> Void)? = nil
+    ) {
+        self.onOpenForWriting = onOpenForWriting
+        self.onCopyAndContinue = onCopyAndContinue
+    }
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    SharedAccessSummaryCard(conversationCount: chatStore.sharedWithMe.count)
+                    SharedAccessSummaryCard(conversationCount: shareStore.sharedWithMe.count)
                         .padding(.vertical, 4)
                 }
 
                 Section("Conversations") {
-                    if chatStore.isLoadingSharedWithMe && chatStore.sharedWithMe.isEmpty {
+                    if shareStore.isLoadingSharedWithMe && shareStore.sharedWithMe.isEmpty {
                         HStack(spacing: 10) {
                             ProgressView()
                             Text("Loading shared conversations")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
-                    } else if chatStore.sharedWithMe.isEmpty {
+                    } else if shareStore.sharedWithMe.isEmpty {
                         ContentUnavailableView("No shared conversations", systemImage: "person.2.slash")
                             .frame(maxWidth: .infinity)
                             .listRowSeparator(.hidden)
                     } else {
-                        ForEach(chatStore.sharedWithMe) { item in
+                        ForEach(shareStore.sharedWithMe) { item in
                             NavigationLink(value: item) {
                                 SharedWithMeRow(item: item)
                             }
@@ -225,11 +320,21 @@ private struct SharedWithMeView: View {
             .navigationTitle("Shared")
             .platformInlineNavigationTitle()
             .refreshable {
-                await chatStore.refreshSharedWithMe()
+                await shareStore.refreshSharedWithMe()
             }
             .navigationDestination(for: SharedConversationInfo.self) { item in
-                SharedWithMePreviewView(item: item)
-                    .environmentObject(chatStore)
+                SharedWithMePreviewView(
+                    item: item,
+                    onOpenForWriting: { snapshot in
+                        onOpenForWriting?(snapshot)
+                        dismiss()
+                    },
+                    onCopyAndContinue: { snapshot in
+                        onCopyAndContinue?(snapshot)
+                        dismiss()
+                    }
+                )
+                .environmentObject(shareStore)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -239,21 +344,16 @@ private struct SharedWithMeView: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        Task { await chatStore.refreshSharedWithMe() }
+                        Task { await shareStore.refreshSharedWithMe() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
-                    .disabled(chatStore.isLoadingSharedWithMe)
+                    .disabled(shareStore.isLoadingSharedWithMe)
                     .accessibilityLabel("Refresh shared conversations")
                 }
             }
             .task {
-                await chatStore.refreshSharedWithMe(showErrors: false)
-            }
-            .onChange(of: chatStore.openSelectedConversationToken) { _, token in
-                if token != nil {
-                    dismiss()
-                }
+                await shareStore.refreshSharedWithMe(showErrors: false)
             }
         }
         .platformLargeDetent()
@@ -313,19 +413,31 @@ struct SharedWithMeRow: View {
             parts.append(error)
         }
         if parts.isEmpty {
-            return item.canWrite ? "Open in place or fork a private copy." : "Copy and Continue makes a private draft."
+            return item.canWrite ? "Open in place, or fork a private copy." : "Copy and Continue makes a private draft."
         }
         return parts.joined(separator: " · ")
     }
 }
 
 struct SharedWithMePreviewView: View {
-    @EnvironmentObject private var chatStore: ChatStore
+    @EnvironmentObject private var shareStore: ShareStore
     let item: SharedConversationInfo
+    let onOpenForWriting: ((SharedConversationSnapshot) -> Void)?
+    let onCopyAndContinue: ((SharedConversationSnapshot) -> Void)?
+
+    init(
+        item: SharedConversationInfo,
+        onOpenForWriting: ((SharedConversationSnapshot) -> Void)? = nil,
+        onCopyAndContinue: ((SharedConversationSnapshot) -> Void)? = nil
+    ) {
+        self.item = item
+        self.onOpenForWriting = onOpenForWriting
+        self.onCopyAndContinue = onCopyAndContinue
+    }
 
     var body: some View {
         Group {
-            if chatStore.isLoadingSharedPreview {
+            if shareStore.isLoadingSharedPreview {
                 VStack(spacing: 12) {
                     ProgressView()
                     Text("Opening shared conversation")
@@ -334,9 +446,13 @@ struct SharedWithMePreviewView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.appBackground)
-            } else if let snapshot = chatStore.sharedPreview,
+            } else if let snapshot = shareStore.sharedPreview,
                       snapshot.conversation.id == item.conversationID {
-                SharedConversationPreview(snapshot: snapshot)
+                SharedConversationPreview(
+                    snapshot: snapshot,
+                    onOpenForWriting: onOpenForWriting,
+                    onCopyAndContinue: onCopyAndContinue
+                )
             } else {
                 ContentUnavailableView(
                     "Could not open conversation",
@@ -350,7 +466,7 @@ struct SharedWithMePreviewView: View {
         .navigationTitle(item.displayTitle)
         .platformInlineNavigationTitle()
         .task(id: item.conversationID) {
-            await chatStore.openSharedConversation(
+            await shareStore.openSharedConversation(
                 from: item.conversationID,
                 knownCanWrite: item.canWrite,
                 sourceLabel: item.sourceLabel
@@ -374,7 +490,7 @@ struct SharedAccessSummaryCard: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Shared with you")
                         .font(.headline)
-                    Text("Read-only chats stay locked. Editable shares open in place when the owner granted write access.")
+                    Text("Read-only chats stay locked. Editable shares open in place when the owner grants write access.")
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)

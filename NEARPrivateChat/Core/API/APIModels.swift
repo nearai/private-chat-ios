@@ -81,7 +81,7 @@ enum APIError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL: "The API URL is invalid."
-        case .unauthenticated: "Sign in again to continue."
+        case .unauthenticated: "Sign in to start chatting."
         case .invalidCallback: "The sign-in callback did not include an authorization code."
         case let .status(code, message): Self.displayStatusMessage(code: code, rawMessage: message)
         case .emptyResponse: "The server returned an empty response."
@@ -98,6 +98,13 @@ enum APIError: LocalizedError {
         guard !normalized.isEmpty else { return fallback }
 
         let lowercased = normalized.lowercased()
+        if code == 401 || code == 403 {
+            let isRawAuthFailure = (lowercased.contains("authorization") && lowercased.contains("header")) ||
+                lowercased.contains("invalid or expired authentication token")
+            if isRawAuthFailure {
+                return "Authentication is missing or expired for this route. Open Account, sign in or connect NEAR AI Cloud, then try again."
+            }
+        }
         let looksRaw = normalized.count > 240 ||
             lowercased.hasPrefix("<!doctype") ||
             lowercased.hasPrefix("<html") ||

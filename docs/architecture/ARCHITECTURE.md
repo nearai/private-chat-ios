@@ -1,201 +1,219 @@
 # Architecture
 
-## Current State
+## Position
 
-The app works, and the feature-first migration now has real folder ownership.
+This repo needs a hard architecture reset, not cosmetic cleanup.
 
-Completed on 2026-05-26:
+Current source already has feature folders, but ownership did not move far enough. Most important behavior still routes through one app-wide object. That object is doing too many jobs: app state, conversation state, project state, sharing, files, streaming, prompt assembly, model routing, account settings, persistence, agent tools, demo data, cache, banners, and UI compatibility.
 
-- Root app construction, lifecycle, legal/setup gating, and status banner live in `App/`.
-- Root route/sheet types and ask/deep-link routing models live in `Core/Routing/`.
-- Reusable design tokens, haptics, layout helpers, brand marks, clipboard, view extensions, and markdown rendering live in `Core/DesignSystem` or `Shared`.
-- Feature UI files now live under `Features/Auth`, `Features/Home`, `Features/Chat`, `Features/ModelCatalog`, `Features/Sharing`, `Features/Projects`, `Features/Files`, `Features/Account`, `Features/Security`, `Features/Agent`, and `Features/Setup`.
-- `AppShellView.swift` is now a small root navigation/dialog coordinator.
-- The old monolithic `Models.swift` has been split into domain model files.
+Feature folders are useful only when behavior follows them. Right now several folders are place names, not boundaries.
 
-The remaining concentration is narrower but still important:
+## Audit Snapshot
 
-- `App/State/ChatStore.swift` still owns conversation state, project state, sharing, files, streaming, source routing, settings, billing, attestation, agent tools, persistence, cache, and banners.
-- Several first-pass domain model files are mechanically split and may need small ownership corrections as feature stores emerge.
+Measured on 2026-06-01:
 
-This remaining shape still slows deeper performance/debug work because network, persistence, streaming, and feature mutation are concentrated in `ChatStore`.
+| File | Lines | Problem |
+| --- | ---: | --- |
+| `NEARPrivateChat/App/State/ChatStore.swift` | 11878 | God object. Central risk. Must shrink phase by phase until deleted or reduced to a tiny facade. |
+| `NEARPrivateChatTests/PrivateChatCoreTests.swift` | 8352 | Test god file. Slows review, hides ownership, makes targeted changes harder. |
+| `NEARPrivateChat/Features/Chat/LiveDataService.swift` | 3599 | Mixed intent parsing, live data, reminders, memory, trackers, widgets. Needs domain split. |
+| `NEARPrivateChat/Features/Chat/BriefingFeature.swift` | 3016 | Feature surface plus orchestration packed together. |
+| `NEARPrivateChat/Features/Chat/ChatMessageViews.swift` | 2452 | Many view components in one file. Hard to review and preview. |
+| `NEARPrivateChat/Features/Home/HomeSupportingViews.swift` | 2224 | Many unrelated home/setup/supporting views in one file. |
+| `NEARPrivateChat/Features/Setup/SetupModels.swift` | 2032 | Setup planning/model logic concentrated in one file. |
+| `NEARPrivateChat/Core/API/PrivateChatAPI.swift` | 1590 | Domain APIs still share one concrete mega-client. |
+| `NEARPrivateChat/Features/Chat/ChatInputBar.swift` | 1411 | Composer UI owns too many sheets, media actions, dictation, source routing actions. |
+| `NEARPrivateChat/Features/Chat/ChatScreenView.swift` | 1385 | Chat screen still coordinates toolbar, export, security, project save, room UI. |
 
-## Target Shape
+Repo has one Xcode project and no workspace:
 
-Use feature-first SwiftUI with small shared core modules.
+- `NEARPrivateChat.xcodeproj`
+- schemes: `NEARPrivateChat`, share extension, widget extension
+- project uses manual file membership. Every new Swift source file must be added to `project.pbxproj`.
+
+## Core Diagnosis
+
+The architecture problem is not file count. It is missing ownership.
+
+Bad current flow:
+
+```txt
+View -> ChatStore -> everything
+```
+
+Target flow:
+
+```txt
+AppEnvironment
+  -> AppRouter
+  -> Feature stores
+  -> Domain services
+  -> API clients / persistence adapters
+```
+
+No feature should need full app state. Views should receive narrow stores or explicit values/actions.
+
+## Target Tree
 
 ```txt
 NEARPrivateChat/
   App/
-    NEARPrivateChatApp.swift
-    RootView.swift
-    AppEnvironment.swift
-    AppLifecycle.swift
+    Composition/
+    Lifecycle/
+    Navigation/
+    State/
   Core/
     API/
     Auth/
-    Cache/
-    DesignSystem/
     Diagnostics/
     Export/
     Persistence/
     Routing/
     Security/
-    Telemetry/
     Streaming/
+    Telemetry/
   Features/
     Account/
+      Models/
+      Services/
+      Store/
+      Views/
     Agent/
-    Auth/
+      Models/
+      Services/
+      Store/
+      Views/
     Chat/
+      Composer/
+      Messages/
+      Streaming/
+      Store/
+      Views/
     Files/
+      Models/
+      Services/
+      Store/
+      Views/
     Home/
+      Planner/
+      Store/
+      Views/
     ModelCatalog/
+      Models/
+      Services/
+      Store/
+      Views/
     Projects/
+      Models/
+      Services/
+      Store/
+      Views/
     Security/
+      Models/
+      Services/
+      Store/
+      Views/
     Setup/
+      Planner/
+      Store/
+      Views/
     Sharing/
+      Models/
+      Services/
+      Store/
+      Views/
   Shared/
     Components/
     Extensions/
+    Formatting/
     Utilities/
-  Resources/
 ```
 
-Rule: feature owns its screen, reducer/store slice, feature-specific components, and feature-specific helpers. Core owns cross-feature services only.
+Folders are allowed to stay flatter inside small features. Use this tree when code grows enough to need it.
 
-Swift access rule: when moving current `private` view types or extensions into separate files, remove `private` only from declarations that must be referenced cross-file. Keep helper subviews `private` when they stay in the same file as their only caller.
+## Ownership Rules
 
-## App Shell
+### App
 
-Target state: root app creates one dependency graph:
+App owns construction only:
 
-- `PrivateChatAPI`
-- `SessionStore`
-- `ConversationStore`
-- `MessageStreamService`
-- `ProjectStore`
-- `FileStore`
-- `ShareStore`
-- `SettingsStore`
-- `AttestationStore`
-- `AgentRuntimeStore`
-- `BannerCenter`
-- `AppRouter`
+- create API clients
+- create persistence adapters
+- create feature services
+- create feature stores
+- install environment dependencies
+- handle app lifecycle callbacks
+- reset app state on sign-out/account switch
 
-SwiftUI views read narrow dependencies. Avoid passing full app store into every feature once extraction starts.
+App must not own feature business rules.
 
-Transition rule: Phase 1 keeps current `SessionStore` and `ChatStore` environment objects. New stores are introduced only when their feature is extracted.
+### Core
 
-Phase 1 completed on 2026-05-26:
+Core owns cross-feature infrastructure:
 
-- `NEARPrivateChatApp.swift` is now app construction and dependency install.
-- `App/RootView.swift` owns root auth/setup/legal/banner presentation.
-- `App/AppLifecycle.swift` owns root URL, auth, profile, account-switch, and bootstrap callbacks.
-- `Core/Routing/AppRoute.swift`, `AppSheet.swift`, and `AppRouter.swift` establish the route model for later feature extraction.
-- `Features/Setup/UserSetupView.swift` and `LegalTermsRequiredView.swift` own setup/legal UI.
+- authenticated request plumbing
+- route planning primitives
+- stream event parsing
+- secure URL validation
+- persistence primitives
+- export primitives
+- telemetry primitives
+- diagnostics primitives
 
-Phase 2/3/4/12 structural pass completed on 2026-05-26:
+Core must not import feature UI.
 
-- `Core/DesignSystem` and `Shared` own reusable presentation primitives.
-- `Features/*` owns feature UI files.
-- `App/AppShellView.swift` is reduced to root shell coordination.
-- Domain models are split across `Core` and `Features`.
+### Features
 
-## Routing
+Feature owns:
 
-Use enum routes, not scattered booleans.
+- screen views
+- feature store
+- feature-specific service
+- feature models
+- feature tests
+- feature-specific formatting/helpers
 
-```swift
-enum AppRoute: Hashable {
-    case chat(conversationID: String)
-    case sharedConversation(id: String)
-    case project(id: String)
-    case security
-    case account
-}
+Feature must not reach into unrelated feature internals. Cross-feature work flows through app-level orchestration or narrow protocols.
 
-enum AppSheet: Identifiable {
-    case modelPicker
-    case share(conversationID: String)
-    case projectFiles(projectID: String)
-    case setup
-    case accountSettings
-}
-```
+### Shared
 
-Target state: `AppRouter` owns:
+Shared owns boring reusable UI/utilities only. If code knows about chat, project, setup, model route, sharing, agent, billing, or attestation, it is not shared.
 
-- navigation path
-- active sheet
-- external deep-link handoff
-- reset on sign-out/account switch
+## Store Rules
 
-Route mapping lives in one `Routing` module. Feature views call router actions, not `NavigationStack` state directly.
+Use narrow stores. One store per feature or sub-feature when behavior is real.
 
-Transition rule: do not replace every nested `NavigationStack` in one pass. Phase 1 introduces route/sheet types and moves root-level auth/setup/legal/banner routing first. Feature-specific sheets stay local until their feature extraction.
+Allowed store jobs:
 
-Phase 1 router should match the current app style: `ObservableObject` with `@StateObject` ownership and `@EnvironmentObject` injection. A later Observation migration may switch to `@Observable` after state ownership is smaller.
+- hold observable feature state
+- expose user actions as methods
+- call services
+- translate service results into feature state
 
-## State Ownership
+Forbidden store jobs:
 
-Keep state at narrowest owner:
+- raw HTTP construction
+- file/keychain/defaults key construction
+- global routing decisions unrelated to feature
+- prompt assembly for unrelated routes
+- demo data generation
+- unrelated feature mutation
 
-- Local UI state -> `@State`
-- Child mutation -> `@Binding`
-- Feature data and async behavior -> feature store or service
-- Cross-feature app services -> environment injection
-- Route and sheets -> `AppRouter`
+State ownership:
 
-No new global mega-store. `ChatStore` becomes temporary facade during migration, then disappears or shrinks to composition root adapter.
+- local view state -> `@State`
+- child mutation -> `@Binding`
+- root-owned observable feature store -> `@StateObject` for current deployment style
+- shared app service -> environment
+- domain behavior -> service/reducer/pure type
 
-## Feature Boundaries
+Do not create view models to mirror state. Split views first. Add a store only when it owns behavior.
 
-### Auth
+## API Boundary
 
-Owns sign-in, callback parsing, session persistence, profile refresh, sign-out.
+`PrivateChatAPI` should become request plumbing plus domain clients.
 
-### Home
-
-Owns conversation list UI, search/filter state, project summary rows, quick actions. Calls conversation/project stores.
-
-### Chat
-
-Owns transcript UI, composer, message actions, response variants, markdown rendering, source strips. Calls message streaming and routing services.
-
-### Model Catalog
-
-Owns model catalog, ranked picker, pinned models, council selection, route readiness.
-
-### Projects
-
-Owns project CRUD, project instructions, memory, links, notes, project-scoped files.
-
-### Files
-
-Owns local file import, remote file list, preview, upload limits, prompt/project attachment behavior.
-
-### Sharing
-
-Owns public links, direct shares, org shares, share groups, shared-with-me, shared previews.
-
-### Security
-
-Owns attestation display, proof language, local verification state, diagnostics tied to privacy/security.
-
-`Core/Security` is for shared security utilities such as URL validation, keychain wrappers, and cryptographic helpers. `Features/Security` is for user-facing attestation/security UI.
-
-### Agent
-
-Owns IronClaw Mobile runtime, hosted handoff preflight, tool calls, approval/credential gates.
-
-### Account
-
-Owns billing, settings, imports, integrations, diagnostics entrypoints.
-
-## Service Boundaries
-
-`PrivateChatAPI` should become protocol-backed clients:
+Target clients:
 
 - `AuthAPI`
 - `ConversationAPI`
@@ -207,76 +225,191 @@ Owns billing, settings, imports, integrations, diagnostics entrypoints.
 - `BillingAPI`
 - `AttestationAPI`
 
-Each client returns typed DTOs. Feature services translate DTOs into domain models when needed.
+Each client gets a protocol. Feature services depend on protocols, not the concrete mega-client.
 
-Xcode project rule: this project uses manual `PBXGroup`, `PBXFileReference`, and `PBXSourcesBuildPhase` entries, not filesystem-synchronized groups. Every new Swift source file must be added to `NEARPrivateChat.xcodeproj/project.pbxproj` with target membership.
+DTO rule: API DTOs live in API/domain files. Views consume feature/domain models, not raw response shapes.
 
-## Persistence
+## Persistence Boundary
 
-Create explicit storage adapters:
+No feature builds storage keys inline.
 
-- `KeychainSessionStore`
-- `UserDefaultsSettingsStore`
-- `FileCacheStore`
-- `DraftStore`
-- `ProjectLocalStore`
-- `MessageCacheStore`
+Target adapters:
 
-No feature should build UserDefaults keys inline. Account-scoped keys live in one persistence helper.
+- `SessionPersistence`
+- `SettingsPersistence`
+- `ConversationCache`
+- `MessageCache`
+- `ProjectPersistence`
+- `DraftPersistence`
+- `FileCache`
+- `AgentThreadPersistence`
 
-## Streaming
+Each adapter owns account scoping, migration from fallback scope, filenames, defaults keys, keychain account names, and serialization.
 
-Move stream orchestration out of view-facing store:
+## Routing Boundary
 
-- `MessageStreamService` owns `/v1/responses` stream parsing and cancellation.
-- `CouncilStreamService` owns parallel model fan-out and synthesis.
-- `RoutePlanner` chooses NEAR Private, NEAR Cloud, IronClaw Mobile, Hosted IronClaw, or Council.
-- `MessageTimelineStore` applies stream events to visible message state.
+Routing must be enum-driven.
 
-This isolates hard bugs: stale stream, retry/fallback, branch variants, visible-output timeout, cancellation.
+`AppRouter` owns:
 
-## UI Standards
+- navigation path
+- active sheet
+- account reset
+- external/deep-link handoff
 
-- One component per file when moved out.
-- Target components under 150 lines when natural.
-- Split by feature first, shared components second.
-- No feature screen imports unrelated feature internals.
-- Design primitives live in `Core/DesignSystem`.
-- Markdown renderer is shared UI, not chat screen inline code.
-- Sheets use enum-driven presentation.
-- Destructive actions use confirmation or undo model.
+Feature views call router actions or return intents. They should not mutate unrelated app state to cause navigation.
 
-## Testing Shape
+Feature-local sheet state can stay local only when it does not cross feature boundaries.
 
-Tests should target extracted seams:
+## Streaming Boundary
 
-- API request builders and stream event parser
-- route planner
-- source-mode semantics
-- message timeline reducer
-- council selection and failure isolation
-- project/file attachment limits
-- sharing permission flows
-- auth callback state validation
-- attestation wording/state model
+Streaming must leave `ChatStore`.
 
-No live network in unit tests. Use protocols and fakes at service seams.
+Target flow:
 
-## Migration Rule
+```txt
+ChatStore/ChatFeatureStore
+  -> ChatSendCoordinator
+  -> RoutePlanner
+  -> MessageStreamService / CouncilStreamService / AgentRuntimeService
+  -> MessageTimelineStore
+```
 
-Do not big-bang rewrite. Extract one vertical feature at a time:
+Ownership:
 
-1. Copy smallest complete UI cluster into feature folder.
-2. Move feature-only helpers with it.
-3. Replace direct `ChatStore` reads with narrow facade methods.
-4. Extract service/store behind facade.
-5. Add focused tests where behavior changed or seam is risk-heavy.
-6. Remove old code from monolith only after callsites compile.
+- `RoutePlanner`: route classification, readiness, source policy
+- `MessageStreamService`: response stream request, event parsing, timeout policy
+- `CouncilStreamService`: fan-out, per-model result collection, synthesis input
+- `AgentRuntimeService`: phone-safe and hosted agent dispatch
+- `MessageTimelineStore`: apply events to visible messages
+- `ChatSendCoordinator`: one send transaction from draft to final state
 
-## Non-Goals
+No UI file should assemble streaming prompts or mutate message arrays directly.
 
-- No backend contract redesign.
-- No DB migrations.
-- No localhost dependency for normal app.
-- No visual redesign as part of architecture cleanup unless feature extraction requires tiny layout glue.
-- No Swift package split until folders and seams stabilize inside app target.
+## Feature Targets
+
+### Chat
+
+Owns transcript, composer, message actions, response variants, selected answer export, source chips, and route readiness UI.
+
+Must not own home setup cards, project storage, model catalog fetching, sharing permission mutation, account billing, or agent project mutations.
+
+### Home
+
+Owns conversation/project listing, home search, inbox grouping, setup/home launch cards, orchestration surface, and open-chat intents.
+
+Home must call conversation/project stores through narrow read models. It should not read full `ChatStore`.
+
+### Projects
+
+Owns project CRUD, project instructions, memory, links, notes, selected-project read model, and project membership.
+
+Project persistence belongs here or in `Core/Persistence`, not in chat.
+
+### Files
+
+Owns local attachments, remote files, previews, upload limits, project file attach, and prompt file attach.
+
+File upload and preview calls go through `FileAPI`.
+
+### Sharing
+
+Owns public links, direct shares, org shares, groups, shared-with-me, shared preview, and share permission copy.
+
+Sharing should be first full extraction because boundary is obvious and risk is contained.
+
+### Model Catalog
+
+Owns route model lists, picker sections, pinned models, council selection, plan locks, and provider display metadata.
+
+Route readiness rules may live in `Core/Routing`; picker-specific grouping stays in feature.
+
+### Security
+
+Owns attestation display, proof capsule, proof education copy, freshness, coverage, and diagnostics entry.
+
+Never say verified when only attestation exists.
+
+### Setup
+
+Owns setup plan, starter presets, restore planner, use-case selection, and first-run recommendations.
+
+Setup model/planner code needs split before new setup behavior lands.
+
+### Agent
+
+Owns phone-safe runtime UI, hosted handoff, approval/credential gates, tool previews, and agent workspace.
+
+Agent project/file mutation must happen through Project/File services, not direct array mutation.
+
+### Account
+
+Owns billing, settings, imports, integrations, diagnostics entry, and auth-linked account actions.
+
+## View Rules
+
+SwiftUI files over 300 lines need scrutiny. Files over 1000 lines are architecture debt unless there is a strong reason.
+
+Rules:
+
+- one component per file when component has its own behavior or preview value
+- keep large bodies as stable view trees
+- prefer dedicated subview types over many computed `some View` fragments
+- move side effects out of `body`
+- pass explicit inputs/actions into subviews
+- avoid `EnvironmentObject ChatStore` in new views
+- no view talks directly to API or persistence
+
+## Test Architecture
+
+Current test file is also a god object. Split by ownership as seams are extracted.
+
+Target:
+
+```txt
+NEARPrivateChatTests/
+  Auth/
+  API/
+  Routing/
+  Streaming/
+  Chat/
+  Home/
+  Projects/
+  Files/
+  Sharing/
+  Setup/
+  Security/
+  Agent/
+  Export/
+```
+
+Each feature extraction must move or add tests beside the new owner.
+
+## Refactor Gates
+
+Every phase must satisfy:
+
+- behavior preserved
+- new Swift files added to Xcode project target membership
+- no new mega-store
+- no new catch-all helper
+- no new feature logic in `ChatStore` unless it is temporary glue being deleted in same phase
+- docs updated when ownership changes
+- focused tests for moved pure/service behavior
+
+Build/test level depends on risk:
+
+- docs only: no build needed
+- file moves/new Swift files: simulator build
+- service/store extraction: focused tests plus simulator build
+- streaming/auth/security: focused tests, simulator build, simulator smoke when feasible
+
+## End State
+
+`ChatStore` should either disappear or become a small compatibility object under 300 lines while old views are replaced. Acceptable final jobs:
+
+- expose selected conversation bridge during transition
+- forward narrow chat actions to `ChatFeatureStore`
+- coordinate app-wide reset until app state is split
+
+Everything else needs a real owner.

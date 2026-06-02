@@ -1,12 +1,170 @@
 import Foundation
 import SwiftUI
 
-struct IronclawSkillProfile: Identifiable, Hashable {
+struct IronclawSkillProfile: Codable, Identifiable, Hashable {
     let id: String
     let title: String
     let summary: String
     let symbolName: String
     let keywords: [String]
+
+    func missionPrompt(seed: String = "", projectName: String? = nil) -> String {
+        let trimmedSeed = seed.trimmingCharacters(in: .whitespacesAndNewlines)
+        let projectLead: String
+        if let projectName = projectName?.trimmingCharacters(in: .whitespacesAndNewlines), !projectName.isEmpty {
+            projectLead = "Use the \(projectName) project context when it helps. "
+        } else {
+            projectLead = ""
+        }
+
+        func prompt(_ blankPrompt: String, _ seededPrefix: String, suffix: String) -> String {
+            if trimmedSeed.isEmpty {
+                return "\(projectLead)\(blankPrompt) \(suffix)"
+            }
+            return "\(projectLead)\(seededPrefix): \(trimmedSeed). \(suffix)"
+        }
+
+        switch id {
+        case "coding":
+            return prompt(
+                "Inspect this code task.",
+                "Implement this change safely",
+                suffix: "Inspect the repo first, make the smallest useful patch, run focused tests, and report changed files plus remaining risks."
+            )
+        case "local-test":
+            return prompt(
+                "Run focused verification on this work.",
+                "Verify this safely",
+                suffix: "Choose the smallest useful build, test, or smoke checks, capture failures clearly, and summarize what still needs manual QA."
+            )
+        case "github-workflow":
+            return prompt(
+                "Triage this GitHub work.",
+                "Handle this GitHub task",
+                suffix: "Inspect the issue, PR, or CI context first, identify the highest-impact next action, and report the concrete follow-up."
+            )
+        case "github":
+            return prompt(
+                "Inspect the linked GitHub context.",
+                "Work from this GitHub context",
+                suffix: "Read the repo, issue, PR, or Actions context first, then summarize the important state, risks, and the next concrete action."
+            )
+        case "code-review":
+            return prompt(
+                "Review this code for correctness.",
+                "Review this code carefully",
+                suffix: "Prioritize bugs, regressions, and missing tests. Lead with findings and keep the summary brief."
+            )
+        case "security-review":
+            return prompt(
+                "Review this for security risk.",
+                "Audit this for security risk",
+                suffix: "Focus on auth, secrets, injection, data exposure, and permission boundaries. Call out concrete exploit paths and fixes."
+            )
+        case "qa-review":
+            return prompt(
+                "Create a focused QA pass for this workflow.",
+                "Plan QA for this workflow",
+                suffix: "List repro steps, edge cases, expected outcomes, and the smallest evidence set needed to validate the result."
+            )
+        case "web-ui-test":
+            return prompt(
+                "Test this web UI flow.",
+                "Test this browser workflow",
+                suffix: "Focus on the critical user path, run the smallest useful browser checks, capture repro-ready failures, and note what still needs manual device QA."
+            )
+        case "project-setup":
+            return prompt(
+                "Set up this Project.",
+                "Turn this into a tracked Project",
+                suffix: "Identify the files, links, instructions, and first task the project should contain, then suggest the cleanest next action."
+            )
+        case "developer-setup":
+            return prompt(
+                "Set up this developer environment.",
+                "Prepare this repo for development",
+                suffix: "Inspect the stack first, identify the exact setup and run commands, call out required credentials or services, and keep the first run path as small as possible."
+            )
+        case "new-project":
+            return prompt(
+                "Turn this idea into a new project.",
+                "Turn this into a new project",
+                suffix: "Define the scope, starter structure, durable notes, and the first milestone before any broad implementation plan."
+            )
+        case "plan-mode":
+            return prompt(
+                "Break this work into a verifiable plan.",
+                "Plan this carefully",
+                suffix: "Split the work into concrete steps, dependencies, risks, and the next smallest useful action without overbuilding."
+            )
+        case "review-readiness":
+            return prompt(
+                "Check whether this work is ready for review.",
+                "Check review readiness for this",
+                suffix: "Inspect the diff, validation status, and remaining risk, then call out the blockers before anyone else reviews it."
+            )
+        case "llm-council":
+            return prompt(
+                "Compare multiple model perspectives on this decision.",
+                "Run a council-style comparison for this",
+                suffix: "Surface strongest agreements, disagreements, and the recommended decision with tradeoffs."
+            )
+        case "product-prioritization":
+            return prompt(
+                "Prioritize this product work.",
+                "Prioritize this product work",
+                suffix: "Rank the options by impact, evidence, effort, and user value, then recommend the highest-leverage next move."
+            )
+        case "decision-capture":
+            return prompt(
+                "Capture this decision clearly.",
+                "Capture this decision",
+                suffix: "Summarize the decision, rationale, alternatives considered, open questions, and follow-up actions."
+            )
+        case "delegation":
+            return prompt(
+                "Turn this into a delegated task.",
+                "Delegate this work clearly",
+                suffix: "Define the assignee-ready brief, expected outcome, dependencies, risks, and the exact follow-up checkpoint."
+            )
+        case "idea-parking":
+            return prompt(
+                "Park this idea without losing it.",
+                "Capture this idea for later",
+                suffix: "Record the core concept, why it matters, the trigger for revisiting it, and what evidence is still missing."
+            )
+        case "commitment-triage":
+            return prompt(
+                "Extract the commitments from this work.",
+                "Extract commitments from this",
+                suffix: "List owners, deadlines, promised deliverables, risks, and the next follow-up checkpoint."
+            )
+        case "tech-debt-tracker":
+            return prompt(
+                "Capture the technical debt in this work.",
+                "Track this technical debt",
+                suffix: "List the debt item, impact, risk if deferred, suggested owner, and the smallest remediation step."
+            )
+        case "review-checklist":
+            return prompt(
+                "Create a review checklist for this change.",
+                "Create a review checklist for this",
+                suffix: "Call out correctness, test coverage, rollout, docs, and follow-up checks so the handoff is easy to verify."
+            )
+        case "portfolio":
+            return prompt(
+                "Review this portfolio.",
+                "Review this portfolio",
+                suffix: "Summarize positions, risks, rebalancing ideas, and what additional live market context is needed before acting."
+            )
+        default:
+            return prompt(
+                "Help with this task.",
+                "Help with this task",
+                suffix: "Inspect the available context first, choose the smallest useful path, and return concrete next actions."
+            )
+        }
+    }
 }
 
 enum IronclawSkillCatalog {
@@ -23,14 +181,21 @@ enum IronclawSkillCatalog {
             title: "Local Test",
             summary: "Run focused tests, builds, and smoke checks.",
             symbolName: "checkmark.seal",
-            keywords: ["test", "qa", "smoke", "build", "run", "verify", "regression"]
+            keywords: ["local test", "smoke check", "run tests", "build verification", "regression suite"]
         ),
         IronclawSkillProfile(
             id: "github-workflow",
-            title: "GitHub",
+            title: "GitHub Workflow",
             summary: "Handle issues, PRs, CI failures, and repo handoff.",
             symbolName: "arrow.triangle.branch",
             keywords: ["github", "issue", "pull request", " pr ", "/pull/", "/issues/", "ci", "branch"]
+        ),
+        IronclawSkillProfile(
+            id: "github",
+            title: "GitHub",
+            summary: "Inspect repo, issue, PR, and Actions context before acting.",
+            symbolName: "chevron.left.forwardslash.chevron.right.circle",
+            keywords: ["github repo", "repository", "repo context", "actions", "workflow run", "issue thread", "pr context"]
         ),
         IronclawSkillProfile(
             id: "code-review",
@@ -54,11 +219,46 @@ enum IronclawSkillCatalog {
             keywords: ["qa", "quality", "manual test", "test plan", "browser test", "repro"]
         ),
         IronclawSkillProfile(
+            id: "web-ui-test",
+            title: "Web UI Test",
+            summary: "Run browser-focused QA for critical flows and regressions.",
+            symbolName: "safari",
+            keywords: ["playwright", "browser flow", "ui regression", "web ui", "frontend qa", "e2e"]
+        ),
+        IronclawSkillProfile(
             id: "project-setup",
             title: "Project Setup",
-            summary: "Turn a repo or new idea into a tracked workspace.",
+            summary: "Turn a repo or new idea into a tracked Project.",
             symbolName: "folder.badge.gearshape",
             keywords: ["setup", "set up", "clone", "bootstrap", "new project", "repo"]
+        ),
+        IronclawSkillProfile(
+            id: "developer-setup",
+            title: "Developer Setup",
+            summary: "Map the exact bootstrap, install, and run path for a repo.",
+            symbolName: "hammer",
+            keywords: ["developer setup", "dev environment", "bootstrap repo", "install dependencies", "run locally", "onboard repo"]
+        ),
+        IronclawSkillProfile(
+            id: "new-project",
+            title: "New Project",
+            summary: "Shape a fresh Project, scope, and first milestone.",
+            symbolName: "sparkles.rectangle.stack",
+            keywords: ["new project", "start a project", "greenfield", "workspace", "organize project"]
+        ),
+        IronclawSkillProfile(
+            id: "plan-mode",
+            title: "Plan Mode",
+            summary: "Break work into concrete, verifiable next steps.",
+            symbolName: "list.bullet.clipboard",
+            keywords: ["plan mode", "break this down", "step by step", "implementation plan", "work plan", "roadmap"]
+        ),
+        IronclawSkillProfile(
+            id: "review-readiness",
+            title: "Review Readiness",
+            summary: "Check whether validation and context are solid before review.",
+            symbolName: "checkmark.message",
+            keywords: ["ready for review", "review readiness", "before merge", "pre review", "handoff"]
         ),
         IronclawSkillProfile(
             id: "llm-council",
@@ -82,11 +282,39 @@ enum IronclawSkillCatalog {
             keywords: ["decision", "decisions", "adr", "capture this", "record", "rationale"]
         ),
         IronclawSkillProfile(
+            id: "delegation",
+            title: "Delegation",
+            summary: "Turn work into a clear assignee-ready brief and follow-up.",
+            symbolName: "person.2.badge.gearshape",
+            keywords: ["delegate", "delegation", "assign this", "handoff", "owner handoff", "handover"]
+        ),
+        IronclawSkillProfile(
+            id: "idea-parking",
+            title: "Idea Parking",
+            summary: "Capture ideas, triggers, and missing evidence without derailing the task.",
+            symbolName: "lightbulb",
+            keywords: ["idea parking", "park this idea", "later idea", "parking lot", "backlog idea", "save this idea"]
+        ),
+        IronclawSkillProfile(
             id: "commitment-triage",
             title: "Commitment Triage",
             summary: "Extract obligations, owners, deadlines, and next steps.",
             symbolName: "person.crop.circle.badge.checkmark",
             keywords: ["commitment", "follow up", "deadline", "owner", "delegate", "nudge"]
+        ),
+        IronclawSkillProfile(
+            id: "tech-debt-tracker",
+            title: "Tech Debt Tracker",
+            summary: "Capture debt items, impact, and the next remediation step.",
+            symbolName: "wrench.and.screwdriver",
+            keywords: ["tech debt", "technical debt", "cleanup later", "refactor later", "debt item", "deferred fix"]
+        ),
+        IronclawSkillProfile(
+            id: "review-checklist",
+            title: "Review Checklist",
+            summary: "Create a concise ship checklist before review or handoff.",
+            symbolName: "list.clipboard",
+            keywords: ["review checklist", "ship checklist", "merge checklist", "preflight checklist", "release checklist"]
         ),
         IronclawSkillProfile(
             id: "portfolio",
@@ -97,15 +325,11 @@ enum IronclawSkillCatalog {
         )
     ]
 
-    static func suggestedSkills(for text: String, limit: Int = 4) -> [IronclawSkillProfile] {
-        let lowercased = text.lowercased()
-        let scored = all.map { skill -> (skill: IronclawSkillProfile, score: Int) in
-            let score = skill.keywords.reduce(0) { partial, keyword in
-                partial + (lowercased.contains(keyword) ? 1 : 0)
-            }
-            return (skill, score)
-        }
-        let matches = scored
+    static func matchingSkills(for text: String, limit: Int? = nil) -> [IronclawSkillProfile] {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        let matches = scoredMatches(for: trimmed)
             .filter { $0.score > 0 }
             .sorted { lhs, rhs in
                 if lhs.score == rhs.score {
@@ -115,8 +339,21 @@ enum IronclawSkillCatalog {
             }
             .map(\.skill)
 
-        if !matches.isEmpty {
+        if let limit {
             return Array(matches.prefix(limit))
+        }
+        return matches
+    }
+
+    static func matchingSkillIDs(for text: String, limit: Int? = nil) -> [String] {
+        matchingSkills(for: text, limit: limit).map(\.id)
+    }
+
+    static func suggestedSkills(for text: String, limit: Int = 4) -> [IronclawSkillProfile] {
+        let lowercased = text.lowercased()
+        let matches = matchingSkills(for: text, limit: limit)
+        if !matches.isEmpty {
+            return matches
         }
 
         if lowercased.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -126,16 +363,44 @@ enum IronclawSkillCatalog {
         return Array(all.filter { ["coding", "local-test", "project-setup"].contains($0.id) }.prefix(limit))
     }
 
+    static func profiles(for ids: [String], limit: Int? = nil) -> [IronclawSkillProfile] {
+        var seen = Set<String>()
+        var profiles: [IronclawSkillProfile] = []
+
+        for id in ids {
+            guard seen.insert(id).inserted,
+                  let profile = all.first(where: { $0.id == id }) else {
+                continue
+            }
+            profiles.append(profile)
+            if let limit, profiles.count >= limit {
+                break
+            }
+        }
+
+        return profiles
+    }
+
     static func promptSection(for text: String) -> String {
         let skills = suggestedSkills(for: text, limit: 5)
         guard !skills.isEmpty else { return "" }
         let lines = skills.map { "- \($0.id): \($0.summary)" }.joined(separator: "\n")
         return """
-        IronClaw skills to consider:
+        Agent skills to consider:
         \(lines)
 
         Select the useful skills internally. Do not print the routing unless the user asks how the agent chose its approach.
         """
+    }
+
+    private static func scoredMatches(for text: String) -> [(skill: IronclawSkillProfile, score: Int)] {
+        let lowercased = text.lowercased()
+        return all.map { skill -> (skill: IronclawSkillProfile, score: Int) in
+            let score = skill.keywords.reduce(0) { partial, keyword in
+                partial + (lowercased.contains(keyword) ? 1 : 0)
+            }
+            return (skill, score)
+        }
     }
 }
 
@@ -157,6 +422,18 @@ struct HostedIronclawHandoffPreflight: Identifiable, Hashable {
     var destinationHost: String
     var promptPreview: String
     var disclosedItems: [String]
+}
+
+struct HostedIronclawAttachmentDisclosure: Hashable {
+    var disclosedItem: String?
+    var fingerprint: String
+
+    static func promptFiles(_ attachments: [ChatAttachment]) -> HostedIronclawAttachmentDisclosure {
+        HostedIronclawAttachmentDisclosure(
+            disclosedItem: attachments.isEmpty ? nil : "Prompt files: \(attachments.map(\.name).joined(separator: ", "))",
+            fingerprint: attachments.map(\.id).joined(separator: "|")
+        )
+    }
 }
 
 struct IronclawPendingGate: Codable, Hashable, Identifiable {
@@ -200,7 +477,7 @@ struct IronclawPendingGate: Codable, Hashable, Identifiable {
         }
         if description.localizedCaseInsensitiveContains("gate: authentication") ||
             description.localizedCaseInsensitiveContains("requires authentication") {
-            return "Add a credential for \(authenticationDisplayName) so the hosted IronClaw workstation can continue this tool call."
+            return "Add a credential for \(authenticationDisplayName) so Hosted IronClaw can continue this tool call."
         }
         return description
     }
@@ -233,7 +510,7 @@ struct IronclawPendingGate: Codable, Hashable, Identifiable {
 
     var alwaysUnavailableReason: String? {
         guard allowsAlways, isHighRiskAlwaysApproval else { return nil }
-        return "Always is disabled on phone for powerful workstation tools. Approve each run so command, network, file, and credential access stays scoped."
+        return "Always is off on phone for powerful hosted tools. Approve each run so command, network, file, and credential access stays scoped."
     }
 
     private static func redactedParameterPreview(_ parameters: String) -> String {
@@ -532,16 +809,16 @@ struct IronclawSettings: Codable, Hashable {
     var endpointValidationMessage: String? {
         let trimmed = normalizedBaseURL
         guard !trimmed.isEmpty else {
-            return "Add a hosted HTTPS IronClaw endpoint first."
+            return "Add a Hosted IronClaw URL first."
         }
         guard let url = URL(string: trimmed),
               let scheme = url.scheme?.lowercased(),
               let host = url.host?.lowercased(),
               !host.isEmpty else {
-            return "Enter a valid hosted HTTPS IronClaw endpoint."
+            return "Enter a valid Hosted IronClaw HTTPS URL."
         }
         if Self.retiredLocalDefaults.contains(trimmed) || !URLSecurity.isPublicHost(host) {
-            return "Use a hosted HTTPS IronClaw endpoint. LAN gateways are local development only."
+            return "Use a Hosted IronClaw HTTPS URL. LAN gateways are for local development only."
         }
         guard scheme == "https" else {
             return "IronClaw on iPhone requires HTTPS, not a local HTTP gateway."

@@ -1,0 +1,337 @@
+import SwiftUI
+
+// Threaded follow-ups (Paradigm 1).
+// A briefing's deliveries rendered as a Slack-style thread: each daily delivery
+// is a NEAR message; follow-ups branch into an inline side-thread anchored to
+// that delivery, so questions don't pollute the main feed. Mirrors Threaded.jsx.
+
+// MARK: - Model
+
+/// Result of a briefing-thread follow-up: prose, a rendered widget (e.g. a real
+/// historical price chart), or both.
+typealias BriefingFollowUpResult = (text: String?, widget: MessageWidget?)
+
+struct BriefingSourceTag: Identifiable, Hashable {
+    let id = UUID()
+    var letter: String
+    var colorHex: String
+}
+
+struct ThreadReply: Identifiable, Hashable {
+    enum Role { case user, assistant }
+    let id = UUID()
+    var role: Role
+    var text: String
+    var citations: [BriefingSourceTag] = []
+    var verifiedModel: String? = nil
+    var verifiedSources: Int = 0
+    var ago: String? = nil
+    /// An assistant reply can carry a rendered widget (e.g. a real historical
+    /// price chart) instead of, or alongside, text.
+    var widget: MessageWidget? = nil
+}
+
+struct DeliveryThread: Identifiable, Hashable {
+    let id = UUID()
+    var label: String
+    var replies: [ThreadReply]
+}
+
+struct BriefingDelivery: Identifiable, Hashable {
+    let id = UUID()
+    var dayLabel: String          // "Yesterday" / "Today"
+    var time: String              // "8:02"
+    var title: String             // "Thu 28 May · briefing"
+    var headline: String? = nil   // bold lead
+    var summary: String? = nil    // subtext under the headline
+    var body: String? = nil       // plain body (collapsed deliveries)
+    var extra: String? = nil      // "+ Israel strikes Beirut · 2 more"
+    var sources: [BriefingSourceTag] = []
+    var replyCount: Int = 0
+    var unread: Bool = false
+    var collapsed: Bool = false
+    var widget: MessageWidget? = nil
+    var thread: DeliveryThread? = nil
+}
+
+// MARK: - Screen
+
+struct ThreadedBriefingView: View {
+    let title: String
+    let schedule: String
+    var onClose: () -> Void = {}
+    private let store: BriefingStore?
+    private let briefingID: UUID?
+    /// Sends a follow-up `(question, context)` to the chat backend and returns
+    /// the assistant's reply (text and/or a rendered widget). Injected by the
+    /// parent (which holds ChatStore). Nil in previews → replies recorded locally.
+    private let onAskFollowUp: ((String, String) async -> BriefingFollowUpResult)?
+
+    @State private var deliveries: [BriefingDelivery]
+    @State private var replyText = ""
+    @State private var isRunning = false
+    @State private var isReplying = false
+    @State private var showingAccountEditor = false
+    @State private var accountInput = ""
+
+    init(
+        title: String,
+        schedule: String,
+        deliveries: [BriefingDelivery],
+        store: BriefingStore? = nil,
+        briefingID: UUID? = nil,
+        onAskFollowUp: ((String, String) async -> BriefingFollowUpResult)? = nil,
+        onClose: @escaping () -> Void = {}
+    ) {
+        self.title = title
+        self.schedule = schedule
+        self.store = store
+        self.briefingID = briefingID
+        self.onAskFollowUp = onAskFollowUp
+        self.onClose = onClose
+        _deliveries = State(initialValue: deliveries)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider().overlay(Color.appHairline)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    ForEach(deliveries) { delivery in
+                        ThreadDayDivider(label: delivery.dayLabel)
+                        BotDeliveryRow(delivery: delivery)
+                        if let thread = delivery.thread {
+                            ThreadInlineView(thread: thread)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 24)
+            }
+            if isReplying {
+                HStack(spacing: 8) {
+                    NearMark(size: 18)
+                    Text("NEAR is thinking…")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.textTertiary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+                .transition(.opacity)
+            }
+            replyComposer
+        }
+        .background(Color.appBackground)
+        .alert("Change NEAR account", isPresented: $showingAccountEditor) {
+            TextField("yourname.near", text: $accountInput)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Button("Update") { changeAccount() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Track a different NEAR mainnet account in this briefing.")
+        }
+    }
+
+    private var liveBriefing: Briefing? {
+        guard let store, let briefingID else { return nil }
+        return store.briefings.first(where: { $0.id == briefingID })
+    }
+
+    private func changeAccount() {
+        guard let store, var briefing = liveBriefing else { return }
+        let account = accountInput.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !account.isEmpty else { return }
+        briefing.accountID = account
+        store.update(briefing)
+        runNow()
+    }
+
+    /// Re-arms a fired one-shot alert (un-pauses it) so it starts watching again.
+    private func reArm() {
+        guard let store, let briefing = liveBriefing else { return }
+        store.setPaused(briefing, false)
+    }
+
+    private var header: some View {
+        HStack(spacing: 4) {
+            Button(action: onClose) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color.actionPrimary)
+                    .frame(width: 44, height: 44)
+            }
+            Spacer(minLength: 0)
+            VStack(spacing: 1) {
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Text(schedule)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.textTertiary)
+            }
+            Spacer(minLength: 0)
+            Menu {
+                if store != nil, briefingID != nil {
+                    Button { runNow() } label: { Label("Run now", systemImage: "arrow.clockwise") }
+                    // A one-shot alert auto-pauses after firing; let the user re-arm it.
+                    if let briefing = liveBriefing, briefing.isConditional, briefing.isPaused {
+                        Button { reArm() } label: { Label("Re-arm alert", systemImage: "bell.badge") }
+                    }
+                    if liveBriefing?.kind == .nearAccount {
+                        Button {
+                            accountInput = liveBriefing?.accountID ?? ""
+                            showingAccountEditor = true
+                        } label: { Label("Change account", systemImage: "at") }
+                    }
+                    Button(role: .destructive) { deleteBriefing() } label: { Label("Delete briefing", systemImage: "trash") }
+                } else {
+                    Button("Mark all read") {}
+                }
+            } label: {
+                Group {
+                    if isRunning {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "ellipsis").font(.system(size: 18, weight: .semibold))
+                    }
+                }
+                .foregroundStyle(Color.textSecondary)
+                .frame(width: 44, height: 44)
+            }
+            .disabled(isRunning)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 52)
+    }
+
+    private var replyComposer: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "plus")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Color.textTertiary)
+                TextField("Reply in thread…", text: $replyText, axis: .vertical)
+                    .font(.system(size: 15))
+                    .lineLimit(1...4)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.appPanelBackground, in: Capsule())
+            .overlay(Capsule().stroke(Color.appBorder, lineWidth: 1))
+
+            Button(action: sendReply) {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(replyTrimmed.isEmpty || isReplying ? Color.textTertiary : Color.actionPrimary)
+            }
+            .disabled(replyTrimmed.isEmpty || isReplying)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+        .background(.ultraThinMaterial)
+    }
+
+    private var replyTrimmed: String {
+        replyText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func runNow() {
+        guard let store, let briefingID,
+              let briefing = store.briefings.first(where: { $0.id == briefingID }) else { return }
+        isRunning = true
+        Task {
+            await store.run(briefing)
+            if let updated = store.briefings.first(where: { $0.id == briefingID }) {
+                deliveries = ThreadedBriefingView.deliveries(for: updated)
+            }
+            isRunning = false
+        }
+    }
+
+    private func deleteBriefing() {
+        guard let store, let briefingID,
+              let briefing = store.briefings.first(where: { $0.id == briefingID }) else { return }
+        store.remove(briefing)
+        onClose()
+    }
+
+    private func sendReply() {
+        let text = replyTrimmed
+        guard !text.isEmpty, !isReplying, let index = deliveries.indices.last else { return }
+        // Capture the conversation so far BEFORE appending the new question, so
+        // follow-ups are multi-turn (the model remembers what we already discussed).
+        let priorReplies = deliveries[index].thread?.replies ?? []
+        appendReply(ThreadReply(role: .user, text: text), at: index, bumpCount: true)
+        replyText = ""
+        AppHaptics.lightImpact()
+
+        // No backend wired (previews) → the user reply is recorded locally only.
+        guard let onAskFollowUp else { return }
+        let context = [
+            ThreadedBriefingView.replyContext(for: deliveries[index]),
+            ThreadedBriefingView.transcript(of: priorReplies)
+        ].filter { !$0.isEmpty }.joined(separator: "\n\n")
+        isReplying = true
+        Task {
+            let answer = await onAskFollowUp(text, context)
+            await MainActor.run {
+                let succeeded = answer.text != nil || answer.widget != nil
+                let body = answer.text ?? (answer.widget == nil
+                    ? "I couldn’t reach the model just now — try again in a moment."
+                    : "")
+                let reply = ThreadReply(
+                    role: .assistant,
+                    text: body,
+                    verifiedModel: succeeded ? "NEAR Private" : nil,
+                    ago: "just now",
+                    widget: answer.widget
+                )
+                if let target = deliveries.indices.last {
+                    appendReply(reply, at: target, bumpCount: false)
+                }
+                isReplying = false
+            }
+        }
+    }
+
+    /// Appends a reply to the last delivery's inline thread (creating the thread
+    /// on first use), keeping `replyCount` in sync for user turns.
+    private func appendReply(_ reply: ThreadReply, at index: Int, bumpCount: Bool) {
+        guard deliveries.indices.contains(index) else { return }
+        var delivery = deliveries[index]
+        var thread = delivery.thread ?? DeliveryThread(label: delivery.headline ?? delivery.title, replies: [])
+        thread.replies.append(reply)
+        delivery.thread = thread
+        if bumpCount { delivery.replyCount += 1 }
+        deliveries[index] = delivery
+    }
+
+    /// The prior thread turns as a compact transcript, so a follow-up is
+    /// multi-turn (the model sees what we already discussed). Skips widget-only
+    /// replies (no text) and caps at the last 8 turns to bound the prompt.
+    static func transcript(of replies: [ThreadReply]) -> String {
+        let lines = replies.suffix(8).compactMap { reply -> String? in
+            let body = reply.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !body.isEmpty else { return nil }
+            return "\(reply.role == .user ? "Me" : "NEAR"): \(body)"
+        }
+        return lines.isEmpty ? "" : "Conversation so far:\n" + lines.joined(separator: "\n")
+    }
+
+    /// The text a follow-up is grounded in: the delivery's widget note/summary
+    /// or its body, so the model can answer questions about this specific result.
+    static func replyContext(for delivery: BriefingDelivery) -> String {
+        if let widget = delivery.widget {
+            if let note = widget.note, !note.isEmpty { return note }
+            return summary(for: widget)
+        }
+        return [delivery.headline, delivery.summary, delivery.body, delivery.extra]
+            .compactMap { $0 }
+            .joined(separator: "\n")
+    }
+}

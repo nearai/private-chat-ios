@@ -2,6 +2,8 @@ import SwiftUI
 
 struct AppShellView: View {
     @EnvironmentObject private var chatStore: ChatStore
+    @EnvironmentObject private var conversationStore: ConversationStore
+    @EnvironmentObject private var agentStore: AgentStore
     @State private var showingCompactChat = false
     let onRunSetupAgain: () -> Void
 
@@ -18,12 +20,12 @@ struct AppShellView: View {
             )
             .navigationDestination(isPresented: $showingCompactChat) {
                 ChatView()
-                    .navigationTitle(chatStore.selectedConversationTitle)
+                    .navigationTitle(conversationStore.selectedConversationTitle)
                     .platformInlineNavigationTitle()
             }
         }
         .tint(.brandBlue)
-        .onChange(of: chatStore.openSelectedConversationToken) { _, token in
+        .onChange(of: conversationStore.openSelectedConversationToken) { _, token in
             if token != nil {
                 showingCompactChat = true
             }
@@ -33,20 +35,20 @@ struct AppShellView: View {
             isPresented: deleteConfirmationPresented,
             titleVisibility: .visible
         ) {
-            if let conversation = chatStore.pendingDeleteConversation {
+            if let conversation = conversationStore.pendingDeleteConversation {
                 Button("Archive Instead") {
                     chatStore.archiveConversation(conversation)
-                    chatStore.cancelPendingDelete()
+                    conversationStore.cancelPendingDelete()
                 }
                 Button("Delete Permanently", role: .destructive) {
                     chatStore.confirmPendingDelete()
                 }
             }
             Button("Cancel", role: .cancel) {
-                chatStore.cancelPendingDelete()
+                conversationStore.cancelPendingDelete()
             }
         } message: {
-            if let conversation = chatStore.pendingDeleteConversation {
+            if let conversation = conversationStore.pendingDeleteConversation {
                 Text("\"\(conversation.title)\" will be permanently deleted. Archive keeps it recoverable.")
             }
         }
@@ -64,19 +66,22 @@ struct AppShellView: View {
         } message: {
             Text(chatStore.pendingExternalDeepLinkDescription)
         }
-        .sheet(item: $chatStore.pendingHostedHandoffPreflight) { preflight in
-            HostedHandoffPreflightSheet(preflight: preflight)
-                .environmentObject(chatStore)
+        .sheet(item: $agentStore.pendingHostedHandoffPreflight) { preflight in
+            HostedHandoffPreflightSheet(
+                preflight: preflight,
+                onConfirm: { chatStore.confirmHostedHandoff($0) },
+                onCancel: { chatStore.cancelHostedHandoff() }
+            )
                 .platformMediumDetent()
         }
     }
 
     private var deleteConfirmationPresented: Binding<Bool> {
         Binding(
-            get: { chatStore.pendingDeleteConversation != nil },
+            get: { conversationStore.pendingDeleteConversation != nil },
             set: { isPresented in
                 if !isPresented {
-                    chatStore.cancelPendingDelete()
+                    conversationStore.cancelPendingDelete()
                 }
             }
         )

@@ -15,14 +15,9 @@ final class SessionStore: NSObject, ObservableObject {
     @Published var isAuthenticating = false
     @Published var bannerMessage: String?
 
-    private let api: PrivateChatAPI
+    private let api: AuthAPI
+    private let persistence: SessionPersistence
     private var webSession: ASWebAuthenticationSession?
-    private let keychainAccount = "session"
-    private let profileCacheAccount = "profile"
-    private let simulatorFallbackKey = "debug.session"
-    private let pendingAuthStateKey = "pendingAuthState"
-    private let simulatorFallbackTTL: TimeInterval = 24 * 60 * 60
-    private let pendingAuthTTL: TimeInterval = 10 * 60
     private var isRefreshingProfile = false
 
     var isSignedIn: Bool { session?.token.isEmpty == false }
@@ -35,27 +30,39 @@ final class SessionStore: NSObject, ObservableObject {
         )
     }
 
-    init(api: PrivateChatAPI) {
+    init(api: AuthAPI, persistence: SessionPersistence = SessionPersistence()) {
         self.api = api
+        self.persistence = persistence
         super.init()
         #if DEBUG
         if DemoCapture.isEnabled {
             configureDemoCaptureSession()
             return
         }
+        // A debug token (env-injected, never persisted) signs into the REAL app
+        // for interactive testing — full Home/Chat, no demo screens. Only active
+        // when launched with NEAR_DEBUG_SESSION_TOKEN; a normal run is unaffected.
+        if DebugBackend.isEnabled {
+            configureDemoCaptureSession()
+            return
+        }
         #endif
-        session = loadStoredSession()
+        session = persistence.loadStoredSession()
         api.authToken = session?.token
         if session != nil {
-            profile = loadCachedProfile()
+            profile = persistence.loadCachedProfile()
         }
     }
 
     #if DEBUG
     func configureDemoCaptureSession() {
+        // A real session token (env-injected, never persisted) lets the *Live
+        // demo screens exercise the actual backend; otherwise a fake token keeps
+        // the harness fully offline.
+        let liveToken = DebugBackend.sessionToken
         let demoSession = AuthSession(
-            token: "demo-capture-token",
-            sessionID: "demo-capture-session",
+            token: liveToken ?? "demo-capture-token",
+            sessionID: liveToken != nil ? "live-debug-session" : "demo-capture-session",
             expiresAt: nil,
             isNewUser: false
         )
@@ -147,7 +154,7 @@ final class SessionStore: NSObject, ObservableObject {
         Task {
             if let session {
                 if session.sessionID.isEmpty {
-                    showBanner("Signed out locally. No server session id was available to revoke.")
+                    showBanner("Signed out on this device. No server session to revoke.")
                 } else {
                     do {
                         try await api.signOut(sessionID: session.sessionID)
@@ -160,9 +167,9 @@ final class SessionStore: NSObject, ObservableObject {
             self.session = nil
             profile = nil
             clearPendingAuthState()
-            KeychainStore.delete(account: keychainAccount)
-            KeychainStore.delete(account: profileCacheAccount)
-            deleteSimulatorFallbackSession()
+            persistence.deleteStoredSession()
+            persistence.deleteCachedProfile()
+            persistence.deleteSimulatorFallbackSession()
         }
     }
 
@@ -176,7 +183,7 @@ final class SessionStore: NSObject, ObservableObject {
             let url = try api.authURL(
                 for: provider,
                 state: pendingRequest.state,
-                codeChallenge: pendingRequest.codeChallenge
+                codeChallenge: Self.codeChallenge(for: pendingRequest.codeVerifier)
             )
             let callbackURL = try await startWebAuthentication(url: url)
             let callback = try api.parseAuthCallback(callbackURL, expectedState: pendingRequest.state)
@@ -198,33 +205,19 @@ final class SessionStore: NSObject, ObservableObject {
     private func createPendingAuthRequest(provider: OAuthProvider) -> PendingAuthRequest {
         let state = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
         let codeVerifier = Self.makePKCECodeVerifier()
-        let envelope = PendingAuthRequest(
+        return persistence.createPendingAuthRequest(
+            provider: provider,
             state: state,
-            providerRawValue: provider.rawValue,
-            codeVerifier: codeVerifier,
-            expiresAt: Date().addingTimeInterval(pendingAuthTTL)
+            codeVerifier: codeVerifier
         )
-        if let data = try? JSONEncoder().encode(envelope) {
-            UserDefaults.standard.set(data, forKey: pendingAuthStateKey)
-        }
-        return envelope
     }
 
     private func requirePendingAuthRequest() throws -> PendingAuthRequest {
-        guard let data = UserDefaults.standard.data(forKey: pendingAuthStateKey),
-              let envelope = try? JSONDecoder().decode(PendingAuthRequest.self, from: data),
-              !envelope.state.isEmpty else {
-            throw APIError.status(401, "No sign-in request is waiting for this callback.")
-        }
-        guard envelope.expiresAt > Date() else {
-            clearPendingAuthState()
-            throw APIError.status(401, "The sign-in callback expired. Try signing in again.")
-        }
-        return envelope
+        try persistence.requirePendingAuthRequest()
     }
 
     private func clearPendingAuthState() {
-        UserDefaults.standard.removeObject(forKey: pendingAuthStateKey)
+        persistence.clearPendingAuthState()
     }
 
     nonisolated private static func makePKCECodeVerifier() -> String {
@@ -254,83 +247,21 @@ final class SessionStore: NSObject, ObservableObject {
         api.authToken = newSession.token
         if sessionChanged {
             profile = nil
-            KeychainStore.delete(account: profileCacheAccount)
+            persistence.deleteCachedProfile()
         }
 
-        do {
-            try KeychainStore.save(newSession, account: keychainAccount)
-            _ = saveSimulatorFallbackSession(newSession)
-        } catch {
-            if saveSimulatorFallbackSession(newSession) {
-                showBanner("Signed in. Simulator fallback storage is active.")
-            } else {
-                showBanner("Signed in for this launch. Keychain storage is unavailable in this build.")
-            }
+        switch persistence.saveSession(newSession) {
+        case .persisted:
+            break
+        case .simulatorFallbackOnly:
+            showBanner("Signed in. Simulator fallback storage is active.")
+        case .volatileOnly:
+            showBanner("Signed in for this launch. Keychain storage is unavailable in this build.")
         }
-    }
-
-    private func loadCachedProfile() -> UserProfile? {
-        (try? KeychainStore.read(UserProfile.self, account: profileCacheAccount)) ?? nil
     }
 
     private func saveCachedProfile(_ profile: UserProfile) {
-        try? KeychainStore.save(profile, account: profileCacheAccount)
-    }
-
-    private func loadStoredSession() -> AuthSession? {
-        #if targetEnvironment(simulator)
-        if let fallbackSession = loadSimulatorFallbackSession() {
-            try? KeychainStore.save(fallbackSession, account: keychainAccount)
-            return fallbackSession
-        }
-        #endif
-
-        do {
-            return try KeychainStore.read(AuthSession.self, account: keychainAccount)
-        } catch {
-            return loadSimulatorFallbackSession()
-        }
-    }
-
-    private func loadSimulatorFallbackSession() -> AuthSession? {
-        #if targetEnvironment(simulator)
-        guard let data = UserDefaults.standard.data(forKey: simulatorFallbackKey) else {
-            return nil
-        }
-        if let envelope = try? JSONDecoder().decode(SimulatorFallbackSessionEnvelope.self, from: data) {
-            guard envelope.expiresAt > Date() else {
-                deleteSimulatorFallbackSession()
-                return nil
-            }
-            return envelope.session
-        }
-        deleteSimulatorFallbackSession()
-        return nil
-        #else
-        return nil
-        #endif
-    }
-
-    private func saveSimulatorFallbackSession(_ session: AuthSession) -> Bool {
-        #if targetEnvironment(simulator)
-        let envelope = SimulatorFallbackSessionEnvelope(
-            session: session,
-            expiresAt: Date().addingTimeInterval(simulatorFallbackTTL)
-        )
-        guard let data = try? JSONEncoder().encode(envelope) else {
-            return false
-        }
-        UserDefaults.standard.set(data, forKey: simulatorFallbackKey)
-        return true
-        #else
-        return false
-        #endif
-    }
-
-    private func deleteSimulatorFallbackSession() {
-        #if targetEnvironment(simulator)
-        UserDefaults.standard.removeObject(forKey: simulatorFallbackKey)
-        #endif
+        persistence.saveCachedProfile(profile)
     }
 
     private func startWebAuthentication(url: URL) async throws -> URL {
@@ -365,27 +296,6 @@ final class SessionStore: NSObject, ObservableObject {
     }
 
 }
-
-private struct PendingAuthRequest: Codable {
-    var state: String
-    var providerRawValue: String
-    var codeVerifier: String
-    var expiresAt: Date
-
-    var provider: OAuthProvider {
-        OAuthProvider(rawValue: providerRawValue) ?? .google
-    }
-
-    var codeChallenge: String {
-        SessionStore.codeChallenge(for: codeVerifier)
-    }
-}
-
-private struct SimulatorFallbackSessionEnvelope: Codable {
-    var session: AuthSession
-    var expiresAt: Date
-}
-
 
 extension SessionStore: ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {

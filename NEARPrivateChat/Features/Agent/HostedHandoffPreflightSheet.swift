@@ -1,9 +1,10 @@
 import SwiftUI
 
 struct HostedHandoffPreflightSheet: View {
-    @EnvironmentObject private var chatStore: ChatStore
     @Environment(\.dismiss) private var dismiss
     let preflight: HostedIronclawHandoffPreflight
+    let onConfirm: (HostedIronclawHandoffPreflight) -> Void
+    let onCancel: () -> Void
 
     var body: some View {
         NavigationStack {
@@ -17,9 +18,9 @@ struct HostedHandoffPreflightSheet: View {
                             .background(Color.brandBlue.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Run on hosted IronClaw?")
+                            Text("Run on Hosted IronClaw?")
                                 .font(.title3.weight(.semibold))
-                            Text("This sends the prompt and selected phone context to \(preflight.destinationHost).")
+                            Text("Sends the prompt and selected phone context to \(preflight.destinationHost).")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -53,19 +54,19 @@ struct HostedHandoffPreflightSheet: View {
 
                     VStack(spacing: 10) {
                         Button {
-                            chatStore.confirmHostedHandoff(preflight)
+                            onConfirm(preflight)
                             dismiss()
                         } label: {
-                            Label("Run on workstation", systemImage: "terminal")
+                            Label("Run on Hosted IronClaw", systemImage: "terminal")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
 
                         Button(role: .cancel) {
-                            chatStore.cancelHostedHandoff()
+                            onCancel()
                             dismiss()
                         } label: {
-                            Text("Keep on phone")
+                            Text("Stay in this chat")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
@@ -180,7 +181,7 @@ struct IronclawApprovalCard: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This only applies to the hosted IronClaw scope returned by the endpoint. Powerful command, file, network, and credential tools still require per-run approval on phone.")
+            Text("Applies only to the Hosted IronClaw scope from the Agent connection. Command, file, network, and credential tools still need per-run approval on phone.")
         }
         .confirmationDialog(
             "Open external site?",
@@ -231,7 +232,7 @@ struct IronclawApprovalCard: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 6) {
-                Label("Hosted workstation", systemImage: "terminal")
+                Label("Hosted IronClaw", systemImage: "terminal")
                 Label("Credential gated", systemImage: "lock.shield")
             }
             .font(.caption2.weight(.semibold))

@@ -173,15 +173,15 @@ enum LegalTerms {
     static let nearAIPrivacyPolicyURL = URL(string: "https://near.ai/privacy-policy")!
     static let ironclawRepositoryURL = URL(string: "https://github.com/nearai/ironclaw")!
 
-    static let acceptanceText = "I confirm that I am at least 18, I agree to the NEAR Private Chat iOS Terms, NEAR AI Services Terms, NEAR AI Cloud Terms, Acceptable Use Policy, and applicable IronClaw or third-party terms, and I understand that networked models, web search, files, and agents can send selected content off this device."
-    static let acceptancePrompt = "Review the current terms, then confirm acceptance before signing in or continuing."
-    static let acceptanceCheckboxText = "I reviewed version \(version) and accept the current terms for this app and its connected NEAR AI routes."
+    static let acceptanceText = "I am 18 or older. I agree to the NEAR Private Chat iOS Terms, NEAR AI Services Terms, NEAR AI Cloud Terms, Acceptable Use Policy, and applicable IronClaw or third-party terms. I understand that networked models, web search, files, and Agents can send selected content off this device."
+    static let acceptancePrompt = "Review the terms, then accept to continue."
+    static let acceptanceCheckboxText = "I reviewed version \(version) and accept the terms for this app and its connected NEAR AI routes."
 
     static let signupSummary = [
-        "Required before account access.",
+        "Required before you get account access.",
         "Applies to private chat, NEAR AI Cloud, LLM Council, files, sharing, web, and IronClaw.",
-        "Cloud premium models use a privacy proxy and do not carry NEAR Private verification.",
-        "Verification is proof of serving environment, not proof that an answer is true.",
+        "Cloud premium models use a privacy proxy and do not carry NEAR Private proof.",
+        "Proof shows where a request ran. It can't confirm the answer is true.",
         "Agent actions and connected keys remain your responsibility."
     ]
 
@@ -196,19 +196,19 @@ enum LegalTerms {
         ),
         LegalTermsSection(
             title: "Age, Eligibility, and Account Security",
-            body: "You must be at least 18 and legally permitted to use the App and connected services. You are responsible for your account, device, API keys, session tokens, SSH keys, repositories, connected workstations, agent endpoints, backups, and recovery methods."
+            body: "You must be at least 18 and legally permitted to use the App and connected services. You are responsible for your account, device, API keys, session tokens, SSH keys, repositories, Agent connections, backups, and recovery methods."
         ),
         LegalTermsSection(
             title: "Privacy, Cloud, and Proof",
-            body: "Private or attested routes may provide verification metadata when supported by the service. NEAR AI Cloud routes can include open-weight and premium closed-source models; premium routes may be anonymously proxied to third-party providers and may not have TEE attestation in the App. Attestation is cryptographic evidence about where a request was served, not a guarantee that an answer is accurate, safe, lawful, complete, or suitable."
+            body: "Private routes may provide proof metadata when supported by the service. NEAR AI Cloud routes can include open-weight and premium closed-source models; premium routes may be anonymously proxied to third-party providers and may not have TEE attestation in the App. Attestation is cryptographic evidence about where a request was served, not a guarantee that an answer is accurate, safe, lawful, complete, or suitable."
         ),
         LegalTermsSection(
             title: "Files, Search, and Context",
             body: "Prompts, files, extracted text, saved links, project instructions, memory, source packs, imports, and web queries may leave your device when you enable or use networked routes. Search results, links, snippets, and imported content are untrusted and may be inaccurate, malicious, copyrighted, private, or prompt-injection material."
         ),
         LegalTermsSection(
-            title: "IronClaw Agents",
-            body: "IronClaw Mobile and hosted IronClaw can inspect or modify files, interact with repositories, run commands and tests, call tools, browse, use configured credentials, or operate on a local or hosted workstation. You are responsible for every instruction, approval, connected permission, credential, repository, endpoint, and resulting action."
+            title: "Agent Capabilities",
+            body: "IronClaw Mobile and Hosted IronClaw can inspect or modify files, interact with repositories, run commands and tests, call tools, browse, use configured credentials, or operate through a Hosted IronClaw connection. You are responsible for every instruction, approval, connected permission, credential, repository, connection, and resulting action."
         ),
         LegalTermsSection(
             title: "Acceptable Use",
@@ -228,7 +228,7 @@ enum LegalTerms {
         ),
         LegalTermsSection(
             title: "Disclaimer",
-            body: "The App and experimental features are provided as is and as available to the fullest extent permitted by law. Features may fail, change, stall, be unavailable, or produce unintended outputs or actions. The distributing entity and support/legal contact are intentionally blank in this draft and must be completed before public release."
+            body: "The App and experimental features are provided as is and as available to the fullest extent permitted by law. Features may fail, change, stall, be unavailable, or produce unintended outputs or actions. The distributing entity is NEAR AI, Inc.; support and legal notices may be sent to legal@near.ai."
         )
     ]
 }
@@ -246,11 +246,13 @@ enum LegalTermsAcceptanceStore {
     static func recordPendingAcceptance(defaults: UserDefaults = .standard, now: Date = Date()) {
         defaults.set(LegalTerms.version, forKey: pendingVersionKey)
         defaults.set(ISO8601DateFormatter().string(from: now), forKey: pendingAcceptedAtKey)
+        NotificationCenter.default.post(name: .legalTermsAcceptanceDidChange, object: nil)
     }
 
     static func clearPendingAcceptance(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: pendingVersionKey)
         defaults.removeObject(forKey: pendingAcceptedAtKey)
+        NotificationCenter.default.post(name: .legalTermsAcceptanceDidChange, object: nil)
     }
 
     static func hasAcceptedCurrentVersion(for accountID: String, defaults: UserDefaults = .standard) -> Bool {

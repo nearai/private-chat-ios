@@ -1,501 +1,404 @@
 import SwiftUI
 
+enum EmptyChatStarterAction {
+    case draft
+    case research
+    case project
+    case council
+    case agent
+    case trust
+}
+
+struct EmptyChatStarterSuggestion: Identifiable, Equatable {
+    var id: String { title }
+    let title: String
+    let symbolName: String
+    let prompt: String
+    var action: EmptyChatStarterAction = .draft
+}
+
+enum EmptyChatStarterPlanner {
+    static func suggestions(
+        projectName: String?,
+        isCouncilModeEnabled: Bool,
+        councilAvailable: Bool,
+        routeKind: ChatRouteKind,
+        agentAvailable: Bool
+    ) -> [EmptyChatStarterSuggestion] {
+        if let projectName = projectName?.nilIfBlank {
+            return projectSuggestions(
+                projectName: projectName,
+                councilAvailable: councilAvailable,
+                routeKind: routeKind,
+                agentAvailable: agentAvailable
+            )
+        }
+
+        if isCouncilModeEnabled {
+            return [
+                EmptyChatStarterSuggestion(
+                    title: "Compare",
+                    symbolName: "square.grid.2x2",
+                    prompt: "Compare the Council's answers on this task: "
+                ),
+                EmptyChatStarterSuggestion(
+                    title: "Disagreements",
+                    symbolName: "arrow.triangle.branch",
+                    prompt: "Show where the Council agrees and disagrees on: "
+                ),
+                EmptyChatStarterSuggestion(
+                    title: "Validate",
+                    symbolName: "checkmark.shield",
+                    prompt: "Have each Council model check this claim and flag what's uncertain: "
+                ),
+                EmptyChatStarterSuggestion(
+                    title: "Decide",
+                    symbolName: "arrow.left.arrow.right.circle",
+                    prompt: "Ask the Council which option to pick and why for: "
+                )
+            ]
+        }
+
+        var suggestions = [
+            EmptyChatStarterSuggestion(
+                title: "Next actions",
+                symbolName: "checklist",
+                prompt: "Turn this into next moves: trackers, reminders, calendar items, risks, decisions, and exact commands. Preview before creating anything: "
+            ),
+            EmptyChatStarterSuggestion(
+                title: "Draft trackers",
+                symbolName: "calendar.badge.clock",
+                prompt: "Turn this into recurring trackers, reminders, and calendar drafts. Include cadence, date, time, timezone, attendees, missing_fields, confidence, and exact commands. Preview before creating anything: "
+            ),
+            EmptyChatStarterSuggestion(
+                title: "Web research",
+                symbolName: "doc.text.magnifyingglass",
+                prompt: "Research this with sources and cite what matters: ",
+                action: .research
+            ),
+            EmptyChatStarterSuggestion(
+                title: "Files to actions",
+                symbolName: "folder.badge.gearshape",
+                prompt: "Use attached files or a Project to turn this into actions, trackers, reminders, risks, decisions, and missing facts. Preview before creating anything: ",
+                action: .project
+            ),
+            EmptyChatStarterSuggestion(
+                title: "Sources & proof",
+                symbolName: "checkmark.shield",
+                prompt: trustPrompt(for: routeKind, projectName: nil),
+                action: .trust
+            )
+        ]
+
+        if agentAvailable {
+            suggestions.append(
+                EmptyChatStarterSuggestion(
+                    title: "Handoff to Agent",
+                    symbolName: "terminal",
+                    prompt: "Agent mission: define the goal, context to inspect, tools, risks, and verification for this task: ",
+                    action: .agent
+                )
+            )
+        } else if councilAvailable {
+            suggestions.append(
+                EmptyChatStarterSuggestion(
+                    title: "Compare with Council",
+                    symbolName: "square.grid.2x2",
+                    prompt: "Compare options with Council for: ",
+                    action: .council
+                )
+            )
+        }
+
+        return suggestions
+    }
+
+    private static func projectSuggestions(
+        projectName: String,
+        councilAvailable: Bool,
+        routeKind: ChatRouteKind,
+        agentAvailable: Bool
+    ) -> [EmptyChatStarterSuggestion] {
+        var suggestions = [
+            EmptyChatStarterSuggestion(
+                title: "Brief project",
+                symbolName: "folder.badge.gearshape",
+                prompt: "Use \(projectName)'s files, links, and notes to brief the next best move."
+            ),
+            EmptyChatStarterSuggestion(
+                title: "Context to actions",
+                symbolName: "list.bullet.clipboard",
+                prompt: "Use \(projectName)'s files, links, and notes to turn this into actions, trackers, reminders, calendar drafts, risks, and decisions. Preview before creating anything."
+            ),
+            EmptyChatStarterSuggestion(
+                title: "Draft trackers",
+                symbolName: "calendar.badge.clock",
+                prompt: "Use \(projectName)'s context to draft recurring trackers, reminders, and calendar items. Include cadence, date, time, timezone, missing_fields, confidence, and exact commands. Preview before creating anything."
+            ),
+            EmptyChatStarterSuggestion(
+                title: "Sources & proof",
+                symbolName: "checkmark.shield",
+                prompt: trustPrompt(for: routeKind, projectName: projectName),
+                action: .trust
+            )
+        ]
+
+        if agentAvailable {
+            suggestions.append(
+                EmptyChatStarterSuggestion(
+                    title: "Handoff to Agent",
+                    symbolName: "terminal",
+                    prompt: "Use \(projectName)'s context to define an Agent mission: goal, files or links to inspect, risks, and verification.",
+                    action: .agent
+                )
+            )
+        } else if councilAvailable {
+            suggestions.append(
+                EmptyChatStarterSuggestion(
+                    title: "Review with Council",
+                    symbolName: "square.grid.2x2",
+                    prompt: "Use \(projectName)'s context to compare the Council's answers on the next decision: ",
+                    action: .council
+                )
+            )
+        } else {
+            suggestions.append(
+                EmptyChatStarterSuggestion(
+                    title: "Find blockers",
+                    symbolName: "exclamationmark.triangle",
+                    prompt: "Review \(projectName)'s context for the highest-risk blockers, missing facts, and next checks."
+                )
+            )
+        }
+
+        return suggestions
+    }
+
+    private static func trustPrompt(for routeKind: ChatRouteKind, projectName: String?) -> String {
+        let subject = projectName.map {
+            "Use \($0)'s context when relevant, answer with sources where useful, then explain"
+        } ?? "Answer this with sources where useful, then explain"
+
+        switch routeKind {
+        case .nearPrivate:
+            return "\(subject) what the NEAR Private route can prove, whether the proof report is fresh, and what still depends on source quality: "
+        case .nearCloud:
+            return "\(subject) why the NEAR AI Cloud route carries no NEAR Private proof, what the trust boundary is, and which sources matter most: "
+        case .ironclawMobile:
+            return "\(subject) what stays on-device with IronClaw Mobile, what NEAR Private proof does not cover, and where the cited sources came from: "
+        case .ironclawHosted:
+            return "\(subject) the Hosted IronClaw trust boundary, what NEAR Private proof does not cover, and where the cited sources came from: "
+        }
+    }
+}
+
+@MainActor
+enum EmptyChatStarterCoordinator {
+    static func suggestions(for chatStore: ChatStore) -> [EmptyChatStarterSuggestion] {
+        let agentAvailable =
+            chatStore.ironclawRemoteWorkstationAvailable ||
+            chatStore.agentModels.contains(where: { $0.id == ModelOption.ironclawMobileModelID })
+        let councilAvailable = chatStore.isCouncilModeEnabled || chatStore.defaultCouncilModels.count >= 2
+        var defaults = EmptyChatStarterPlanner.suggestions(
+            projectName: chatStore.selectedProject?.name,
+            isCouncilModeEnabled: chatStore.isCouncilModeEnabled,
+            councilAvailable: councilAvailable,
+            routeKind: chatStore.selectedRouteKind,
+            agentAvailable: agentAvailable
+        )
+
+        if let starter = QuickIntentParser.personalizedStarter(fromMemory: chatStore.memoryStore.items.map(\.text)) {
+            let suggestion = EmptyChatStarterSuggestion(
+                title: starter.title,
+                symbolName: starter.symbol,
+                prompt: starter.prompt
+            )
+            defaults.removeAll { $0.title == suggestion.title }
+            defaults.insert(suggestion, at: 0)
+        }
+        return Array(defaults.prefix(6))
+    }
+
+    @discardableResult
+    static func prepare(
+        _ suggestion: EmptyChatStarterSuggestion,
+        to chatStore: ChatStore,
+        onOpenProject: (() -> Void)? = nil,
+        onOpenCouncil: (() -> Void)? = nil
+    ) -> Bool {
+        switch suggestion.action {
+        case .draft:
+            return true
+        case .research:
+            chatStore.selectSourceMode(.web)
+            if !chatStore.researchModeEnabled {
+                chatStore.toggleResearchMode()
+            }
+            return true
+        case .project:
+            chatStore.selectSourceMode(chatStore.selectedProject == nil ? .files : .all)
+            guard chatStore.selectedProject != nil else {
+                onOpenProject?()
+                return false
+            }
+            return true
+        case .council:
+            chatStore.useDefaultCouncilLineup()
+            if let onOpenCouncil {
+                onOpenCouncil()
+                return false
+            }
+            return true
+        case .agent:
+            if chatStore.agentModels.contains(where: { $0.id == ModelOption.ironclawMobileModelID }) {
+                chatStore.selectModel(ModelOption.ironclawMobileModelID)
+            } else if chatStore.ironclawRemoteWorkstationAvailable {
+                chatStore.selectModel(ModelOption.ironclawModelID)
+            }
+            return true
+        case .trust:
+            if chatStore.selectedProject != nil {
+                chatStore.selectSourceMode(.all)
+            } else {
+                chatStore.selectSourceMode(.web)
+                if !chatStore.selectedRouteUsesNearCloud, !chatStore.researchModeEnabled {
+                    chatStore.toggleResearchMode()
+                }
+            }
+            return true
+        }
+    }
+
+    nonisolated static func stagedPrompt(_ prompt: String, existingDraft: String) -> String {
+        let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDraft = existingDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrompt.isEmpty else { return existingDraft }
+        guard !trimmedDraft.isEmpty else { return trimmedPrompt }
+        guard !trimmedDraft.hasPrefix(trimmedPrompt) else { return trimmedDraft }
+        return "\(trimmedPrompt) \(trimmedDraft)"
+    }
+
+    @discardableResult
+    static func apply(
+        _ suggestion: EmptyChatStarterSuggestion,
+        to chatStore: ChatStore,
+        onOpenProject: (() -> Void)? = nil,
+        onOpenCouncil: (() -> Void)? = nil
+    ) -> Bool {
+        let shouldFocusComposer = prepare(
+            suggestion,
+            to: chatStore,
+            onOpenProject: onOpenProject,
+            onOpenCouncil: onOpenCouncil
+        )
+
+        chatStore.draft = stagedPrompt(suggestion.prompt, existingDraft: chatStore.draft)
+        return shouldFocusComposer
+    }
+}
+
+/// Empty state for a new chat thread — v2 redesign.
+/// Single NEAR mark + caption, optional prompt-suggestion chips below.
+/// All setup-recovery / quickstart / capability-callout patterns from the
+/// pre-v2 design are intentionally removed — those belong in Setup, never on
+/// the chat surface.
 struct EmptyChatView: View {
     @EnvironmentObject private var chatStore: ChatStore
-    @EnvironmentObject private var sessionStore: SessionStore
-    @State private var showingAccountSettings = false
-
-    private struct EmptyPromptSuggestion: Identifiable {
-        var id: String { title }
-        let title: String
-        let symbolName: String
-        let prompt: String
-    }
-
-    private struct SetupQuickstartState {
-        let profile: UserSetupProfile
-        let plan: AppSetupPlan
-        let restoreState: SetupRestoreState
-
-        var hasStarterPrompt: Bool {
-            plan.firstRunDraft != nil
-        }
-
-        var primaryActionTitle: String {
-            switch (restoreState.needsRestore, hasStarterPrompt) {
-            case (true, true):
-                return "Restore saved setup"
-            case (true, false):
-                return "Restore saved setup"
-            case (false, true):
-                return "Use starter prompt"
-            case (false, false):
-                return "Setup ready"
-            }
-        }
-
-        var primaryActionSymbolName: String {
-            switch (restoreState.needsRestore, hasStarterPrompt) {
-            case (true, _):
-                return "arrow.counterclockwise"
-            case (false, true):
-                return "text.cursor"
-            case (false, false):
-                return "checkmark.circle"
-            }
-        }
-    }
-
-    private var emptyHeroSubtitle: String {
-        if let project = chatStore.selectedProject {
-            let contextCount = chatStore.activeProjectContextAttachments.count + chatStore.activeProjectContextLinks.count
-            return contextCount > 0 ? "\(project.name) context is ready." : "\(project.name) is selected."
-        }
-        if chatStore.selectedModelOption?.isIronclawHostedModel == true {
-            return chatStore.ironclawRemoteWorkstationAvailable ? "Hosted agent ready." : "Connect hosted IronClaw to run workstation tasks."
-        }
-        if chatStore.selectedModelOption?.isIronclawMobileRuntime == true {
-            return chatStore.ironclawRemoteWorkstationAvailable ? "Hosted agent ready." : "Mobile agent ready."
-        }
-        if let setupProfileWithGoal {
-            return setupProfileWithGoal.emptyStateSubtitle
-        }
-        if chatStore.isCouncilModeEnabled {
-            return "Council is ready to compare answers."
-        }
-        if chatStore.researchModeEnabled && !chatStore.selectedRouteUsesNearCloud {
-            return "Search current sources."
-        }
-        if let setupProfile {
-            return setupProfile.emptyStateSubtitle
-        }
-        return "Ask normally. NEAR picks web, project context, or an agent when needed."
-    }
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    var onOpenProject: () -> Void = {}
+    var onOpenCouncil: () -> Void = {}
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center, spacing: 12) {
-                PrivacySeal(size: 40)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("What do you want to ask?")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(Color.primary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(emptyHeroSubtitle)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+        VStack(spacing: 14) {
+            NearAppIconMark(size: 56)
+
+            VStack(spacing: 5) {
+                Text("What do you want to ask?")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(Color.textPrimary)
+                Text("Private by default. Add sources, a Project, Council, or Agent when needed.")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(Color.textTertiary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            if let setupQuickstartState {
-                setupQuickstartCard(setupQuickstartState)
-            }
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) {
+            if !emptyPromptSuggestions.isEmpty {
+                LazyVGrid(columns: suggestionColumns, spacing: 8) {
                     ForEach(emptyPromptSuggestions) { suggestion in
-                        suggestionButton(suggestion)
+                        suggestionChip(suggestion)
                     }
                 }
-                .padding(.vertical, 1)
-
-                Menu {
-                    ForEach(emptyPromptSuggestions) { suggestion in
-                        Button {
-                            fillDraft(for: suggestion)
-                        } label: {
-                            Label(suggestion.title, systemImage: suggestion.symbolName)
-                        }
-                    }
-                } label: {
-                    Label("Prompt examples", systemImage: "sparkles")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.textSecondary)
-                        .frame(height: 34)
-                        .padding(.horizontal, 10)
-                        .background(Color.secondarySurface, in: Capsule())
-                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
             }
         }
-        .frame(maxWidth: 360, alignment: .leading)
-        .sheet(isPresented: $showingAccountSettings) {
-            AccountSettingsView(onRunSetupAgain: {})
-                .environmentObject(sessionStore)
-                .environmentObject(chatStore)
-        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
-    private func suggestionButton(_ suggestion: EmptyPromptSuggestion) -> some View {
+    private func suggestionChip(_ suggestion: EmptyChatStarterSuggestion) -> some View {
         Button {
             fillDraft(for: suggestion)
         } label: {
             Label(suggestion.title, systemImage: suggestion.symbolName)
-                .font(.caption.weight(.semibold))
+                .font(.footnote.weight(.medium))
                 .labelStyle(.titleAndIcon)
                 .foregroundStyle(Color.textSecondary)
-                .lineLimit(1)
-                .padding(.horizontal, 10)
-                .frame(height: 34)
-                .background(Color.secondarySurface, in: Capsule())
+                .lineLimit(2)
+                .minimumScaleFactor(0.90)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(Color.appSecondaryBackground, in: Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Use suggestion, \(suggestion.title)")
-        .accessibilityHint("Fills the composer without sending.")
+        .accessibilityHint(accessibilityHint(for: suggestion))
     }
 
-    private func setupQuickstartCard(_ state: SetupQuickstartState) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: state.plan.modelRoute.symbolName)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(Color.brandBlue)
-                    .frame(width: 36, height: 36)
-                    .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Setup quickstart")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(Color.primaryAction)
-                    Text(state.plan.launchCardTitle)
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(state.plan.launchCardSubtitle)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            if !state.plan.launchCardMetadata.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(state.plan.launchCardMetadata, id: \.self) { item in
-                            SetupLaunchPill(title: item)
-                        }
-                    }
-                    .padding(.horizontal, 1)
-                }
-                .scrollClipDisabled()
-            }
-
-            if let firstRunDraft = state.plan.firstRunDraft {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Starter prompt")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(Color.textSecondary)
-                    Text(firstRunDraft)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(3)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(12)
-                .background(Color.secondarySurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            }
-
-            Text(state.plan.readinessStatus)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if state.restoreState.needsRestore {
-                Text(state.restoreState.summaryText)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Color.primaryAction)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if let recommendation = setupQuickstartRecommendation(for: state.plan) {
-                SetupCardRecommendationView(
-                    recommendation: recommendation,
-                    onAction: { runSetupQuickstartRecommendation(for: state.plan) }
-                )
-            }
-
-            if state.restoreState.needsRestore || state.hasStarterPrompt {
-                HStack(spacing: 10) {
-                    Button {
-                        runSetupQuickstart(state)
-                    } label: {
-                        Label(state.primaryActionTitle, systemImage: state.primaryActionSymbolName)
-                            .font(.caption.weight(.bold))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 38)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.white)
-                    .background(Color.primaryAction, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                    if state.restoreState.needsRestore, state.hasStarterPrompt {
-                        Button {
-                            useSetupPrompt(state)
-                        } label: {
-                            Label("Use starter prompt", systemImage: "text.cursor")
-                                .font(.caption.weight(.semibold))
-                                .frame(height: 38)
-                                .padding(.horizontal, 10)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color.textSecondary)
-                        .background(Color.secondarySurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    }
-                }
-            } else {
-                Text("This chat already matches your saved setup defaults.")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Color.textSecondary)
-            }
-        }
-        .padding(12)
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.brandBlue.opacity(0.10), lineWidth: 1)
-        }
-    }
-
-    private var emptyPromptSuggestions: [EmptyPromptSuggestion] {
-        if chatStore.selectedProviderDisplayName == "IronClaw" {
-            return [
-                EmptyPromptSuggestion(title: "Review repo", symbolName: "chevron.left.forwardslash.chevron.right", prompt: "Agent mission: Review this repo and identify the highest-impact fixes: "),
-                EmptyPromptSuggestion(title: "Patch safely", symbolName: "wrench.and.screwdriver", prompt: "Agent mission: Implement this change, run focused tests, and report changed files: "),
-                EmptyPromptSuggestion(title: "Research issue", symbolName: "globe", prompt: "Agent mission: Research the latest context and turn it into next actions: ")
-            ]
-        }
-
-        if let project = chatStore.selectedProject {
-            let projectName = project.name
-            return [
-                EmptyPromptSuggestion(title: "Brief project", symbolName: "folder.badge.gearshape", prompt: "Use \(projectName)'s files, links, and notes to brief me on the next best move."),
-                EmptyPromptSuggestion(title: "Find blockers", symbolName: "exclamationmark.triangle", prompt: "Review \(projectName)'s context and identify the highest-risk blockers, missing facts, and next checks."),
-                EmptyPromptSuggestion(title: "Draft next step", symbolName: "arrow.forward.circle", prompt: "Turn \(projectName)'s current context into a concise next-step plan I can act on.")
-            ]
-        }
-
-        if let setupProfileWithGoal {
-            return setupProfileWithGoal.emptyStatePromptSuggestions.map {
-                EmptyPromptSuggestion(title: $0.title, symbolName: $0.symbolName, prompt: $0.prompt)
-            }
-        }
-
-        if chatStore.isCouncilModeEnabled {
-            return [
-                EmptyPromptSuggestion(title: "Compare models", symbolName: "square.grid.2x2", prompt: "Compare Anthropic and OpenAI for this task: "),
-                EmptyPromptSuggestion(title: "Disagree", symbolName: "arrow.triangle.branch", prompt: "Ask the council to identify strongest agreements and disagreements on: "),
-                EmptyPromptSuggestion(title: "Decision brief", symbolName: "doc.text.magnifyingglass", prompt: "Give me a decision-ready brief with tradeoffs and next steps: ")
-            ]
-        }
-
-        if chatStore.researchModeEnabled {
-            return [
-                EmptyPromptSuggestion(title: "Latest AI", symbolName: "globe", prompt: "What is the latest important news in AI? Include sources and dates."),
-                EmptyPromptSuggestion(title: "Compare views", symbolName: "square.grid.2x2", prompt: "Compare Anthropic and OpenAI for this task using current sources: "),
-                EmptyPromptSuggestion(title: "Brief me", symbolName: "doc.text.magnifyingglass", prompt: "Research this and give me a decision-ready brief with citations: ")
-            ]
-        }
-
-        if let setupProfile {
-            return setupProfile.emptyStatePromptSuggestions.map {
-                EmptyPromptSuggestion(title: $0.title, symbolName: $0.symbolName, prompt: $0.prompt)
-            }
-        }
-
-        return [
-            EmptyPromptSuggestion(title: "Plan next move", symbolName: "arrow.forward.circle", prompt: "Help me turn this into the next concrete action: "),
-            EmptyPromptSuggestion(title: "Research latest", symbolName: "globe", prompt: "Research the latest context and give me the decision-ready version: "),
-            EmptyPromptSuggestion(title: "Compare options", symbolName: "square.grid.2x2", prompt: "Compare the strongest options, tradeoffs, and recommendation for: ")
-        ]
-    }
-
-    private var setupProfile: UserSetupProfile? {
-        guard let accountID = sessionStore.setupAccountID else { return nil }
-        return UserSetupStorage.load(for: accountID)
-    }
-
-    private var setupProfileWithGoal: UserSetupProfile? {
-        guard let setupProfile, !setupProfile.normalizedGoalText.isEmpty else { return nil }
-        return setupProfile
-    }
-
-    private var setupQuickstartState: SetupQuickstartState? {
-        guard let profile = setupProfile else { return nil }
-        let plan = AppSetupPlan(profile: profile, readiness: setupReadinessSnapshot)
-        return SetupQuickstartState(
-            profile: profile,
-            plan: plan,
-            restoreState: SetupRestorePlanner.evaluate(
-                profile: profile,
-                plan: plan,
-                runtime: currentSetupRuntimeSnapshot
-            )
-        )
-    }
-
-    private var setupReadinessSnapshot: AppSetupReadinessSnapshot {
-        AppSetupReadinessSnapshot(
-            modelCatalogLoaded: !chatStore.models.isEmpty,
-            privateModelAvailable: chatStore.pickerModels.contains { !$0.isExternalModel },
-            defaultCouncilModelCount: chatStore.defaultCouncilModels.count,
-            ironclawMobileAvailable: chatStore.agentModels.contains { $0.id == ModelOption.ironclawMobileModelID },
-            hostedIronclawAvailable: chatStore.ironclawRemoteWorkstationAvailable,
-            nearCloudKeyConfigured: chatStore.nearCloudKeyConfigured
-        )
-    }
-
-    private var setupRouteBlock: CapabilityRouteBlock? {
-        guard let issue = chatStore.routeReadinessIssue else { return nil }
-        switch issue.route {
-        case .nearCloud:
-            return .nearCloudKeyRequired
-        case .hostedIronclaw:
-            return .hostedIronclawEndpointRequired
+    private func accessibilityHint(for suggestion: EmptyChatStarterSuggestion) -> String {
+        switch suggestion.action {
+        case .draft:
+            return "Starts a draft without sending."
+        case .research:
+            return "Turns on Research Mode and starts a draft."
+        case .project:
+            return "Opens Project context and starts a draft."
         case .council:
-            return .councilNeedsModels
+            return "Enables Council and starts a draft."
+        case .agent:
+            return "Selects the Agent route and starts a draft."
+        case .trust:
+            return "Starts a draft for checking sources and trust boundaries."
         }
     }
 
-    private func setupQuickstartNextStep(for plan: AppSetupPlan) -> CapabilityNextStep? {
-        let recommendation = CapabilityNextStepPlanner.recommend(
-            routeBlock: setupRouteBlock,
-            setupPlan: plan,
-            currentRoute: chatStore.selectedRouteKind,
-            hasFreshPrivateProof: true,
-            hostedIronclawAvailable: chatStore.ironclawRemoteWorkstationAvailable,
-            autoCouncilReady: chatStore.defaultCouncilModels.count >= 2
-        )
-
-        guard let recommendation else { return nil }
-        switch recommendation.kind {
-        case .openCloud, .openAgent, .useAutoCouncil:
-            return recommendation
-        case .openSecurity, .rerunSetup:
-            return nil
+    private var suggestionRows: [[EmptyChatStarterSuggestion]] {
+        stride(from: 0, to: emptyPromptSuggestions.count, by: 2).map { start in
+            Array(emptyPromptSuggestions[start..<min(start + 2, emptyPromptSuggestions.count)])
         }
     }
 
-    private func setupQuickstartRecommendation(for plan: AppSetupPlan) -> SetupCardRecommendation? {
-        guard let recommendation = setupQuickstartNextStep(for: plan) else { return nil }
-        return SetupCardRecommendation(
-            title: recommendation.title,
-            detail: recommendation.detail,
-            actionTitle: recommendation.actionTitle,
-            actionSymbolName: setupQuickstartRecommendationSymbolName(for: recommendation.kind)
-        )
-    }
-
-    private func setupQuickstartRecommendationSymbolName(for kind: CapabilityNextStepKind) -> String {
-        switch kind {
-        case .openCloud:
-            return "key"
-        case .openAgent:
-            return "point.3.connected.trianglepath.dotted"
-        case .useAutoCouncil:
-            return "square.grid.2x2"
-        case .openSecurity:
-            return "checkmark.shield"
-        case .rerunSetup:
-            return "arrow.counterclockwise"
+    private var suggestionColumns: [GridItem] {
+        if dynamicTypeSize.isAccessibilitySize {
+            return [GridItem(.flexible(minimum: 220), spacing: 8)]
         }
+        return [GridItem(.adaptive(minimum: 148), spacing: 8)]
     }
 
-    private func runSetupQuickstartRecommendation(for plan: AppSetupPlan) {
-        guard let recommendation = setupQuickstartNextStep(for: plan) else { return }
-        switch recommendation.kind {
-        case .openCloud, .openAgent:
-            AppHaptics.lightImpact()
-            showingAccountSettings = true
-        case .useAutoCouncil:
-            AppHaptics.selection()
-            chatStore.useDefaultCouncilLineup()
-        case .openSecurity, .rerunSetup:
-            break
-        }
+    private var emptyPromptSuggestions: [EmptyChatStarterSuggestion] {
+        EmptyChatStarterCoordinator.suggestions(for: chatStore)
     }
 
-    private func fillDraft(for suggestion: EmptyPromptSuggestion) {
+    private func fillDraft(for suggestion: EmptyChatStarterSuggestion) {
         AppHaptics.selection()
-        chatStore.draft = suggestion.prompt
-    }
-
-    private func runSetupQuickstart(_ state: SetupQuickstartState) {
-        if state.restoreState.needsRestore {
-            AppHaptics.lightImpact()
-            chatStore.applySetupProfile(state.profile)
-            return
-        }
-
-        useSetupPrompt(state)
-    }
-
-    private func useSetupPrompt(_ state: SetupQuickstartState) {
-        guard let prompt = state.plan.firstRunDraft else { return }
-        AppHaptics.selection()
-        recordPromptTelemetry(for: state.profile)
-        chatStore.draft = prompt
-    }
-
-    private var currentSetupRuntimeSnapshot: SetupRuntimeSnapshot {
-        SetupRuntimeSnapshot(
-            modelRoute: currentModelRoute,
-            focusMode: chatStore.sourceMode,
-            webSearchEnabled: chatStore.webSearchEnabled,
-            researchModeEnabled: chatStore.researchModeEnabled,
-            selectedProjectName: chatStore.selectedProject?.name
+        _ = EmptyChatStarterCoordinator.apply(
+            suggestion,
+            to: chatStore,
+            onOpenProject: onOpenProject,
+            onOpenCouncil: onOpenCouncil
         )
-    }
-
-    private var currentModelRoute: AppSetupModelRoute {
-        if chatStore.selectedModelOption?.isIronclawMobileRuntime == true ||
-            chatStore.selectedModelOption?.isIronclawHostedModel == true {
-            return .ironclaw
-        }
-        if chatStore.isCouncilModeEnabled {
-            return .council
-        }
-        return .privateModel
-    }
-
-    private func recordPromptTelemetry(for profile: UserSetupProfile) {
-        let store = PrivateTelemetryStore()
-        let context = TelemetryContext(
-            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "local",
-            profileBucket: profile.telemetryProfileBucket
-        )
-        try? store.record(.promptChipUsed(profile.telemetryPromptChip), context: context)
-    }
-}
-
-private extension UserSetupProfile {
-    var telemetryPromptChip: TelemetryPromptChip {
-        switch useCases.setupPrimaryUseCase {
-        case .privateChat:
-            return .ask
-        case .research:
-            return .research
-        case .buildAgents:
-            return .agent
-        case .teamProjects:
-            return .sourceQA
-        }
-    }
-
-    var telemetryProfileBucket: TelemetryProfileBucket {
-        if useCases.count > 1 {
-            return .mixed
-        }
-        switch useCases.setupPrimaryUseCase {
-        case .privateChat:
-            return .privateChat
-        case .research:
-            return .research
-        case .buildAgents:
-            return .agentWork
-        case .teamProjects:
-            return .mixed
-        }
     }
 }

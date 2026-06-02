@@ -128,7 +128,7 @@ enum IronclawMobilePlanner {
     static let toolDefinitions: [IronclawMobileToolDefinition] = [
         IronclawMobileToolDefinition(
             name: IronclawMobileToolNames.workspaceSnapshot,
-            summary: "Read current iOS workspace state: selected project, chats, files, and web-search setting.",
+            summary: "Read current iOS Project/chat state: selected project, chats, files, and web-search setting.",
             destructive: false
         ),
         IronclawMobileToolDefinition(
