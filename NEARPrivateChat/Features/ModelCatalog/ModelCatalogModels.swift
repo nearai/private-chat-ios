@@ -150,7 +150,7 @@ struct ModelOption: Decodable, Identifiable, Hashable {
     let modelID: String
     let publicModel: Bool?
     let metadata: Metadata?
-    static let nearPrivateDefaultModelID = "zai-org/GLM-latest"
+    static let nearPrivateDefaultModelID = "zai-org/GLM-5.1-FP8"
     static let ironclawModelID = "ironclaw/agent"
     static let ironclawMobileModelID = "ironclaw/mobile-runtime"
     static let nearCloudModelPrefix = "near-cloud/"

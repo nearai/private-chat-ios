@@ -9,7 +9,7 @@ import UIKit
 
 extension PrivateChatCoreTests {
     func testModelCatalogStoreBuildsPickerAndPinnedModelsWithoutChatStore() {
-        let glm = ModelOption(modelID: "zai-org/GLM-5.1-FP8", publicModel: true, metadata: nil)
+        let glm = ModelOption(modelID: ModelOption.nearPrivateDefaultModelID, publicModel: true, metadata: nil)
         let qwen = ModelOption(modelID: "Qwen/Qwen3.5-122B-A10B", publicModel: true, metadata: nil)
         let utility = ModelOption(modelID: "embedding-model", publicModel: true, metadata: nil)
         let cloud = ModelOption(
@@ -28,12 +28,12 @@ extension PrivateChatCoreTests {
             models: [utility, qwen, glm],
             nearCloudModels: [cloud],
             allowedModelIDs: nil,
-            preferredModelIDs: ["zai-org/GLM-5.1-FP8", "Qwen/Qwen3.5-122B-A10B"],
+            preferredModelIDs: [ModelOption.nearPrivateDefaultModelID, "Qwen/Qwen3.5-122B-A10B"],
             nearCloudPreferredModelIDs: [cloud.id]
         )
 
         let rankedPrivateModels = catalog.rankedModels(from: catalog.pickerModels.filter { !$0.isExternalModel })
-        XCTAssertEqual(rankedPrivateModels.first?.id, "zai-org/GLM-5.1-FP8")
+        XCTAssertEqual(rankedPrivateModels.first?.id, ModelOption.nearPrivateDefaultModelID)
         XCTAssertFalse(catalog.pickerModels.contains { $0.id == "embedding-model" })
         XCTAssertTrue(catalog.cloudRouteModels.contains { $0.id == cloud.id })
         XCTAssertEqual(catalog.pinnedPickerModels(from: ["Qwen/Qwen3.5-122B-A10B"]).map(\.id), ["Qwen/Qwen3.5-122B-A10B"])
@@ -96,6 +96,22 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(api.lastCloudAPIKey, "near-cloud-key")
     }
 
+    func testGLM51IsCanonicalPrivateDefaultAndSurvivesNarrowCatalogs() {
+        let qwenOnlyCatalog = ModelCatalogStore(
+            models: [
+                ModelOption(modelID: "Qwen/Qwen3.5-122B-A10B", publicModel: true, metadata: nil)
+            ],
+            allowedModelIDs: ["qwen/qwen3.5-122b-a10b"]
+        )
+
+        XCTAssertEqual(ModelOption.nearPrivateDefaultModelID, "zai-org/GLM-5.1-FP8")
+        XCTAssertEqual(ModelCatalogStore.defaultModelID, "zai-org/GLM-5.1-FP8")
+        XCTAssertEqual(qwenOnlyCatalog.selectedModel, "zai-org/GLM-5.1-FP8")
+        XCTAssertTrue(qwenOnlyCatalog.pickerModels.contains { $0.id == "zai-org/GLM-5.1-FP8" })
+        XCTAssertTrue(qwenOnlyCatalog.pickerModels.contains { $0.id == "Qwen/Qwen3.5-122B-A10B" })
+        XCTAssertEqual(qwenOnlyCatalog.modelDisplayName(for: "zai-org/GLM-5.1-FP8"), "GLM 5.1")
+    }
+
     func testProjectIdentityCatalogSupportsSearchablePhoneChoices() {
         XCTAssertGreaterThanOrEqual(ProjectPalette.allCases.count, 8)
         XCTAssertGreaterThanOrEqual(ProjectIcon.allCases.count, 30)
@@ -146,8 +162,6 @@ extension PrivateChatCoreTests {
             "kimi-k2.6",
             "gemini-3.5-flash",
             "claude-opus-4-7",
-            "GLM-5.1-FP8",
-            "GLM-5.1",
             "Qwen 3.7 Max",
             "Claude Opus 4.7"
         ]
@@ -177,9 +191,6 @@ extension PrivateChatCoreTests {
             "kimi-k2.6",
             "gemini-3.5-flash",
             "claude-opus-4-7",
-            "GLM-5.1-FP8",
-            "GLM-5.1",
-            "GLM 5.1",
             "Qwen 3.7 Max",
             "Claude Opus 4.7"
         ]

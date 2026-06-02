@@ -8,6 +8,7 @@ final class ModelCatalogStore: ObservableObject {
 
     static let preferredModelIDs = [
         ModelOption.nearPrivateDefaultModelID,
+        "zai-org/GLM-latest",
         "Qwen/Qwen3.5-122B-A10B",
         "Qwen/Qwen3.6-35B-A3B-FP8",
         "Qwen/Qwen3-30B-A3B-Instruct-2507",
@@ -81,6 +82,11 @@ final class ModelCatalogStore: ObservableObject {
     private var settingsPersistence: SettingsPersistence?
     private var shouldPersist = false
     private var currentBillingPlanName = "free"
+    private static let modelDefaultRepairMigrationKey = "modelDefaultRepairMigrationV1"
+    private static let deprecatedAutomaticDefaultModelIDs = [
+        "zai-org/GLM-latest",
+        "Qwen/Qwen3.5-122B-A10B"
+    ]
 
     init(
         models: [ModelOption] = [],
@@ -114,7 +120,7 @@ final class ModelCatalogStore: ObservableObject {
         let fallbackDefault = effectiveDefaultModelID?.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedDefault = fallbackDefault?.isEmpty == false ? fallbackDefault! : self.effectiveDefaultModelID
         let storedModel = settingsPersistence?.loadSelectedModelID()
-        let initialModel = storedModel ?? resolvedDefault
+        let initialModel = repairedInitialModel(storedModel, resolvedDefault: resolvedDefault)
         selectedModel = RoutePlanner.routeKind(forModelID: initialModel).isIronclawRoute ? resolvedDefault : initialModel
         let storedCouncilModelIDs = normalizedCouncilModelIDs(settingsPersistence?.loadCouncilModelIDs() ?? [])
         councilModelIDs = storedCouncilModelIDs.isEmpty ? [selectedModel] : storedCouncilModelIDs
@@ -207,7 +213,7 @@ final class ModelCatalogStore: ObservableObject {
     }
 
     var chatModels: [ModelOption] {
-        let privateModels = models.isEmpty ? Self.fallbackPrivateModels() : models
+        let privateModels = Self.uniqueModels(Self.fallbackPrivateModels() + models)
         return (privateModels + externalModels).filter { model in
             !model.isUtilityModel && isAllowedByCurrentPlan(model)
         }
@@ -817,6 +823,9 @@ final class ModelCatalogStore: ObservableObject {
         if model.isExternalModel {
             return true
         }
+        if model.id == ModelOption.nearPrivateDefaultModelID {
+            return true
+        }
         guard let allowedModelIDs else {
             return true
         }
@@ -927,10 +936,10 @@ final class ModelCatalogStore: ObservableObject {
                 metadata: ModelOption.Metadata(
                     verifiable: true,
                     contextLength: nil,
-                    modelDisplayName: "NEAR Private model",
-                    modelDescription: "Default private route with proof support.",
+                    modelDisplayName: "GLM 5.1",
+                    modelDescription: "Default NEAR Private route with proof support.",
                     modelIcon: nil,
-                    aliases: ["NEAR Private", "verified", "private"]
+                    aliases: ["NEAR Private", "verified", "private", "GLM"]
                 )
             )
         ]
@@ -982,8 +991,43 @@ final class ModelCatalogStore: ObservableObject {
     static func model(_ model: ModelOption, matchesCandidateID candidateID: String) -> Bool {
         let candidate = candidateID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !candidate.isEmpty else { return false }
-        let comparableIDs = uniqueStrings([model.id, model.nearCloudUnderlyingModelID].compactMap { $0 })
+        let comparableIDs = uniqueStrings(
+            [model.id, model.nearCloudUnderlyingModelID].compactMap { $0 } +
+                canonicalModelAliases(for: model.id)
+        )
         return comparableIDs.contains { $0.localizedCaseInsensitiveCompare(candidate) == .orderedSame }
+    }
+
+    private func repairedInitialModel(_ storedModel: String?, resolvedDefault: String) -> String {
+        guard let storedModel,
+              !storedModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return resolvedDefault
+        }
+        guard let settingsPersistence,
+              !settingsPersistence.defaults.bool(forKey: settingsPersistence.scopedDefaultsKey(Self.modelDefaultRepairMigrationKey)) else {
+            return Self.canonicalModelID(for: storedModel)
+        }
+        settingsPersistence.defaults.set(true, forKey: settingsPersistence.scopedDefaultsKey(Self.modelDefaultRepairMigrationKey))
+        if Self.deprecatedAutomaticDefaultModelIDs.contains(where: { $0.localizedCaseInsensitiveCompare(storedModel) == .orderedSame }) {
+            return resolvedDefault
+        }
+        return Self.canonicalModelID(for: storedModel)
+    }
+
+    private static func canonicalModelID(for modelID: String) -> String {
+        let trimmed = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if canonicalModelAliases(for: Self.defaultModelID).contains(where: { $0.localizedCaseInsensitiveCompare(trimmed) == .orderedSame }) {
+            return Self.defaultModelID
+        }
+        return trimmed
+    }
+
+    private static func canonicalModelAliases(for modelID: String) -> [String] {
+        if modelID.localizedCaseInsensitiveCompare(ModelOption.nearPrivateDefaultModelID) == .orderedSame ||
+            modelID.localizedCaseInsensitiveCompare("zai-org/GLM-latest") == .orderedSame {
+            return ["zai-org/GLM-latest"]
+        }
+        return []
     }
 
     private static func nearCloudRouteModelID(for cloudModelID: String) -> String {
