@@ -1,6 +1,36 @@
 import Foundation
 import SwiftUI
 
+struct ChatPromptSourcePrivacyOverride: Equatable {
+    var blocksWeb: Bool = false
+    var prefersFileOnly: Bool = false
+    var requiresPrivateRoute: Bool = false
+
+    var isEmpty: Bool {
+        !blocksWeb && !prefersFileOnly && !requiresPrivateRoute
+    }
+
+    func sourceInstruction(attachmentNames: [String]) -> String? {
+        guard blocksWeb || prefersFileOnly || requiresPrivateRoute else { return nil }
+        let names = attachmentNames
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if prefersFileOnly {
+            let source = names.isEmpty
+                ? "Use only the attached or selected file context already present in this turn."
+                : "Use only these attached files: \(names.joined(separator: ", "))."
+            return "\(source) Do not browse, use live web, pull saved links, or add unstated project context."
+        }
+        if blocksWeb {
+            return "Do not browse or use live web. Use the conversation, attached files, and selected project sources already present."
+        }
+        if requiresPrivateRoute {
+            return "Keep this turn on the private route; do not hand it to hosted or cloud routes."
+        }
+        return nil
+    }
+}
+
 enum ChatSourceMode: String, CaseIterable, Codable, Identifiable, Hashable {
     case auto
     case web

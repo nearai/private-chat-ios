@@ -1,0 +1,253 @@
+import XCTest
+import SwiftUI
+import UserNotifications
+import CoreSpotlight
+#if canImport(UIKit)
+import UIKit
+#endif
+@testable import NEARPrivateChat
+
+extension PrivateChatCoreTests {
+    func testModelCatalogStoreBuildsPickerAndPinnedModelsWithoutChatStore() {
+        let glm = ModelOption(modelID: "zai-org/GLM-5.1-FP8", publicModel: true, metadata: nil)
+        let qwen = ModelOption(modelID: "Qwen/Qwen3.5-122B-A10B", publicModel: true, metadata: nil)
+        let utility = ModelOption(modelID: "embedding-model", publicModel: true, metadata: nil)
+        let cloud = ModelOption(
+            modelID: ModelOption.nearCloudModelID(for: "provider/current-model"),
+            publicModel: true,
+            metadata: ModelOption.Metadata(
+                verifiable: false,
+                contextLength: nil,
+                modelDisplayName: "Provider model",
+                modelDescription: "Catalog-returned cloud route.",
+                modelIcon: nil,
+                aliases: []
+            )
+        )
+        let catalog = ModelCatalogStore(
+            models: [utility, qwen, glm],
+            nearCloudModels: [cloud],
+            allowedModelIDs: nil,
+            preferredModelIDs: ["zai-org/GLM-5.1-FP8", "Qwen/Qwen3.5-122B-A10B"],
+            nearCloudPreferredModelIDs: [cloud.id]
+        )
+
+        let rankedPrivateModels = catalog.rankedModels(from: catalog.pickerModels.filter { !$0.isExternalModel })
+        XCTAssertEqual(rankedPrivateModels.first?.id, "zai-org/GLM-5.1-FP8")
+        XCTAssertFalse(catalog.pickerModels.contains { $0.id == "embedding-model" })
+        XCTAssertTrue(catalog.cloudRouteModels.contains { $0.id == cloud.id })
+        XCTAssertEqual(catalog.pinnedPickerModels(from: ["Qwen/Qwen3.5-122B-A10B"]).map(\.id), ["Qwen/Qwen3.5-122B-A10B"])
+    }
+
+    func testModelCatalogStoreOwnsSelectionPinningAndCouncilLineupWithoutChatStore() {
+        let catalog = ModelCatalogStore(
+            models: [
+                ModelOption(modelID: ModelOption.nearPrivateDefaultModelID, publicModel: true, metadata: nil),
+                ModelOption(modelID: "Qwen/Qwen3.5-122B-A10B", publicModel: true, metadata: nil),
+                ModelOption(modelID: "moonshotai/Kimi-K2-Instruct", publicModel: true, metadata: nil)
+            ],
+            preferredModelIDs: [
+                ModelOption.nearPrivateDefaultModelID,
+                "Qwen/Qwen3.5-122B-A10B",
+                "moonshotai/Kimi-K2-Instruct"
+            ]
+        )
+
+        XCTAssertTrue(catalog.selectModel("Qwen/Qwen3.5-122B-A10B"))
+        XCTAssertEqual(catalog.selectedModel, "Qwen/Qwen3.5-122B-A10B")
+        XCTAssertEqual(catalog.councilModelIDs, ["Qwen/Qwen3.5-122B-A10B"])
+
+        catalog.togglePinnedModel("moonshotai/Kimi-K2-Instruct")
+        XCTAssertEqual(catalog.pinnedModelIDs, ["moonshotai/Kimi-K2-Instruct"])
+
+        catalog.useDefaultCouncilLineup()
+        XCTAssertTrue(catalog.isCouncilModeEnabled)
+        XCTAssertEqual(Array(catalog.activeCouncilModels.map(\.id).prefix(2)), [
+            ModelOption.nearPrivateDefaultModelID,
+            "Qwen/Qwen3.5-122B-A10B"
+        ])
+    }
+
+    func testModelCatalogStoreRefreshOwnsPrivateAndCloudCatalogApplication() async throws {
+        let privateModel = ModelOption(modelID: ModelOption.nearPrivateDefaultModelID, publicModel: true, metadata: nil)
+        let cloudModel = ModelOption(
+            modelID: "provider/current-model",
+            publicModel: true,
+            metadata: ModelOption.Metadata(
+                verifiable: false,
+                contextLength: 128_000,
+                modelDisplayName: "Current Cloud Model",
+                modelDescription: "Current account model.",
+                modelIcon: nil,
+                aliases: []
+            )
+        )
+        let api = ModelCatalogFakeAPI(privateModels: [privateModel], cloudModels: [cloudModel])
+        let catalog = ModelCatalogStore()
+
+        try await catalog.refreshModels(
+            modelAPI: api,
+            loadCloudCatalog: true,
+            nearCloudAPIKey: "near-cloud-key"
+        )
+
+        XCTAssertEqual(catalog.models.map(\.id), [ModelOption.nearPrivateDefaultModelID])
+        XCTAssertEqual(catalog.cloudRouteModels.map(\.id), [ModelOption.nearCloudModelID(for: "provider/current-model")])
+        XCTAssertEqual(api.lastCloudAPIKey, "near-cloud-key")
+    }
+
+    func testProjectIdentityCatalogSupportsSearchablePhoneChoices() {
+        XCTAssertGreaterThanOrEqual(ProjectPalette.allCases.count, 8)
+        XCTAssertGreaterThanOrEqual(ProjectIcon.allCases.count, 30)
+        XCTAssertTrue(ProjectIcon.pullRequest.matches("pull"))
+        XCTAssertTrue(ProjectIcon.brain.matches("thinking"))
+        XCTAssertTrue(ProjectIcon.shield.matches("verified"))
+        XCTAssertFalse(ProjectIcon.folder.matches("nonexistent-symbol"))
+    }
+
+    func testIronclawSkillCatalogBlankStatePrefersPhoneFirstAgentSkills() {
+        let skills = IronclawSkillCatalog.suggestedSkills(for: "", limit: 3)
+
+        XCTAssertEqual(skills.map(\.id), ["coding", "local-test", "github-workflow"])
+    }
+
+    func testIronclawSkillCatalogIncludesUpstreamSetupSkillsUsedByOnboarding() {
+        let skills = IronclawSkillCatalog.profiles(
+            for: ["developer-setup", "new-project", "plan-mode", "review-readiness"]
+        )
+
+        XCTAssertEqual(skills.map(\.id), ["developer-setup", "new-project", "plan-mode", "review-readiness"])
+    }
+
+    func testIronclawSkillCatalogIncludesUpstreamSkillsReferencedByRouting() {
+        let skills = IronclawSkillCatalog.profiles(
+            for: ["github", "delegation", "review-checklist", "idea-parking", "tech-debt-tracker", "web-ui-test"]
+        )
+
+        XCTAssertEqual(
+            skills.map(\.id),
+            ["github", "delegation", "review-checklist", "idea-parking", "tech-debt-tracker", "web-ui-test"]
+        )
+    }
+
+    func testIronclawSkillCatalogMatchingSkillsOnlyReturnsExactKeywordMatches() {
+        let skills = IronclawSkillCatalog.matchingSkills(
+            for: "Run a security audit with a manual test plan before merge.",
+            limit: 4
+        )
+
+        XCTAssertEqual(skills.map(\.id), ["qa-review", "security-review", "review-readiness"])
+    }
+
+    func testModelCatalogContainsNoSpeculativeFallbackIdentifiers() {
+        let banned = [
+            "gpt-5.5",
+            "qwen3.7-max",
+            "kimi-k2.6",
+            "gemini-3.5-flash",
+            "claude-opus-4-7",
+            "GLM-5.1-FP8",
+            "GLM-5.1",
+            "Qwen 3.7 Max",
+            "Claude Opus 4.7"
+        ]
+        let fallbackSurface = (ModelCatalogStore.fallbackNearCloudModels() + ModelCatalogStore.fallbackPrivateModels())
+            .flatMap { model in
+                [
+                    model.id,
+                    model.displayName,
+                    model.metadata?.modelDescription ?? "",
+                    model.metadata?.aliases?.joined(separator: " ") ?? ""
+                ]
+            }
+            .joined(separator: " ")
+
+        for identifier in banned {
+            XCTAssertFalse(
+                fallbackSurface.localizedCaseInsensitiveContains(identifier),
+                "Fallback model surface should not include \(identifier)."
+            )
+        }
+    }
+
+    func testProductSourcesDoNotShipSpeculativeModelNames() throws {
+        let banned = [
+            "gpt-5.5",
+            "qwen3.7-max",
+            "kimi-k2.6",
+            "gemini-3.5-flash",
+            "claude-opus-4-7",
+            "GLM-5.1-FP8",
+            "GLM-5.1",
+            "GLM 5.1",
+            "Qwen 3.7 Max",
+            "Claude Opus 4.7"
+        ]
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let roots = [
+            repoRoot.appendingPathComponent("NEARPrivateChat"),
+            repoRoot.appendingPathComponent("Preview")
+        ]
+        var leaks: [String] = []
+
+        for root in roots {
+            guard let enumerator = FileManager.default.enumerator(
+                at: root,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            ) else {
+                continue
+            }
+            for case let fileURL as URL in enumerator {
+                if fileURL.pathComponents.contains(where: { $0.hasSuffix(".xcassets") }) {
+                    enumerator.skipDescendants()
+                    continue
+                }
+                let fileExtension = fileURL.pathExtension.lowercased()
+                guard ["swift", "html", "md", "plist"].contains(fileExtension) else { continue }
+                let text = (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
+                for identifier in banned where text.localizedCaseInsensitiveContains(identifier) {
+                    leaks.append("\(fileURL.path): \(identifier)")
+                }
+            }
+        }
+
+        XCTAssertTrue(leaks.isEmpty, leaks.joined(separator: "\n"))
+    }
+}
+
+private final class ModelCatalogFakeAPI: ModelAPI {
+    let privateModels: [ModelOption]
+    let cloudModels: [ModelOption]
+    private(set) var lastCloudAPIKey: String?
+
+    init(privateModels: [ModelOption], cloudModels: [ModelOption]) {
+        self.privateModels = privateModels
+        self.cloudModels = cloudModels
+    }
+
+    func fetchModels() async throws -> [ModelOption] {
+        privateModels
+    }
+
+    func connectNearCloudAccount() async throws -> NearCloudConnectResponse {
+        throw APIError.emptyResponse
+    }
+
+    func fetchNearCloudModels(apiKey: String?) async throws -> [ModelOption] {
+        lastCloudAPIKey = apiKey
+        return cloudModels
+    }
+
+    func fetchNearCloudChatCompletion(
+        apiKey: String,
+        model: String,
+        prompt: String,
+        systemPrompt: String,
+        advancedParams: AdvancedModelParams
+    ) async throws -> String {
+        throw APIError.emptyResponse
+    }
+}

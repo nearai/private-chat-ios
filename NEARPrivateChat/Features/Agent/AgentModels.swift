@@ -424,6 +424,18 @@ struct HostedIronclawHandoffPreflight: Identifiable, Hashable {
     var disclosedItems: [String]
 }
 
+struct HostedIronclawAttachmentDisclosure: Hashable {
+    var disclosedItem: String?
+    var fingerprint: String
+
+    static func promptFiles(_ attachments: [ChatAttachment]) -> HostedIronclawAttachmentDisclosure {
+        HostedIronclawAttachmentDisclosure(
+            disclosedItem: attachments.isEmpty ? nil : "Prompt files: \(attachments.map(\.name).joined(separator: ", "))",
+            fingerprint: attachments.map(\.id).joined(separator: "|")
+        )
+    }
+}
+
 struct IronclawPendingGate: Codable, Hashable, Identifiable {
     var requestID: String
     var threadID: String

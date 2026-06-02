@@ -166,8 +166,14 @@ struct AuthView: View {
             LegalTermsSheet()
         }
         .sheet(isPresented: $showingSharedLink) {
-            SharedConversationSheet()
-                .environmentObject(chatStore)
+            SharedConversationSheet(
+                onOpenForWriting: { snapshot in
+                    chatStore.openSharedPreviewForWriting(snapshot)
+                },
+                onCopyAndContinue: { snapshot in
+                    chatStore.cloneConversation(snapshot.conversation)
+                }
+            )
         }
         #if DEBUG
         .sheet(isPresented: $showingTokenLogin) {

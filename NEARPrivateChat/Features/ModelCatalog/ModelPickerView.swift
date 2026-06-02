@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ModelPickerView: View {
     @EnvironmentObject private var chatStore: ChatStore
+    @EnvironmentObject private var modelCatalogStore: ModelCatalogStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var selectedTab: ModelPickerTab = .models
@@ -20,7 +21,7 @@ struct ModelPickerView: View {
     // MARK: - Computed pickers
 
     private var allPickerModels: [ModelOption] {
-        chatStore.pickerModels
+        modelCatalogStore.pickerModels
     }
 
     private var defaultPrivateModel: ModelOption? {
@@ -41,11 +42,11 @@ struct ModelPickerView: View {
     }
 
     private var cloudPreviewCount: Int {
-        chatStore.cloudModels.count
+        modelCatalogStore.cloudModels.count
     }
 
     private var frontierCloudModels: [ModelOption] {
-        let cloud = chatStore.cloudModels
+        let cloud = modelCatalogStore.cloudModels
         let frontier = cloud.filter { model in
             model.isEliteModel ||
                 model.displayName.localizedCaseInsensitiveContains("opus") ||
@@ -96,7 +97,7 @@ struct ModelPickerView: View {
                 }
             }
             .task {
-                if chatStore.models.isEmpty {
+                if modelCatalogStore.models.isEmpty {
                     await chatStore.refreshModels(loadCloudCatalog: chatStore.nearCloudKeyConfigured)
                 }
             }
@@ -150,9 +151,9 @@ struct ModelPickerView: View {
     }
 
     private var activeRouteSummary: (title: String, detail: String, badges: [String], symbolName: String, tint: Color) {
-        if chatStore.isCouncilModeEnabled {
-            let count = max(chatStore.activeCouncilModels.count, chatStore.defaultCouncilModels.count)
-            let proof = chatStore.activeCouncilHasExternalRoutes ? "Mixed proof" : "Proof when fetched"
+        if modelCatalogStore.isCouncilModeEnabled {
+            let count = max(modelCatalogStore.activeCouncilModels.count, modelCatalogStore.defaultCouncilModels.count)
+            let proof = modelCatalogStore.activeCouncilHasExternalRoutes ? "Mixed proof" : "Proof when fetched"
             return (
                 "Council",
                 "\(max(count, 2)) models answer independently. The app synthesizes one result.",
@@ -162,7 +163,7 @@ struct ModelPickerView: View {
             )
         }
 
-        switch chatStore.selectedRouteKind {
+        switch modelCatalogStore.selectedRouteKind {
         case .nearPrivate:
             return (
                 "NEAR Private",
@@ -211,7 +212,7 @@ struct ModelPickerView: View {
 	                        subtitle: "Private inference. Proof when fetched.",
                         badges: model.routeDisclosureBadges,
                         trailing: .checkmark,
-                        isSelected: model.id == chatStore.selectedModel && !chatStore.isCouncilModeEnabled,
+                        isSelected: model.id == modelCatalogStore.selectedModel && !modelCatalogStore.isCouncilModeEnabled,
                         showsDivider: false,
                         action: { selectModelAndDismiss(model) }
                     )
@@ -230,10 +231,10 @@ struct ModelPickerView: View {
                                 ? "Multi-step reasoning, slower"
                                 : "Deepest analysis. Slowest.",
                             badges: model.routeDisclosureBadges,
-                            trailing: model.id == chatStore.selectedModel && !chatStore.isCouncilModeEnabled
+                            trailing: model.id == modelCatalogStore.selectedModel && !modelCatalogStore.isCouncilModeEnabled
                                 ? .checkmark
                                 : .none,
-                            isSelected: model.id == chatStore.selectedModel && !chatStore.isCouncilModeEnabled,
+                            isSelected: model.id == modelCatalogStore.selectedModel && !modelCatalogStore.isCouncilModeEnabled,
                             showsDivider: index != reasoningChoices.count - 1,
                             action: { selectModelAndDismiss(model) }
                         )
@@ -268,10 +269,10 @@ struct ModelPickerView: View {
                             title: model.displayName,
                             subtitle: frontierSubtitle(for: model),
                             badges: model.routeDisclosureBadges,
-                            trailing: model.id == chatStore.selectedModel && !chatStore.isCouncilModeEnabled
+                            trailing: model.id == modelCatalogStore.selectedModel && !modelCatalogStore.isCouncilModeEnabled
                                 ? .checkmark
                                 : .none,
-                            isSelected: model.id == chatStore.selectedModel && !chatStore.isCouncilModeEnabled,
+                            isSelected: model.id == modelCatalogStore.selectedModel && !modelCatalogStore.isCouncilModeEnabled,
                             showsDivider: index != frontierCloudModels.count - 1,
                             action: { selectModelAndDismiss(model) }
                         )
@@ -305,7 +306,7 @@ struct ModelPickerView: View {
 
     private var councilTab: some View {
         let lineup = councilDisplayLineup()
-        let isActive = chatStore.isCouncilModeEnabled
+        let isActive = modelCatalogStore.isCouncilModeEnabled
 
         return VStack(alignment: .leading, spacing: 22) {
             ModelSpecSection(title: isActive ? "Active Council" : "Recommended Council") {
@@ -336,9 +337,9 @@ struct ModelPickerView: View {
 	            VStack(spacing: 10) {
                 Button {
                     if isActive {
-                        chatStore.clearCouncilMode()
+                        modelCatalogStore.clearCouncilMode()
                     } else {
-                        chatStore.useDefaultCouncilLineup()
+                        modelCatalogStore.useDefaultCouncilLineup()
                     }
                     dismiss()
                 } label: {
@@ -356,9 +357,9 @@ struct ModelPickerView: View {
 
 	            councilCandidatesSection
 
-	            if !chatStore.councilPresets.isEmpty {
+	            if !modelCatalogStore.councilPresets.isEmpty {
                 ModelSpecSection(title: "Presets") {
-                    let presets = chatStore.councilPresets
+                    let presets = modelCatalogStore.councilPresets
                     ForEach(Array(presets.enumerated()), id: \.element.id) { index, preset in
                         ModelSpecRow(
                             symbolName: presetSymbol(for: preset),
@@ -371,7 +372,7 @@ struct ModelPickerView: View {
                             showsDivider: index != presets.count - 1,
                             isEnabled: preset.isAvailable,
                             action: {
-                                chatStore.useCouncilPreset(preset.id)
+                                modelCatalogStore.useCouncilPreset(preset.id)
                                 dismiss()
                             }
                         )
@@ -384,11 +385,11 @@ struct ModelPickerView: View {
     // MARK: - Helpers
 
     private func councilDisplayLineup() -> [ModelOption] {
-        let active = chatStore.activeCouncilModels
+        let active = modelCatalogStore.activeCouncilModels
         if active.count > 1 {
             return Array(active.prefix(4))
         }
-        return Array(chatStore.defaultCouncilModels.prefix(4))
+        return Array(modelCatalogStore.defaultCouncilModels.prefix(4))
     }
 
 	    private func councilSubtitle(for model: ModelOption, index: Int) -> String {
@@ -415,7 +416,7 @@ struct ModelPickerView: View {
 
     @ViewBuilder
     private var councilCandidatesSection: some View {
-        let candidates = Array(chatStore.councilCandidateModels.prefix(8))
+        let candidates = Array(modelCatalogStore.councilCandidateModels.prefix(8))
         if !candidates.isEmpty {
             ModelSpecSection(title: "Choose Models") {
                 Text(councilSelectionStatusText)
@@ -427,8 +428,8 @@ struct ModelPickerView: View {
                     .background(Color.appSecondaryBackground.opacity(0.72))
 
                 ForEach(Array(candidates.enumerated()), id: \.element.id) { index, model in
-                    let isSelected = chatStore.councilIndex(for: model.id) != nil
-                    let isEnabled = isSelected || chatStore.activeCouncilModels.count < chatStore.maxCouncilModelCount
+                    let isSelected = modelCatalogStore.councilIndex(for: model.id) != nil
+                    let isEnabled = isSelected || modelCatalogStore.activeCouncilModels.count < modelCatalogStore.maxCouncilModelCount
                     ModelSpecRow(
                         symbolName: isSelected ? "checkmark.circle.fill" : "plus.circle",
                         symbolColor: isSelected ? Color.actionPrimary : Color.textSecondary,
@@ -439,7 +440,7 @@ struct ModelPickerView: View {
                         isSelected: isSelected,
                         showsDivider: index != candidates.count - 1,
                         isEnabled: isEnabled,
-                        action: { chatStore.toggleCouncilModel(model.id) }
+                        action: { modelCatalogStore.toggleCouncilModel(model.id) }
                     )
                 }
             }
@@ -447,17 +448,17 @@ struct ModelPickerView: View {
     }
 
     private func manualCouncilSubtitle(for model: ModelOption) -> String {
-        if let index = chatStore.councilIndex(for: model.id) {
+        if let index = modelCatalogStore.councilIndex(for: model.id) {
             return "Council slot \(index)"
         }
-        if chatStore.activeCouncilModels.count >= chatStore.maxCouncilModelCount {
+        if modelCatalogStore.activeCouncilModels.count >= modelCatalogStore.maxCouncilModelCount {
             return "Remove a model to add this one"
         }
         return "Add to Council"
     }
 
     private var councilSelectionStatusText: String {
-        "\(chatStore.activeCouncilModels.count) selected · 2 required · \(chatStore.maxCouncilModelCount) max"
+        "\(modelCatalogStore.activeCouncilModels.count) selected · 2 required · \(modelCatalogStore.maxCouncilModelCount) max"
     }
 
 	    private func compactCatalogDescription(for model: ModelOption) -> String? {
@@ -478,7 +479,7 @@ struct ModelPickerView: View {
 	    }
 
     private func selectModelAndDismiss(_ model: ModelOption) {
-        chatStore.selectModel(model.id)
+        _ = modelCatalogStore.selectModel(model.id)
         dismiss()
     }
 

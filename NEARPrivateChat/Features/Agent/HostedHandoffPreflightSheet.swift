@@ -1,9 +1,10 @@
 import SwiftUI
 
 struct HostedHandoffPreflightSheet: View {
-    @EnvironmentObject private var chatStore: ChatStore
     @Environment(\.dismiss) private var dismiss
     let preflight: HostedIronclawHandoffPreflight
+    let onConfirm: (HostedIronclawHandoffPreflight) -> Void
+    let onCancel: () -> Void
 
     var body: some View {
         NavigationStack {
@@ -53,7 +54,7 @@ struct HostedHandoffPreflightSheet: View {
 
                     VStack(spacing: 10) {
                         Button {
-                            chatStore.confirmHostedHandoff(preflight)
+                            onConfirm(preflight)
                             dismiss()
                         } label: {
                             Label("Run on Hosted IronClaw", systemImage: "terminal")
@@ -62,7 +63,7 @@ struct HostedHandoffPreflightSheet: View {
                         .buttonStyle(.borderedProminent)
 
                         Button(role: .cancel) {
-                            chatStore.cancelHostedHandoff()
+                            onCancel()
                             dismiss()
                         } label: {
                             Text("Stay in this chat")

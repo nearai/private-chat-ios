@@ -2,15 +2,71 @@ import Foundation
 
 struct AppEnvironment {
     let api: PrivateChatAPI
+    let authAPI: AuthAPI
+    let conversationAPI: ConversationAPI
+    let messageAPI: MessageAPI
+    let modelAPI: ModelAPI
+    let fileAPI: FileAPI
+    let shareAPI: ShareAPI
+    let settingsAPI: SettingsAPI
+    let billingAPI: BillingAPI
+    let attestationAPI: AttestationAPI
     let sessionStore: SessionStore
+    let modelCatalogStore: ModelCatalogStore
+    let fileStore: FileStore
+    let projectStore: ProjectStore
+    let conversationStore: ConversationStore
+    let agentStore: AgentStore
+    let accountStore: AccountStore
+    let securityStore: SecurityStore
     let chatStore: ChatStore
+    let shareStore: ShareStore
     let briefingStore: BriefingStore
 
     @MainActor
     static func production() -> AppEnvironment {
         let api = PrivateChatAPI(configuration: .production)
         let sessionStore = SessionStore(api: api)
-        let chatStore = ChatStore(api: api)
+        let modelCatalogStore = ModelCatalogStore()
+        let fileService = FileService(fileAPI: api)
+        let fileStore = FileStore(service: fileService)
+        let projectStore = ProjectStore()
+        let conversationStore = ConversationStore(repository: ConversationRepository(api: api))
+        let agentStore = AgentStore()
+        let securityStore = SecurityStore(attestationAPI: api)
+        let accountStore = AccountStore(
+            settingsAPI: api,
+            billingAPI: api,
+            modelAPI: api,
+            conversationAPI: api,
+            modelCatalogStore: modelCatalogStore,
+            agentStore: agentStore
+        )
+        accountStore.conversationsRefreshHandler = { [weak conversationStore] in
+            await conversationStore?.refreshConversations(showErrors: false)
+        }
+        let chatStore = ChatStore(
+            api: api,
+            fileService: fileService,
+            fileStore: fileStore,
+            modelCatalogStore: modelCatalogStore,
+            projectStore: projectStore,
+            conversationStore: conversationStore,
+            agentStore: agentStore,
+            accountStore: accountStore,
+            securityStore: securityStore,
+            initialAccountID: AccountStorageScope.signedOutAccountID
+        )
+        fileStore.bannerHandler = { [weak chatStore] message in
+            chatStore?.bannerMessage = message
+        }
+        projectStore.bannerHandler = { [weak chatStore] message in
+            chatStore?.bannerMessage = message
+        }
+        let shareStore = ShareStore(service: SharingService(shareAPI: api, conversationAPI: api))
+        shareStore.bannerHandler = { [weak chatStore] message in
+            chatStore?.bannerMessage = message
+        }
         #if DEBUG
         // Demo capture uses an isolated briefings file so its seeded samples
         // (and the saves their scheduled runs trigger) never pollute the real
@@ -43,8 +99,25 @@ struct AppEnvironment {
         chatStore.trackersProvider = { [weak briefingStore] in briefingStore?.briefings ?? [] }
         return AppEnvironment(
             api: api,
+            authAPI: api,
+            conversationAPI: api,
+            messageAPI: api,
+            modelAPI: api,
+            fileAPI: api,
+            shareAPI: api,
+            settingsAPI: api,
+            billingAPI: api,
+            attestationAPI: api,
             sessionStore: sessionStore,
+            modelCatalogStore: modelCatalogStore,
+            fileStore: fileStore,
+            projectStore: projectStore,
+            conversationStore: conversationStore,
+            agentStore: agentStore,
+            accountStore: accountStore,
+            securityStore: securityStore,
             chatStore: chatStore,
+            shareStore: shareStore,
             briefingStore: briefingStore
         )
     }

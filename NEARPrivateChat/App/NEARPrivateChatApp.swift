@@ -139,7 +139,15 @@ enum DebugBackend {
 struct NEARPrivateChatApp: App {
     private let environment: AppEnvironment
     @StateObject private var sessionStore: SessionStore
+    @StateObject private var modelCatalogStore: ModelCatalogStore
+    @StateObject private var fileStore: FileStore
+    @StateObject private var projectStore: ProjectStore
+    @StateObject private var conversationStore: ConversationStore
+    @StateObject private var agentStore: AgentStore
+    @StateObject private var accountStore: AccountStore
+    @StateObject private var securityStore: SecurityStore
     @StateObject private var chatStore: ChatStore
+    @StateObject private var shareStore: ShareStore
     @StateObject private var briefingStore: BriefingStore
     @StateObject private var appRouter = AppRouter()
 
@@ -147,7 +155,15 @@ struct NEARPrivateChatApp: App {
         let environment = AppEnvironment.production()
         self.environment = environment
         _sessionStore = StateObject(wrappedValue: environment.sessionStore)
+        _modelCatalogStore = StateObject(wrappedValue: environment.modelCatalogStore)
+        _fileStore = StateObject(wrappedValue: environment.fileStore)
+        _projectStore = StateObject(wrappedValue: environment.projectStore)
+        _conversationStore = StateObject(wrappedValue: environment.conversationStore)
+        _agentStore = StateObject(wrappedValue: environment.agentStore)
+        _accountStore = StateObject(wrappedValue: environment.accountStore)
+        _securityStore = StateObject(wrappedValue: environment.securityStore)
         _chatStore = StateObject(wrappedValue: environment.chatStore)
+        _shareStore = StateObject(wrappedValue: environment.shareStore)
         _briefingStore = StateObject(wrappedValue: environment.briefingStore)
     }
 
@@ -165,10 +181,18 @@ struct NEARPrivateChatApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(sessionStore)
+                .environmentObject(modelCatalogStore)
+                .environmentObject(fileStore)
+                .environmentObject(projectStore)
+                .environmentObject(conversationStore)
+                .environmentObject(agentStore)
+                .environmentObject(accountStore)
+                .environmentObject(securityStore)
                 .environmentObject(chatStore)
+                .environmentObject(shareStore)
                 .environmentObject(briefingStore)
                 .environmentObject(appRouter)
-                .modifier(AppLifecycleModifier(sessionStore: sessionStore, chatStore: chatStore, briefingStore: briefingStore, router: appRouter))
+                .modifier(AppLifecycleModifier(sessionStore: sessionStore, chatStore: chatStore, shareStore: shareStore, briefingStore: briefingStore, router: appRouter))
         }
         .backgroundTask(.appRefresh(Self.briefingRefreshTaskID)) {
             await briefingStore.runDue()

@@ -4,13 +4,15 @@ import CoreSpotlight
 struct AppLifecycleModifier: ViewModifier {
     @ObservedObject private var sessionStore: SessionStore
     @ObservedObject private var chatStore: ChatStore
+    @ObservedObject private var shareStore: ShareStore
     @ObservedObject private var briefingStore: BriefingStore
     @ObservedObject private var router: AppRouter
     @Environment(\.scenePhase) private var scenePhase
 
-    init(sessionStore: SessionStore, chatStore: ChatStore, briefingStore: BriefingStore, router: AppRouter) {
+    init(sessionStore: SessionStore, chatStore: ChatStore, shareStore: ShareStore, briefingStore: BriefingStore, router: AppRouter) {
         self.sessionStore = sessionStore
         self.chatStore = chatStore
+        self.shareStore = shareStore
         self.briefingStore = briefingStore
         self.router = router
     }
@@ -56,6 +58,7 @@ struct AppLifecycleModifier: ViewModifier {
                     #endif
                     if token == nil {
                         router.resetForSignOut()
+                        shareStore.reset()
                         chatStore.updateCurrentUser(profile: nil)
                         chatStore.prepareForAuthenticatedAccount(nil)
                     } else {
@@ -84,6 +87,7 @@ struct AppLifecycleModifier: ViewModifier {
                 }
                 Task {
                     if oldAccountID != accountID {
+                        shareStore.reset()
                         chatStore.prepareForAuthenticatedAccount(accountID)
                     }
                     await chatStore.bootstrap()
@@ -120,7 +124,9 @@ struct AppLifecycleModifier: ViewModifier {
         guard sessionStore.isSignedIn else { return }
         chatStore.updateCurrentUser(profile: sessionStore.profile)
         chatStore.prepareForAuthenticatedAccount(sessionStore.setupAccountID)
+        shareStore.reset()
         sessionStore.scheduleProfileRefresh(force: false)
         await chatStore.bootstrap()
+        await shareStore.refreshSharedWithMe(showErrors: false)
     }
 }

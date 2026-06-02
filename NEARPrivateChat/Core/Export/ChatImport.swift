@@ -266,14 +266,116 @@ enum ChatImportBuilder {
     }
 }
 
+struct ChatImportSummary: Equatable {
+    let importedCount: Int
+    let failedCount: Int
+    let firstFailure: String?
+
+    var bannerMessage: String {
+        if importedCount > 0 {
+            return failedCount == 0
+                ? "Imported \(importedCount) chat\(importedCount == 1 ? "" : "s")."
+                : "Imported \(importedCount); \(failedCount) failed."
+        }
+        return firstFailure ?? "Chat import failed."
+    }
+}
+
+final class ChatImportService {
+    private let conversationAPI: ConversationAPI
+
+    init(conversationAPI: ConversationAPI) {
+        self.conversationAPI = conversationAPI
+    }
+
+    func importChats(from url: URL, importedAt: Date = Date()) async throws -> ChatImportSummary {
+        let shouldStopAccessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if shouldStopAccessing {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        if let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+           let fileSize = values.fileSize,
+           fileSize > ChatImportLimits.maxImportBytes {
+            throw ChatImportError.tooLarge("Import JSON must be 8 MB or smaller.")
+        }
+
+        let imports = try await Task.detached(priority: .userInitiated) {
+            let data = try Data(contentsOf: url)
+            return try ChatImportBuilder.conversations(from: data)
+        }.value
+
+        guard !imports.isEmpty else {
+            throw ChatImportError.empty
+        }
+        guard imports.count <= ChatImportLimits.maxConversationCount,
+              imports.reduce(0, { $0 + $1.items.count }) <= ChatImportLimits.maxTotalItemCount else {
+            throw ChatImportError.tooLarge("Import is too large to sync safely.")
+        }
+
+        var importedCount = 0
+        var failures: [String] = []
+        let importedAtMilliseconds = String(Int(importedAt.timeIntervalSince1970 * 1000))
+
+        for importedConversation in imports {
+            do {
+                let title = Self.clippedTitle(importedConversation.title)
+                let metadata = [
+                    "imported_at": importedAtMilliseconds,
+                    "initial_created_at": String(Int(importedConversation.timestamp ?? importedAt.timeIntervalSince1970))
+                ]
+                let conversation = try await conversationAPI.createConversation(title: title, metadata: metadata)
+                for batch in importedConversation.batchedItems {
+                    try await conversationAPI.addItemsToConversation(conversation.id, items: batch)
+                }
+                importedCount += 1
+            } catch {
+                failures.append("\(importedConversation.title): \(Self.displayFailureMessage(error.localizedDescription))")
+            }
+        }
+
+        return ChatImportSummary(
+            importedCount: importedCount,
+            failedCount: failures.count,
+            firstFailure: failures.first
+        )
+    }
+
+    private static func clippedTitle(_ rawTitle: String, maxLength: Int = 64) -> String {
+        let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return "New conversation" }
+        guard title.count > maxLength else { return title }
+
+        let prefix = String(title.prefix(maxLength))
+        if let lastSpace = prefix.lastIndex(where: { $0 == " " }), prefix.distance(from: prefix.startIndex, to: lastSpace) > 24 {
+            return String(prefix[..<lastSpace]).trimmingCharacters(in: .whitespacesAndNewlines) + "..."
+        }
+        return prefix.trimmingCharacters(in: .whitespacesAndNewlines) + "..."
+    }
+
+    private static func displayFailureMessage(_ message: String) -> String {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.localizedCaseInsensitiveContains("missing authorization header") ||
+            trimmed.localizedCaseInsensitiveContains("invalid or expired authentication token") {
+            return "Authentication is missing or expired. Sign in again, then retry."
+        }
+        return trimmed.isEmpty ? "Request failed." : trimmed
+    }
+}
+
 enum ChatImportError: LocalizedError {
     case invalidFormat
+    case empty
     case tooLarge(String)
 
     var errorDescription: String? {
         switch self {
         case .invalidFormat:
             "Invalid import file. Use a NEAR Private Chat export or legacy Private Chat history file."
+        case .empty:
+            "No importable chats found in that JSON file."
         case let .tooLarge(message):
             message
         }

@@ -35,11 +35,11 @@ struct ChatAttachment: Identifiable, Codable, Hashable {
 
     static func isNativeVisionImage(filename: String, mimeTypeOrKind: String) -> Bool {
         let fileExtension = (filename as NSString).pathExtension.lowercased()
-        if ["png", "jpg", "jpeg", "webp", "gif"].contains(fileExtension) {
+        if ["png", "jpg", "jpeg", "webp", "gif", "heic", "heif", "tif", "tiff"].contains(fileExtension) {
             return true
         }
         let normalizedKind = mimeTypeOrKind.lowercased()
-        return ["image/png", "image/jpeg", "image/webp", "image/gif"].contains(normalizedKind)
+        return ["image/png", "image/jpeg", "image/webp", "image/gif", "image/heic", "image/heif", "image/tiff"].contains(normalizedKind)
     }
 
     var displaySize: String? {
