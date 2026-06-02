@@ -41,21 +41,44 @@ struct ModelPickerView: View {
         return Array(choices.prefix(2))
     }
 
-    private var cloudPreviewCount: Int {
-        modelCatalogStore.cloudModels.count
+    private var privateModelChoices: [ModelOption] {
+        let shownIDs = Set(([defaultPrivateModel?.id].compactMap { $0 }) + reasoningChoices.map(\.id))
+        let choices = allPickerModels.filter { model in
+            !shownIDs.contains(model.id) &&
+                !model.isExternalModel &&
+                !model.isIronclawModel &&
+                model.id != ModelOption.llmCouncilSynthesisModelID
+        }
+        return modelCatalogStore.rankedModels(from: choices)
     }
 
-    private var frontierCloudModels: [ModelOption] {
-        let cloud = modelCatalogStore.cloudModels
-        let frontier = cloud.filter { model in
-            model.isEliteModel ||
-                model.displayName.localizedCaseInsensitiveContains("opus") ||
-                model.displayName.localizedCaseInsensitiveContains("gpt") ||
-                model.displayName.localizedCaseInsensitiveContains("gemini") ||
-                model.displayName.localizedCaseInsensitiveContains("qwen") ||
-                model.displayName.localizedCaseInsensitiveContains("kimi")
+    private var agentChoices: [ModelOption] {
+        let availableIDs = Set(allPickerModels.map(\.id))
+        return modelCatalogStore.agentModels.filter { availableIDs.contains($0.id) }
+    }
+
+    private var cloudModelChoices: [ModelOption] {
+        modelCatalogStore.cloudModels
+    }
+
+    private var selectedSingleModelID: String? {
+        modelCatalogStore.isCouncilModeEnabled ? nil : modelCatalogStore.selectedModel
+    }
+
+    private func isSelectedSingleModel(_ model: ModelOption) -> Bool {
+        selectedSingleModelID == model.id
+    }
+
+    private func modelRowTrailing(for model: ModelOption) -> ModelSpecTrailing {
+        isSelectedSingleModel(model) ? .checkmark : .none
+    }
+
+    private func modelRowBadges(for model: ModelOption, prefix: String? = nil) -> [String] {
+        var badges = model.routeDisclosureBadges
+        if let prefix {
+            badges.insert(prefix, at: 0)
         }
-        return Array((frontier.isEmpty ? cloud : frontier).prefix(3))
+        return Array(badges.prefix(3))
     }
 
     // MARK: - Body
@@ -205,14 +228,14 @@ struct ModelPickerView: View {
             // DEFAULT
             ModelSpecSection(title: "Default") {
                 if let model = defaultPrivateModel {
-	                    ModelSpecRow(
-	                        symbolName: "cpu",
-	                        symbolColor: Color.actionPrimary,
-	                        title: model.displayName,
-	                        subtitle: "Private inference. Proof when fetched.",
+                    ModelSpecRow(
+                        symbolName: "cpu",
+                        symbolColor: Color.actionPrimary,
+                        title: model.displayName,
+                        subtitle: "Private inference. Proof when fetched.",
                         badges: model.routeDisclosureBadges,
-                        trailing: .checkmark,
-                        isSelected: model.id == modelCatalogStore.selectedModel && !modelCatalogStore.isCouncilModeEnabled,
+                        trailing: modelRowTrailing(for: model),
+                        isSelected: isSelectedSingleModel(model),
                         showsDivider: false,
                         action: { selectModelAndDismiss(model) }
                     )
@@ -226,16 +249,48 @@ struct ModelPickerView: View {
                         ModelSpecRow(
                             symbolName: "sparkles",
                             symbolColor: Color.textSecondary,
-                            title: index == 0 ? "Expert" : "Heavy",
-                            subtitle: index == 0
-                                ? "Multi-step reasoning, slower"
-                                : "Deepest analysis. Slowest.",
-                            badges: model.routeDisclosureBadges,
-                            trailing: model.id == modelCatalogStore.selectedModel && !modelCatalogStore.isCouncilModeEnabled
-                                ? .checkmark
-                                : .none,
-                            isSelected: model.id == modelCatalogStore.selectedModel && !modelCatalogStore.isCouncilModeEnabled,
+                            title: model.displayName,
+                            subtitle: reasoningSubtitle(for: model, index: index),
+                            badges: modelRowBadges(for: model, prefix: index == 0 ? "Expert" : "Heavy"),
+                            trailing: modelRowTrailing(for: model),
+                            isSelected: isSelectedSingleModel(model),
                             showsDivider: index != reasoningChoices.count - 1,
+                            action: { selectModelAndDismiss(model) }
+                        )
+                    }
+                }
+            }
+
+            if !privateModelChoices.isEmpty {
+                ModelSpecSection(title: "Private Models") {
+                    ForEach(Array(privateModelChoices.enumerated()), id: \.element.id) { index, model in
+                        ModelSpecRow(
+                            symbolName: model.isOpenWeightCandidate ? "shippingbox" : "cpu",
+                            symbolColor: Color.textSecondary,
+                            title: model.displayName,
+                            subtitle: privateModelSubtitle(for: model),
+                            badges: model.routeDisclosureBadges,
+                            trailing: modelRowTrailing(for: model),
+                            isSelected: isSelectedSingleModel(model),
+                            showsDivider: index != privateModelChoices.count - 1,
+                            action: { selectModelAndDismiss(model) }
+                        )
+                    }
+                }
+            }
+
+            if !agentChoices.isEmpty {
+                ModelSpecSection(title: "Agents") {
+                    ForEach(Array(agentChoices.enumerated()), id: \.element.id) { index, model in
+                        ModelSpecRow(
+                            symbolName: model.isIronclawMobileRuntime ? "iphone" : "terminal",
+                            symbolColor: Color.textSecondary,
+                            title: model.displayName,
+                            subtitle: agentSubtitle(for: model),
+                            badges: model.routeDisclosureBadges,
+                            trailing: modelRowTrailing(for: model),
+                            isSelected: isSelectedSingleModel(model),
+                            showsDivider: index != agentChoices.count - 1,
                             action: { selectModelAndDismiss(model) }
                         )
                     }
@@ -247,10 +302,10 @@ struct ModelPickerView: View {
                 ModelSpecRow(
                     symbolName: chatStore.nearCloudKeyConfigured ? "cloud.fill" : "cloud",
                     symbolColor: Color.textSecondary,
-	                    title: chatStore.nearCloudKeyConfigured ? "Connected" : "Connect NEAR AI Cloud",
-	                    subtitle: chatStore.nearCloudKeyConfigured
-	                        ? "Refresh catalog or open account"
-	                        : "Add your key to use external models",
+                    title: chatStore.nearCloudKeyConfigured ? "Connected" : "Connect NEAR AI Cloud",
+                    subtitle: chatStore.nearCloudKeyConfigured
+                        ? "Refresh catalog or open account"
+                        : "Add your key to use external models",
                     badges: ["Privacy proxy", "External models"],
                     trailing: .chevron,
                     isSelected: false,
@@ -260,20 +315,18 @@ struct ModelPickerView: View {
             }
 
             // CLOUD MODELS
-            if chatStore.nearCloudKeyConfigured && !frontierCloudModels.isEmpty {
+            if chatStore.nearCloudKeyConfigured && !cloudModelChoices.isEmpty {
                 ModelSpecSection(title: "Cloud Models") {
-                    ForEach(Array(frontierCloudModels.enumerated()), id: \.element.id) { index, model in
+                    ForEach(Array(cloudModelChoices.enumerated()), id: \.element.id) { index, model in
                         ModelSpecRow(
                             symbolName: "cpu",
                             symbolColor: Color.textSecondary,
                             title: model.displayName,
-                            subtitle: frontierSubtitle(for: model),
+                            subtitle: cloudModelSubtitle(for: model),
                             badges: model.routeDisclosureBadges,
-                            trailing: model.id == modelCatalogStore.selectedModel && !modelCatalogStore.isCouncilModeEnabled
-                                ? .checkmark
-                                : .none,
-                            isSelected: model.id == modelCatalogStore.selectedModel && !modelCatalogStore.isCouncilModeEnabled,
-                            showsDivider: index != frontierCloudModels.count - 1,
+                            trailing: modelRowTrailing(for: model),
+                            isSelected: isSelectedSingleModel(model),
+                            showsDivider: index != cloudModelChoices.count - 1,
                             action: { selectModelAndDismiss(model) }
                         )
                     }
@@ -284,7 +337,7 @@ struct ModelPickerView: View {
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(Color.textSecondary)
                         .padding(.horizontal, 16)
-	                    Text("Connect NEAR AI Cloud to browse external models on your account.")
+                    Text(chatStore.nearCloudKeyConfigured ? "No Cloud models returned for this account yet." : "Connect NEAR AI Cloud to browse external models on your account.")
                         .font(.subheadline)
                         .foregroundStyle(Color.textTertiary)
                         .multilineTextAlignment(.center)
@@ -314,9 +367,9 @@ struct ModelPickerView: View {
                     ModelSpecRow(
                         symbolName: "person.3",
                         symbolColor: Color.textSecondary,
-	                        title: "Council unavailable",
-	                        subtitle: "Needs two or more chat models",
-	                        badges: ["2-3 models", "Route varies"],
+                        title: "Council unavailable",
+                        subtitle: "Needs two or more chat models",
+                        badges: ["2-3 models", "Route varies"],
                         trailing: .none,
                         isSelected: false,
                         showsDivider: false,
@@ -366,7 +419,7 @@ struct ModelPickerView: View {
                             symbolColor: preset.isAvailable ? Color.textSecondary : Color.textTertiary,
                             title: preset.title,
                             subtitle: preset.isAvailable ? preset.previewNames : "Some models unavailable",
-	                            badges: ["Council", "Route varies"],
+                            badges: ["Council", "Route varies"],
                             trailing: .chevron,
                             isSelected: false,
                             showsDivider: index != presets.count - 1,
@@ -392,10 +445,10 @@ struct ModelPickerView: View {
         return Array(modelCatalogStore.defaultCouncilModels.prefix(4))
     }
 
-	    private func councilSubtitle(for model: ModelOption, index: Int) -> String {
-	        let suffix = index == 0 ? "Primary answer" : "Independent comparison"
-	        return "\(model.routeDisclosureBadges.prefix(2).joined(separator: " · ")) · \(suffix)"
-	    }
+    private func councilSubtitle(for model: ModelOption, index: Int) -> String {
+        let suffix = index == 0 ? "Primary answer" : "Independent comparison"
+        return "\(model.routeDisclosureBadges.prefix(2).joined(separator: " · ")) · \(suffix)"
+    }
 
     private func presetSymbol(for preset: CouncilPresetOption) -> String {
         if !preset.symbolName.isEmpty { return preset.symbolName }
@@ -407,12 +460,38 @@ struct ModelPickerView: View {
             model.displayName.localizedCaseInsensitiveContains("NEAR Private")
     }
 
-	    private func frontierSubtitle(for model: ModelOption) -> String {
-	        if let description = compactCatalogDescription(for: model) {
-	            return description
-	        }
-	        return "\(providerLabel(for: model)) via NEAR AI Cloud"
-	    }
+    private func reasoningSubtitle(for model: ModelOption, index: Int) -> String {
+        if let description = compactCatalogDescription(for: model) {
+            return description
+        }
+        return index == 0 ? "Multi-step reasoning, slower." : "Deeper analysis for hard prompts."
+    }
+
+    private func privateModelSubtitle(for model: ModelOption) -> String {
+        if let description = compactCatalogDescription(for: model) {
+            return description
+        }
+        if model.isOpenWeightCandidate {
+            return "Open-weight private route."
+        }
+        return model.isPrivateVerifiableChatModel ? "Private route with proof support." : "Private chat model."
+    }
+
+    private func agentSubtitle(for model: ModelOption) -> String {
+        if let description = compactCatalogDescription(for: model) {
+            return description
+        }
+        return model.isIronclawMobileRuntime
+            ? "Local agent route for phone-safe tasks."
+            : "Hosted agent route for code, shell, and repo tasks."
+    }
+
+    private func cloudModelSubtitle(for model: ModelOption) -> String {
+        if let description = compactCatalogDescription(for: model) {
+            return description
+        }
+        return "\(providerLabel(for: model)) via NEAR AI Cloud"
+    }
 
     @ViewBuilder
     private var councilCandidatesSection: some View {
@@ -461,22 +540,22 @@ struct ModelPickerView: View {
         "\(modelCatalogStore.activeCouncilModels.count) selected · 2 required · \(modelCatalogStore.maxCouncilModelCount) max"
     }
 
-	    private func compactCatalogDescription(for model: ModelOption) -> String? {
-	        guard let raw = model.metadata?.modelDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
-	              !raw.isEmpty else {
-	            return nil
-	        }
-	        let firstSentence = raw.split(separator: ".", maxSplits: 1).first.map(String.init) ?? raw
-	        return String(firstSentence.prefix(74))
-	    }
+    private func compactCatalogDescription(for model: ModelOption) -> String? {
+        guard let raw = model.metadata?.modelDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else {
+            return nil
+        }
+        let firstSentence = raw.split(separator: ".", maxSplits: 1).first.map(String.init) ?? raw
+        return String(firstSentence.prefix(90))
+    }
 
-	    private func providerLabel(for model: ModelOption) -> String {
-	        let id = (model.nearCloudUnderlyingModelID ?? model.id)
-	            .split(separator: "/")
-	            .first
-	            .map(String.init) ?? "External model"
-	        return ModelOption.humanize(modelID: id)
-	    }
+    private func providerLabel(for model: ModelOption) -> String {
+        let id = (model.nearCloudUnderlyingModelID ?? model.id)
+            .split(separator: "/")
+            .first
+            .map(String.init) ?? "External model"
+        return ModelOption.humanize(modelID: id)
+    }
 
     private func selectModelAndDismiss(_ model: ModelOption) {
         _ = modelCatalogStore.selectModel(model.id)

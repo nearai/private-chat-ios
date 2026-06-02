@@ -112,6 +112,43 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(qwenOnlyCatalog.modelDisplayName(for: "zai-org/GLM-5.1-FP8"), "GLM 5.1")
     }
 
+    func testModelSelectionSurfaceIncludesPrivateAgentAndCloudRoutes() {
+        let qwen = ModelOption(modelID: "Qwen/Qwen3.5-122B-A10B", publicModel: true, metadata: nil)
+        let kimi = ModelOption(modelID: "moonshotai/Kimi-K2-Instruct", publicModel: true, metadata: nil)
+        let cloudID = ModelOption.nearCloudModelID(for: "anthropic/claude-sonnet-4-6")
+        let cloud = ModelOption(
+            modelID: cloudID,
+            publicModel: true,
+            metadata: ModelOption.Metadata(
+                verifiable: false,
+                contextLength: 200_000,
+                modelDisplayName: "Claude Sonnet 4.6",
+                modelDescription: "Connected account cloud route.",
+                modelIcon: nil,
+                aliases: []
+            )
+        )
+        let catalog = ModelCatalogStore(models: [qwen, kimi], nearCloudModels: [cloud])
+        let pickerIDs = Set(catalog.pickerModels.map(\.id))
+
+        XCTAssertTrue(pickerIDs.contains(ModelOption.nearPrivateDefaultModelID))
+        XCTAssertTrue(pickerIDs.contains(qwen.id))
+        XCTAssertTrue(pickerIDs.contains(kimi.id))
+        XCTAssertTrue(pickerIDs.contains(ModelOption.ironclawMobileModelID))
+        XCTAssertTrue(pickerIDs.contains(ModelOption.ironclawModelID))
+        XCTAssertEqual(catalog.cloudModels.map(\.id), [cloudID])
+
+        XCTAssertTrue(catalog.selectModel(cloudID))
+        XCTAssertEqual(catalog.selectedRouteKind, .nearCloud)
+
+        XCTAssertTrue(catalog.selectModel(ModelOption.ironclawMobileModelID))
+        XCTAssertEqual(catalog.selectedRouteKind, .ironclawMobile)
+
+        XCTAssertTrue(catalog.selectModel(ModelOption.nearPrivateDefaultModelID))
+        XCTAssertEqual(catalog.selectedRouteKind, .nearPrivate)
+        XCTAssertEqual(catalog.selectedModelDisplayName, "GLM 5.1")
+    }
+
     func testProjectIdentityCatalogSupportsSearchablePhoneChoices() {
         XCTAssertGreaterThanOrEqual(ProjectPalette.allCases.count, 8)
         XCTAssertGreaterThanOrEqual(ProjectIcon.allCases.count, 30)
