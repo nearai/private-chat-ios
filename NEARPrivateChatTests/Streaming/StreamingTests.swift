@@ -256,23 +256,16 @@ extension PrivateChatCoreTests {
     }
 
     @MainActor
-    func testSendDraftAnswersDataQuestionLocallyWithStreamingPlaceholder() {
+    func testSendDraftDataQuestionFallsThroughToModelRouting() {
         let store = ChatStore(api: PrivateChatAPI(configuration: .production))
         store.draft = "what is the eth price"
 
         store.sendDraft()
 
-        // The draft is consumed and a user turn + assistant placeholder appear
-        // immediately, before the async live-data fetch completes.
-        XCTAssertEqual(store.draft, "")
-        XCTAssertEqual(store.messages.count, 2)
-        XCTAssertEqual(store.messages.first?.role, .user)
-        XCTAssertEqual(store.messages.first?.text, "what is the eth price")
-        XCTAssertEqual(store.messages.last?.role, .assistant)
-        XCTAssertTrue(store.messages.last?.isStreaming == true)
-        XCTAssertTrue(store.isStreaming)
-        // No route-readiness block: the prompt is answered without sign-in.
-        XCTAssertNil(store.routeReadinessIssue)
+        // Bare answer requests must not be replaced by a hardcoded live-data
+        // widget. They fall through to normal model routing/readiness instead.
+        XCTAssertFalse(store.isStreaming)
+        XCTAssertTrue(store.messages.isEmpty)
     }
 
 
@@ -286,9 +279,11 @@ extension PrivateChatCoreTests {
         store.sendDraft()
 
         let briefing = try XCTUnwrap(created)
-        XCTAssertEqual(briefing.kind, .cryptoPrice)
-        XCTAssertEqual(briefing.accountID, "ethereum")
+        XCTAssertEqual(briefing.kind, .customPrompt)
+        XCTAssertNil(briefing.accountID)
         XCTAssertEqual(briefing.schedule, .daily(hour: 8, minute: 0))
+        XCTAssertTrue(briefing.prompt.contains("Run this recurring workflow through chat"))
+        XCTAssertTrue(briefing.prompt.contains("ETH"))
         // Tracker creation is synchronous: a confirmation turn, no streaming.
         XCTAssertFalse(store.isStreaming)
         XCTAssertEqual(store.messages.first?.role, .user)
@@ -298,19 +293,34 @@ extension PrivateChatCoreTests {
 
 
     @MainActor
-    func testCancelStreamStopsInFlightQuickIntentAnswer() {
+    func testCancelStreamFinalizesCurrentAssistantMessage() {
         let store = ChatStore(api: PrivateChatAPI(configuration: .production))
-        store.draft = "what is the eth price"
-        store.sendDraft()
+        store.sendMessages = [
+            ChatMessage(
+                id: "assistant-cancel",
+                role: .assistant,
+                text: "partial",
+                model: ModelOption.nearPrivateDefaultModelID,
+                createdAt: Date(timeIntervalSince1970: 1_000),
+                status: "streaming",
+                responseID: nil,
+                isStreaming: true
+            )
+        ]
+        store.sendCurrentAssistantMessageID = "assistant-cancel"
+        store.sendIsStreaming = true
+        store.sendStreamTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
         XCTAssertTrue(store.isStreaming)
-        let placeholderID = store.messages.last?.id
 
         store.cancelStream()
 
-        // The tracked fetch is cancelled and the placeholder is finalized as
-        // cancelled instead of being left spinning or later overwritten.
         XCTAssertFalse(store.isStreaming)
-        let placeholder = store.messages.first { $0.id == placeholderID }
+        XCTAssertNil(store.sendStreamTask)
+        let placeholder = store.messages.first { $0.id == "assistant-cancel" }
         XCTAssertEqual(placeholder?.isStreaming, false)
         XCTAssertEqual(placeholder?.status, "cancelled")
     }

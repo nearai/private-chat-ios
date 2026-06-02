@@ -9,7 +9,7 @@ enum BriefingKind: String, Codable, Hashable {
     case watchlist
     case nearAccount
     case dailyNews
-    /// Composed client-side from the user's other trackers + a market snapshot.
+    /// Composed client-side from the user's other trackers and latest results.
     case dailyBrief
 
     init(from decoder: Decoder) throws {
@@ -224,7 +224,7 @@ enum BriefDigest {
             rows.append(WidgetComparisonRow(label: "Nothing tracked yet", cells: [WidgetComparisonCell(text: "—", tone: nil)]))
         }
         let count = active.count
-        let subtitle = count == 0 ? "No automations yet" : "\(count) automation\(count == 1 ? "" : "s") · latest signals"
+        let subtitle = count == 0 ? "No automations yet" : "\(count) automation\(count == 1 ? "" : "s") · latest results"
         return MessageWidget(
             kind: .comparison,
             title: "Your brief",
@@ -366,4 +366,3 @@ enum BriefingStatus: String, Codable, Hashable {
     case scheduled
     case paused
 }
-

@@ -1,9 +1,8 @@
 import Foundation
 
-// LiveDataService — turns auth-free public APIs into MessageWidgets so the named
-// use cases ("what is ETH price", "how is my NEAR account doing", "pull daily
-// news") produce real answers through the widget/briefing UX without the chat
-// backend. Filled in by a ring-fenced workstream.
+// LiveDataService — deterministic public-data helpers retained for parser
+// metadata, threshold-alert gates, and demo/debug capture screens. Normal chat
+// answers and recurring workflow presentation route through the model.
 
 // Coins recognized in prompts ("eth price", "track near every morning").
 struct LiveCoin: Equatable {
@@ -24,8 +23,8 @@ func liveCoin(forID id: String) -> LiveCoin? {
     liveCoins.first { $0.id == id.lowercased() }
 }
 
-/// What a typed prompt should do, parsed locally so common data questions and
-/// "create a tracker…" commands work without the chat backend.
+/// What a typed prompt appears to request. Explicit app-control commands can be
+/// handled locally; answer/data intents are routed through the model.
 enum QuickIntent: Equatable {
     case price(coinID: String, symbol: String)
     case stock(symbol: String, company: String)
@@ -482,7 +481,7 @@ enum QuickIntentParser {
         • “Debug this Swift error” · “Compare these options”
         • “Research this topic and make a decision brief”
 
-        **Quick tools before sign-in** — local utilities and public data:
+        **Model-routed live questions** — use the assistant for current, contextual answers:
         • “Weather in Tokyo” · “What time is it in London?”
         • “Convert 100 USD to EUR” · “5 miles in km” · “Define serendipity”
         • “Top headlines” · “What’s the ETH price?” · “How’s my account, alice.near?”
@@ -491,10 +490,10 @@ enum QuickIntentParser {
         • “Check this topic every morning” — I’ll draft the workflow before creating anything
         • Ask something, then say “track that” to start a recurring check
         • “Remind me to review the grant draft every Friday”
-        • “Brief me” — one digest of your active automations and relevant signals
+        • “Brief me” — one digest of your active automations and approved results
         • “What are you tracking?” to review them
 
-        **Quick math & dates** — instant, on-device:
+        **Math & dates** — ask naturally in chat:
         • “What’s 18% of 85.50?” · “12 * 7 + 3”
         • “How many days until Christmas?” · “What’s the date in 2 weeks?”
 
@@ -508,7 +507,7 @@ enum QuickIntentParser {
 
         **Hands-free**: tap the mic to dictate, or ask Siri to run your briefings.
 
-        Just type what you want. If it needs the general model, I’ll route it through chat; if it’s a quick local/public lookup, I can answer immediately.
+        Just type what you want. If it is an answer request, I route it through chat; if it is an explicit app command, I handle the local state change directly.
         """
     }
 

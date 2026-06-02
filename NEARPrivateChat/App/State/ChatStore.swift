@@ -2326,28 +2326,12 @@ final class ChatStore: ObservableObject {
     /// Runs a briefing prompt headlessly in a throwaway conversation and returns
     /// the structured widget the model produced (falling back to a generic text
     /// widget). Used by the BriefingStore runner; returns nil on any failure.
-    /// The agentic Daily Brief: active automations plus any relevant live signal
-    /// snapshot, composed into one digest. Shared by the on-demand "brief me"
+    /// The agentic Daily Brief: active automations and their latest approved
+    /// results, composed into one digest. Shared by the on-demand "brief me"
     /// intent and the scheduled .dailyBrief automation.
     private func briefDigestWidget() async -> MessageWidget? {
         let trackers = trackersProvider?() ?? []
-        var market: [(label: String, value: String)] = []
-        let wantsMarketSnapshot = trackers.contains { tracker in
-            switch tracker.kind {
-            case .ethPrice, .cryptoPrice, .stockPrice, .watchlist:
-                return true
-            case .customPrompt, .nearAccount, .dailyNews, .dailyBrief:
-                return false
-            }
-        }
-        if wantsMarketSnapshot {
-            async let ethPrice = LiveDataService.coinUSDPrice(coinID: "ethereum")
-            async let btcPrice = LiveDataService.coinUSDPrice(coinID: "bitcoin")
-            let (eth, btc) = await (ethPrice, btcPrice)
-            if let eth { market.append((label: "ETH", value: LiveDataService.usdPriceString(eth))) }
-            if let btc { market.append((label: "BTC", value: LiveDataService.usdPriceString(btc))) }
-        }
-        return BriefDigest.compose(trackers: trackers, market: market)
+        return BriefDigest.compose(trackers: trackers, market: [])
     }
 
     func runBriefing(_ briefing: Briefing) async -> MessageWidget? {
@@ -2358,47 +2342,26 @@ final class ChatStore: ObservableObject {
             return await runConditionalBriefing(briefing, condition: condition)
         }
 
-        // Live kinds fetch real data from auth-free public APIs (work without the
-        // chat backend); custom prompts fall through to the chat model below.
-        switch briefing.kind {
-        case .ethPrice:
-            return await LiveDataService.ethPriceWidget()
-        case .cryptoPrice:
-            // A cryptoPrice tracker must carry its coin id. Never silently
-            // default to ETH — that would surface a wrong coin's price as fact.
-            guard let id = briefing.accountID, !id.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-            return await LiveDataService.cryptoPriceWidget(coinID: id, symbol: LiveDataService.symbol(forCoinID: id))
-        case .stockPrice:
-            guard let symbol = briefing.accountID, !symbol.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-            let company = briefing.title.replacingOccurrences(of: " stock", with: "", options: .caseInsensitive).trimmingCharacters(in: .whitespaces)
-            return await LiveDataService.stockQuoteWidget(symbol: symbol, company: company)
-        case .watchlist:
-            guard let serialized = briefing.accountID, !serialized.isEmpty else { return nil }
-            return await LiveDataService.watchlistWidget(serialized: serialized)
-        case .nearAccount:
-            return await LiveDataService.nearAccountWidget(account: briefing.accountID ?? "")
-        case .dailyNews:
-            return await LiveDataService.newsBriefWidget()
-        case .dailyBrief:
+        // The Daily Brief is a client-side digest of existing automation state.
+        // Other non-conditional briefings, including legacy live-data kinds,
+        // route through the model so facts, sources, and presentation are not
+        // hardcoded in the app.
+        if briefing.kind == .dailyBrief {
             return await briefDigestWidget()
-        case .customPrompt:
-            break
         }
 
-        // customPrompt briefings run the chat backend (need sign-in). A council
-        // briefing runs several models + a synthesis on each scheduled run; a
-        // plain one runs a single model. Live kinds above already returned.
+        // A council briefing runs several models + a synthesis on each scheduled
+        // run; a plain one runs a single model.
         if briefing.council {
             return await runCouncilBriefing(briefing)
         }
         return await runSingleModelBriefing(briefing)
     }
 
-    /// Evaluates a conditional tracker against live price data. Returns the live
-    /// price widget only when the threshold is met (so the briefing delivers +
-    /// notifies); returns nil otherwise (the briefing stays due and re-checks on
-    /// its next cycle). A met run is logged for the activity audit; quiet checks
-    /// are intentionally not logged so the log stays meaningful.
+    /// Evaluates a conditional tracker against live price data. The threshold
+    /// gate is deterministic and local; fired-alert presentation routes through
+    /// the model with a value-only metric fallback so notifications are not lost.
+    /// Quiet checks are intentionally not logged so the log stays meaningful.
     private func runConditionalBriefing(_ briefing: Briefing, condition: BriefingCondition) async -> MessageWidget? {
         // A "stock:" coinID prefix marks an equity alert (Yahoo); otherwise crypto.
         let isStock = condition.coinID.hasPrefix("stock:")
@@ -2412,14 +2375,30 @@ final class ChatStore: ObservableObject {
         guard condition.isSatisfied(by: price) else { return nil }
         let priceLabel = LiveDataService.usdPriceString(price)
         activityLog.record("Alert fired — \(condition.summary) (now \(priceLabel))")
-        // Surface the live price card; fall back to a plain metric if the chart
-        // fetch is unavailable so a met alert always delivers something.
-        let widget = isStock
-            ? await LiveDataService.stockQuoteWidget(symbol: stockSymbol, company: condition.symbol)
-            : await LiveDataService.cryptoPriceWidget(coinID: condition.coinID, symbol: condition.symbol)
-        if let widget {
-            return widget
+
+        let prompt = """
+        A scheduled alert fired.
+
+        Alert: \(condition.summary)
+        Checked value: \(priceLabel)
+        Symbol: \(condition.symbol)
+
+        Explain what happened concisely, include the checked value, and say what the next useful action is. If current context or sources are needed, use web search. Do not imply the app hardcoded the answer; present this as a model-routed alert follow-up based on the threshold check.
+        """
+        let alertBriefing = Briefing(
+            title: "\(condition.symbol) alert",
+            prompt: prompt,
+            schedule: briefing.schedule,
+            kind: .customPrompt,
+            council: briefing.council
+        )
+        let modelWidget = briefing.council
+            ? await runCouncilBriefing(alertBriefing)
+            : await runSingleModelBriefing(alertBriefing)
+        if let modelWidget {
+            return modelWidget
         }
+
         return MessageWidget(
             kind: .metric,
             title: "\(condition.symbol) alert",
@@ -2493,44 +2472,12 @@ final class ChatStore: ObservableObject {
         return briefingWidget(from: text, title: briefing.title)
     }
 
-    /// Answers a follow-up in a briefing thread. For a crypto-price tracker, a
-    /// chart-timeframe question ("show me the 1 year chart") returns a REAL
-    /// historical chart from CoinGecko — not prose. Everything else runs one
-    /// private-route model turn with the delivery's text as context (web search
-    /// on). Private route only, consistent with the app's privacy posture.
+    /// Answers a follow-up in a briefing thread by routing the question through
+    /// the model with the delivery's text as context. Private route only,
+    /// consistent with the app's privacy posture.
     func answerBriefingFollowUp(question: String, context: String, briefing: Briefing) async -> (text: String?, widget: MessageWidget?) {
         let trimmedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuestion.isEmpty else { return (nil, nil) }
-
-        // A chart-timeframe ask on a stock tracker → real historical stock chart.
-        if briefing.kind == .stockPrice, let symbol = briefing.accountID, !symbol.isEmpty,
-           let timeframe = QuickIntentParser.parseChartTimeframe(trimmedQuestion),
-           let widget = await LiveDataService.stockHistoryChartWidget(
-               symbol: symbol,
-               range: LiveDataService.yahooRange(forDays: timeframe.days),
-               label: timeframe.label
-           ) {
-            return (nil, widget)
-        }
-
-        // A chart-timeframe ask on a coin tracker → real historical chart.
-        let coinID: String? = {
-            switch briefing.kind {
-            case .ethPrice: return "ethereum"
-            case .cryptoPrice: return briefing.accountID
-            default: return nil
-            }
-        }()
-        if let coinID, !coinID.isEmpty,
-           let timeframe = QuickIntentParser.parseChartTimeframe(trimmedQuestion),
-           let widget = await LiveDataService.cryptoHistoryChartWidget(
-               coinID: coinID,
-               symbol: LiveDataService.symbol(forCoinID: coinID),
-               days: timeframe.days,
-               label: timeframe.label
-           ) {
-            return (nil, widget)
-        }
 
         guard let conversation = try? await api.createConversation(title: "Briefing follow-up") else {
             return (nil, nil)
@@ -2643,8 +2590,8 @@ final class ChatStore: ObservableObject {
         )
     }
 
-    /// Answers a recognized prompt locally: data questions render a live widget,
-    /// "create a tracker…" creates a scheduled briefing. No chat backend needed.
+    /// Handles explicit app-control prompts locally, such as creating trackers,
+    /// saving memory, or showing the user's current tracker digest.
     private func handleQuickIntent(_ intent: QuickIntent, prompt: String) {
         let model = selectedModel
         messages.append(ChatLocalIntentTranscriptWriter.userMessage(text: prompt, model: model))
@@ -2708,8 +2655,8 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    /// Runs a compound prompt ("eth price and tokyo weather"): one user turn,
-    /// then a live widget per chained data lookup, fetched in order.
+    /// Handles a compound local prompt if the dispatcher allows one. Data
+    /// lookup compounds route through the model instead of this path.
     private func handleCompoundIntent(_ intents: [QuickIntent], prompt: String) {
         let model = selectedModel
         messages.append(ChatLocalIntentTranscriptWriter.userMessage(text: prompt, model: model))
@@ -5656,14 +5603,12 @@ final class ChatStore: ObservableObject {
             webSearchEnabled = true
             draft = ""
         case .generativeChat:
-            // Drives the REAL prompt → QuickIntent → live-widget path: types a
-            // prompt and sends it, so the chat answers with real public-API data
-            // (no sign-in). Override the prompt with NEAR_DEMO_PROMPT to capture
-            // eth/near/news/tracker flows from one screen.
+            // Drives the REAL prompt through normal send routing. Override the
+            // prompt with NEAR_DEMO_PROMPT to capture a specific chat flow.
             selectedConversation = data.primaryConversation
             projectStore.selectProjectID(nil, persist: false)
             messages = []
-            draft = DemoCapture.demoPrompt ?? "what is the eth price"
+            draft = DemoCapture.demoPrompt ?? "What should I track from this project plan every morning?"
             sendDraft()
         case .chatStarters:
             // Empty new chat with council off so the default live-data starter

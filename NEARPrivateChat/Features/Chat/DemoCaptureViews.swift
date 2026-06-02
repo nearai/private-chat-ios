@@ -108,9 +108,9 @@ struct DemoCaptureRootView: View {
     }
 }
 
-/// Fetches the three named use cases live (CoinGecko, NEAR RPC, BBC RSS) and
-/// renders them as real widget cards — proof the capabilities work through the
-/// widget UX with no chat backend.
+/// Demo-capture-only public data cards (CoinGecko, NEAR RPC, RSS). This is not
+/// the normal chat route; user answers and recurring workflows route through the
+/// model.
 struct LiveDataDemoView: View {
     @State private var widgets: [MessageWidget] = []
     @State private var isLoading = true
@@ -121,8 +121,8 @@ struct LiveDataDemoView: View {
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .foregroundStyle(Color.actionPrimary)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Live data").font(.headline.weight(.semibold))
-        Text("Live prices · accounts · today's news").font(.caption).foregroundStyle(Color.textSecondary)
+                    Text("Data API demo").font(.headline.weight(.semibold))
+        Text("Debug cards · not normal chat routing").font(.caption).foregroundStyle(Color.textSecondary)
                 }
                 Spacer(minLength: 0)
             }

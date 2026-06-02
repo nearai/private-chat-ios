@@ -4,9 +4,9 @@ enum BriefingSamples {
     @MainActor
     static let store = BriefingStore(briefings: sampleBriefings)
 
-    // Live briefings — no canned results. They fetch real data through the
-    // actual runner (LiveDataService) on runDue, so the demo exercises the real
-    // product flow rather than fake widgets.
+    // Sample briefings — no canned results. Production injects the real
+    // model-routed runner; preview-only stores can still fall back to sample
+    // widgets when no runner is available.
     static let sampleBriefings: [Briefing] = [
         Briefing(
             title: "Daily news brief",

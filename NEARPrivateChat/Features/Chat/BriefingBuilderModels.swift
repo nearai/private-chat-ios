@@ -45,8 +45,9 @@ enum BriefingBuilderPlanner {
            let account = QuickIntentParser.extractAccount(from: text.lowercased()) {
             var draft = current
             draft.title = "NEAR account"
-            draft.prompt = "Track NEAR account \(account)."
-            draft.accountID = account
+            draft.prompt = modelRoutedPrompt("Track NEAR account \(account).")
+            draft.kind = .customPrompt
+            draft.accountID = nil
             return BriefingBuilderPlan(draft: draft, reply: reply(for: draft))
         }
 
@@ -79,60 +80,63 @@ enum BriefingBuilderPlanner {
                 reply: "I can do that. Send the NEAR account id and I will finish the draft."
             )
         case let .nearAccount(account):
+            if let account {
+                let prompt = modelRoutedPrompt("Track NEAR account \(account).")
+                let draft = BriefingBuilderDraft(
+                    title: "NEAR account",
+                    prompt: prompt,
+                    schedule: current.schedule,
+                    kind: .customPrompt
+                )
+                return BriefingBuilderPlan(draft: draft, reply: reply(for: draft))
+            }
             let schedule = current.schedule
             let draft = BriefingBuilderDraft(
                 title: "NEAR account",
-                prompt: account.map { "Track NEAR account \($0)." } ?? "Track my NEAR account.",
+                prompt: "Track my NEAR account.",
                 schedule: schedule,
-                kind: .nearAccount,
-                accountID: account
+                kind: .nearAccount
             )
-            let reply = account == nil
-                ? "I can do that. Send the NEAR account id and I will finish the draft."
-                : Self.reply(for: draft)
+            let reply = "I can do that. Send the NEAR account id and I will finish the draft."
             return BriefingBuilderPlan(draft: draft, reply: reply)
         case .news:
             let draft = BriefingBuilderDraft(
                 title: "Daily news brief",
-                prompt: "Today's top news",
+                prompt: modelRoutedPrompt("Give me today's top news with current sources and a concise explanation of what matters."),
                 schedule: current.schedule,
-                kind: .dailyNews
+                kind: .customPrompt
             )
             return BriefingBuilderPlan(draft: draft, reply: reply(for: draft))
-        case let .price(coinID, symbol):
-            let kind: BriefingKind = coinID == "ethereum" ? .ethPrice : .cryptoPrice
+        case let .price(_, symbol):
             let draft = BriefingBuilderDraft(
                 title: "\(symbol) price",
-                prompt: "What is the \(symbol) price?",
+                prompt: modelRoutedPrompt("What is the current \(symbol) price? Include the source and as-of time."),
                 schedule: current.schedule,
-                kind: kind,
-                accountID: kind == .cryptoPrice ? coinID : nil
+                kind: .customPrompt
             )
             return BriefingBuilderPlan(draft: draft, reply: reply(for: draft))
         case let .stock(symbol, company):
             let draft = BriefingBuilderDraft(
                 title: "\(company) stock",
-                prompt: "Track \(company) (\(symbol)) stock price.",
+                prompt: modelRoutedPrompt("Track \(company) (\(symbol)) stock price. Include the source, as-of time, and what changed."),
                 schedule: current.schedule,
-                kind: .stockPrice,
-                accountID: symbol
+                kind: .customPrompt
             )
             return BriefingBuilderPlan(draft: draft, reply: reply(for: draft))
         case let .watchlist(serialized):
             let draft = BriefingBuilderDraft(
                 title: "Watchlist",
-                prompt: "Track this watchlist.",
+                prompt: modelRoutedPrompt("Track this watchlist: \(watchlistPromptLabel(from: serialized)). Include current sources, movement, and the most important change."),
                 schedule: current.schedule,
-                kind: .watchlist,
-                accountID: serialized
+                kind: .customPrompt
             )
             return BriefingBuilderPlan(draft: draft, reply: reply(for: draft))
         case .briefMe:
             let draft = BriefingBuilderDraft(
                 title: "Daily Brief",
-                prompt: "Brief me",
+                prompt: modelRoutedPrompt("Brief me on the highest-value updates, risks, and next actions."),
                 schedule: current.schedule,
-                kind: .dailyBrief
+                kind: .customPrompt
             )
             return BriefingBuilderPlan(draft: draft, reply: reply(for: draft))
         default:
@@ -145,26 +149,56 @@ enum BriefingBuilderPlanner {
         let rawTitle = spec.title.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
             ?? title(from: fallbackText)
         let title = self.title(from: rawTitle)
-        let prompt: String
-        if let specPrompt = spec.prompt?.trimmingCharacters(in: .whitespacesAndNewlines), !specPrompt.isEmpty {
-            prompt = spec.kind == .customPrompt ? enhancedRecurringPrompt(specPrompt) : specPrompt
-        } else if spec.kind == .nearAccount, let account = spec.subject {
-            prompt = "Track NEAR account \(account)."
-        } else {
-            let confirmation = spec.confirmation.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-            prompt = spec.kind == .customPrompt
-                ? genericPrompt(from: fallbackText)
-                : (confirmation ?? genericPrompt(from: fallbackText))
-        }
+        let keepsStructuredKind = spec.condition != nil
+        let prompt = prompt(from: spec, fallbackText: fallbackText, keepsStructuredKind: keepsStructuredKind)
         return BriefingBuilderDraft(
             title: title,
             prompt: prompt,
             schedule: spec.schedule,
-            kind: spec.kind,
-            accountID: spec.subject,
+            kind: keepsStructuredKind ? spec.kind : .customPrompt,
+            accountID: keepsStructuredKind ? spec.subject : nil,
             council: spec.council,
-            condition: spec.condition
+            condition: keepsStructuredKind ? spec.condition : nil
         )
+    }
+
+    private static func prompt(
+        from spec: TrackerSpec,
+        fallbackText: String,
+        keepsStructuredKind: Bool
+    ) -> String {
+        if let specPrompt = spec.prompt?.trimmingCharacters(in: .whitespacesAndNewlines), !specPrompt.isEmpty {
+            return keepsStructuredKind ? specPrompt : enhancedRecurringPrompt(specPrompt)
+        }
+        if keepsStructuredKind {
+            if spec.kind == .nearAccount, let account = spec.subject {
+                return "Track NEAR account \(account)."
+            }
+            return spec.confirmation.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                ?? genericPrompt(from: fallbackText)
+        }
+        switch spec.kind {
+        case .nearAccount:
+            if let account = spec.subject {
+                return modelRoutedPrompt("Track NEAR account \(account).")
+            }
+        case .cryptoPrice, .ethPrice:
+            let subject = spec.subject.map { LiveDataService.symbol(forCoinID: $0) } ?? spec.title
+            return modelRoutedPrompt("What is the current \(subject) price? Include the source, as-of time, and what changed.")
+        case .stockPrice:
+            let subject = spec.subject ?? spec.title
+            return modelRoutedPrompt("Track \(subject) stock price. Include the source, as-of time, and what changed.")
+        case .watchlist:
+            let label = spec.subject.map(watchlistPromptLabel(from:)) ?? spec.title
+            return modelRoutedPrompt("Track this watchlist: \(label). Include current sources, movement, and the most important change.")
+        case .dailyNews:
+            return modelRoutedPrompt("Give me today's top news with current sources and a concise explanation of what matters.")
+        case .dailyBrief:
+            return modelRoutedPrompt("Brief me on the highest-value updates, risks, and next actions.")
+        case .customPrompt:
+            break
+        }
+        return genericPrompt(from: fallbackText)
     }
 
     static func actionCandidates(for draft: BriefingBuilderDraft) -> [WidgetActionItem] {
@@ -172,14 +206,14 @@ enum BriefingBuilderPlanner {
         let prompt = draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty || !prompt.isEmpty else { return [] }
 
-            let baseTitle = title.isEmpty ? "Recurring workflow" : title
-            var actions: [WidgetActionItem] = [
-                WidgetActionItem(
-                    title: baseTitle,
-                    type: "workflow",
-                    detail: prompt.isEmpty ? "Run a recurring check and summarize what changed." : prompt,
-                    schedule: draft.schedule.scheduleLabel,
-                    command: "Create a tracker for \(prompt.isEmpty ? baseTitle : prompt) \(draft.schedule.scheduleLabel.lowercased())",
+        let baseTitle = title.isEmpty ? "Recurring workflow" : title
+        return [
+            WidgetActionItem(
+                title: baseTitle,
+                type: "workflow",
+                detail: prompt.isEmpty ? "Run a recurring check and summarize what changed." : prompt,
+                schedule: draft.schedule.scheduleLabel,
+                command: "Create a tracker for \(prompt.isEmpty ? baseTitle : prompt) \(draft.schedule.scheduleLabel.lowercased())",
                 source: draft.kind == .customPrompt ? nil : draft.kind.rawValue,
                 recurrence: draft.schedule.scheduleLabel,
                 missingFields: draft.kind == .nearAccount && draft.accountID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false ? ["NEAR account"] : [],
@@ -187,53 +221,6 @@ enum BriefingBuilderPlanner {
                 tone: .neutral
             )
         ]
-
-        let normalized = "\(title) \(prompt)".lowercased()
-        if normalized.contains("supplement") ||
-            normalized.contains("workbook") ||
-            normalized.contains("table") ||
-            normalized.contains("dose") ||
-            normalized.contains("calendar invite") {
-            actions.append(
-                WidgetActionItem(
-                    title: "Phone reminder candidates",
-                    type: "reminder",
-                    detail: "Extract rows into reminder cards before anything is written to the phone.",
-                    source: title.isEmpty ? nil : title,
-                    recurrence: "per row",
-                    missingFields: ["exact waking time", "bedtime if used", "start date"],
-                    confidence: 0.72,
-                    tone: .warn
-                )
-            )
-            actions.append(
-                WidgetActionItem(
-                    title: "Calendar invite preview",
-                    type: "calendar",
-                    detail: "Create calendar-worthy events only after concrete dates and times are confirmed.",
-                    source: title.isEmpty ? nil : title,
-                    missingFields: ["date", "time", "duration"],
-                    confidence: 0.62,
-                    tone: .neutral
-                )
-            )
-        }
-
-        if normalized.contains("risk") || normalized.contains("decision") || normalized.contains("follow-up") || normalized.contains("follow up") {
-            actions.append(
-                WidgetActionItem(
-                    title: "Decision and follow-up log",
-                    type: "decision",
-                    detail: "Save durable decisions, risks, and follow-ups back into the project after review.",
-                    command: "Save this decision: \(baseTitle)",
-                    source: title.isEmpty ? nil : title,
-                    confidence: 0.7,
-                    tone: .good
-                )
-            )
-        }
-
-        return actions
     }
 
     private static func genericDraft(from text: String, current: BriefingBuilderDraft) -> BriefingBuilderDraft {
@@ -268,6 +255,29 @@ enum BriefingBuilderPlanner {
 
         Use provided or project sources first. If current external data is needed, state what source was checked. Return a concise update with what changed, why it matters, any calendar-worthy or follow-up actions, and the next useful action.
         """
+    }
+
+    private static func modelRoutedPrompt(_ task: String) -> String {
+        """
+        Run this recurring workflow through chat: \(task)
+
+        Let the model decide which current sources, searches, calculations, charts, or action previews are needed. Do not rely on app hardcoded defaults. Return a concise update with what changed, why it matters, any calendar-worthy or follow-up actions, and the next useful action.
+        """
+    }
+
+    private static func watchlistPromptLabel(from serialized: String) -> String {
+        let labels = serialized.split(separator: "|").compactMap { item -> String? in
+            let value = String(item)
+            if value.hasPrefix("crypto:") {
+                let coinID = String(value.dropFirst("crypto:".count))
+                return LiveDataService.symbol(forCoinID: coinID)
+            }
+            if value.hasPrefix("stock:") {
+                return String(value.dropFirst("stock:".count))
+            }
+            return value.nilIfEmpty
+        }
+        return labels.isEmpty ? serialized : labels.joined(separator: ", ")
     }
 
     private static func enhancedRecurringPrompt(_ prompt: String) -> String {

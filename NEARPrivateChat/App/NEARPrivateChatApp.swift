@@ -99,8 +99,8 @@ enum DemoCapture {
         return DemoCaptureScreen(rawValueOrDefault: argumentValue ?? ProcessInfo.processInfo.environment["NEAR_DEMO_SCREEN"])
     }
 
-    /// Prompt the `generativeChat` demo screen types and sends through the real
-    /// QuickIntent path. Lets one screen capture eth/near/news/tracker flows.
+    /// Prompt the `generativeChat` demo screen types and sends through normal
+    /// chat routing. Lets capture runs override the default prompt.
     static var demoPrompt: String? {
         let argumentPrefix = "-NEARDemoPrompt="
         let argumentValue = CommandLine.arguments.first { $0.hasPrefix(argumentPrefix) }

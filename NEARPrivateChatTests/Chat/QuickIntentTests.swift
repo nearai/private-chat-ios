@@ -340,25 +340,33 @@ extension PrivateChatCoreTests {
                 text: "what is the eth price",
                 pendingNearAccountTrackerSchedule: schedule
             ),
-            ChatLocalIntentDispatch(
-                clearsPendingNearAccountTracker: true,
-                action: .single(.price(coinID: "ethereum", symbol: "ETH"))
-            )
+            ChatLocalIntentDispatch(clearsPendingNearAccountTracker: true, action: nil)
         )
     }
 
-    func testChatLocalIntentDispatcherKeepsCompoundLookupAsOneLocalAction() {
-        XCTAssertEqual(
+    func testChatLocalIntentDispatcherLetsAnswerRequestsReachModel() {
+        XCTAssertNil(
+            ChatLocalIntentDispatcher.dispatch(
+                text: "what is the eth price",
+                pendingNearAccountTrackerSchedule: nil
+            )
+        )
+        XCTAssertNil(
+            ChatLocalIntentDispatcher.dispatch(
+                text: "AAPL stock price",
+                pendingNearAccountTrackerSchedule: nil
+            )
+        )
+        XCTAssertNil(
             ChatLocalIntentDispatcher.dispatch(
                 text: "what's the eth price and the weather in tokyo",
                 pendingNearAccountTrackerSchedule: nil
-            ),
-            ChatLocalIntentDispatch(
-                clearsPendingNearAccountTracker: false,
-                action: .compound([
-                    .price(coinID: "ethereum", symbol: "ETH"),
-                    .weather(query: "tokyo")
-                ])
+            )
+        )
+        XCTAssertNil(
+            ChatLocalIntentDispatcher.dispatch(
+                text: "weather in tokyo",
+                pendingNearAccountTrackerSchedule: nil
             )
         )
         XCTAssertNil(
@@ -367,6 +375,25 @@ extension PrivateChatCoreTests {
                 pendingNearAccountTrackerSchedule: nil
             )
         )
+    }
+
+    func testChatLocalIntentDispatcherStillHandlesExplicitLocalActions() {
+        XCTAssertEqual(
+            ChatLocalIntentDispatcher.dispatch(
+                text: "remember that I prefer concise answers",
+                pendingNearAccountTrackerSchedule: nil
+            ),
+            ChatLocalIntentDispatch(
+                clearsPendingNearAccountTracker: false,
+                action: .single(.remember(text: "I prefer concise answers"))
+            )
+        )
+        guard case .single(.createTracker)? = ChatLocalIntentDispatcher.dispatch(
+            text: "create an eth price tracker every morning",
+            pendingNearAccountTrackerSchedule: nil
+        )?.action else {
+            return XCTFail("Expected explicit tracker creation to stay local.")
+        }
     }
 
     func testChatLocalIntentWidgetServiceUsesInjectedBriefDigest() async {
@@ -380,6 +407,14 @@ extension PrivateChatCoreTests {
     func testChatLocalIntentWidgetServiceLeavesActionIntentsSynchronous() async {
         let widget = await ChatLocalIntentWidgetService.widget(for: .remember(text: "I prefer concise answers")) {
             XCTFail("Action intents should not request a live widget.")
+            return MessageWidget(kind: .generic, title: "Unexpected")
+        }
+        XCTAssertNil(widget)
+    }
+
+    func testChatLocalIntentWidgetServiceDoesNotAnswerDataRequestsLocally() async {
+        let widget = await ChatLocalIntentWidgetService.widget(for: .price(coinID: "ethereum", symbol: "ETH")) {
+            XCTFail("Data requests should route through the model, not the local brief digest.")
             return MessageWidget(kind: .generic, title: "Unexpected")
         }
         XCTAssertNil(widget)
@@ -702,8 +737,9 @@ extension PrivateChatCoreTests {
             schedule: schedule,
             environment: environment
         )
-        XCTAssertEqual(createdTrackers.last?.kind, .nearAccount)
-        XCTAssertEqual(createdTrackers.last?.accountID, "codex.near")
+        XCTAssertEqual(createdTrackers.last?.kind, .customPrompt)
+        XCTAssertNil(createdTrackers.last?.accountID)
+        XCTAssertTrue(createdTrackers.last?.prompt.contains("codex.near") == true)
         XCTAssertTrue(pending.assistantText.contains("NEAR account · codex.near"))
     }
 
@@ -721,11 +757,44 @@ extension PrivateChatCoreTests {
 
         let briefing = ChatLocalIntentBriefingFactory.trackerBriefing(for: spec, fallbackPrompt: "fallback")
         XCTAssertEqual(briefing.title, "Rolex GMT Master II")
-        XCTAssertEqual(briefing.prompt, "Track Rolex GMT Master II pricing from current sources.")
+        XCTAssertTrue(briefing.prompt.contains("Track Rolex GMT Master II pricing from current sources."))
+        XCTAssertTrue(briefing.prompt.contains("what changed"))
         XCTAssertEqual(briefing.schedule, .daily(hour: 8, minute: 0))
         XCTAssertTrue(briefing.council)
         XCTAssertEqual(briefing.kind, .customPrompt)
         XCTAssertEqual(ChatLocalIntentBriefingFactory.trackerActivitySummary(for: spec), "Created tracker “Rolex GMT Master II” · Rolex GMT Master II · Daily · 8:00 AM")
+
+        let priceSpec = TrackerSpec(
+            title: "ETH price",
+            kind: .cryptoPrice,
+            subject: "ethereum",
+            schedule: .daily(hour: 8, minute: 0),
+            council: false,
+            confirmation: "ETH price · Daily · 8:00 AM",
+            prompt: nil,
+            condition: nil
+        )
+        let priceBriefing = ChatLocalIntentBriefingFactory.trackerBriefing(for: priceSpec, fallbackPrompt: "fallback")
+        XCTAssertEqual(priceBriefing.kind, .customPrompt)
+        XCTAssertNil(priceBriefing.accountID)
+        XCTAssertTrue(priceBriefing.prompt.contains("Run this recurring workflow through chat"))
+        XCTAssertTrue(priceBriefing.prompt.contains("ETH"))
+
+        let alertCondition = BriefingCondition(coinID: "ethereum", symbol: "ETH", comparator: .below, threshold: 2_000)
+        let alertSpec = TrackerSpec(
+            title: "ETH alert",
+            kind: .cryptoPrice,
+            subject: "ethereum",
+            schedule: .everyNHours(3),
+            council: false,
+            confirmation: "ETH below $2,000 · Every 3h",
+            prompt: nil,
+            condition: alertCondition
+        )
+        let alertBriefing = ChatLocalIntentBriefingFactory.trackerBriefing(for: alertSpec, fallbackPrompt: "fallback")
+        XCTAssertEqual(alertBriefing.kind, .cryptoPrice)
+        XCTAssertEqual(alertBriefing.accountID, "ethereum")
+        XCTAssertEqual(alertBriefing.condition, alertCondition)
     }
 
     func testChatLocalIntentBriefingFactoryBuildsTrackLastDraft() throws {
@@ -751,9 +820,9 @@ extension PrivateChatCoreTests {
         )
 
         XCTAssertEqual(briefing.title, "NEAR account")
-        XCTAssertEqual(briefing.prompt, "Track NEAR account codex.near.")
-        XCTAssertEqual(briefing.kind, .nearAccount)
-        XCTAssertEqual(briefing.accountID, "codex.near")
+        XCTAssertTrue(briefing.prompt.contains("Track NEAR account codex.near."))
+        XCTAssertEqual(briefing.kind, .customPrompt)
+        XCTAssertNil(briefing.accountID)
         XCTAssertEqual(briefing.schedule, schedule)
         XCTAssertEqual(
             ChatLocalIntentBriefingFactory.nearAccountActivitySummary(account: "codex.near", schedule: schedule),

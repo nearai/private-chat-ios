@@ -640,7 +640,7 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(text.contains("Chat about anything"))
         XCTAssertTrue(text.contains("Write a concise client follow-up email"))
         XCTAssertTrue(text.contains("Summarize this PDF"))
-        XCTAssertTrue(text.contains("Quick tools before sign-in"))
+        XCTAssertTrue(text.contains("Model-routed live questions"))
         XCTAssertFalse(text.contains("What’s trending in crypto"))
         XCTAssertLessThan(
             text.range(of: "Write a concise")?.lowerBound ?? text.endIndex,
@@ -664,9 +664,10 @@ extension PrivateChatCoreTests {
 
         let completed = BriefingBuilderPlanner.plan(from: "abhishek.near", current: first.draft)
 
-        XCTAssertEqual(completed.draft.kind, .nearAccount)
-        XCTAssertEqual(completed.draft.accountID, "abhishek.near")
-        XCTAssertEqual(completed.draft.prompt, "Track NEAR account abhishek.near.")
+        XCTAssertEqual(completed.draft.kind, .customPrompt)
+        XCTAssertNil(completed.draft.accountID)
+        XCTAssertTrue(completed.draft.prompt.contains("Track NEAR account abhishek.near."))
+        XCTAssertTrue(completed.draft.prompt.contains("Run this recurring workflow through chat"))
         XCTAssertTrue(completed.reply.contains("Weekdays"))
     }
 

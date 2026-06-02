@@ -649,6 +649,26 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(plan.reply.contains("Daily"))
     }
 
+    func testBriefingBuilderPlannerRoutesDataWorkflowsThroughModel() throws {
+        let price = BriefingBuilderPlanner.plan(from: "create an ETH price tracker every morning")
+        XCTAssertEqual(price.draft.kind, .customPrompt)
+        XCTAssertNil(price.draft.accountID)
+        XCTAssertTrue(price.draft.prompt.contains("Run this recurring workflow through chat"))
+        XCTAssertTrue(price.draft.prompt.contains("hardcoded defaults"))
+        XCTAssertTrue(price.draft.prompt.contains("ETH"))
+
+        let news = BriefingBuilderPlanner.plan(from: "create a daily news tracker every morning")
+        XCTAssertEqual(news.draft.kind, .customPrompt)
+        XCTAssertNil(news.draft.accountID)
+        XCTAssertTrue(news.draft.prompt.lowercased().contains("top news"))
+
+        let watchlist = BriefingBuilderPlanner.plan(from: "track ETH, NEAR and Tesla every morning")
+        XCTAssertEqual(watchlist.draft.kind, .customPrompt)
+        XCTAssertNil(watchlist.draft.accountID)
+        XCTAssertTrue(watchlist.draft.prompt.contains("ETH"))
+        XCTAssertTrue(watchlist.draft.prompt.contains("TSLA"))
+    }
+
     func testQuickIntentDoesNotCreateTrackerWithoutSubject() {
         // No trackable subject → falls through to the model, not an ETH default.
         XCTAssertNil(QuickIntentParser.parse("remind me to stretch every morning"))
@@ -802,10 +822,12 @@ extension PrivateChatCoreTests {
 
         XCTAssertEqual(briefingStore.briefings.count, 1)
         let landed = try XCTUnwrap(briefingStore.briefings.first)
-        XCTAssertEqual(landed.kind, .cryptoPrice)
-        XCTAssertEqual(landed.accountID, "ethereum")
+        XCTAssertEqual(landed.kind, .customPrompt)
+        XCTAssertNil(landed.accountID)
         XCTAssertEqual(landed.schedule, .daily(hour: 8, minute: 0))
         XCTAssertEqual(landed.title, "ETH price")
+        XCTAssertTrue(landed.prompt.contains("Run this recurring workflow through chat"))
+        XCTAssertTrue(landed.prompt.contains("ETH"))
         XCTAssertFalse(landed.council)
 
         try? FileManager.default.removeItem(at: tempFile)

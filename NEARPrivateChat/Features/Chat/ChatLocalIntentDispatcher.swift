@@ -27,13 +27,15 @@ enum ChatLocalIntentDispatcher {
             clearsPendingNearAccountTracker = true
         }
 
-        if let intents = QuickIntentParser.parseCompound(text) {
+        if let intents = QuickIntentParser.parseCompound(text),
+           intents.allSatisfy(shouldHandleLocally) {
             return ChatLocalIntentDispatch(
                 clearsPendingNearAccountTracker: clearsPendingNearAccountTracker,
                 action: .compound(intents)
             )
         }
-        if let intent = QuickIntentParser.parse(text) {
+        if let intent = QuickIntentParser.parse(text),
+           shouldHandleLocally(intent) {
             return ChatLocalIntentDispatch(
                 clearsPendingNearAccountTracker: clearsPendingNearAccountTracker,
                 action: .single(intent)
@@ -42,5 +44,21 @@ enum ChatLocalIntentDispatcher {
 
         guard clearsPendingNearAccountTracker else { return nil }
         return ChatLocalIntentDispatch(clearsPendingNearAccountTracker: true, action: nil)
+    }
+
+    private static func shouldHandleLocally(_ intent: QuickIntent) -> Bool {
+        switch intent {
+        case .price, .stock, .watchlist, .trendingCrypto, .cryptoMarket, .news,
+             .weather, .worldTime, .fx, .unitConvert, .define, .math, .dateMath,
+             .tipSplit:
+            return false
+        case .nearAccount(let account):
+            return account == nil
+        case .briefMe, .remember, .recallMemory, .forget, .forgetAutoLearned,
+             .setMemoryCapture, .setDocumentPrivacy, .activityLog, .listTrackers,
+             .capabilities, .searchHistory, .createReminder, .createTracker,
+             .requestNearAccountTracker, .trackLast:
+            return true
+        }
     }
 }
