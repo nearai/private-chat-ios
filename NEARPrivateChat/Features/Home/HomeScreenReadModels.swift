@@ -262,13 +262,13 @@ extension HomeScreen {
 
     var homeLaunchSubtitle: String {
         if let projectName = chatStore.selectedProject?.name.nilIfBlank {
-            return "\(projectName) context is active. Chat, research, files, trackers, proof, and agent handoff all start from one prompt."
+            return "\(projectName) context is active. Ask, research, prove, or hand off."
         }
-        return "Chat, research, files, trackers, proof, and agent handoff all start from one prompt."
+        return "Ask, research, prove, or hand off from one place."
     }
 
     var homeLaunchSuggestions: [EmptyChatStarterSuggestion] {
-        Array(EmptyChatStarterCoordinator.suggestions(for: chatStore).prefix(5))
+        Array(EmptyChatStarterCoordinator.suggestions(for: chatStore).prefix(4))
     }
 
     var selectedHomeLaunchSuggestion: EmptyChatStarterSuggestion? {

@@ -100,7 +100,7 @@ struct ChatToolbar: View {
     }
 
     private var compactToolbar: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(compactTitle)
@@ -111,6 +111,7 @@ struct ChatToolbar: View {
                     Text(compactStatusText)
                         .font(.caption.weight(.medium))
                         .foregroundStyle(Color.textSecondary)
+                        .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -171,24 +172,42 @@ struct ChatToolbar: View {
             }
             .scrollClipDisabled()
         }
-        .padding(14)
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(12)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(Color.appBorder, lineWidth: 1)
         }
         .padding(.horizontal, 14)
-        .padding(.top, 8)
-        .padding(.bottom, 10)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
     }
 
     private var compactTitle: String {
-        conversationStore.selectedConversationTitle
+        if transcriptStore.messages.isEmpty {
+            return modelCatalogStore.isCouncilModeEnabled ? "Council route" : modelCatalogStore.selectedRouteKind.disclosureTitle
+        }
+        return conversationStore.selectedConversationTitle
     }
 
     private var compactStatusText: String {
         if transcriptStore.messages.isEmpty {
-            return "Private by default. Add sources, a Project, or Agent when the task needs them."
+            let routeSummary: String
+            if modelCatalogStore.isCouncilModeEnabled {
+                routeSummary = "\(modelCatalogStore.activeCouncilModels.count) models selected"
+            } else {
+                switch modelCatalogStore.selectedRouteKind {
+                case .nearPrivate:
+                    routeSummary = modelCatalogStore.researchModeEnabled ? "Private research" : "Private chat"
+                case .nearCloud:
+                    routeSummary = "Privacy proxy"
+                case .ironclawMobile:
+                    routeSummary = "Phone agent"
+                case .ironclawHosted:
+                    routeSummary = "Hosted IronClaw"
+                }
+            }
+            return "\(routeSummary) · Add sources when needed."
         }
 
         var parts: [String] = []

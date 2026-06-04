@@ -11,31 +11,39 @@ struct HomePromptCaptureCard: View {
     let actionEnabled: Bool
     let onSelectSuggestion: (EmptyChatStarterSuggestion) -> Void
     let onSubmit: () -> Void
+    @FocusState private var isPromptFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Start from one prompt")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.primary)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Start from one prompt")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
 
-                Text(subtitle)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Color.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+                    Text(subtitle)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
-            if let selectedProjectName = selectedProjectName?.nilIfBlank {
-                Label("\(selectedProjectName) context is active", systemImage: "folder.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.brandBlue)
-                    .padding(.horizontal, 10)
-                    .frame(height: 28)
-                    .background(Color.actionTint, in: Capsule())
+                Spacer(minLength: 0)
+
+                if let selectedProjectName = selectedProjectName?.nilIfBlank {
+                    Label(selectedProjectName, systemImage: "folder.fill")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Color.actionPrimary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 9)
+                        .frame(height: 26)
+                        .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .accessibilityLabel("\(selectedProjectName) context active")
+                }
             }
 
             TextField(
-                "Paste a task, source, file question, tracker idea, or handoff brief",
+                "Paste a task, source, file, or handoff",
                 text: $draft,
                 axis: .vertical
             )
@@ -44,76 +52,66 @@ struct HomePromptCaptureCard: View {
             .lineLimit(3...6)
             .padding(.horizontal, 12)
             .padding(.vertical, 11)
-            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .frame(minHeight: 72, alignment: .topLeading)
+            .focused($isPromptFocused)
+            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.appBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(isPromptFocused ? Color.actionPrimary.opacity(0.34) : Color.appBorder, lineWidth: 1)
             }
 
             if !suggestions.isEmpty {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
-                        promptIntentChips(fillsWidth: false)
-                    }
-
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 132), spacing: 8)],
-                        alignment: .leading,
-                        spacing: 8
-                    ) {
-                        promptIntentChips(fillsWidth: true)
-                    }
+                LazyVGrid(columns: chipColumns, alignment: .leading, spacing: 8) {
+                    promptIntentChips()
                 }
             }
 
-            HStack(alignment: .center, spacing: 12) {
-                Text("Nothing sends until you review it in chat.")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Color.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Spacer(minLength: 0)
-
-                Button(action: onSubmit) {
-                    Label(actionTitle, systemImage: actionSymbolName)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .frame(height: 42)
-                        .background(
-                            actionEnabled ? Color.actionPrimary : Color.textTertiary,
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        )
-                }
-                .buttonStyle(.plain)
-                .disabled(!actionEnabled)
+            Button(action: onSubmit) {
+                Label(actionEnabled ? actionTitle : "Type to prepare", systemImage: actionSymbolName)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(actionEnabled ? Color.appPanelBackground : Color.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 42)
+                    .background(
+                        actionEnabled ? Color.actionPrimary : Color.appSecondaryBackground,
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(actionEnabled ? Color.clear : Color.appBorder, lineWidth: 1)
+                    }
             }
+            .buttonStyle(.plain)
+            .disabled(!actionEnabled)
+            .accessibilityHint("Stages the draft in chat for review.")
         }
-        .padding(14)
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(12)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(Color.appBorder, lineWidth: 1)
         }
     }
 
     @ViewBuilder
-    private func promptIntentChips(fillsWidth: Bool) -> some View {
+    private func promptIntentChips() -> some View {
         ForEach(suggestions) { suggestion in
             HomePromptIntentChip(
                 suggestion: suggestion,
                 isSelected: suggestion.id == selectedSuggestionID,
-                fillsWidth: fillsWidth,
                 action: { onSelectSuggestion(suggestion) }
             )
         }
+    }
+
+    private var chipColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 136), spacing: 8)]
     }
 }
 
 private struct HomePromptIntentChip: View {
     let suggestion: EmptyChatStarterSuggestion
     let isSelected: Bool
-    var fillsWidth = false
     let action: () -> Void
 
     var body: some View {
@@ -126,18 +124,17 @@ private struct HomePromptIntentChip: View {
                     .lineLimit(1)
             }
             .foregroundStyle(isSelected ? Color.actionPrimary : Color.textSecondary)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: 40)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: 38)
             .background(
                 isSelected ? Color.actionTint : Color.appSecondaryBackground,
-                in: Capsule()
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
             )
             .overlay {
-                Capsule()
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(isSelected ? Color.actionPrimary.opacity(0.24) : Color.appBorder, lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
     }
 }
-

@@ -309,14 +309,14 @@ struct EmptyChatView: View {
     var onOpenCouncil: () -> Void = {}
 
     var body: some View {
-        VStack(spacing: 14) {
-            NearAppIconMark(size: 56)
+        VStack(spacing: 12) {
+            NearAppIconMark(size: 52)
 
             VStack(spacing: 5) {
                 Text("What do you want to ask?")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(Color.textPrimary)
-                Text("Private by default. Add sources, a Project, Council, or Agent when needed.")
+                Text("Ask privately, then add sources or tools only when the task needs them.")
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(Color.textTertiary)
                     .multilineTextAlignment(.center)
@@ -351,7 +351,11 @@ struct EmptyChatView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 12)
                 .frame(maxWidth: .infinity, minHeight: 44)
-                .background(Color.appSecondaryBackground, in: Capsule())
+                .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.appBorder, lineWidth: 1)
+                }
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Use suggestion, \(suggestion.title)")

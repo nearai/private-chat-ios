@@ -31,8 +31,8 @@ struct HomeOrchestrationSurface: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                    Text("Today")
-                    .font(.title3.weight(.semibold))
+                Text("Next up")
+                    .font(.headline.weight(.semibold))
                     .foregroundStyle(.primary)
                 Text(plan.subtitle)
                     .font(.caption.weight(.medium))
@@ -240,6 +240,9 @@ private struct HomeOrchestrationCard: View {
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(item.tone.tintColor)
                         .lineLimit(1)
+                        .padding(.horizontal, 7)
+                        .frame(height: 22)
+                        .background(item.tone.tintColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -256,7 +259,7 @@ private struct HomeOrchestrationCard: View {
                     Text(item.detail)
                         .font(.caption)
                         .foregroundStyle(Color.textSecondary)
-                        .lineLimit(3)
+                        .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -264,7 +267,7 @@ private struct HomeOrchestrationCard: View {
                 Spacer(minLength: 0)
             }
             .padding(12)
-            .frame(maxWidth: .infinity, minHeight: 154, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 142, alignment: .topLeading)
             .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)

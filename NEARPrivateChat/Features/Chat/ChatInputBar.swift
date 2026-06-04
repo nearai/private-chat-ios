@@ -121,7 +121,7 @@ struct InputBar: View {
                     .textFieldStyle(.plain)
                     .tokenInputTraits()
                     .autocorrectionDisabled()
-                    .lineLimit(1...6)
+                    .lineLimit(1...4)
                     .focused($isFocused)
                     .font(.body)
                     .foregroundStyle(Color.textPrimary)
@@ -187,9 +187,9 @@ struct InputBar: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
-            .glassBackground(in: Capsule())
+            .glassBackground(in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay {
-                Capsule()
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .stroke(isFocused ? Color.actionPrimary.opacity(0.38) : Color.appBorder, lineWidth: 0.5)
             }
         }

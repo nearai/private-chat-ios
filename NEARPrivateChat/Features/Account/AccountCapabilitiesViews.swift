@@ -172,7 +172,7 @@ struct AccountSettingsView: View {
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .lineLimit(1)
-                    Text(sessionStore.profile?.user.email ?? "Signed in")
+                    Text(accountStatusSummary)
                         .font(.footnote)
                         .fontWeight(.regular)
                         .foregroundStyle(Color.textSecondary)
@@ -218,7 +218,13 @@ struct AccountSettingsView: View {
             Spacer()
             Text(detail)
                 .foregroundStyle(Color.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.86)
         }
+    }
+
+    private var accountStatusSummary: String {
+        sessionStore.session?.sessionID.isEmpty == false ? "Browser session active" : "Session token active"
     }
 
     /// Friendly name for the active default model, falling back to the
@@ -272,7 +278,7 @@ struct AccountSettingsView: View {
             Button {
                 showingChatImporter = true
             } label: {
-                Text(accountStore.isImportingChats ? "Importing Chats" : "Import Chats")
+                Label(accountStore.isImportingChats ? "Importing Chats" : "Import Chats", systemImage: "square.and.arrow.down")
                     .foregroundStyle(.primary)
             }
             .disabled(accountStore.isImportingChats)
