@@ -119,14 +119,13 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(pickerIDs.contains(ModelOption.nearPrivateDefaultModelID))
         XCTAssertTrue(pickerIDs.contains("Qwen/Qwen3.5-122B-A10B"))
         XCTAssertTrue(pickerIDs.contains("Qwen/Qwen3.6-35B-A3B-FP8"))
-        XCTAssertTrue(pickerIDs.contains("moonshotai/kimi-k2.6"))
 
         XCTAssertTrue(catalog.selectModel("Qwen/Qwen3.5-122B-A10B"))
         XCTAssertEqual(catalog.selectedModel, "Qwen/Qwen3.5-122B-A10B")
         XCTAssertEqual(catalog.selectedRouteKind, .nearPrivate)
 
-        XCTAssertTrue(catalog.selectModel("moonshotai/kimi-k2.6"))
-        XCTAssertEqual(catalog.selectedModel, "moonshotai/kimi-k2.6")
+        XCTAssertTrue(catalog.selectModel("Qwen/Qwen3.6-35B-A3B-FP8"))
+        XCTAssertEqual(catalog.selectedModel, "Qwen/Qwen3.6-35B-A3B-FP8")
         XCTAssertEqual(catalog.selectedRouteKind, .nearPrivate)
     }
 
@@ -182,15 +181,15 @@ extension PrivateChatCoreTests {
                 )
             ),
             ModelOption(
-                modelID: "google/gemini-2.5-flash",
+                modelID: "openai/gpt-oss-120b",
                 publicModel: true,
                 metadata: ModelOption.Metadata(
                     verifiable: false,
                     contextLength: 1_000_000,
-                    modelDisplayName: "Gemini 2.5 Flash",
+                    modelDisplayName: "GPT OSS 120B",
                     modelDescription: "Current Cloud catalog model.",
                     modelIcon: nil,
-                    aliases: ["gemini-2.5-flash"]
+                    aliases: ["gpt-oss-120b"]
                 )
             )
         ]

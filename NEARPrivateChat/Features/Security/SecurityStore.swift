@@ -34,14 +34,18 @@ final class SecurityStore: ObservableObject {
     ) -> AttestationStatus {
         if isCouncilModeEnabled {
             guard !activeCouncilHasExternalRoutes else {
-                return .unavailable(reason: .routeNotSupported)
+                return .unavailable(reason: .privacyProxyRoute)
             }
             return privateRouteAttestationStatus(selectedModelID: selectedModelID)
         }
-        guard selectedRouteKind == .nearPrivate else {
-            return .unavailable(reason: .routeNotSupported)
+        switch selectedRouteKind {
+        case .nearPrivate:
+            return privateRouteAttestationStatus(selectedModelID: selectedModelID)
+        case .nearCloud:
+            return .unavailable(reason: .privacyProxyRoute)
+        case .ironclawMobile, .ironclawHosted:
+            return .unavailable(reason: .agentRouteOutsideProof)
         }
-        return privateRouteAttestationStatus(selectedModelID: selectedModelID)
     }
 
     func refreshAttestationReport(

@@ -131,9 +131,14 @@ enum ChatLocalIntentExecutor {
     static func completePendingNearAccountTracker(
         account: String,
         schedule: BriefingSchedule,
-        environment: Environment
+        environment: Environment,
+        structured: Bool = false
     ) -> ChatLocalIntentExecutionResult {
-        let briefing = ChatLocalIntentBriefingFactory.nearAccountBriefing(account: account, schedule: schedule)
+        let briefing = ChatLocalIntentBriefingFactory.nearAccountBriefing(
+            account: account,
+            schedule: schedule,
+            structured: structured
+        )
         environment.createTracker(briefing)
         environment.activityLog.record(ChatLocalIntentBriefingFactory.nearAccountActivitySummary(account: account, schedule: schedule))
         return ChatLocalIntentExecutionResult(

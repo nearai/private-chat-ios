@@ -468,6 +468,33 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(copy.badge, "Privacy proxy")
     }
 
+    @MainActor
+    func testAttestationCopySeparatesAgentRoutesFromPrivacyProxy() {
+        let store = SecurityStore(attestationAPI: FakeSecurityAttestationAPI())
+
+        let mobileStatus = store.currentAttestationStatus(
+            selectedModelID: ModelOption.ironclawMobileModelID,
+            selectedRouteKind: ChatRouteKind.ironclawMobile,
+            isCouncilModeEnabled: false,
+            activeCouncilHasExternalRoutes: false
+        )
+        let mobileCopy = mobileStatus.userFacingCopy()
+
+        XCTAssertEqual(mobileCopy.title, "Agent route outside proof")
+        XCTAssertTrue(mobileCopy.detail.contains("Agent trust boundary"))
+        XCTAssertEqual(mobileCopy.badge, "Outside proof")
+
+        let cloudCopy = store.currentAttestationStatus(
+            selectedModelID: "zai-org/GLM-5.1-FP8",
+            selectedRouteKind: ChatRouteKind.nearCloud,
+            isCouncilModeEnabled: false,
+            activeCouncilHasExternalRoutes: false
+        ).userFacingCopy()
+
+        XCTAssertEqual(cloudCopy.title, "Privacy proxy route")
+        XCTAssertEqual(cloudCopy.badge, "Privacy proxy")
+    }
+
     func testAttestationCopySeparatesServiceFailureFromMissingModelCoverage() {
         let serviceCopy = AttestationStatus.unavailable(reason: .serviceUnavailable).userFacingCopy()
 

@@ -540,15 +540,76 @@ extension PrivateChatCoreTests {
         XCTAssertNil(QuickIntentParser.parse("what's the weather like in a relationship"))
         XCTAssertNil(QuickIntentParser.parse("is the weather nice in general"))
         XCTAssertNil(QuickIntentParser.parse("how's the weather in control"))
+        XCTAssertNil(QuickIntentParser.parse("what's the weather like in our roadmap"))
+        XCTAssertNil(QuickIntentParser.parse("forecast for the product launch"))
+        XCTAssertNil(QuickIntentParser.parse("Nvidia forecast"))
         // Real places — including the "like in <place>" form — still resolve.
         XCTAssertEqual(QuickIntentParser.parse("what's the weather like in Tokyo"), .weather(query: "tokyo"))
         XCTAssertEqual(QuickIntentParser.parse("weather in new york"), .weather(query: "new york"))
+        XCTAssertEqual(QuickIntentParser.parse("London forecast"), .weather(query: "london"))
     }
 
     func testPriceDoesNotHijackExplanatoryOrOpinionPrompts() {
         XCTAssertNil(QuickIntentParser.parse("explain how ethereum works"))
         XCTAssertNil(QuickIntentParser.parse("is solana a good investment"))
         XCTAssertNil(QuickIntentParser.parse("why does bitcoin matter"))
+    }
+
+    func testHostileProductReviewPromptLadderStaysConservative() throws {
+        let modelRoutedPrompts = [
+            "help me write a hostile product review of this onboarding",
+            "remind me why this sign-in flow feels suspicious",
+            "what time is it in our roadmap",
+            "Apple Vision Pro vs Meta Quest 3 price",
+            "Deep search Claude Code and Xcode release notes; make a tracker only if there is a breaking workflow change; otherwise list dated sources.",
+            "track Canton Network token price every morning, no web",
+            "what have you done to the sign-in screen?",
+            "what are you tracking on tv tonight?",
+            "show my alerts about the movie tomorrow",
+            "what can you help me write in a product review?",
+            "stop auto-renewing my subscription",
+            "turn off private browsing mode in Safari",
+            "can I upload my documents safely?",
+            "should I keep documents private for this upload?",
+            "don't forget everything we covered in the meeting",
+            "wipe your memory leak notes from the review",
+            "what's happening in onboarding analytics",
+            "top stories from our customer interviews",
+            "what time is it in the release plan",
+            "make a watchlist of Netflix and Disney movies"
+        ]
+        for prompt in modelRoutedPrompts {
+            XCTAssertNil(QuickIntentParser.parse(prompt), prompt)
+        }
+        XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("Apple Vision Pro vs Meta Quest 3 price"))
+        XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("Apple Watch Ultra price"))
+
+        guard case let .createTracker(productTracker) = QuickIntentParser.parse("track Apple Vision Pro and Meta Quest 3 price every morning") else {
+            return XCTFail("Expected unknown product pricing to become a custom web-grounded tracker.")
+        }
+        XCTAssertEqual(productTracker.kind, .customPrompt)
+        XCTAssertEqual(productTracker.schedule, .daily(hour: 8, minute: 0))
+        let productPrompt = try XCTUnwrap(productTracker.prompt).lowercased()
+        XCTAssertTrue(productPrompt.contains("apple vision pro"))
+        XCTAssertTrue(productPrompt.contains("meta quest 3"))
+
+        guard case let .createTracker(reviewTracker) = QuickIntentParser.parse("set up a weekly hostile review of the onboarding with source-backed competitor notes") else {
+            return XCTFail("Expected scheduled product-review work to stay as a custom tracker.")
+        }
+        XCTAssertEqual(reviewTracker.kind, .customPrompt)
+        XCTAssertEqual(reviewTracker.schedule, .weekly(weekday: 2, hour: 8, minute: 0))
+        XCTAssertTrue(try XCTUnwrap(reviewTracker.prompt).lowercased().contains("hostile review"))
+
+        XCTAssertEqual(QuickIntentParser.parse("please clear your memory!"), .forget(text: nil))
+        XCTAssertEqual(QuickIntentParser.parse("please keep documents on device"), .setDocumentPrivacy(onDevice: true))
+        XCTAssertEqual(QuickIntentParser.parse("upload documents normally"), .setDocumentPrivacy(onDevice: false))
+        XCTAssertEqual(QuickIntentParser.parse("show my trackers"), .listTrackers)
+        XCTAssertEqual(QuickIntentParser.parse("what have you done"), .activityLog)
+
+        guard case let .remember(text) = QuickIntentParser.parse("remember that the phrase forget everything appears in the spec") else {
+            return XCTFail("Quoted command-like text should be stored, not executed.")
+        }
+        XCTAssertTrue(text.contains("forget everything"))
     }
 
     func testStockIntentResolvesTickersAndCompanies() {

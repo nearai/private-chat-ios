@@ -35,12 +35,17 @@ enum ChatLocalIntentBriefingFactory {
         return ChatLocalIntentTrackLastDraft(title: title, subject: subject, briefing: briefing)
     }
 
-    static func nearAccountBriefing(account: String, schedule: BriefingSchedule) -> Briefing {
+    static func nearAccountBriefing(
+        account: String,
+        schedule: BriefingSchedule,
+        structured: Bool = false
+    ) -> Briefing {
         Briefing(
             title: "NEAR account",
             prompt: modelRoutedPrompt("Track NEAR account \(account)."),
             schedule: schedule,
-            kind: .customPrompt
+            kind: structured ? .nearAccount : .customPrompt,
+            accountID: structured ? account : nil
         )
     }
 

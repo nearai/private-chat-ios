@@ -2723,7 +2723,8 @@ final class ChatStore: ObservableObject {
         let result = ChatLocalIntentExecutor.completePendingNearAccountTracker(
             account: account,
             schedule: schedule,
-            environment: localIntentExecutionEnvironment()
+            environment: localIntentExecutionEnvironment(),
+            structured: true
         )
         let assistantCreatedAt = Date()
         messages.append(ChatLocalIntentTranscriptWriter.assistantMessage(
@@ -5132,6 +5133,10 @@ final class ChatStore: ObservableObject {
 
         if lowercased.contains("chat route needs a valid ironclaw token") {
             return "Hosted IronClaw is reachable. The Agent token is missing or invalid. Open Account and test the Agent connection."
+        }
+
+        if lowercased.contains("failed to check rate limit") {
+            return "Could not verify account usage before sending. Refresh Account or sign in again, then retry."
         }
 
         if lowercased.contains("tool 'http' failed") &&

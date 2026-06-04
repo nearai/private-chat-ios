@@ -11,11 +11,14 @@ struct ProductWordmark: View {
             Text("NEAR")
                 .font(.largeTitle.weight(.heavy))
                 .foregroundStyle(Color.textPrimary)
+                .accessibilityHidden(true)
             Text("Private Chat")
                 .font(.title2.weight(.heavy))
                 .foregroundStyle(Color.brandBlue)
+                .accessibilityHidden(true)
         }
         .scaleEffect(scale)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("NEAR Private Chat")
     }
 }
@@ -67,9 +70,11 @@ struct PrivacySeal: View {
                 .fill(Color.actionTint)
 
             NearMark(size: size * 0.64)
+                .accessibilityHidden(true)
         }
         .frame(width: size, height: size)
         .shadow(color: Color.brandBlue.opacity(0.22), radius: 22, y: 10)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("NEAR Private Chat")
     }
 }

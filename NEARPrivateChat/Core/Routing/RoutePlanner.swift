@@ -198,9 +198,12 @@ struct RoutePlanner {
         ].contains { lowercased.contains($0) }
         let liveAskCue = [
             "what", "how much", "find", "look up", "track", "monitor",
-            "watch", "price of", "value of", "cost of", "quote for"
+            "watch", "compare", "comparison", " vs ", " versus ",
+            "price of", "prices of", "prices for", "value of", "cost of", "quote for"
         ].contains { lowercased.contains($0) }
-        return valueCue && liveAskCue
+        let endsWithValueCue =
+            lowercased.range(of: #"\b(price|prices|value|worth|quote|rate)\??$"#, options: .regularExpression) != nil
+        return valueCue && (liveAskCue || endsWithValueCue)
     }
 
     static func promptRequestsCouncil(_ prompt: String) -> Bool {

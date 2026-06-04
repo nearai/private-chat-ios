@@ -454,7 +454,7 @@ extension PrivateChatCoreTests {
             route: .nearCloud
         )
         XCTAssertEqual(cloudAuto.modelNativeWebToolPolicy, .never)
-        XCTAssertEqual(cloudAuto.appWebGroundingPolicy, .never)
+        XCTAssertEqual(cloudAuto.appWebGroundingPolicy, .whenFreshRequested)
         XCTAssertTrue(cloudAuto.attachesSavedLinkSourcePack)
         XCTAssertTrue(cloudAuto.attachesProjectFileSourcePack)
 

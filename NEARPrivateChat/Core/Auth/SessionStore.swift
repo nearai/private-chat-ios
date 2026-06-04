@@ -118,12 +118,12 @@ final class SessionStore: NSObject, ObservableObject {
                     await refreshProfile(force: true)
                     showBanner(newSession.isNewUser ? "Account created." : "Signed in.")
                 } catch {
-                    showBanner(error.localizedDescription)
+                    showBanner(Self.userFacingAuthenticationError(error))
                 }
             }
         } catch {
             clearPendingAuthState()
-            showBanner(error.localizedDescription)
+            showBanner(Self.userFacingAuthenticationError(error))
         }
         return true
     }
@@ -198,7 +198,7 @@ final class SessionStore: NSObject, ObservableObject {
             showBanner(newSession.isNewUser ? "Account created." : "Signed in.")
         } catch {
             clearPendingAuthState()
-            showBanner(error.localizedDescription)
+            showBanner(Self.userFacingAuthenticationError(error))
         }
     }
 
@@ -262,6 +262,22 @@ final class SessionStore: NSObject, ObservableObject {
 
     private func saveCachedProfile(_ profile: UserProfile) {
         persistence.saveCachedProfile(profile)
+    }
+
+    private static func userFacingAuthenticationError(_ error: Error) -> String {
+        if let authenticationError = error as? ASWebAuthenticationSessionError,
+           authenticationError.code == .canceledLogin {
+            return "Sign-in canceled."
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == "com.apple.AuthenticationServices.WebAuthenticationSession",
+           nsError.code == ASWebAuthenticationSessionError.Code.canceledLogin.rawValue {
+            return "Sign-in canceled."
+        }
+
+        let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        return message.isEmpty ? "Sign-in failed. Try again." : message
     }
 
     private func startWebAuthentication(url: URL) async throws -> URL {

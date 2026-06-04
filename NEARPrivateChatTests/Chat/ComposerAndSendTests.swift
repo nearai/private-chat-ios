@@ -941,6 +941,60 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(timelineStore.messages.isEmpty)
     }
 
+    @MainActor
+    func testChatMessageLoadCoordinatorRemovesStaleConversationOn404() async throws {
+        let conversation = ConversationSummary(
+            id: "conv-missing-remote",
+            createdAt: 1_700_000_000,
+            metadata: ConversationMetadata(title: "Missing remote")
+        )
+        let api = ConversationRepositoryAPIFake()
+        api.fetchItemsError = APIError.status(404, "HTTP 404 - Conversation not found")
+        let conversationStore = ConversationStore(repository: ConversationRepository(api: api))
+        conversationStore.insertOrReplace(conversation)
+        conversationStore.selectConversation(conversation)
+        let timelineStore = MessageTimelineStore()
+        timelineStore.messages = [
+            makeMessage(
+                id: "stale-message",
+                role: .assistant,
+                text: "Old answer",
+                createdAt: Date(timeIntervalSince1970: 1_000)
+            )
+        ]
+        let coordinator = ChatMessageLoadCoordinator(
+            repository: MessageRepository(conversationAPI: api),
+            conversationStore: conversationStore,
+            timelineStore: timelineStore
+        )
+        var banners: [String] = []
+
+        await coordinator.loadMessages(
+            for: conversation,
+            preferCached: false,
+            callbacks: ChatMessageLoadCoordinatorCallbacks(
+                restoreSelectedModel: { _ in XCTFail("Missing remote chats should not restore a selected model.") },
+                refreshExternalLatestResponse: { _ in },
+                showBanner: { banners.append($0) }
+            )
+        )
+
+        XCTAssertNil(conversationStore.selectedConversation)
+        XCTAssertFalse(conversationStore.conversations.contains(where: { $0.id == conversation.id }))
+        XCTAssertTrue(timelineStore.messages.isEmpty)
+        XCTAssertEqual(banners.last, "That chat is no longer available. Removed it from Home.")
+    }
+
+    @MainActor
+    func testChatStoreRateLimitFailureCopyIsActionable() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+
+        XCTAssertEqual(
+            store.displayFailureMessageForSend("Failed to check rate limit."),
+            "Could not verify account usage before sending. Refresh Account or sign in again, then retry."
+        )
+    }
+
     func testMessageRepositoryCachedPreviewPrefersCurrentTimeline() throws {
         let defaults = try makeIsolatedDefaults()
         let accountID = "message-preview-\(UUID().uuidString)"
@@ -1552,6 +1606,7 @@ private final class ConversationRepositoryAPIFake: ConversationAPI {
     )
     var itemsResponse = ConversationItemsResponse(data: [], firstID: nil, hasMore: false, lastID: nil)
     var fetchItemsDelayNanoseconds: UInt64?
+    var fetchItemsError: Error?
 
     private(set) var updatedTitles: [(conversationID: String, title: String)] = []
     private(set) var deletedConversationIDs: [String] = []
@@ -1589,6 +1644,9 @@ private final class ConversationRepositoryAPIFake: ConversationAPI {
     func fetchConversationItems(_ conversationID: String) async throws -> ConversationItemsResponse {
         if let fetchItemsDelayNanoseconds {
             try await Task.sleep(nanoseconds: fetchItemsDelayNanoseconds)
+        }
+        if let fetchItemsError {
+            throw fetchItemsError
         }
         return itemsResponse
     }

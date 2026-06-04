@@ -213,6 +213,8 @@ struct ProofCapsuleViewModel: Codable, Equatable, Sendable {
 enum AttestationUnavailableReason: String, Codable, Equatable, Sendable {
     case notFetched = "not_fetched"
     case routeNotSupported = "route_not_supported"
+    case privacyProxyRoute = "privacy_proxy_route"
+    case agentRouteOutsideProof = "agent_route_outside_proof"
     case serviceUnavailable = "service_unavailable"
     case modelCoverageUnavailable = "model_coverage_unavailable"
 }
@@ -348,11 +350,17 @@ enum AttestationStatus: Codable, Equatable, Sendable {
         switch self {
         case let .unavailable(reason):
             switch reason {
-            case .routeNotSupported:
+            case .routeNotSupported, .privacyProxyRoute:
                 return AttestationStatusCopy(
                     title: "Privacy proxy route",
                     detail: "This route uses NEAR AI Cloud privacy proxy forwarding, so it carries no NEAR Private proof report. Use a private model when proof matters.",
                     badge: "Privacy proxy"
+                )
+            case .agentRouteOutsideProof:
+                return AttestationStatusCopy(
+                    title: "Agent route outside proof",
+                    detail: "IronClaw Mobile and Hosted IronClaw use a separate Agent trust boundary, so they carry no NEAR Private proof report. Switch to a private model when proof matters.",
+                    badge: "Outside proof"
                 )
             case .serviceUnavailable:
                 return AttestationStatusCopy(

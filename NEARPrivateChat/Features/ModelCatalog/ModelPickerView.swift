@@ -73,6 +73,22 @@ struct ModelPickerView: View {
         isSelectedSingleModel(model) ? .checkmark : .none
     }
 
+    private func modelRowTitle(for model: ModelOption, defaultTitle: String? = nil) -> String {
+        guard DemoCapture.isEnabled else {
+            return defaultTitle ?? model.displayName
+        }
+        if isDefaultPrivateModel(model) {
+            return "NEAR Private model"
+        }
+        if model.isPrivateVerifiableChatModel {
+            return "Private reasoning model"
+        }
+        if model.isNearCloudModel {
+            return "NEAR AI Cloud model"
+        }
+        return defaultTitle ?? model.displayName
+    }
+
     private func modelRowBadges(for model: ModelOption, prefix: String? = nil) -> [String] {
         var badges = model.routeDisclosureBadges
         if let prefix {
@@ -229,7 +245,7 @@ struct ModelPickerView: View {
                     ModelSpecRow(
                         symbolName: "cpu",
                         symbolColor: Color.actionPrimary,
-                        title: model.displayName,
+                        title: modelRowTitle(for: model),
                         subtitle: "Private inference. Proof when fetched.",
                         badges: model.routeDisclosureBadges,
                         trailing: modelRowTrailing(for: model),
@@ -247,7 +263,7 @@ struct ModelPickerView: View {
                         ModelSpecRow(
                             symbolName: "sparkles",
                             symbolColor: Color.textSecondary,
-                            title: model.displayName,
+                            title: modelRowTitle(for: model),
                             subtitle: reasoningSubtitle(for: model, index: index),
                             badges: modelRowBadges(for: model, prefix: index == 0 ? "Expert" : "Heavy"),
                             trailing: modelRowTrailing(for: model),
@@ -265,7 +281,7 @@ struct ModelPickerView: View {
                         ModelSpecRow(
                             symbolName: model.isOpenWeightCandidate ? "shippingbox" : "cpu",
                             symbolColor: Color.textSecondary,
-                            title: model.displayName,
+                            title: modelRowTitle(for: model),
                             subtitle: privateModelSubtitle(for: model),
                             badges: model.routeDisclosureBadges,
                             trailing: modelRowTrailing(for: model),
@@ -283,7 +299,7 @@ struct ModelPickerView: View {
                         ModelSpecRow(
                             symbolName: model.isIronclawMobileRuntime ? "iphone" : "terminal",
                             symbolColor: Color.textSecondary,
-                            title: model.displayName,
+                            title: modelRowTitle(for: model),
                             subtitle: agentSubtitle(for: model),
                             badges: model.routeDisclosureBadges,
                             trailing: modelRowTrailing(for: model),
@@ -319,7 +335,7 @@ struct ModelPickerView: View {
                         ModelSpecRow(
                             symbolName: "cpu",
                             symbolColor: Color.textSecondary,
-                            title: model.displayName,
+                            title: modelRowTitle(for: model),
                             subtitle: cloudModelSubtitle(for: model),
                             badges: model.routeDisclosureBadges,
                             trailing: modelRowTrailing(for: model),
@@ -377,7 +393,7 @@ struct ModelPickerView: View {
                     ForEach(Array(lineup.enumerated()), id: \.element.id) { index, model in
                         CouncilNumberedRow(
                             number: index + 1,
-                            title: model.displayName,
+                            title: modelRowTitle(for: model),
                             subtitle: councilSubtitle(for: model, index: index),
                             showsDivider: index != lineup.count - 1
                         )
@@ -510,7 +526,7 @@ struct ModelPickerView: View {
                     ModelSpecRow(
                         symbolName: isSelected ? "checkmark.circle.fill" : "plus.circle",
                         symbolColor: isSelected ? Color.actionPrimary : Color.textSecondary,
-                        title: model.displayName,
+                        title: modelRowTitle(for: model),
                         subtitle: manualCouncilSubtitle(for: model),
                         badges: model.routeDisclosureBadges,
                         trailing: isSelected ? .checkmark : .none,

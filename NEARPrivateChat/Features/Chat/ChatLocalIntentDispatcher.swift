@@ -49,15 +49,14 @@ enum ChatLocalIntentDispatcher {
     private static func shouldHandleLocally(_ intent: QuickIntent) -> Bool {
         switch intent {
         case .price, .stock, .watchlist, .trendingCrypto, .cryptoMarket, .news,
-             .weather, .worldTime, .fx, .unitConvert, .define, .math, .dateMath,
-             .tipSplit:
+             .weather, .worldTime, .fx, .unitConvert, .define:
             return false
         case .nearAccount(let account):
             return account == nil
         case .briefMe, .remember, .recallMemory, .forget, .forgetAutoLearned,
              .setMemoryCapture, .setDocumentPrivacy, .activityLog, .listTrackers,
-             .capabilities, .searchHistory, .createReminder, .createTracker,
-             .requestNearAccountTracker, .trackLast:
+             .capabilities, .math, .dateMath, .tipSplit, .searchHistory,
+             .createReminder, .createTracker, .requestNearAccountTracker, .trackLast:
             return true
         }
     }

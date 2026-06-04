@@ -383,11 +383,11 @@ struct ModelOption: Decodable, Identifiable, Hashable {
         let lowercasedID = comparableID.lowercased()
         let lowercased = searchText.lowercased()
 
-        if isNearCloudModel {
-            return lowercased.contains("embedding") ||
-                lowercased.contains("reranker") ||
-                lowercased.contains("whisper") ||
-                lowercased.contains("flux")
+        if lowercased.contains("embedding") ||
+            lowercased.contains("reranker") ||
+            lowercased.contains("whisper") ||
+            lowercased.contains("flux") {
+            return true
         }
 
         if [
@@ -395,6 +395,7 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             "openai/gpt-5.1",
             "openai/gpt-5.4",
             "openai/gpt-4.1",
+            "openai/o3",
             "google/gemini-2.5-pro",
             "google/gemini-2.5-flash",
             "anthropic/claude-opus-4-5",

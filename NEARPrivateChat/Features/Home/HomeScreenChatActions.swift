@@ -105,8 +105,12 @@ extension HomeScreen {
             chatStore.selectProject(project)
         }
 
+        let launchDraft = homeStore.homeLaunchDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         chatStore.startNewConversation()
-        chatStore.draft = stagedPrompt.prompt
+        chatStore.draft = stagedPrompt.resolvedPrompt(existingDraft: launchDraft)
+        if !launchDraft.isEmpty {
+            homeStore.clearLaunchComposer()
+        }
         chatStore.bannerMessage = stagedPrompt.banner
         AppHaptics.selection()
         onStartNewChat()

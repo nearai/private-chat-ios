@@ -204,7 +204,11 @@ struct ChatSourceRoutingSemantics: Hashable {
             }
         }
         let sourceWebPolicy = webPolicy(for: focus, webSearchEnabled: webSearchEnabled)
-        let appGroundingPolicy = appGroundingPolicy(for: focus, webSearchEnabled: webSearchEnabled)
+        let appGroundingPolicy = appGroundingPolicy(
+            for: focus,
+            webSearchEnabled: webSearchEnabled,
+            route: route
+        )
         let supportsNativeWebTool = route == .nearPrivate || route == .ironclawMobile
         let supportsAppGrounding = route == .nearCloud || route == .ironclawMobile || route == .ironclawHosted
 
@@ -232,7 +236,11 @@ struct ChatSourceRoutingSemantics: Hashable {
         }
     }
 
-    private static func appGroundingPolicy(for focus: ChatFocusState, webSearchEnabled: Bool) -> ChatWebUsePolicy {
+    private static func appGroundingPolicy(
+        for focus: ChatFocusState,
+        webSearchEnabled: Bool,
+        route: ChatRouteKind
+    ) -> ChatWebUsePolicy {
         switch focus {
         case .web, .research:
             return .always
@@ -243,6 +251,9 @@ struct ChatSourceRoutingSemantics: Hashable {
         case .links:
             return webSearchEnabled ? .whenFreshRequested : .never
         case .auto:
+            if route == .nearCloud {
+                return webSearchEnabled ? .whenHelpful : .whenFreshRequested
+            }
             return webSearchEnabled ? .whenHelpful : .never
         }
     }

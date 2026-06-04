@@ -358,6 +358,22 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(web.attachesPromptFiles)
     }
 
+    func testSourceRoutingSemanticsNearCloudAutoKeepsCloudRouteForFreshPrompts() {
+        let cloudAuto = RoutePlanner.sourceRoutingSemantics(
+            sourceMode: .auto,
+            researchModeEnabled: false,
+            webSearchEnabled: false,
+            route: .nearCloud
+        )
+
+        XCTAssertEqual(cloudAuto.modelNativeWebToolPolicy, .never)
+        XCTAssertEqual(cloudAuto.appWebGroundingPolicy, .whenFreshRequested)
+        XCTAssertTrue(cloudAuto.attachesSavedLinkSourcePack)
+        XCTAssertTrue(cloudAuto.attachesProjectFileSourcePack)
+
+        XCTAssertFalse(RoutePlanner.promptNeedsLiveWeb("Do not use web. Answer from this chat only."))
+    }
+
     func testAskOrchestratorRequestsCloudKeyWithoutChangingSelectedRoute() {
         let decision = AskOrchestrator.decide(
             AskOrchestrator.Input(
@@ -426,7 +442,11 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("Deep research the latest Claude Code changes with citations."))
         XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("Look up source-backed pricing for Rolex GMT Master II as of today."))
         XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("Investigate current FDA supplement recalls from sources."))
+        XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("Apple Vision Pro vs Meta Quest 3 price"))
+        XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("Apple Watch Ultra price"))
+        XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("compare Apple Watch Ultra and Oura Ring prices"))
         XCTAssertFalse(RoutePlanner.promptNeedsLiveWeb("Write a poem about focus."))
+        XCTAssertFalse(RoutePlanner.promptNeedsLiveWeb("Write a paragraph about price elasticity."))
     }
 
     func testRoutePlannerDetectsCouncilPromptsWithoutChatStore() {

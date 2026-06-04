@@ -195,6 +195,19 @@ extension PrivateChatCoreTests {
         )
     }
 
+    func testHomeStagedPromptPreservesExistingLaunchDraft() {
+        let stagedPrompt = HomeStagedPrompt(prompt: "Plan the next Agent task: ")
+
+        XCTAssertEqual(
+            stagedPrompt.resolvedPrompt(existingDraft: "run a hostile review against the chat route"),
+            "Plan the next Agent task: run a hostile review against the chat route"
+        )
+        XCTAssertEqual(
+            stagedPrompt.resolvedPrompt(existingDraft: "Plan the next Agent task: run a hostile review"),
+            "Plan the next Agent task: run a hostile review"
+        )
+    }
+
     func testPersonalizedStarterFromMemory() {
         let bitcoin = QuickIntentParser.personalizedStarter(fromMemory: ["I hold a lot of bitcoin", "I live in Denver"])
         XCTAssertEqual(bitcoin?.symbol, "chart.line.uptrend.xyaxis")

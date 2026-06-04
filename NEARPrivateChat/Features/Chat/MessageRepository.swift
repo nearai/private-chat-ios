@@ -279,6 +279,9 @@ struct MessageRepository {
         if lowercased.contains("chat route needs a valid ironclaw token") {
             return "Hosted IronClaw is reachable. The Agent token is missing or invalid. Open Account and test the Agent connection."
         }
+        if lowercased.contains("failed to check rate limit") {
+            return "Could not verify account usage before sending. Refresh Account or sign in again, then retry."
+        }
         if lowercased.contains("tool 'http' failed") &&
             lowercased.contains("request returned redirect") &&
             lowercased.contains("blocked to prevent ssrf") {

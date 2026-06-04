@@ -11,10 +11,10 @@ extension Notification.Name {
     static let legalTermsAcceptanceDidChange = Notification.Name("legalTermsAcceptanceDidChange")
 }
 
-/// Auth screen — Claude Design v2 spec.
+/// Auth screen.
 ///
 /// Single-column iPhone layout (390x844):
-///   - Top: 48x48 NEAR mark + headline "Private AI with verifiable answers."
+///   - Top: NEAR mark + wordmark + concise product promise.
 ///   - Spacer pushes the rest to the bottom (`margin-top: auto` in CSS).
 ///   - Bottom: terms row card, three provider buttons, "Open shared link"
 ///     quiet button, debug-only "More sign-in options" disclosure (DEBUG
@@ -39,14 +39,16 @@ struct AuthView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Top — mark + headline, centered with 56pt top padding.
-            VStack(spacing: 28) {
+            // Top — mark + headline, centered with enough air to feel calm
+            // without pushing the action stack too low on small phones.
+            VStack(spacing: 20) {
                 Image("NearMark")
                     .resizable()
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 48, height: 48)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .frame(width: 52, height: 52)
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .shadow(color: Color.brandBlue.opacity(0.16), radius: 14, y: 6)
                     .accessibilityHidden(true)
 
                 ProductWordmark(alignment: .center, scale: 0.9)
@@ -59,15 +61,15 @@ struct AuthView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 310)
             }
-            .padding(.top, 56)
+            .padding(.top, 44)
             .frame(maxWidth: .infinity)
 
             // Spacer pushes terms + providers to the bottom of the screen
             // (spec uses `margin-top: auto` on the bottom block).
-            Spacer(minLength: 24)
+            Spacer(minLength: 20)
 
             // Bottom — terms row, providers, utility actions, footer.
-            VStack(spacing: 14) {
+            VStack(spacing: 12) {
                 TermsRowCard(
                     isAccepted: hasAcceptedLegalTerms,
                     onToggle: {
@@ -77,7 +79,7 @@ struct AuthView: View {
                     onReadTerms: { showingLegalTerms = true }
                 )
 
-                VStack(spacing: 10) {
+                VStack(spacing: 8) {
                     AuthProviderButton(
                         provider: .near,
                         isLoading: sessionStore.isAuthenticating,
@@ -104,50 +106,52 @@ struct AuthView: View {
                 Button {
                     showingSharedLink = true
                 } label: {
-                    Text("Open shared link")
-                        .font(.subheadline)
+                    Label("Open shared link", systemImage: "link")
+                        .font(.subheadline.weight(.medium))
                         .foregroundStyle(Color.textSecondary)
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 12)
+                        .labelStyle(.titleAndIcon)
+                        .frame(height: 42)
                         .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
+                        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.appBorder, lineWidth: 1)
+                        }
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
 
-                #if DEBUG
-                // One-tap session-token paste for debug builds. Lives at
-                // the bottom of the Auth screen so it's not buried under
-                // "More sign-in options" while OAuth callback allowlist
-                // issues are being worked out.
-                Button {
-                    showingTokenLogin = true
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "key.fill")
-                            .font(.footnote.weight(.semibold))
-                        Text("Paste session token (DEBUG)")
-                            .font(.subheadline.weight(.semibold))
+                if hasAcceptedLegalTerms {
+                    #if DEBUG
+                    // One-tap session-token paste for debug builds after legal acceptance.
+                    Button {
+                        showingTokenLogin = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "key.fill")
+                                .font(.footnote.weight(.semibold))
+                            Text("Paste session token (DEBUG)")
+                                .font(.footnote.weight(.semibold))
+                        }
+                        .foregroundStyle(Color.actionPrimary)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 16)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(Color.actionPrimary.opacity(0.18), lineWidth: 1)
+                        }
                     }
-                    .foregroundStyle(Color.actionPrimary)
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 16)
-                    .frame(maxWidth: .infinity)
-                    .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(Color.actionPrimary.opacity(0.18), lineWidth: 1)
-                    }
-                }
-                .buttonStyle(.plain)
-                .disabled(!hasAcceptedLegalTerms)
-                .opacity(hasAcceptedLegalTerms ? 1 : 0.5)
+                    .buttonStyle(.plain)
 
-                DebugMoreSignInOptions(
-                    isOpen: $showingMoreSignInOptions,
-                    isEnabled: hasAcceptedLegalTerms,
-                    onSelectToken: { showingTokenLogin = true }
-                )
-                #endif
+                    DebugMoreSignInOptions(
+                        isOpen: $showingMoreSignInOptions,
+                        isEnabled: true,
+                        onSelectToken: { showingTokenLogin = true }
+                    )
+                    #endif
+                }
 
                 Text("https://private.near.ai")
                     .font(.footnote)
@@ -155,11 +159,11 @@ struct AuthView: View {
                     .fontWeight(.regular)
                     .foregroundStyle(Color.textSecondary)
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 18)
+                    .padding(.top, 10)
             }
         }
         .padding(.horizontal, 24)
-        .padding(.bottom, 28)
+        .padding(.bottom, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.appBackground.ignoresSafeArea())
         .sheet(isPresented: $showingLegalTerms) {
@@ -248,13 +252,14 @@ struct AuthView: View {
 /// Mark + headline block used by auth-adjacent surfaces.
 struct AuthHeroCard: View {
     var body: some View {
-        VStack(spacing: 28) {
+        VStack(spacing: 20) {
             Image("NearMark")
                 .resizable()
                 .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 48, height: 48)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .shadow(color: Color.brandBlue.opacity(0.16), radius: 14, y: 6)
                 .accessibilityHidden(true)
 
             ProductWordmark(alignment: .center, scale: 0.9)
@@ -273,34 +278,34 @@ private struct TermsRowCard: View {
 
     var body: some View {
         Button(action: onToggle) {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 CheckBox(isOn: isAccepted)
 
                 Text("I agree to the Terms and Privacy Policy")
-                    .font(.system(.footnote, design: .rounded).weight(.regular))
+                    .font(.system(.footnote, design: .rounded).weight(.medium))
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Button(action: onReadTerms) {
-                    Text("Read terms")
-                        .font(.system(.footnote, design: .rounded).weight(.medium))
+                    Text("Read")
+                        .font(.system(.footnote, design: .rounded).weight(.semibold))
                         .foregroundStyle(Color.actionPrimary)
                         .lineLimit(1)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Read terms")
             }
-            .padding(.vertical, 11)
+            .padding(.vertical, 12)
             .padding(.horizontal, 14)
             .frame(maxWidth: .infinity)
-            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.appBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(isAccepted ? Color.actionPrimary.opacity(0.22) : Color.appBorder, lineWidth: 1)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
@@ -315,7 +320,7 @@ private struct CheckBox: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 6, style: .continuous)
             .fill(isOn ? Color.actionPrimary : .clear)
-            .frame(width: 20, height: 20)
+            .frame(width: 22, height: 22)
             .overlay {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .strokeBorder(isOn ? Color.actionPrimary : Color.textTertiary, lineWidth: 1.5)
@@ -323,7 +328,7 @@ private struct CheckBox: View {
             .overlay {
                 if isOn {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(.white)
                 }
             }
@@ -340,9 +345,11 @@ private struct AuthProviderButton: View {
     let action: () -> Void
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+
         Button(action: action) {
             HStack(spacing: 12) {
-                ProviderGlyph(provider: provider, tint: isEnabled ? .white : Color.textTertiary)
+                ProviderGlyph(provider: provider, tint: isEnabled ? .white : Color.textSecondary)
                     .frame(width: 20, height: 20)
 
                 Text(provider.title)
@@ -354,21 +361,24 @@ private struct AuthProviderButton: View {
                 if isLoading {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(isEnabled ? .white : Color.textTertiary)
+                        .tint(isEnabled ? .white : Color.textSecondary)
                         .frame(width: 20, height: 20)
                 } else {
                     Color.clear.frame(width: 20, height: 20)
                 }
             }
-            .foregroundStyle(isEnabled ? .white : Color.textTertiary)
+            .foregroundStyle(isEnabled ? .white : Color.textSecondary)
             .padding(.horizontal, 18)
-            .frame(height: 52)
+            .frame(height: 50)
             .frame(maxWidth: .infinity)
             .background(
-                (isEnabled ? Color.actionPrimary : Color.appSecondaryBackground),
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                (isEnabled ? Color.actionPrimary : Color.appPanelBackground),
+                in: shape
             )
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                shape.stroke(isEnabled ? Color.clear : Color.appBorder, lineWidth: 1)
+            }
+            .contentShape(shape)
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled || isLoading)
@@ -377,7 +387,7 @@ private struct AuthProviderButton: View {
 }
 
 /// Real brand glyphs for each provider, rendered monochrome white on the
-/// brand-blue button per Claude Design's house rule. The shapes themselves
+/// brand-blue button per the auth screen's house style. The shapes themselves
 /// are the canonical brand marks (NEAR letterform, Google "G", GitHub
 /// Octocat), not generic SF Symbol placeholders.
 private struct ProviderGlyph: View {
@@ -405,7 +415,7 @@ private struct ProviderGlyph: View {
 }
 
 /// Google "G" letterform — single-fill monochrome rendering of the canonical
-/// Google G shape. Matches the path used in the Claude Design Auth spec.
+/// Google G shape.
 private struct GoogleGGlyph: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()

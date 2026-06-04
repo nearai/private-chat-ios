@@ -623,6 +623,11 @@ final class ModelCatalogStore: ObservableObject {
     }
 
     func defaultCouncilModelIDs() -> [String] {
+        let catalogBackedModels = Self.uniqueModels(models + cloudRouteModels)
+            .filter(isCouncilEligible)
+        guard !catalogBackedModels.isEmpty else {
+            return []
+        }
         let eligibleIDs = Set(chatModels.filter(isCouncilEligible).map(\.id))
         guard !eligibleIDs.isEmpty else {
             return []
@@ -964,18 +969,6 @@ final class ModelCatalogStore: ObservableObject {
                     modelDescription: "NEAR Private open-weight fast reasoning route with proof support.",
                     modelIcon: nil,
                     aliases: ["Qwen", "private", "open-weight", "fast"]
-                )
-            ),
-            ModelOption(
-                modelID: "moonshotai/kimi-k2.6",
-                publicModel: true,
-                metadata: ModelOption.Metadata(
-                    verifiable: false,
-                    contextLength: nil,
-                    modelDisplayName: "Kimi K2.6",
-                    modelDescription: "NEAR Private catalog route. Proof availability depends on the current backend report.",
-                    modelIcon: nil,
-                    aliases: ["Kimi", "Moonshot", "private"]
                 )
             )
         ]

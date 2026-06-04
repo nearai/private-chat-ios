@@ -113,6 +113,12 @@ final class ChatMessageLoadCoordinator {
             return
         } catch {
             guard canApplyMessageLoad(for: conversation.id, generation: generation) else { return }
+            if Self.isMissingConversation(error) {
+                conversationStore.removeConversation(id: conversation.id)
+                timelineStore.messages = []
+                callbacks.showBanner("That chat is no longer available. Removed it from Home.")
+                return
+            }
             if cachedMessages?.isEmpty == false {
                 callbacks.showBanner("Could not refresh this chat. Showing cached messages.")
             } else {
@@ -139,5 +145,13 @@ final class ChatMessageLoadCoordinator {
         !Task.isCancelled &&
             self.generation == generation &&
             conversationStore.selectedConversation?.id == conversationID
+    }
+
+    private static func isMissingConversation(_ error: Error) -> Bool {
+        if case APIError.status(let code, _) = error, code == 404 {
+            return true
+        }
+        let message = error.localizedDescription.lowercased()
+        return message.contains("http 404") || message.contains("conversation not found")
     }
 }

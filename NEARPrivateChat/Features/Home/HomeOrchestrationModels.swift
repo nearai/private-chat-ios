@@ -95,6 +95,10 @@ struct HomeStagedPrompt: Equatable {
         self.projectID = projectID
         self.banner = banner
     }
+
+    func resolvedPrompt(existingDraft: String) -> String {
+        EmptyChatStarterCoordinator.stagedPrompt(prompt, existingDraft: existingDraft)
+    }
 }
 
 enum HomeOrchestrationAction: Equatable {
@@ -149,4 +153,3 @@ struct HomeOrchestrationPlan: Equatable {
 
     var activeCount: Int { liveItems.count }
 }
-

@@ -172,15 +172,12 @@ enum QuickIntentParser {
         if contains(text, ["what do you remember", "what do you know about me", "what have you remembered", "what's in your memory", "whats in your memory", "show my memory", "show what you remember"]) {
             return .recallMemory
         }
-        if contains(text, ["what have you done", "what did you do", "show your activity", "activity log", "what have you been up to", "show what you've done", "your recent activity"]) {
+        if isActivityLogRequest(text) {
             return .activityLog
         }
         // Every needle names a tracker/alert/briefing, so ambiguous phrases like
         // "what are you watching on tv" can't be mistaken for this.
-        if contains(text, ["what are you tracking", "show my trackers", "list my trackers",
-                            "show my alerts", "list my alerts", "what alerts do i have",
-                            "what are my trackers", "my active trackers", "show my briefings",
-                            "list my briefings", "my trackers and alerts"]) {
+        if isListTrackersRequest(text) {
             return .listTrackers
         }
         // Capabilities / help — EXACT (punctuation-stripped) match only, so
@@ -204,16 +201,10 @@ enum QuickIntentParser {
                             "auto-remember again", "start remembering things automatically"]) {
             return .setMemoryCapture(enabled: true)
         }
-        // Document privacy mode — keep attached docs entirely on-device.
-        if contains(text, ["keep documents on device", "keep my documents on device", "keep files on device",
-                            "keep documents private", "keep my documents private", "don't upload my documents",
-                            "dont upload my documents", "don't upload documents", "private documents on",
-                            "process documents on device", "keep my docs on device", "private document mode"]) {
-            return .setDocumentPrivacy(onDevice: true)
-        }
-        if contains(text, ["upload documents normally", "documents off device", "turn off private documents",
-                            "stop keeping documents on device", "private documents off", "upload my documents"]) {
-            return .setDocumentPrivacy(onDevice: false)
+        // Document privacy mode — keep attached docs entirely on-device. Treat
+        // these as commands, not discussion topics ("can I upload documents?").
+        if let documentPrivacy = documentPrivacyCommand(text) {
+            return .setDocumentPrivacy(onDevice: documentPrivacy)
         }
         if contains(text, ["forget what you learned automatically", "forget what you auto", "forget the auto-learned",
                             "forget auto-learned", "clear auto memory", "clear what you inferred",
@@ -221,14 +212,14 @@ enum QuickIntentParser {
                             "forget things you learned on your own"]) {
             return .forgetAutoLearned
         }
-        if contains(text, ["forget everything", "forget it all", "forget all", "clear your memory", "clear my memory", "delete your memory", "wipe your memory", "erase your memory"]) {
+        if let fact = parseRemember(text, original: trimmedRaw) {
+            return .remember(text: fact)
+        }
+        if isClearAllMemoryCommand(text) {
             return .forget(text: nil)
         }
         if let toForget = parseForget(text, original: trimmedRaw) {
             return .forget(text: toForget)
-        }
-        if let fact = parseRemember(text, original: trimmedRaw) {
-            return .remember(text: fact)
         }
         if let query = parseSearchHistory(text, original: trimmedRaw) {
             return .searchHistory(query: query)
@@ -352,6 +343,7 @@ enum QuickIntentParser {
         // "tokyo forecast"). Without a place we fall through to the model.
         if !blocksLiveNetwork,
            contains(text, ["weather", "forecast", "temperature"]),
+           !looksLikeNonWeatherForecast(text),
            let place = extractLocation(from: text) {
             return .weather(query: place)
         }
@@ -437,6 +429,82 @@ enum QuickIntentParser {
         "what can this do", "what else can you do", "how do you work", "what do you do"
     ]
 
+    private static func normalizedCommandText(_ text: String) -> String {
+        var normalized = text
+            .lowercased()
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: " ?.!"))
+        if normalized.hasPrefix("please ") {
+            normalized = String(normalized.dropFirst("please ".count))
+        }
+        return normalized
+    }
+
+    private static func isQuestionLike(_ text: String) -> Bool {
+        let normalized = normalizedCommandText(text)
+        if text.contains("?") { return true }
+        return [
+            "can i ", "could i ", "should i ", "do i ", "do we ",
+            "should we ", "is it ", "are we ", "what happens if ",
+            "why ", "how do i ", "how should i "
+        ].contains { normalized.hasPrefix($0) }
+    }
+
+    private static func isActivityLogRequest(_ text: String) -> Bool {
+        let normalized = normalizedCommandText(text)
+        return [
+            "what have you done", "what have you done recently",
+            "what did you do", "show your activity", "activity log",
+            "what have you been up to", "show what you've done",
+            "show what youve done", "your recent activity"
+        ].contains(normalized)
+    }
+
+    private static func isListTrackersRequest(_ text: String) -> Bool {
+        let normalized = normalizedCommandText(text)
+        return [
+            "what are you tracking", "show my trackers", "list my trackers",
+            "show my alerts", "list my alerts", "what alerts do i have",
+            "what are my trackers", "my active trackers", "show my briefings",
+            "list my briefings", "my trackers and alerts"
+        ].contains(normalized)
+    }
+
+    private static func documentPrivacyCommand(_ text: String) -> Bool? {
+        guard !isQuestionLike(text) else { return nil }
+        let normalized = normalizedCommandText(text)
+        let onDevicePrefixes = [
+            "keep documents on device", "keep my documents on device",
+            "keep files on device", "keep documents private",
+            "keep my documents private", "don't upload my documents",
+            "dont upload my documents", "don't upload documents",
+            "dont upload documents", "private documents on",
+            "process documents on device", "keep my docs on device",
+            "private document mode"
+        ]
+        if onDevicePrefixes.contains(where: { normalized == $0 || normalized.hasPrefix($0 + " ") }) {
+            return true
+        }
+        let offDevicePrefixes = [
+            "upload documents normally", "documents off device",
+            "turn off private documents", "stop keeping documents on device",
+            "private documents off", "upload my documents"
+        ]
+        if offDevicePrefixes.contains(where: { normalized == $0 || normalized.hasPrefix($0 + " ") }) {
+            return false
+        }
+        return nil
+    }
+
+    private static func isClearAllMemoryCommand(_ text: String) -> Bool {
+        let normalized = normalizedCommandText(text)
+        return [
+            "forget everything", "forget it all", "forget all",
+            "clear your memory", "clear my memory", "delete your memory",
+            "wipe your memory", "erase your memory"
+        ].contains(normalized)
+    }
+
     private static func requestsWorldTime(_ text: String) -> Bool {
         if contains(text, [
             "what time is it", "current time", "local time", "time in ",
@@ -446,6 +514,25 @@ enum QuickIntentParser {
         }
         let simplePlaceTimePattern = #"^[a-z][a-z .'-]{1,40}\s+(time|clock)\??$"#
         return text.range(of: simplePlaceTimePattern, options: .regularExpression) != nil
+    }
+
+    private static func looksLikeNonWeatherForecast(_ text: String) -> Bool {
+        guard text.contains("forecast"),
+              !contains(text, ["weather", "temperature"]) else {
+            return false
+        }
+        if knownStocks.contains(where: { stock in
+            wordPresent(stock.symbol.lowercased(), in: text) ||
+                stock.names.contains { wordPresent($0, in: text) }
+        }) {
+            return true
+        }
+        return contains(text, [
+            "revenue", "earnings", "sales", "growth", "demand", "roadmap",
+            "backlog", "sprint", "launch", "product", "pricing", "retention",
+            "churn", "adoption", "runway", "burn", "pipeline", "strategy",
+            "market", "marketing", "users", "customers", "conversion"
+        ])
     }
 
     private static func blocksLiveNetwork(_ text: String) -> Bool {
@@ -1503,8 +1590,16 @@ enum QuickIntentParser {
             "general", "trouble", "debt", "life", "doubt", "secret", "denial",
             "theory", "practice", "question", "jeopardy", "vain", "retrospect",
             "hindsight", "moment", "mood", "zone", "dark", "fact", "particular",
-            "common", "private", "public", "person", "danger", "limbo", "style"
+            "common", "private", "public", "person", "danger", "limbo", "style",
+            "roadmap", "backlog", "sprint", "launch", "strategy", "plan",
+            "plans", "pipeline", "product", "review", "critique", "pricing"
         ]
+        let nonPlacePhrases: Set<String> = [
+            "product roadmap", "app roadmap", "product launch", "app launch",
+            "launch plan", "release plan", "design review", "product review",
+            "growth strategy", "go to market", "go-to-market"
+        ]
+        if nonPlacePhrases.contains(placeless) { return nil }
         if nonPlaceNouns.contains(placeless) { return nil }
         return location
     }
