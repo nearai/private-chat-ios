@@ -199,7 +199,7 @@ struct RoutePlanner {
         let liveAskCue = [
             "what", "how much", "find", "look up", "track", "monitor",
             "watch", "compare", "comparison", " vs ", " versus ",
-            "price of", "prices of", "prices for", "value of", "cost of", "quote for"
+            "price of", "price for", "prices of", "prices for", "value of", "cost of", "quote for"
         ].contains { lowercased.contains($0) }
         let endsWithValueCue =
             lowercased.range(of: #"\b(price|prices|value|worth|quote|rate)\??$"#, options: .regularExpression) != nil
@@ -234,6 +234,17 @@ struct RoutePlanner {
         ]
         if directPhrases.contains(where: { lowercased.contains($0) }) {
             return true
+        }
+
+        let modelSurfaceExclusions = [
+            "without changing models",
+            "model picker",
+            "model selection",
+            "selected model",
+            "route labels"
+        ]
+        if modelSurfaceExclusions.contains(where: { lowercased.contains($0) }) {
+            return false
         }
 
         let comparisonWords = [
@@ -286,6 +297,7 @@ struct RoutePlanner {
             "clone and",
             "research to code",
             "research-to-code",
+            "open a pr",
             "write software",
             "build software"
         ]
