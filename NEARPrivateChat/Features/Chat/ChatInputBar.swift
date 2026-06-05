@@ -68,7 +68,7 @@ struct InputBar: View {
                 slashCommandTray
             }
 
-            composerRouteControl
+            composerRoutingControls
 
             HStack(alignment: .bottom, spacing: 8) {
                 Menu {

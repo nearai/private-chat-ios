@@ -14,6 +14,8 @@ struct ComposerRouteChip: View {
                 .font(.footnote)
                 .fontWeight(.medium)
                 .lineLimit(1)
+                .minimumScaleFactor(0.86)
+                .frame(maxWidth: 180, alignment: .leading)
             if showsChevron {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 11, weight: .semibold))
@@ -21,14 +23,39 @@ struct ComposerRouteChip: View {
             }
         }
         .foregroundStyle(isActive ? Color.actionPress : Color.textPrimary)
-        .padding(.leading, 10)
-        .padding(.trailing, 12)
+        .padding(.leading, 9)
+        .padding(.trailing, 10)
         .frame(height: 30)
         .background(background, in: Capsule())
         .overlay {
             Capsule()
                 .stroke(border, lineWidth: 1)
         }
+    }
+
+    private var background: Color {
+        isActive ? Color.actionFill : Color.appPanelBackground
+    }
+
+    private var border: Color {
+        isActive ? Color.actionPrimary.opacity(0.30) : Color.appBorder
+    }
+}
+
+struct ComposerRouteIconChip: View {
+    let symbolName: String
+    let isActive: Bool
+
+    var body: some View {
+        Image(systemName: symbolName)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(isActive ? Color.actionPress : Color.textPrimary)
+            .frame(width: 30, height: 30)
+            .background(background, in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(border, lineWidth: 1)
+            }
     }
 
     private var background: Color {

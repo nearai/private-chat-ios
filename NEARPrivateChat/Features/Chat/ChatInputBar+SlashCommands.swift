@@ -133,7 +133,7 @@ extension InputBar {
         !researchButtonActive && chatStore.sourceMode != .auto && chatStore.sourceMode != .web
     }
 
-    func sourceModeMenuSymbolName(isActive: Bool, fallback: String = "checkmark") -> String {
+    func sourceModeMenuSymbolName(isActive: Bool, fallback: String = "circle") -> String {
         isActive ? "checkmark" : fallback
     }
 

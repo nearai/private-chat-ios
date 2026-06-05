@@ -3,7 +3,7 @@ import SwiftUI
 extension InputBar {
     var composerRoutingControls: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 Button {
                     openModelPicker(openingCouncil: false)
                 } label: {
@@ -32,27 +32,27 @@ extension InputBar {
                 .accessibilityLabel(chatStore.isCouncilModeEnabled ? "LLM Council active" : "Configure LLM Council")
                 .accessibilityHint("Opens the Council lineup for the next message.")
 
+                sourceModeControl
+
                 if selectedModelSupportsReasoningEffort {
                     Menu {
                         ForEach(ModelReasoningEffort.allCases) { effort in
                             Button {
                                 chatStore.setReasoningEffort(effort)
                             } label: {
-                                Label(effort.title, systemImage: effort == chatStore.advancedModelParams.reasoningEffort ? "checkmark" : "circle")
+                                Label(reasoningEffortMenuTitle(for: effort), systemImage: reasoningEffortMenuSymbolName(for: effort))
                             }
                         }
                         Divider()
                         Button {
                             openModelPicker(openingCouncil: false)
                         } label: {
-                            Label("Open model settings", systemImage: "slider.horizontal.3")
+                            Label("Advanced model settings", systemImage: "slider.horizontal.3")
                         }
                     } label: {
-                        ComposerRouteChip(
-                            title: "Effort \(chatStore.advancedModelParams.reasoningEffort.title)",
+                        ComposerRouteIconChip(
                             symbolName: "gauge.medium",
-                            isActive: chatStore.advancedModelParams.reasoningEffort != .automatic,
-                            showsChevron: false
+                            isActive: chatStore.advancedModelParams.reasoningEffort != .automatic
                         )
                     }
                     .buttonStyle(.plain)
@@ -64,151 +64,17 @@ extension InputBar {
         }
     }
 
-    var composerRouteControl: some View {
-        Menu {
-            Button {
-                openModelPicker(openingCouncil: false)
-            } label: {
-                Label("Model: \(chatStore.selectedModelDisplayName)", systemImage: composerModelSymbolName)
-            }
-
-            Button {
-                openModelPicker(openingCouncil: true)
-            } label: {
-                Label(
-                    chatStore.isCouncilModeEnabled ? "Council: \(chatStore.activeCouncilModels.count) models" : "Use Council",
-                    systemImage: "person.3"
-                )
-            }
-
-            if selectedModelSupportsReasoningEffort {
-                Divider()
-                ForEach(ModelReasoningEffort.allCases) { effort in
-                    Button {
-                        chatStore.setReasoningEffort(effort)
-                    } label: {
-                        Label("Effort: \(effort.title)", systemImage: effort == chatStore.advancedModelParams.reasoningEffort ? "checkmark" : "gauge.medium")
-                    }
-                }
-            }
-
-            Divider()
-
-            Button {
-                AppHaptics.selection()
-                chatStore.selectSourceMode(.auto)
-            } label: {
-                Label("Auto sources", systemImage: sourceModeMenuSymbolName(isActive: sourceModeControlIsAuto))
-            }
-
-            Button {
-                AppHaptics.selection()
-                chatStore.selectSourceMode(.web)
-            } label: {
-                Label("Web", systemImage: sourceModeMenuSymbolName(isActive: sourceModeControlIsWeb))
-            }
-
-            Button {
-                selectProjectSourceMode()
-            } label: {
-                Label("Project", systemImage: sourceModeMenuSymbolName(isActive: sourceModeControlIsProject))
-            }
-
-            Button {
-                selectResearchSourceMode()
-            } label: {
-                Label("Research", systemImage: sourceModeMenuSymbolName(isActive: researchButtonActive, fallback: "doc.text.magnifyingglass"))
-            }
-            .disabled(chatStore.selectedRouteUsesNearCloud)
-
-            Divider()
-
-            ForEach(exactProjectSourceModes) { mode in
-                Button {
-                    AppHaptics.selection()
-                    chatStore.selectSourceMode(mode)
-                    if mode == .files && chatStore.selectedProject == nil && composerStore.pendingAttachments.isEmpty {
-                        showingProjectFiles = true
-                    }
-                } label: {
-                    Label(sourceModeMenuTitle(for: mode), systemImage: exactSourceModeMenuSymbolName(for: mode))
-                }
-            }
-
-            if !quickStartSuggestions.isEmpty {
-                Divider()
-
-                Section("Quick starts") {
-                    ForEach(quickStartSuggestions) { suggestion in
-                        Button {
-                            applyQuickStartSuggestion(suggestion)
-                        } label: {
-                            Label(suggestion.title, systemImage: suggestion.symbolName)
-                        }
-                    }
-                }
-            }
-        } label: {
-            ComposerRouteChip(
-                title: composerRouteSummaryTitle,
-                symbolName: composerRouteSummarySymbolName,
-                isActive: composerRouteIsCustomized,
-                showsChevron: true
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Route \(composerRouteSummaryTitle)")
-        .accessibilityHint("Choose model, Council, effort, web, research, project files, or saved links for the next message.")
-    }
-
-    var composerRouteSummaryTitle: String {
-        var parts: [String] = []
-        if chatStore.isCouncilModeEnabled {
-            parts.append("Council \(chatStore.activeCouncilModels.count)")
-        } else if chatStore.selectedRouteKind == .nearPrivate {
-            parts.append("Private")
-        } else {
-            parts.append(chatStore.selectedProviderDisplayName)
-        }
-
-        if chatStore.sourceMode != .auto || chatStore.researchModeEnabled {
-            parts.append(composerSourceTitle)
-        }
-
-        if chatStore.advancedModelParams.reasoningEffort != .automatic {
-            parts.append(chatStore.advancedModelParams.reasoningEffort.title)
-        }
-
-        return parts.prefix(2).joined(separator: " · ")
-    }
-
-    var composerRouteSummarySymbolName: String {
-        if chatStore.isCouncilModeEnabled {
-            return "person.3"
-        }
-        if researchButtonActive {
-            return "doc.text.magnifyingglass"
-        }
-        if chatStore.sourceMode == .web {
-            return "globe"
-        }
-        if chatStore.sourceMode != .auto {
-            return "folder"
-        }
-        return composerModelSymbolName
-    }
-
-    var composerRouteIsCustomized: Bool {
-        chatStore.isCouncilModeEnabled ||
-            chatStore.sourceMode != .auto ||
-            chatStore.researchModeEnabled ||
-            chatStore.selectedRouteKind != .nearPrivate ||
-            chatStore.advancedModelParams.reasoningEffort != .automatic
-    }
-
     var selectedModelSupportsReasoningEffort: Bool {
         guard let model = chatStore.selectedModelOption else { return false }
         return model.isRecommendedReasoningModel || model.isNearCloudModel
+    }
+
+    func reasoningEffortMenuTitle(for effort: ModelReasoningEffort) -> String {
+        effort == .automatic ? "Auto effort" : "\(effort.title) effort"
+    }
+
+    func reasoningEffortMenuSymbolName(for effort: ModelReasoningEffort) -> String {
+        effort == chatStore.advancedModelParams.reasoningEffort ? "checkmark" : "gauge.medium"
     }
 
     var composerModelSymbolName: String {
@@ -233,7 +99,7 @@ extension InputBar {
         }
         switch chatStore.sourceMode {
         case .auto:
-            return "Auto"
+            return "Source"
         case .web:
             return "Web"
         case .links:
@@ -255,44 +121,46 @@ extension InputBar {
 
     var sourceModeControl: some View {
         Menu {
-            Button {
-                AppHaptics.selection()
-                chatStore.selectSourceMode(.auto)
-            } label: {
-                Label("Auto", systemImage: sourceModeMenuSymbolName(isActive: sourceModeControlIsAuto))
-            }
-
-            Button {
-                AppHaptics.selection()
-                chatStore.selectSourceMode(.web)
-            } label: {
-                Label("Web", systemImage: sourceModeMenuSymbolName(isActive: sourceModeControlIsWeb))
-            }
-
-            Button {
-                selectProjectSourceMode()
-            } label: {
-                Label("Project", systemImage: sourceModeMenuSymbolName(isActive: sourceModeControlIsProject))
-            }
-
-            Button {
-                selectResearchSourceMode()
-            } label: {
-                Label("Research", systemImage: sourceModeMenuSymbolName(isActive: researchButtonActive, fallback: "doc.text.magnifyingglass"))
-            }
-            .disabled(chatStore.selectedRouteUsesNearCloud)
-
-            Divider()
-
-            ForEach(exactProjectSourceModes) { mode in
+            Section("Source mode") {
                 Button {
                     AppHaptics.selection()
-                    chatStore.selectSourceMode(mode)
-                    if mode == .files && chatStore.selectedProject == nil && composerStore.pendingAttachments.isEmpty {
-                        showingProjectFiles = true
-                    }
+                    chatStore.selectSourceMode(.auto)
                 } label: {
-                    Label(sourceModeMenuTitle(for: mode), systemImage: exactSourceModeMenuSymbolName(for: mode))
+                    Label("Auto sources", systemImage: sourceModeMenuSymbolName(isActive: sourceModeControlIsAuto, fallback: ChatSourceMode.auto.symbolName))
+                }
+
+                Button {
+                    AppHaptics.selection()
+                    chatStore.selectSourceMode(.web)
+                } label: {
+                    Label("Live web", systemImage: sourceModeMenuSymbolName(isActive: sourceModeControlIsWeb, fallback: ChatSourceMode.web.symbolName))
+                }
+
+                Button {
+                    selectProjectSourceMode()
+                } label: {
+                    Label("Project context", systemImage: sourceModeMenuSymbolName(isActive: sourceModeControlIsProject, fallback: "folder.badge.gearshape"))
+                }
+
+                Button {
+                    selectResearchSourceMode()
+                } label: {
+                    Label("Research mode", systemImage: sourceModeMenuSymbolName(isActive: researchButtonActive, fallback: "doc.text.magnifyingglass"))
+                }
+                .disabled(chatStore.selectedRouteUsesNearCloud)
+            }
+
+            Section("Project context") {
+                ForEach(exactProjectSourceModes) { mode in
+                    Button {
+                        AppHaptics.selection()
+                        chatStore.selectSourceMode(mode)
+                        if mode == .files && chatStore.selectedProject == nil && composerStore.pendingAttachments.isEmpty {
+                            showingProjectFiles = true
+                        }
+                    } label: {
+                        Label(sourceModeMenuTitle(for: mode), systemImage: exactSourceModeMenuSymbolName(for: mode))
+                    }
                 }
             }
         } label: {

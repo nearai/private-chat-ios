@@ -13,6 +13,9 @@ final class NEARPrivateChatUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["What do you want to ask?"].exists)
         XCTAssertTrue(app.buttons["Next actions"].exists || app.staticTexts["Next actions"].exists)
         XCTAssertTrue(app.buttons["Files to actions"].exists || app.staticTexts["Files to actions"].exists)
+        XCTAssertTrue(app.buttons["Model GLM 5.1"].exists || app.staticTexts["GLM 5.1"].exists)
+        XCTAssertTrue(app.buttons["Configure LLM Council"].exists || app.staticTexts["Council"].exists)
+        XCTAssertTrue(app.buttons["Source mode Source"].exists || app.staticTexts["Source"].exists)
     }
 
     func testModelPickerDemoContainsNoSpeculativeModelNames() throws {
