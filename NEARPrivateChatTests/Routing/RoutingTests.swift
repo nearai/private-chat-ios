@@ -654,7 +654,19 @@ extension PrivateChatCoreTests {
             PrivacyCase(id: "HW-071", prompt: "use only this attached project export", hasAttachments: true, expectsFileOnly: true),
             PrivacyCase(id: "HW-072", prompt: "file only, produce a hostile review checklist", hasAttachments: true, expectsFileOnly: true),
             PrivacyCase(id: "HW-073", prompt: "from the attached file only, find contradictions", hasAttachments: true, expectsFileOnly: true),
-            PrivacyCase(id: "HW-074", prompt: "no internet and no browsing; answer locally", hasAttachments: false, expectsFileOnly: false)
+            PrivacyCase(id: "HW-074", prompt: "no internet and no browsing; answer locally", hasAttachments: false, expectsFileOnly: false),
+            PrivacyCase(id: "HW-153", prompt: "dont browse, use the attached doc only", hasAttachments: true, expectsFileOnly: true),
+            PrivacyCase(id: "HW-154", prompt: "dont search the web; summarize this note", hasAttachments: false, expectsFileOnly: false),
+            PrivacyCase(id: "HW-155", prompt: "dont use web for this product review", hasAttachments: false, expectsFileOnly: false),
+            PrivacyCase(id: "HW-156", prompt: "dont go online, only these files", hasAttachments: true, expectsFileOnly: true),
+            PrivacyCase(id: "HW-157", prompt: "dont look up fresh facts; answer from the pasted note", hasAttachments: false, expectsFileOnly: false),
+            PrivacyCase(id: "HW-158", prompt: "no live web, use the PDF only", hasAttachments: true, expectsFileOnly: true),
+            PrivacyCase(id: "HW-159", prompt: "without live web, use these files only", hasAttachments: true, expectsFileOnly: true),
+            PrivacyCase(id: "HW-160", prompt: "without internet, critique this copied thread", hasAttachments: false, expectsFileOnly: false),
+            PrivacyCase(id: "HW-161", prompt: "no online lookups; use the conversation only", hasAttachments: false, expectsFileOnly: false),
+            PrivacyCase(id: "HW-162", prompt: "attachments only: extract the decisions", hasAttachments: true, expectsFileOnly: true),
+            PrivacyCase(id: "HW-163", prompt: "these files only; do not browse", hasAttachments: true, expectsFileOnly: true),
+            PrivacyCase(id: "HW-164", prompt: "pdf only, no live web, list the risks", hasAttachments: true, expectsFileOnly: true)
         ]
         for testCase in privacyOverrides {
             record(testCase.id)
@@ -680,7 +692,19 @@ extension PrivateChatCoreTests {
             PromptCase(id: "HW-087", prompt: "keep this private and do not send to hosted"),
             PromptCase(id: "HW-088", prompt: "do not send this to hosted or cloud; run tests"),
             PromptCase(id: "HW-089", prompt: "keep this private; no hosted workstation"),
-            PromptCase(id: "HW-090", prompt: "private only, no cloud, no hosted, inspect the repo")
+            PromptCase(id: "HW-090", prompt: "private only, no cloud, no hosted, inspect the repo"),
+            PromptCase(id: "HW-165", prompt: "private route only, review this SwiftUI diff"),
+            PromptCase(id: "HW-166", prompt: "NEAR Private only for this account note"),
+            PromptCase(id: "HW-167", prompt: "use NEAR Private, not the cloud model"),
+            PromptCase(id: "HW-168", prompt: "dont use cloud for these files"),
+            PromptCase(id: "HW-169", prompt: "dont send to cloud; audit the code"),
+            PromptCase(id: "HW-170", prompt: "do not send to NEAR AI Cloud"),
+            PromptCase(id: "HW-171", prompt: "don't send to NEAR AI Cloud; summarize this"),
+            PromptCase(id: "HW-172", prompt: "no cloud model should touch this"),
+            PromptCase(id: "HW-173", prompt: "no NEAR AI Cloud, keep the private route"),
+            PromptCase(id: "HW-174", prompt: "never cloud; review the repository"),
+            PromptCase(id: "HW-175", prompt: "not hosted and not cloud for this draft"),
+            PromptCase(id: "HW-176", prompt: "stay on NEAR Private while checking the tests")
         ]
         for testCase in privateRoutePrompts {
             record(testCase.id)
@@ -778,7 +802,15 @@ extension PrivateChatCoreTests {
             PromptCase(id: "HW-137", prompt: "cross-check the responses"),
             PromptCase(id: "HW-138", prompt: "several models should evaluate the prompt"),
             PromptCase(id: "HW-139", prompt: "ask different models for independent takes"),
-            PromptCase(id: "HW-140", prompt: "all the models should vote")
+            PromptCase(id: "HW-140", prompt: "all the models should vote"),
+            PromptCase(id: "HW-177", prompt: "use council for this decision"),
+            PromptCase(id: "HW-178", prompt: "using council, review the launch plan"),
+            PromptCase(id: "HW-179", prompt: "use the council and synthesize the result"),
+            PromptCase(id: "HW-180", prompt: "ask the council whether this is shippable"),
+            PromptCase(id: "HW-181", prompt: "run the council on this failure mode"),
+            PromptCase(id: "HW-182", prompt: "council mode for this release call"),
+            PromptCase(id: "HW-183", prompt: "council review of the onboarding flow"),
+            PromptCase(id: "HW-184", prompt: "council answer with independent votes")
         ]
         for testCase in councilTrue {
             record(testCase.id)
@@ -804,7 +836,7 @@ extension PrivateChatCoreTests {
             XCTAssertFalse(RoutePlanner.promptRequestsCouncil(testCase.prompt), testCase.id)
         }
 
-        XCTAssertGreaterThanOrEqual(executedCaseIDs.count, 120)
+        XCTAssertGreaterThanOrEqual(executedCaseIDs.count, 170)
     }
 
     @MainActor

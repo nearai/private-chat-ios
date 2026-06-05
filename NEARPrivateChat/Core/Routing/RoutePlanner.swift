@@ -123,26 +123,35 @@ struct RoutePlanner {
 
         let blocksWeb = [
             "no web", "without web", "no browsing", "do not browse", "don't browse",
+            "dont browse", "no live web", "without live web",
             "do not search the web", "don't search the web", "no internet",
-            "offline only", "do not use web", "don't use web",
-            "do not go online", "don't go online", "do not look up", "don't look up"
+            "dont search the web", "without internet", "no online",
+            "offline only", "do not use web", "don't use web", "dont use web",
+            "do not go online", "don't go online", "dont go online",
+            "do not look up", "don't look up", "dont look up"
         ].contains(where: hasPhrase)
 
         let fileOnly = [
             "only this file", "only the attached file", "only attached file",
             "use only attached", "use only this attached", "attached file only",
+            "attachments only", "only these files", "these files only",
             "file only", "from this file only", "from the attached file only",
-            "only this sheet", "only this spreadsheet", "only this workbook"
+            "only this sheet", "only this spreadsheet", "only this workbook",
+            "use the pdf only", "pdf only"
         ].contains(where: { phrase in
             normalized.contains(phrase)
         }) || (hasAttachments && blocksWeb && normalized.contains(" only "))
 
         let requiresPrivate = [
             "keep it private", "keep this private", "private only", "stay private",
-            "do not use cloud", "don't use cloud", "no cloud", "no hosted",
+            "private route", "near private only", "use near private", "stay on near private",
+            "do not use cloud", "don't use cloud", "dont use cloud",
+            "no cloud", "no cloud model", "no near ai cloud", "never cloud",
+            "not cloud", "not hosted", "no hosted",
             "do not use hosted", "don't use hosted", "do not send to hosted",
             "do not send this to hosted", "don't send this to hosted",
             "do not send to cloud", "do not send this to cloud", "don't send this to cloud",
+            "dont send to cloud", "do not send to near ai cloud", "don't send to near ai cloud",
             "on device only", "local only"
         ].contains(where: hasPhrase)
 
@@ -220,6 +229,14 @@ struct RoutePlanner {
             "multi model",
             "multiple models",
             "several models",
+            "council mode",
+            "use council",
+            "using council",
+            "use the council",
+            "ask the council",
+            "run the council",
+            "council review",
+            "council answer",
             "ask different models",
             "ask multiple models",
             "run different models",
