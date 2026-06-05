@@ -9,18 +9,22 @@ extension HomeOrchestrationPlanner {
     ) -> String {
         var parts: [String] = []
         if liveBriefingCount > 0 {
-            parts.append("\(liveBriefingCount) live")
+            parts.append(liveBriefingCount == 1 ? "Live briefing ready." : "\(liveBriefingCount) live briefings ready.")
         }
         if projectCount > 0 {
-            parts.append(projectCount == 1 ? "1 Project" : "\(projectCount) Projects")
+            parts.append(projectCount == 1 ? "Project context loaded." : "\(projectCount) projects loaded.")
         }
-        if isCouncilAvailable {
-            parts.append("Council")
+        switch (isCouncilAvailable, isAgentAvailable) {
+        case (true, true):
+            parts.append("Council and Agent routes ready.")
+        case (true, false):
+            parts.append("Council route ready.")
+        case (false, true):
+            parts.append("Agent route ready.")
+        case (false, false):
+            break
         }
-        if isAgentAvailable {
-            parts.append("Agent")
-        }
-        return parts.isEmpty ? "Stage the next run" : parts.joined(separator: " / ")
+        return parts.isEmpty ? "Stage the next run." : parts.joined(separator: " ")
     }
 
     static func widgetSummary(_ widget: MessageWidget?) -> String? {

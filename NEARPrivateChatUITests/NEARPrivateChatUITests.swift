@@ -9,15 +9,14 @@ final class NEARPrivateChatUITests: XCTestCase {
         let app = launchDemo(screen: "chatStarters")
 
         XCTAssertTrue(app.staticTexts["New chat"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.staticTexts["NEAR Private"].exists)
         XCTAssertTrue(app.staticTexts["What do you want to ask?"].exists)
-        XCTAssertTrue(app.staticTexts["Sources as needed"].exists)
-        XCTAssertTrue(app.staticTexts["Agent tools"].exists)
         XCTAssertTrue(app.buttons["Next actions"].exists || app.staticTexts["Next actions"].exists)
         XCTAssertTrue(app.buttons["Files to actions"].exists || app.staticTexts["Files to actions"].exists)
         XCTAssertTrue(app.buttons["Model GLM 5.1"].exists || app.staticTexts["GLM 5.1"].exists)
         XCTAssertTrue(app.buttons["Configure LLM Council"].exists || app.staticTexts["Council"].exists)
         XCTAssertTrue(app.buttons["Source mode Source"].exists || app.staticTexts["Source"].exists)
+        XCTAssertFalse(app.staticTexts["Private chat · sources stay explicit"].exists)
+        XCTAssertFalse(app.staticTexts["Council route"].exists)
     }
 
     func testModelPickerDemoShowsRealModelNames() throws {
@@ -28,7 +27,6 @@ final class NEARPrivateChatUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["GLM 5.1"].exists)
         XCTAssertTrue(app.staticTexts["Claude Opus 4.7"].exists)
         XCTAssertTrue(app.staticTexts["GPT-5.5"].exists)
-        XCTAssertTrue(app.staticTexts["Qwen3.7 Max"].exists)
         XCTAssertTrue(app.staticTexts["DeepSeek V4 Flash"].exists)
         XCTAssertTrue(app.staticTexts["Qwen3.5 122B A10B"].exists)
         XCTAssertTrue(button(containing: "GLM 5.1", in: app).exists)
@@ -104,6 +102,8 @@ final class NEARPrivateChatUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["IronClaw Reborn Plan context is active. Ask, research, prove, or hand off."].exists)
         XCTAssertTrue(app.staticTexts["IronClaw Reborn Plan context active"].exists || app.staticTexts["IronClaw Reborn Plan"].exists)
         XCTAssertTrue(app.staticTexts["Add prompt first"].exists)
+        XCTAssertTrue(app.staticTexts["Project context loaded. Council and Agent routes ready."].exists)
+        XCTAssertFalse(app.staticTexts["1 Project / Council / Agent"].exists)
         XCTAssertFalse(app.staticTexts["Type to prepare"].exists)
         XCTAssertFalse(app.staticTexts["1 model selected"].exists)
         XCTAssertFalse(app.staticTexts["Enable the default multi-model lineup."].exists)

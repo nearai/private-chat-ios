@@ -29,10 +29,25 @@ struct ModelPickerView: View {
             allPickerModels.first(where: { $0.isPrivateVerifiableChatModel })
     }
 
-    private var reasoningChoices: [ModelOption] {
+    private var primaryPrivateModels: [ModelOption] {
         let defaultID = defaultPrivateModel?.id
+        let privateAlternatives = modelCatalogStore.rankedModels(
+            from: allPickerModels.filter { model in
+                model.id != defaultID &&
+                    !model.isExternalModel &&
+                    !model.isIronclawModel &&
+                    model.isPrivateVerifiableChatModel &&
+                    model.isRecommendedReasoningModel &&
+                    !model.isLowerPriorityModel
+            }
+        )
+        return ModelCatalogStore.uniqueModels(([defaultPrivateModel].compactMap { $0 }) + Array(privateAlternatives.prefix(1)))
+    }
+
+    private var reasoningChoices: [ModelOption] {
+        let primaryIDs = Set(primaryPrivateModels.map(\.id))
         let choices = allPickerModels.filter { model in
-            model.id != defaultID &&
+            !primaryIDs.contains(model.id) &&
                 model.isRecommendedReasoningModel &&
                 !model.isNearCloudModel &&
                 !model.isIronclawModel &&
@@ -42,7 +57,7 @@ struct ModelPickerView: View {
     }
 
     private var privateModelChoices: [ModelOption] {
-        let shownIDs = Set(([defaultPrivateModel?.id].compactMap { $0 }) + reasoningChoices.map(\.id))
+        let shownIDs = Set(primaryPrivateModels.map(\.id) + reasoningChoices.map(\.id))
         let choices = allPickerModels.filter { model in
             !shownIDs.contains(model.id) &&
                 !model.isExternalModel &&
@@ -63,7 +78,7 @@ struct ModelPickerView: View {
 
     private var primaryCloudModels: [ModelOption] {
         guard chatStore.nearCloudKeyConfigured else { return [] }
-        return Array(cloudModelChoices.prefix(3))
+        return Array(cloudModelChoices.prefix(2))
     }
 
     private var councilPrivateCandidates: [ModelOption] {
@@ -242,16 +257,18 @@ struct ModelPickerView: View {
         VStack(alignment: .leading, spacing: 22) {
             // SINGLE ROUTE
             ModelSpecSection(title: "Single Model Route") {
-                if let model = defaultPrivateModel {
+                ForEach(Array(primaryPrivateModels.enumerated()), id: \.element.id) { index, model in
                     ModelSpecRow(
                         symbolName: "cpu",
                         symbolColor: Color.actionPrimary,
                         title: modelRowTitle(for: model),
-                        subtitle: "NEAR Private model · one answer with proof support.",
+                        subtitle: index == 0
+                            ? "NEAR Private model · one answer with proof support."
+                            : privateModelSubtitle(for: model),
                         badges: model.routeDisclosureBadges,
                         trailing: modelRowTrailing(for: model),
                         isSelected: isSelectedSingleModel(model),
-                        showsDivider: !primaryCloudModels.isEmpty || !chatStore.nearCloudKeyConfigured,
+                        showsDivider: index != primaryPrivateModels.count - 1 || !primaryCloudModels.isEmpty || !chatStore.nearCloudKeyConfigured,
                         action: { selectModelAndDismiss(model) }
                     )
                 }

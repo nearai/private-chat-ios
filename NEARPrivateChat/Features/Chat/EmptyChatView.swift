@@ -216,7 +216,7 @@ enum EmptyChatStarterCoordinator {
             defaults.removeAll { $0.title == suggestion.title }
             defaults.insert(suggestion, at: 0)
         }
-        return Array(defaults.prefix(6))
+        return Array(defaults.prefix(4))
     }
 
     @discardableResult

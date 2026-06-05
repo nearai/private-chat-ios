@@ -23,7 +23,13 @@ struct ChatToolbar: View {
     @State private var exportFilename = "near-private-chat.txt"
 
     var body: some View {
-        compactToolbar
+        Group {
+            if transcriptStore.messages.isEmpty {
+                EmptyView()
+            } else {
+                compactToolbar
+            }
+        }
         .buttonStyle(.borderless)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
