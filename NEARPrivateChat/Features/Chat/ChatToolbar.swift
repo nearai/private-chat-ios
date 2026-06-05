@@ -15,6 +15,7 @@ struct ChatToolbar: View {
     @State private var showingRename = false
     @State private var showingProjectFiles = false
     @State private var showingAgentWorkspace = false
+    @State private var showingMoreActions = false
     @State private var showingExporter = false
     @State private var showingSignedExportNotice = false
     @State private var exportDocument = ConversationExportDocument()
@@ -25,9 +26,6 @@ struct ChatToolbar: View {
         compactToolbar
         .buttonStyle(.borderless)
         .toolbar {
-            // Spec (chat-view.jsx ThreadTopBar): "..." menu sits in the
-            // top-right of the nav bar. All the sheet bindings stay on
-            // this view so the menu's actions still resolve correctly.
             ToolbarItem(placement: .topBarTrailing) {
                 moreMenuButton
             }
@@ -84,6 +82,13 @@ struct ChatToolbar: View {
             case let .failure(error):
                 chatStore.bannerMessage = error.localizedDescription
             }
+        }
+        .confirmationDialog(
+            "Chat actions",
+            isPresented: $showingMoreActions,
+            titleVisibility: .visible
+        ) {
+            moreMenuContent
         }
         .confirmationDialog(
             "Signed export identity",
@@ -389,11 +394,13 @@ struct ChatToolbar: View {
     }
 
     private var moreMenuButton: some View {
-        Menu {
-            moreMenuContent
+        Button {
+            AppHaptics.selection()
+            showingMoreActions = true
         } label: {
             ToolbarIcon(symbolName: "ellipsis")
         }
+        .buttonStyle(.plain)
         .accessibilityLabel("More")
     }
 

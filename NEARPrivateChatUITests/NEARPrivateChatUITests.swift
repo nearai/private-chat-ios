@@ -24,7 +24,11 @@ final class NEARPrivateChatUITests: XCTestCase {
         let app = launchDemo(screen: "models")
 
         XCTAssertTrue(app.staticTexts["Model"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["SINGLE MODEL ROUTE"].exists)
         XCTAssertTrue(app.staticTexts["NEAR Private model"].exists)
+        XCTAssertTrue(app.staticTexts["NEAR AI Cloud model A"].exists)
+        XCTAssertTrue(button(containing: "NEAR Private model", in: app).exists)
+        XCTAssertTrue(button(containing: "NEAR AI Cloud model A", in: app).exists)
         for banned in [
             "GLM-5.1-FP8",
             "GLM-5.1",
@@ -39,6 +43,18 @@ final class NEARPrivateChatUITests: XCTestCase {
         ] {
             XCTAssertFalse(app.staticTexts[banned].exists, "Speculative model name rendered: \(banned)")
         }
+    }
+
+    func testCouncilPickerDemoShowsPrivateAndCloudCouncilChoices() throws {
+        let app = launchDemo(screen: "council")
+
+        XCTAssertTrue(app.staticTexts["Council"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["CHOOSE COUNCIL MODELS"].exists)
+        XCTAssertTrue(app.staticTexts["NEAR PRIVATE COUNCIL MODELS"].exists)
+        XCTAssertTrue(app.staticTexts["NEAR AI CLOUD COUNCIL MODELS"].exists)
+        XCTAssertTrue(button(containing: "NEAR Private model", in: app).exists)
+        XCTAssertTrue(button(containing: "NEAR AI Cloud model A", in: app).exists)
+        XCTAssertTrue(button(containing: "NEAR AI Cloud model B", in: app).exists)
     }
 
     func testHomeDemoPromptCaptureKeepsProjectContextReadable() throws {
@@ -69,5 +85,9 @@ final class NEARPrivateChatUITests: XCTestCase {
         ]
         app.launch()
         return app
+    }
+
+    private func button(containing label: String, in app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", label)).firstMatch
     }
 }

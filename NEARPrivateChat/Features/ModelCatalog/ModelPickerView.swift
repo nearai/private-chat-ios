@@ -21,7 +21,7 @@ struct ModelPickerView: View {
     // MARK: - Computed pickers
 
     private var allPickerModels: [ModelOption] {
-        modelCatalogStore.pickerModels
+        ModelCatalogStore.uniqueModels(modelCatalogStore.pickerModels)
     }
 
     private var defaultPrivateModel: ModelOption? {
@@ -61,6 +61,18 @@ struct ModelPickerView: View {
         modelCatalogStore.rankedModels(from: allPickerModels.filter { $0.isNearCloudModel })
     }
 
+    private var primaryCloudModel: ModelOption? {
+        cloudModelChoices.first
+    }
+
+    private var councilPrivateCandidates: [ModelOption] {
+        ModelCatalogStore.uniqueModels(modelCatalogStore.councilCandidateModels.filter { !$0.isExternalModel })
+    }
+
+    private var councilCloudCandidates: [ModelOption] {
+        ModelCatalogStore.uniqueModels(modelCatalogStore.councilCandidateModels.filter { $0.isNearCloudModel })
+    }
+
     private var selectedSingleModelID: String? {
         modelCatalogStore.isCouncilModeEnabled ? nil : modelCatalogStore.selectedModel
     }
@@ -81,9 +93,23 @@ struct ModelPickerView: View {
             return "NEAR Private model"
         }
         if model.isPrivateVerifiableChatModel {
+            if model.id.localizedCaseInsensitiveContains("Qwen3.5") {
+                return "Private reasoning model A"
+            }
+            if model.id.localizedCaseInsensitiveContains("Qwen3.6") {
+                return "Private reasoning model B"
+            }
             return "Private reasoning model"
         }
         if model.isNearCloudModel {
+            let name = model.displayName.lowercased()
+            let id = model.id.lowercased()
+            if name.contains("model b") || id.contains("model-b") {
+                return "NEAR AI Cloud model B"
+            }
+            if name.contains("model a") || id.contains("model-a") {
+                return "NEAR AI Cloud model A"
+            }
             return "NEAR AI Cloud model"
         }
         return defaultTitle ?? model.displayName
@@ -239,19 +265,45 @@ struct ModelPickerView: View {
     @ViewBuilder
     private var modelsTab: some View {
         VStack(alignment: .leading, spacing: 22) {
-            // DEFAULT
-            ModelSpecSection(title: "Default") {
+            // SINGLE ROUTE
+            ModelSpecSection(title: "Single Model Route") {
                 if let model = defaultPrivateModel {
                     ModelSpecRow(
                         symbolName: "cpu",
                         symbolColor: Color.actionPrimary,
                         title: modelRowTitle(for: model),
-                        subtitle: "Private inference. Proof when fetched.",
+                        subtitle: "Use this for one NEAR Private answer with proof support.",
+                        badges: model.routeDisclosureBadges,
+                        trailing: modelRowTrailing(for: model),
+                        isSelected: isSelectedSingleModel(model),
+                        showsDivider: primaryCloudModel != nil || !chatStore.nearCloudKeyConfigured,
+                        action: { selectModelAndDismiss(model) }
+                    )
+                }
+
+                if let model = primaryCloudModel {
+                    ModelSpecRow(
+                        symbolName: "cloud.fill",
+                        symbolColor: Color.brandBlue,
+                        title: modelRowTitle(for: model, defaultTitle: "NEAR AI Cloud: \(model.displayName)"),
+                        subtitle: "Use this for one external answer through the privacy proxy.",
                         badges: model.routeDisclosureBadges,
                         trailing: modelRowTrailing(for: model),
                         isSelected: isSelectedSingleModel(model),
                         showsDivider: false,
                         action: { selectModelAndDismiss(model) }
+                    )
+                } else if !chatStore.nearCloudKeyConfigured {
+                    ModelSpecRow(
+                        symbolName: "cloud",
+                        symbolColor: Color.textSecondary,
+                        title: "Connect NEAR AI Cloud",
+                        subtitle: "Add a Cloud key to select external single-model routes.",
+                        badges: ["Privacy proxy", "External models"],
+                        trailing: .chevron,
+                        isSelected: false,
+                        showsDivider: false,
+                        action: connectOrOpenNearCloud
                     )
                 }
             }
@@ -376,6 +428,8 @@ struct ModelPickerView: View {
         let isActive = modelCatalogStore.isCouncilModeEnabled
 
         return VStack(alignment: .leading, spacing: 22) {
+            councilCandidatesSection
+
             ModelSpecSection(title: isActive ? "Active Council" : "Recommended Council") {
                 if lineup.isEmpty {
                     ModelSpecRow(
@@ -399,9 +453,9 @@ struct ModelPickerView: View {
                         )
                     }
                 }
-	            }
+            }
 
-	            VStack(spacing: 10) {
+            VStack(spacing: 10) {
                 Button {
                     if isActive {
                         modelCatalogStore.clearCouncilMode()
@@ -419,12 +473,10 @@ struct ModelPickerView: View {
                 .buttonStyle(.plain)
                 .disabled(lineup.count < 2 && !isActive)
                 .opacity(lineup.count < 2 && !isActive ? 0.4 : 1)
-	            }
-	            .padding(.horizontal, 16)
+            }
+            .padding(.horizontal, 16)
 
-	            councilCandidatesSection
-
-	            if !modelCatalogStore.councilPresets.isEmpty {
+            if !modelCatalogStore.councilPresets.isEmpty {
                 ModelSpecSection(title: "Presets") {
                     let presets = modelCatalogStore.councilPresets
                     ForEach(Array(presets.enumerated()), id: \.element.id) { index, preset in
@@ -509,35 +561,73 @@ struct ModelPickerView: View {
 
     @ViewBuilder
     private var councilCandidatesSection: some View {
-        let candidates = Array(modelCatalogStore.councilCandidateModels.prefix(8))
-        if !candidates.isEmpty {
-            ModelSpecSection(title: "Choose Models") {
-                Text(councilSelectionStatusText)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.textSecondary)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 9)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.appSecondaryBackground.opacity(0.72))
+        ModelSpecSection(title: "Choose Council Models") {
+            Text(councilSelectionStatusText)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.textSecondary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 9)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.appSecondaryBackground.opacity(0.72))
+        }
 
-                ForEach(Array(candidates.enumerated()), id: \.element.id) { index, model in
-                    let isSelected = modelCatalogStore.councilIndex(for: model.id) != nil
-                    let isEnabled = isSelected || modelCatalogStore.activeCouncilModels.count < modelCatalogStore.maxCouncilModelCount
-                    ModelSpecRow(
-                        symbolName: isSelected ? "checkmark.circle.fill" : "plus.circle",
-                        symbolColor: isSelected ? Color.actionPrimary : Color.textSecondary,
-                        title: modelRowTitle(for: model),
-                        subtitle: manualCouncilSubtitle(for: model),
-                        badges: model.routeDisclosureBadges,
-                        trailing: isSelected ? .checkmark : .none,
-                        isSelected: isSelected,
-                        showsDivider: index != candidates.count - 1,
-                        isEnabled: isEnabled,
-                        action: { modelCatalogStore.toggleCouncilModel(model.id) }
-                    )
-                }
+        if !councilPrivateCandidates.isEmpty {
+            councilCandidateGroupSection(
+                title: "NEAR Private Council Models",
+                candidates: Array(councilPrivateCandidates.prefix(6))
+            )
+        }
+
+        if !councilCloudCandidates.isEmpty {
+            councilCandidateGroupSection(
+                title: "NEAR AI Cloud Council Models",
+                candidates: Array(councilCloudCandidates.prefix(8))
+            )
+        } else {
+            ModelSpecSection(title: "NEAR AI Cloud Council Models") {
+                ModelSpecRow(
+                    symbolName: chatStore.nearCloudKeyConfigured ? "cloud.fill" : "cloud",
+                    symbolColor: Color.textSecondary,
+                    title: chatStore.nearCloudKeyConfigured ? "Refresh NEAR AI Cloud" : "Connect NEAR AI Cloud",
+                    subtitle: chatStore.nearCloudKeyConfigured
+                        ? "No Cloud Council models are available yet."
+                        : "Add a Cloud key to include external Council models.",
+                    badges: ["Privacy proxy", "External models"],
+                    trailing: .chevron,
+                    isSelected: false,
+                    showsDivider: false,
+                    action: connectOrOpenNearCloud
+                )
             }
         }
+    }
+
+    private func councilCandidateGroupSection(title: String, candidates: [ModelOption]) -> some View {
+        ModelSpecSection(title: title) {
+            ForEach(Array(candidates.enumerated()), id: \.element.id) { index, model in
+                councilCandidateRow(
+                    model: model,
+                    showsDivider: index != candidates.count - 1
+                )
+            }
+        }
+    }
+
+    private func councilCandidateRow(model: ModelOption, showsDivider: Bool) -> some View {
+        let isSelected = modelCatalogStore.councilIndex(for: model.id) != nil
+        let isEnabled = isSelected || modelCatalogStore.activeCouncilModels.count < modelCatalogStore.maxCouncilModelCount
+        return ModelSpecRow(
+            symbolName: isSelected ? "checkmark.circle.fill" : "plus.circle",
+            symbolColor: isSelected ? Color.actionPrimary : (model.isNearCloudModel ? Color.brandBlue : Color.textSecondary),
+            title: modelRowTitle(for: model),
+            subtitle: manualCouncilSubtitle(for: model),
+            badges: model.routeDisclosureBadges,
+            trailing: isSelected ? .checkmark : .none,
+            isSelected: isSelected,
+            showsDivider: showsDivider,
+            isEnabled: isEnabled,
+            action: { modelCatalogStore.toggleCouncilModel(model.id) }
+        )
     }
 
     private func manualCouncilSubtitle(for model: ModelOption) -> String {
@@ -701,6 +791,14 @@ private struct ModelSpecRow: View {
         .buttonStyle(.plain)
         .disabled(!isEnabled)
         .opacity(isEnabled ? 1 : 0.48)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(rowAccessibilityValue)
+        .accessibilityHint(isEnabled ? "Selects this model route." : subtitle)
+    }
+
+    private var rowAccessibilityValue: String {
+        ([subtitle] + badges).joined(separator: ", ")
     }
 
     @ViewBuilder
@@ -743,7 +841,8 @@ private struct CouncilNumberedRow: View {
                     Text(subtitle)
                         .font(.subheadline)
                         .foregroundStyle(Color.textSecondary)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 0)

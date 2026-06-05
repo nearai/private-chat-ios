@@ -15,6 +15,7 @@ struct InputBar: View {
     @State var showingFileImporter = false
     @State var showingPhotoPicker = false
     @State var showingCamera = false
+    @State var showingAttachmentOptions = false
     @State var selectedPhotoItems: [PhotosPickerItem] = []
     @State var showingProjectFiles = false
     @State var showingSecurity = false
@@ -24,6 +25,8 @@ struct InputBar: View {
     @State var showingCapabilities = false
     @State var showingModelPicker = false
     @State var modelPickerOpeningCouncil = false
+    @State var showingSourceModeOptions = false
+    @State var showingReasoningEffortOptions = false
     @StateObject var dictation = VoiceDictation()
 
     var body: some View {
@@ -71,34 +74,9 @@ struct InputBar: View {
             composerRoutingControls
 
             HStack(alignment: .bottom, spacing: 8) {
-                Menu {
-                    Button {
-                        AppHaptics.selection()
-                        showingFileImporter = true
-                    } label: {
-                        Label("Files", systemImage: "folder")
-                    }
-
-                    Button {
-                        AppHaptics.selection()
-                        showingPhotoPicker = true
-                    } label: {
-                        Label("Photos", systemImage: "photo.on.rectangle")
-                    }
-
-                    Button {
-                        AppHaptics.selection()
-                        openCamera()
-                    } label: {
-                        Label("Camera", systemImage: "camera")
-                    }
-
-                    Button {
-                        AppHaptics.selection()
-                        attachPasteboard()
-                    } label: {
-                        Label("Paste", systemImage: "doc.on.clipboard")
-                    }
+                Button {
+                    AppHaptics.selection()
+                    showingAttachmentOptions = true
                 } label: {
                     Image(systemName: "plus")
                         .font(.body.weight(.semibold))
@@ -194,6 +172,24 @@ struct InputBar: View {
             }
         }
         .safeAreaPadding(.bottom, 8)
+        .confirmationDialog(
+            "Add attachment",
+            isPresented: $showingAttachmentOptions,
+            titleVisibility: .visible,
+            actions: { attachmentOptionsDialog }
+        )
+        .confirmationDialog(
+            "Source mode",
+            isPresented: $showingSourceModeOptions,
+            titleVisibility: .visible,
+            actions: { sourceModeOptionsDialog }
+        )
+        .confirmationDialog(
+            "Reasoning effort",
+            isPresented: $showingReasoningEffortOptions,
+            titleVisibility: .visible,
+            actions: { reasoningEffortOptionsDialog }
+        )
         .fileImporter(
             isPresented: $showingFileImporter,
             allowedContentTypes: [

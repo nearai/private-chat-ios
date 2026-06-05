@@ -6,6 +6,29 @@ import UIKit
 #endif
 
 extension InputBar {
+    @ViewBuilder
+    var attachmentOptionsDialog: some View {
+        Button("Files") {
+            AppHaptics.selection()
+            showingFileImporter = true
+        }
+
+        Button("Photos") {
+            AppHaptics.selection()
+            showingPhotoPicker = true
+        }
+
+        Button("Camera") {
+            AppHaptics.selection()
+            openCamera()
+        }
+
+        Button("Paste") {
+            AppHaptics.selection()
+            attachPasteboard()
+        }
+    }
+
     func attachPhotoItems(_ items: [PhotosPickerItem]) {
         guard !items.isEmpty else { return }
         Task {
