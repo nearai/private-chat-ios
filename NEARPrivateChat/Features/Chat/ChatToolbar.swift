@@ -125,57 +125,54 @@ struct ChatToolbar: View {
                 compactAttestationButton
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    MetadataPill(
-                        title: compactRouteTitle,
-                        symbolName: compactRouteSymbolName,
-                        isPrimary: true
-                    )
+            ChipFlowLayout(spacing: 8, lineSpacing: 8) {
+                MetadataPill(
+                    title: compactRouteTitle,
+                    symbolName: compactRouteSymbolName,
+                    isPrimary: true
+                )
 
-                    MetadataPill(
-                        title: compactSourceModeTitle,
-                        symbolName: compactSourceModeSymbolName,
-                        isPrimary: sourceRoutingSemantics.modelNativeWebToolEnabledByDefault || modelCatalogStore.researchModeEnabled
-                    )
+                MetadataPill(
+                    title: compactSourceModeTitle,
+                    symbolName: compactSourceModeSymbolName,
+                    isPrimary: sourceRoutingSemantics.modelNativeWebToolEnabledByDefault || modelCatalogStore.researchModeEnabled
+                )
 
-                    if let selectedProject = projectStore.selectedProject {
-                        Button {
-                            showingProjectFiles = true
-                        } label: {
-                            MetadataPill(title: selectedProject.name, symbolName: "folder", isPrimary: false)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Open project \(selectedProject.name)")
-                        .accessibilityHint("Shows the selected Project context.")
+                if let selectedProject = projectStore.selectedProject {
+                    Button {
+                        showingProjectFiles = true
+                    } label: {
+                        MetadataPill(title: selectedProject.name, symbolName: "folder", isPrimary: false)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open project \(selectedProject.name)")
+                    .accessibilityHint("Shows the selected Project context.")
+                }
 
-                    if let projectContextSummary {
+                if let projectContextSummary {
+                    MetadataPill(
+                        title: projectContextSummary,
+                        symbolName: projectContextSummarySymbolName,
+                        isPrimary: false
+                    )
+                }
+
+                if shouldShowAgentWorkspaceButton {
+                    Button {
+                        showingAgentWorkspace = true
+                    } label: {
                         MetadataPill(
-                            title: projectContextSummary,
-                            symbolName: projectContextSummarySymbolName,
-                            isPrimary: false
+                            title: compactAgentPillTitle,
+                            symbolName: "terminal",
+                            isPrimary: modelCatalogStore.selectedRouteKind.isIronclawRoute || agentStore.ironclawRemoteWorkstationAvailable
                         )
                     }
-
-                    if shouldShowAgentWorkspaceButton {
-                        Button {
-                            showingAgentWorkspace = true
-                        } label: {
-                            MetadataPill(
-                                title: compactAgentPillTitle,
-                                symbolName: "terminal",
-                                isPrimary: modelCatalogStore.selectedRouteKind.isIronclawRoute || agentStore.ironclawRemoteWorkstationAvailable
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Open agent workspace")
-                        .accessibilityHint("Shows agent tools and handoff options.")
-                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open agent workspace")
+                    .accessibilityHint("Shows agent tools and handoff options.")
                 }
-                .padding(.horizontal, 1)
             }
-            .scrollClipDisabled()
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
         .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))

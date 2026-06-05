@@ -291,7 +291,6 @@ final class ChatStore: ObservableObject {
         "Qwen/Qwen3.5-122B-A10B",
         "Qwen/Qwen3.6-35B-A3B-FP8",
         "Qwen/Qwen3-30B-A3B-Instruct-2507",
-        "openai/gpt-oss-120b",
         "Qwen/Qwen3-VL-30B-A3B-Instruct",
         "moonshotai/Kimi-K2-Thinking",
         "moonshotai/Kimi-K2-Instruct",
@@ -5741,8 +5740,14 @@ final class ChatStore: ObservableObject {
         let conversationID = "demo-conversation-iran-council"
         let glmConversationID = "demo-conversation-glm-private"
         let councilBatchID = "demo-council-iran-status"
-        let demoIndependentModelA = "near-cloud/demo-independent-model-a"
-        let demoIndependentModelB = "near-cloud/demo-independent-model-b"
+        let demoCloudClaudeOpus47 = ModelOption.nearCloudModelID(for: "anthropic/claude-opus-4-7")
+        let demoCloudGPT55 = ModelOption.nearCloudModelID(for: "openai/gpt-5.5")
+        let demoCloudQwen37 = ModelOption.nearCloudModelID(for: "qwen/qwen3.7-max")
+        let demoCloudKimi26 = ModelOption.nearCloudModelID(for: "moonshotai/kimi-k2.6")
+        let demoCloudClaudeSonnet46 = ModelOption.nearCloudModelID(for: "anthropic/claude-sonnet-4-6")
+        let demoCloudClaudeOpus46 = ModelOption.nearCloudModelID(for: "anthropic/claude-opus-4-6")
+        let demoCloudQwen3635 = ModelOption.nearCloudModelID(for: "Qwen/Qwen3.6-35B-A3B-FP8")
+        let demoCloudQwen3627 = ModelOption.nearCloudModelID(for: "Qwen/Qwen3.6-27B-FP8")
         let created = now.addingTimeInterval(-11 * 60)
         let project = ChatProject(
             id: projectID,
@@ -5867,18 +5872,18 @@ final class ChatStore: ObservableObject {
             role: .assistant,
             text: """
             ## Direct answer
-            The best answer is: not over, but closer to an off-ramp. The private model reads the AP/PBS overview as evidence that a deal is emerging [1][2]. Independent model A focuses on whether the reported framework and Strait of Hormuz terms actually get implemented [3][4]. Independent model B keeps the caution high because fresh military activity and the Israel-Hezbollah front can still break the diplomatic track [5][6].
+            The best answer is: not over, but closer to an off-ramp. GLM 5.1 reads the AP/PBS overview as evidence that a deal is emerging [1][2]. Claude Opus 4.7 focuses on whether the reported framework and Strait of Hormuz terms actually get implemented [3][4]. GPT-5.5 keeps the caution high because fresh military activity and the Israel-Hezbollah front can still break the diplomatic track [5][6].
 
             ## What the council agrees on
             Nobody should say the war is already over. The supported statement is narrower: talks appear close to an agreement, but the outcome still depends on a signed/finalized deal, implementation of the Hormuz reopening, and containment of related military fronts [1][3][5][6].
 
             ## How the models vary
-            - Private model: weighs the broad AP/PBS explainer coverage and calls this a possible endgame, not a settled peace [1][2].
-            - Independent model A: reads the deal-specific reporting as an implementation checklist: final text, Hormuz reopening, and follow-on negotiations [3][4].
-            - Independent model B: reads the security reporting as a warning that diplomacy is still exposed to military and regional shocks [5][6].
+            - GLM 5.1: weighs the broad AP/PBS explainer coverage and calls this a possible endgame, not a settled peace [1][2].
+            - Claude Opus 4.7: reads the deal-specific reporting as an implementation checklist: final text, Hormuz reopening, and follow-on negotiations [3][4].
+            - GPT-5.5: reads the security reporting as a warning that diplomacy is still exposed to military and regional shocks [5][6].
 
             ## Disagreements or uncertainty
-            The disagreement is about confidence. The private model is the most optimistic because the overview reporting points to a possible deal. Independent model A is conditional because a framework is not the same as implementation. Independent model B is the least willing to call it ending while strike reports and spillover risks remain live.
+            The disagreement is about confidence. GLM 5.1 is the most optimistic because the overview reporting points to a possible deal. Claude Opus 4.7 is conditional because a framework is not the same as implementation. GPT-5.5 is the least willing to call it ending while strike reports and spillover risks remain live.
             """,
             model: ModelOption.llmCouncilSynthesisModelID,
             createdAt: created.addingTimeInterval(18),
@@ -5894,7 +5899,7 @@ final class ChatStore: ObservableObject {
             id: "demo-assistant-glm",
             role: .assistant,
             text: """
-            ## Private model
+            ## GLM 5.1
             The AP/PBS overview supports "possible endgame," not "ended" [1][2]. I would answer that the war appears closer to a diplomatic off-ramp, but the claim should stay bounded until there is a final agreement and visible implementation.
             """,
             model: Self.defaultModelID,
@@ -5911,10 +5916,10 @@ final class ChatStore: ObservableObject {
             id: "demo-assistant-qwen-large",
             role: .assistant,
             text: """
-            ## Independent model A
+            ## Claude Opus 4.7
             The deal-specific reporting makes this an implementation question [1][2]. If the framework is finalized and the Strait of Hormuz reopening actually starts, then "ending" becomes plausible. If those milestones slip, the headline is only diplomatic momentum.
             """,
-            model: demoIndependentModelA,
+            model: demoCloudClaudeOpus47,
             createdAt: created.addingTimeInterval(20),
             firstTokenAt: created.addingTimeInterval(21.7),
             status: "completed",
@@ -5928,10 +5933,10 @@ final class ChatStore: ObservableObject {
             id: "demo-assistant-opus",
             role: .assistant,
             text: """
-            ## Independent model B
+            ## GPT-5.5
             I would be careful with the word "ending." Diplomatic signals can coexist with active coercion. Fresh strike reporting and the Israel-Hezbollah front mean the safer answer is: negotiations may be near an off-ramp, but the conflict is not reliably settled yet [1][2].
             """,
-            model: demoIndependentModelB,
+            model: demoCloudGPT55,
             createdAt: created.addingTimeInterval(21),
             firstTokenAt: created.addingTimeInterval(22.4),
             status: "completed",
@@ -5993,9 +5998,15 @@ final class ChatStore: ObservableObject {
         )
 
         let models = [
-            demoModel(Self.defaultModelID, displayName: "NEAR Private model", description: "Default private route with proof.", verifiable: true),
-            demoModel(demoIndependentModelA, displayName: "Independent model A", description: "Cloud model through NEAR Cloud privacy proxy.", verifiable: false),
-            demoModel(demoIndependentModelB, displayName: "Independent model B", description: "Cloud model through NEAR Cloud privacy proxy.", verifiable: false),
+            demoModel(Self.defaultModelID, displayName: "GLM 5.1", description: "Default NEAR Private model with proof support.", verifiable: true),
+            demoModel(demoCloudClaudeOpus47, displayName: "Claude Opus 4.7", description: "Frontier Anthropic model through the NEAR AI Cloud privacy proxy.", verifiable: false),
+            demoModel(demoCloudGPT55, displayName: "GPT-5.5", description: "Frontier OpenAI model through the NEAR AI Cloud privacy proxy.", verifiable: false),
+            demoModel(demoCloudQwen37, displayName: "Qwen3.7 Max", description: "Current Qwen frontier model through the NEAR AI Cloud privacy proxy.", verifiable: false),
+            demoModel(demoCloudKimi26, displayName: "Kimi K2.6", description: "Current Moonshot model through the NEAR AI Cloud privacy proxy.", verifiable: false),
+            demoModel(demoCloudClaudeSonnet46, displayName: "Claude Sonnet 4.6", description: "Anthropic long-context model through the NEAR AI Cloud privacy proxy.", verifiable: false),
+            demoModel(demoCloudClaudeOpus46, displayName: "Claude Opus 4.6", description: "Anthropic coding and agent model through the NEAR AI Cloud privacy proxy.", verifiable: false),
+            demoModel(demoCloudQwen3635, displayName: "Qwen 3.6 35B A3B FP8", description: "Qwen reasoning model through the NEAR AI Cloud privacy proxy.", verifiable: false),
+            demoModel(demoCloudQwen3627, displayName: "Qwen 3.6 27B FP8", description: "Qwen dense model through the NEAR AI Cloud privacy proxy.", verifiable: false),
             demoModel(ModelOption.ironclawMobileModelID, displayName: "IronClaw Mobile", description: "Phone-safe agent runtime.", verifiable: false),
             demoModel(ModelOption.ironclawModelID, displayName: "Hosted IronClaw", description: "Connected Hosted IronClaw.", verifiable: false)
         ]

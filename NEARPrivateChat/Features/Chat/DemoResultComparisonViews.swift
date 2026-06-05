@@ -103,10 +103,10 @@ struct DemoCouncilComparisonView: View {
         switch message.model {
         case ChatStore.defaultModelID:
             return "Private model answer"
-        case "near-cloud/demo-independent-model-a":
-            return "Independent model answer"
-        case "near-cloud/demo-independent-model-b":
-            return "Independent model answer"
+        case "near-cloud/anthropic/claude-opus-4-7":
+            return "NEAR AI Cloud answer"
+        case "near-cloud/openai/gpt-5.5":
+            return "NEAR AI Cloud answer"
         default:
             return "Raw model view"
         }

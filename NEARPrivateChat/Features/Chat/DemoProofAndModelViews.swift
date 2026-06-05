@@ -31,64 +31,53 @@ struct DemoVerifiedProofCard: View {
 
 struct DemoNearCloudModelsView: View {
     @EnvironmentObject private var chatStore: ChatStore
-    @State private var scrollTarget: String?
 
     private var cloudModels: [ModelOption] {
-        chatStore.nearCloudModels
+        chatStore.nearCloudModels.filter { !$0.isDeprecatedPickerModel }
     }
 
     var body: some View {
         NavigationStack {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        header
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    header
 
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(Array(cloudModels.prefix(3))) { model in
-                                DemoCloudModelRow(model: model)
-                                    .id(model.id)
-                            }
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(Array(cloudModels.prefix(8))) { model in
+                            DemoCloudModelRow(model: model)
+                                .id(model.id)
                         }
+                    }
 
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Route behavior")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
-                            Label("Uses the same project files, saved links, and web context when the prompt needs them.", systemImage: "folder.badge.gearshape")
-                            Label("Cloud models run through the NEAR AI Cloud privacy proxy, separate from the fully private route.", systemImage: "lock.rotation")
-                            Label("The private route stays the default when proof matters; Cloud is an explicit override.", systemImage: "checkmark.shield")
-                        }
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(12)
-                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .id("route-behavior")
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 18)
-                }
-                .background(Color.appBackground)
-                .navigationTitle("NEAR AI Cloud")
-                .platformInlineNavigationTitle()
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") {}
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Label("Connected", systemImage: "key.fill")
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Route behavior")
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(Color.trustVerified)
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                        Label("Uses the same project files, saved links, and web context when the prompt needs them.", systemImage: "folder.badge.gearshape")
+                        Label("Cloud models run through the NEAR AI Cloud privacy proxy, separate from the fully private route.", systemImage: "lock.rotation")
+                        Label("The private route stays the default when proof matters; Cloud is an explicit override.", systemImage: "checkmark.shield")
                     }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(12)
+                    .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .id("route-behavior")
                 }
-                .task {
-                    try? await Task.sleep(nanoseconds: 1_500_000_000)
-                    await MainActor.run {
-                        withAnimation(.easeInOut(duration: 1.1)) {
-                            proxy.scrollTo("route-behavior", anchor: .bottom)
-                        }
-                    }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 18)
+            }
+            .background(Color.appBackground)
+            .navigationTitle("NEAR AI Cloud")
+            .platformInlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {}
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Label("Connected", systemImage: "key.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.trustVerified)
                 }
             }
         }
@@ -103,7 +92,7 @@ struct DemoNearCloudModelsView: View {
                     .frame(width: 34, height: 34)
                     .background(Color.actionPrimary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("SOTA models through NEAR AI Cloud")
+                    Text("Current NEAR AI Cloud catalog")
                         .font(.headline.weight(.semibold))
                     Text("Cloud key connected · privacy proxy route")
                         .font(.caption.weight(.semibold))
@@ -135,7 +124,7 @@ struct DemoSingleModelPickerView: View {
 
                 Section("Selected model") {
                     DemoSingleModelRow(
-                        title: "NEAR Private model",
+                        title: "GLM 5.1",
                         subtitle: "Default private model",
                         detail: "NEAR Private route · proof when fresh",
                         symbolName: "checkmark.shield.fill",

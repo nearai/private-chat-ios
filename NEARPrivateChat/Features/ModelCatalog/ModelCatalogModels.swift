@@ -169,8 +169,8 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             if let modelDisplayName = sanitizedModelDisplayName {
                 return modelDisplayName
             }
-            if let familyName = Self.providerFamilyName(for: nearCloudUnderlyingModelID ?? modelID) {
-                return "\(familyName) model"
+            if let underlyingModelID = nearCloudUnderlyingModelID {
+                return Self.humanize(modelID: underlyingModelID)
             }
             return "NEAR AI Cloud model"
         }
@@ -338,6 +338,10 @@ struct ModelOption: Decodable, Identifiable, Hashable {
 
     var isEliteModel: Bool {
         let ids = [
+            "anthropic/claude-opus-4-7",
+            "openai/gpt-5.5",
+            "qwen/qwen3.7-max",
+            "moonshotai/kimi-k2.6",
             "anthropic/claude-sonnet-4-6",
             "openai/gpt-5.4",
             "google/gemini-3-pro",
@@ -391,8 +395,10 @@ struct ModelOption: Decodable, Identifiable, Hashable {
         }
 
         if [
+            "openai/gpt-oss-120b",
             "openai/gpt-5",
             "openai/gpt-5.1",
+            "openai/gpt-5.2",
             "openai/gpt-5.4",
             "openai/gpt-4.1",
             "openai/o3",
@@ -409,6 +415,7 @@ struct ModelOption: Decodable, Identifiable, Hashable {
 
         if lowercased.contains("gpt-5.4") ||
             lowercased.contains("gpt-5.4-mini") ||
+            lowercased.contains("gpt-oss") ||
             lowercased.contains("gpt-4.1") ||
             lowercased.contains("o3") ||
             lowercased.contains("o4-mini") ||
@@ -434,6 +441,8 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             lowercased.contains("thinking") ||
             lowercased.contains("deepseek") ||
             lowercased.contains("gpt-5") ||
+            lowercased.contains("qwen3.7") ||
+            lowercased.contains("kimi-k2.6") ||
             lowercased.contains("gemini-3") ||
             lowercased.contains("gemini-2.5-pro") ||
             lowercased.contains("qwen3.5") ||

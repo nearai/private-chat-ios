@@ -20,28 +20,35 @@ final class NEARPrivateChatUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Source mode Source"].exists || app.staticTexts["Source"].exists)
     }
 
-    func testModelPickerDemoContainsNoSpeculativeModelNames() throws {
+    func testModelPickerDemoShowsRealModelNames() throws {
         let app = launchDemo(screen: "models")
 
         XCTAssertTrue(app.staticTexts["Model"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["SINGLE MODEL ROUTE"].exists)
-        XCTAssertTrue(app.staticTexts["NEAR Private model"].exists)
-        XCTAssertTrue(app.staticTexts["NEAR AI Cloud model A"].exists)
-        XCTAssertTrue(button(containing: "NEAR Private model", in: app).exists)
-        XCTAssertTrue(button(containing: "NEAR AI Cloud model A", in: app).exists)
+        XCTAssertTrue(app.staticTexts["GLM 5.1"].exists)
+        XCTAssertTrue(app.staticTexts["Claude Opus 4.7"].exists)
+        XCTAssertTrue(app.staticTexts["GPT-5.5"].exists)
+        XCTAssertTrue(app.staticTexts["Qwen3.7 Max"].exists)
+        XCTAssertTrue(app.staticTexts["Qwen3.5 122B A10B"].exists)
+        XCTAssertTrue(button(containing: "GLM 5.1", in: app).exists)
+        XCTAssertTrue(button(containing: "Claude Opus 4.7", in: app).exists)
+        XCTAssertTrue(button(containing: "GPT-5.5", in: app).exists)
+        XCTAssertFalse(app.staticTexts["NEAR Private model"].exists)
+        XCTAssertFalse(app.staticTexts["NEAR AI Cloud model A"].exists)
+        XCTAssertFalse(app.staticTexts["Private reasoning model A"].exists)
+        XCTAssertFalse(app.staticTexts["Private reasoning model B"].exists)
         for banned in [
-            "GLM-5.1-FP8",
-            "GLM-5.1",
-            "GLM 5.1",
-            "Qwen 3.7 Max",
-            "Claude Opus 4.7",
-            "gpt-5.5",
-            "qwen3.7-max",
-            "kimi-k2.6",
-            "gemini-3.5-flash",
-            "claude-opus-4-7"
+            "GPT OSS 120B",
+            "OpenAI GPT-4.1",
+            "GPT 4.1",
+            "OpenAI o3",
+            "O3",
+            "OpenAI o4 Mini",
+            "O4 Mini",
+            "Gemini 2.5 Pro",
+            "GLM-5.1-FP8"
         ] {
-            XCTAssertFalse(app.staticTexts[banned].exists, "Speculative model name rendered: \(banned)")
+            XCTAssertFalse(app.staticTexts[banned].exists, "Stale model name rendered: \(banned)")
         }
     }
 
@@ -52,9 +59,39 @@ final class NEARPrivateChatUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["CHOOSE COUNCIL MODELS"].exists)
         XCTAssertTrue(app.staticTexts["NEAR PRIVATE COUNCIL MODELS"].exists)
         XCTAssertTrue(app.staticTexts["NEAR AI CLOUD COUNCIL MODELS"].exists)
-        XCTAssertTrue(button(containing: "NEAR Private model", in: app).exists)
-        XCTAssertTrue(button(containing: "NEAR AI Cloud model A", in: app).exists)
-        XCTAssertTrue(button(containing: "NEAR AI Cloud model B", in: app).exists)
+        XCTAssertTrue(button(containing: "GLM 5.1", in: app).exists)
+        XCTAssertTrue(button(containing: "Claude Opus 4.7", in: app).exists)
+        XCTAssertTrue(button(containing: "GPT-5.5", in: app).exists)
+        app.scrollViews.firstMatch.swipeUp()
+        XCTAssertTrue(button(containing: "Qwen3.7 Max", in: app).exists)
+        XCTAssertFalse(app.staticTexts["NEAR Private model"].exists)
+        XCTAssertFalse(app.staticTexts["NEAR AI Cloud model A"].exists)
+        XCTAssertFalse(app.staticTexts["NEAR AI Cloud model B"].exists)
+    }
+
+    func testNearCloudDemoUsesExplicitCloudModelNames() throws {
+        let app = launchDemo(screen: "cloudModels")
+
+        XCTAssertTrue(app.staticTexts["NEAR AI Cloud"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Claude Opus 4.7"].exists)
+        XCTAssertTrue(app.staticTexts["GPT-5.5"].exists)
+        XCTAssertTrue(app.staticTexts["Qwen3.7 Max"].exists)
+        XCTAssertTrue(app.staticTexts["Kimi K2.6"].exists)
+        XCTAssertTrue(app.staticTexts["Claude Sonnet 4.6"].exists)
+        XCTAssertTrue(app.staticTexts["Claude Opus 4.6"].exists)
+        XCTAssertFalse(app.staticTexts["GPT OSS 120B"].exists)
+        XCTAssertFalse(app.staticTexts["Gemini 2.5 Pro"].exists)
+        XCTAssertFalse(app.staticTexts["GPT 4.1"].exists)
+        XCTAssertFalse(app.staticTexts["O3"].exists)
+        XCTAssertFalse(app.staticTexts["O4 Mini"].exists)
+        XCTAssertTrue(app.staticTexts["Frontier OpenAI model through the NEAR AI Cloud privacy proxy."].exists)
+        XCTAssertTrue(app.staticTexts["Frontier Anthropic model through the NEAR AI Cloud privacy proxy."].exists)
+        XCTAssertTrue(app.staticTexts["Current Qwen frontier model through the NEAR AI Cloud privacy proxy."].exists)
+        XCTAssertFalse(app.staticTexts["Independent model A"].exists)
+        XCTAssertFalse(app.staticTexts["Independent model B"].exists)
+        XCTAssertFalse(app.staticTexts["NEAR AI Cloud model A"].exists)
+        XCTAssertFalse(app.staticTexts["NEAR AI Cloud model B"].exists)
+        XCTAssertFalse(app.staticTexts["Cloud model through NEAR Cloud privacy proxy."].exists)
     }
 
     func testHomeDemoPromptCaptureKeepsProjectContextReadable() throws {

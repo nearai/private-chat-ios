@@ -8,32 +8,39 @@ final class ModelCatalogStore: ObservableObject {
 
     static let preferredModelIDs = [
         ModelOption.nearPrivateDefaultModelID,
+        "anthropic/claude-opus-4-7",
+        "openai/gpt-5.5",
+        "qwen/qwen3.7-max",
+        "moonshotai/kimi-k2.6",
+        "anthropic/claude-sonnet-4-6",
+        "anthropic/claude-opus-4-6",
+        "Qwen/Qwen3.6-35B-A3B-FP8",
+        "Qwen/Qwen3.6-27B-FP8",
         "zai-org/GLM-latest",
         "Qwen/Qwen3.5-122B-A10B",
-        "Qwen/Qwen3.6-35B-A3B-FP8",
         "Qwen/Qwen3-30B-A3B-Instruct-2507",
-        "openai/gpt-oss-120b",
         "Qwen/Qwen3-VL-30B-A3B-Instruct",
         "moonshotai/Kimi-K2-Thinking",
         "moonshotai/Kimi-K2-Instruct",
         "MoonshotAI/Kimi-K2-Instruct",
         "deepseek-ai/DeepSeek-V3.2",
         "deepseek-ai/DeepSeek-V3.1",
-        "deepseek-ai/DeepSeek-R1",
-        "anthropic/claude-sonnet-4-6",
-        "openai/gpt-5.4",
-        "google/gemini-3-pro",
-        "openai/gpt-5.2",
-        "openai/gpt-5.1",
-        "openai/gpt-5",
-        "google/gemini-2.5-pro",
-        "anthropic/claude-opus-4-6",
-        "anthropic/claude-sonnet-4-5",
-        "openai/gpt-4.1",
-        "openai/o3",
-        "openai/o4-mini"
+        "deepseek-ai/DeepSeek-R1"
     ]
-    static let nearCloudPreferredModelIDs: [String] = []
+    static let nearCloudPreferredModelIDs: [String] = [
+        "anthropic/claude-opus-4-7",
+        "openai/gpt-5.5",
+        "qwen/qwen3.7-max",
+        "moonshotai/kimi-k2.6",
+        "anthropic/claude-sonnet-4-6",
+        "anthropic/claude-opus-4-6",
+        "Qwen/Qwen3.6-35B-A3B-FP8",
+        "Qwen/Qwen3.6-27B-FP8",
+        "deepseek-ai/DeepSeek-V4-Flash",
+        "Qwen/Qwen3.5-122B-A10B",
+        "Qwen/Qwen3-30B-A3B-Instruct-2507",
+        "zai-org/GLM-5.1-FP8"
+    ]
     static let defaultCouncilCandidateGroups = [
         [
             ModelOption.nearPrivateDefaultModelID
@@ -335,8 +342,7 @@ final class ModelCatalogStore: ObservableObject {
                     [ModelOption.nearPrivateDefaultModelID],
                     ["Qwen/Qwen3.5-122B-A10B", "Qwen/Qwen3.6-35B-A3B-FP8", "Qwen/Qwen3-30B-A3B-Instruct-2507"],
                     ["moonshotai/Kimi-K2-Thinking", "moonshotai/Kimi-K2-Instruct"],
-                    ["deepseek-ai/DeepSeek-V3.2", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-R1"],
-                    ["openai/gpt-oss-120b"]
+                    ["deepseek-ai/DeepSeek-V3.2", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-R1"]
                 ],
                 candidateModels: chatModels.filter { isCouncilEligible($0) && !$0.isExternalModel },
                 fallbackModels: chatModels.filter { isCouncilEligible($0) && !$0.isExternalModel }

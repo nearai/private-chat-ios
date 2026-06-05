@@ -61,8 +61,9 @@ struct ModelPickerView: View {
         modelCatalogStore.rankedModels(from: allPickerModels.filter { $0.isNearCloudModel })
     }
 
-    private var primaryCloudModel: ModelOption? {
-        cloudModelChoices.first
+    private var primaryCloudModels: [ModelOption] {
+        guard chatStore.nearCloudKeyConfigured else { return [] }
+        return Array(cloudModelChoices.prefix(3))
     }
 
     private var councilPrivateCandidates: [ModelOption] {
@@ -86,32 +87,6 @@ struct ModelPickerView: View {
     }
 
     private func modelRowTitle(for model: ModelOption, defaultTitle: String? = nil) -> String {
-        guard DemoCapture.isEnabled else {
-            return defaultTitle ?? model.displayName
-        }
-        if isDefaultPrivateModel(model) {
-            return "NEAR Private model"
-        }
-        if model.isPrivateVerifiableChatModel {
-            if model.id.localizedCaseInsensitiveContains("Qwen3.5") {
-                return "Private reasoning model A"
-            }
-            if model.id.localizedCaseInsensitiveContains("Qwen3.6") {
-                return "Private reasoning model B"
-            }
-            return "Private reasoning model"
-        }
-        if model.isNearCloudModel {
-            let name = model.displayName.lowercased()
-            let id = model.id.lowercased()
-            if name.contains("model b") || id.contains("model-b") {
-                return "NEAR AI Cloud model B"
-            }
-            if name.contains("model a") || id.contains("model-a") {
-                return "NEAR AI Cloud model A"
-            }
-            return "NEAR AI Cloud model"
-        }
         return defaultTitle ?? model.displayName
     }
 
@@ -272,27 +247,29 @@ struct ModelPickerView: View {
                         symbolName: "cpu",
                         symbolColor: Color.actionPrimary,
                         title: modelRowTitle(for: model),
-                        subtitle: "Use this for one NEAR Private answer with proof support.",
+                        subtitle: "NEAR Private model · one answer with proof support.",
                         badges: model.routeDisclosureBadges,
                         trailing: modelRowTrailing(for: model),
                         isSelected: isSelectedSingleModel(model),
-                        showsDivider: primaryCloudModel != nil || !chatStore.nearCloudKeyConfigured,
+                        showsDivider: !primaryCloudModels.isEmpty || !chatStore.nearCloudKeyConfigured,
                         action: { selectModelAndDismiss(model) }
                     )
                 }
 
-                if let model = primaryCloudModel {
-                    ModelSpecRow(
-                        symbolName: "cloud.fill",
-                        symbolColor: Color.brandBlue,
-                        title: modelRowTitle(for: model, defaultTitle: "NEAR AI Cloud: \(model.displayName)"),
-                        subtitle: "Use this for one external answer through the privacy proxy.",
-                        badges: model.routeDisclosureBadges,
-                        trailing: modelRowTrailing(for: model),
-                        isSelected: isSelectedSingleModel(model),
-                        showsDivider: false,
-                        action: { selectModelAndDismiss(model) }
-                    )
+                if !primaryCloudModels.isEmpty {
+                    ForEach(Array(primaryCloudModels.enumerated()), id: \.element.id) { index, model in
+                        ModelSpecRow(
+                            symbolName: "cloud.fill",
+                            symbolColor: Color.brandBlue,
+                            title: modelRowTitle(for: model),
+                            subtitle: "NEAR AI Cloud model · one external answer through the privacy proxy.",
+                            badges: model.routeDisclosureBadges,
+                            trailing: modelRowTrailing(for: model),
+                            isSelected: isSelectedSingleModel(model),
+                            showsDivider: index != primaryCloudModels.count - 1,
+                            action: { selectModelAndDismiss(model) }
+                        )
+                    }
                 } else if !chatStore.nearCloudKeyConfigured {
                     ModelSpecRow(
                         symbolName: "cloud",
