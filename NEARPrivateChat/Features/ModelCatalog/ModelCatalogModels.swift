@@ -370,6 +370,9 @@ struct ModelOption: Decodable, Identifiable, Hashable {
 
     var isLowerPriorityModel: Bool {
         let lowercased = searchText.lowercased()
+        if lowercased.contains("deepseek-v4-flash") || lowercased.contains("deepseek v4 flash") {
+            return false
+        }
         return lowercased.contains("o3") ||
             lowercased.contains("o4-mini") ||
             lowercased.contains("haiku") ||
@@ -386,6 +389,17 @@ struct ModelOption: Decodable, Identifiable, Hashable {
         let comparableID = isNearCloudModel ? (nearCloudUnderlyingModelID ?? modelID) : modelID
         let lowercasedID = comparableID.lowercased()
         let lowercased = searchText.lowercased()
+
+        if lowercasedID == "deepseek-ai/deepseek-v4-flash" {
+            return false
+        }
+        if !isNearCloudModel,
+           [
+               "qwen/qwen3-30b-a3b-instruct-2507",
+               "qwen/qwen3-vl-30b-a3b-instruct"
+           ].contains(lowercasedID) {
+            return false
+        }
 
         if lowercased.contains("embedding") ||
             lowercased.contains("reranker") ||

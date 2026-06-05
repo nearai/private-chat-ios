@@ -14,6 +14,7 @@ final class ModelCatalogStore: ObservableObject {
         "moonshotai/kimi-k2.6",
         "anthropic/claude-sonnet-4-6",
         "anthropic/claude-opus-4-6",
+        "deepseek-ai/DeepSeek-V4-Flash",
         "Qwen/Qwen3.6-35B-A3B-FP8",
         "Qwen/Qwen3.6-27B-FP8",
         "zai-org/GLM-latest",
@@ -340,6 +341,7 @@ final class ModelCatalogStore: ObservableObject {
                 symbolName: "checkmark.shield.fill",
                 candidateGroups: [
                     [ModelOption.nearPrivateDefaultModelID],
+                    ["deepseek-ai/DeepSeek-V4-Flash"],
                     ["Qwen/Qwen3.5-122B-A10B", "Qwen/Qwen3.6-35B-A3B-FP8", "Qwen/Qwen3-30B-A3B-Instruct-2507"],
                     ["moonshotai/Kimi-K2-Thinking", "moonshotai/Kimi-K2-Instruct"],
                     ["deepseek-ai/DeepSeek-V3.2", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-R1"]
@@ -954,6 +956,18 @@ final class ModelCatalogStore: ObservableObject {
                 )
             ),
             ModelOption(
+                modelID: "deepseek-ai/DeepSeek-V4-Flash",
+                publicModel: true,
+                metadata: ModelOption.Metadata(
+                    verifiable: true,
+                    contextLength: 1_048_576,
+                    modelDisplayName: "DeepSeek V4 Flash",
+                    modelDescription: "NEAR Private DeepSeek V4 Flash route with proof support.",
+                    modelIcon: nil,
+                    aliases: ["DeepSeek", "private", "reasoning", "fast", "TDX"]
+                )
+            ),
+            ModelOption(
                 modelID: "Qwen/Qwen3.5-122B-A10B",
                 publicModel: true,
                 metadata: ModelOption.Metadata(
@@ -975,6 +989,42 @@ final class ModelCatalogStore: ObservableObject {
                     modelDescription: "NEAR Private open-weight fast reasoning route with proof support.",
                     modelIcon: nil,
                     aliases: ["Qwen", "private", "open-weight", "fast"]
+                )
+            ),
+            ModelOption(
+                modelID: "Qwen/Qwen3.6-27B-FP8",
+                publicModel: true,
+                metadata: ModelOption.Metadata(
+                    verifiable: true,
+                    contextLength: 262_144,
+                    modelDisplayName: "Qwen 3.6 27B FP8",
+                    modelDescription: "NEAR Private dense reasoning route with proof support.",
+                    modelIcon: nil,
+                    aliases: ["Qwen", "private", "open-weight", "reasoning"]
+                )
+            ),
+            ModelOption(
+                modelID: "Qwen/Qwen3-30B-A3B-Instruct-2507",
+                publicModel: true,
+                metadata: ModelOption.Metadata(
+                    verifiable: true,
+                    contextLength: 262_144,
+                    modelDisplayName: "Qwen3 30B A3B Instruct 2507",
+                    modelDescription: "NEAR Private instruction route with proof support.",
+                    modelIcon: nil,
+                    aliases: ["Qwen", "private", "open-weight", "instruct"]
+                )
+            ),
+            ModelOption(
+                modelID: "Qwen/Qwen3-VL-30B-A3B-Instruct",
+                publicModel: true,
+                metadata: ModelOption.Metadata(
+                    verifiable: true,
+                    contextLength: 256_000,
+                    modelDisplayName: "Qwen3-VL-30B-A3B-Instruct",
+                    modelDescription: "NEAR Private vision-language route with proof support.",
+                    modelIcon: nil,
+                    aliases: ["Qwen", "private", "open-weight", "vision"]
                 )
             )
         ]

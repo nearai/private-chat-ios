@@ -39,6 +39,26 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(catalog.pinnedPickerModels(from: ["Qwen/Qwen3.5-122B-A10B"]).map(\.id), ["Qwen/Qwen3.5-122B-A10B"])
     }
 
+    func testFallbackPrivateCatalogIncludesCurrentPrivateModelChoices() {
+        let catalog = ModelCatalogStore()
+        let pickerIDs = Set(catalog.pickerModels.map(\.id))
+        let fallbackIDs = Set(ModelCatalogStore.fallbackPrivateModels().map(\.id))
+
+        for modelID in [
+            "deepseek-ai/DeepSeek-V4-Flash",
+            "Qwen/Qwen3.6-27B-FP8",
+            "Qwen/Qwen3-30B-A3B-Instruct-2507",
+            "Qwen/Qwen3-VL-30B-A3B-Instruct"
+        ] {
+            XCTAssertTrue(fallbackIDs.contains(modelID), "\(modelID) should be seeded as a private fallback model")
+            XCTAssertTrue(pickerIDs.contains(modelID), "\(modelID) should be selectable in the model picker")
+        }
+
+        XCTAssertEqual(catalog.pickerModels.first { $0.id == "deepseek-ai/DeepSeek-V4-Flash" }?.displayName, "DeepSeek V4 Flash")
+        XCTAssertEqual(catalog.pickerModels.first { $0.id == "deepseek-ai/DeepSeek-V4-Flash" }?.isNearCloudModel, false)
+        XCTAssertEqual(catalog.pickerModels.first { $0.id == "deepseek-ai/DeepSeek-V4-Flash" }?.isVerifiable, true)
+    }
+
     func testModelCatalogStoreOwnsSelectionPinningAndCouncilLineupWithoutChatStore() {
         let catalog = ModelCatalogStore(
             models: [
