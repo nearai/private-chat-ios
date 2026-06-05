@@ -207,7 +207,7 @@ struct ChatToolbar: View {
                     routeSummary = "Hosted IronClaw"
                 }
             }
-            return "\(routeSummary) · Add sources when needed."
+            return "\(routeSummary) · \(emptyRouteSourceSummary)"
         }
 
         var parts: [String] = []
@@ -250,15 +250,33 @@ struct ChatToolbar: View {
         }
         switch modelCatalogStore.sourceMode {
         case .auto:
-            return "Auto"
+            return "Sources as needed"
         case .web:
-            return "Web"
+            return "Live web"
         case .links:
-            return "Links"
+            return "Saved links"
         case .files:
             return "Files"
         case .all:
-            return "Web + Files"
+            return "Web + files"
+        }
+    }
+
+    private var emptyRouteSourceSummary: String {
+        if modelCatalogStore.researchModeEnabled {
+            return "research sources on"
+        }
+        switch modelCatalogStore.sourceMode {
+        case .auto:
+            return "sources stay explicit"
+        case .web:
+            return "live web on"
+        case .links:
+            return "saved links only"
+        case .files:
+            return "files only"
+        case .all:
+            return "web and files on"
         }
     }
 
@@ -299,7 +317,7 @@ struct ChatToolbar: View {
         case .ironclawHosted:
             return "Hosted IronClaw"
         case .nearPrivate, .nearCloud:
-            return "Agent"
+            return "Agent tools"
         }
     }
 

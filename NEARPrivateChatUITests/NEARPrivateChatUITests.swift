@@ -11,6 +11,8 @@ final class NEARPrivateChatUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["New chat"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["NEAR Private"].exists)
         XCTAssertTrue(app.staticTexts["What do you want to ask?"].exists)
+        XCTAssertTrue(app.staticTexts["Sources as needed"].exists)
+        XCTAssertTrue(app.staticTexts["Agent tools"].exists)
         XCTAssertTrue(app.buttons["Next actions"].exists || app.staticTexts["Next actions"].exists)
         XCTAssertTrue(app.buttons["Files to actions"].exists || app.staticTexts["Files to actions"].exists)
         XCTAssertTrue(app.buttons["Model GLM 5.1"].exists || app.staticTexts["GLM 5.1"].exists)
