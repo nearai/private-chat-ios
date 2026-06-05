@@ -41,6 +41,20 @@ final class NEARPrivateChatUITests: XCTestCase {
         }
     }
 
+    func testHomeDemoPromptCaptureKeepsProjectContextReadable() throws {
+        let app = launchDemo(screen: "home")
+
+        XCTAssertTrue(app.staticTexts["Start from one prompt"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["IronClaw Reborn Plan context is active. Ask, research, prove, or hand off."].exists)
+        XCTAssertTrue(app.staticTexts["IronClaw Reborn Plan context active"].exists || app.staticTexts["IronClaw Reborn Plan"].exists)
+        XCTAssertTrue(app.staticTexts["Add prompt first"].exists)
+        XCTAssertFalse(app.staticTexts["Type to prepare"].exists)
+        XCTAssertTrue(app.buttons["Brief project"].exists)
+        XCTAssertTrue(app.buttons["Context to actions"].exists)
+        XCTAssertTrue(app.buttons["Draft trackers"].exists)
+        XCTAssertTrue(app.buttons["Sources & proof"].exists)
+    }
+
     private func launchDemo(screen: String) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
