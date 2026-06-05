@@ -118,15 +118,20 @@ struct DefaultModelDetailView: View {
                             onSelectDefaultModel(next)
                         } label: {
                             HStack(spacing: 12) {
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: 6) {
                                     Text(option.displayName)
                                         .font(.body)
                                         .foregroundStyle(.primary)
-                                    if let subtitle = subtitle(for: option) {
-                                        Text(subtitle)
-                                            .font(.footnote)
-                                            .fontWeight(.regular)
-                                            .foregroundStyle(Color.textSecondary)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.82)
+                                    if let badge = routeBadge(for: option) {
+                                        Label(badge.title, systemImage: badge.symbolName)
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(badge.tint)
+                                            .lineLimit(1)
+                                            .padding(.horizontal, 8)
+                                            .frame(height: 24)
+                                            .background(badge.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                                     }
                                 }
                                 Spacer(minLength: 0)
@@ -151,18 +156,24 @@ struct DefaultModelDetailView: View {
         .platformInlineNavigationTitle()
     }
 
-    private func subtitle(for option: ModelOption) -> String? {
+    private func routeBadge(for option: ModelOption) -> ModelRouteBadge? {
         if option.id == ModelCatalogStore.defaultModelID {
-            return "Shipped default · private route with proof"
+            return ModelRouteBadge(title: "Default private", symbolName: "checkmark.shield", tint: Color.actionPrimary)
         }
         if option.isNearCloudModel {
-            return "NEAR AI Cloud · no NEAR Private proof"
+            return ModelRouteBadge(title: "Cloud route", symbolName: "cloud", tint: Color.textSecondary)
         }
         if option.isVerifiable {
-            return "NEAR Private · attested when proof is fresh"
+            return ModelRouteBadge(title: "Private proof", symbolName: "checkmark.shield", tint: Color.proofVerified)
         }
-        return nil
+        return ModelRouteBadge(title: "External route", symbolName: "network", tint: Color.textSecondary)
     }
+}
+
+private struct ModelRouteBadge {
+    let title: String
+    let symbolName: String
+    let tint: Color
 }
 
 struct ReasoningEffortDetailView: View {

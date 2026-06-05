@@ -1,7 +1,5 @@
 import SwiftUI
 
-import SwiftUI
-
 enum HomeOrchestrationFilter: String, CaseIterable, Identifiable {
     case all
     case streams

@@ -219,17 +219,22 @@ struct HomeScreen: View {
                             .padding(.top, 12)
                         } else if homeInboxSectionPlan.showsActiveSearchEmptyState {
                             VStack(spacing: 14) {
-                                ClaudeHomeEmptyState(
-                                    title: searchQuery.isEmpty ? "Start a private chat" : "No matching chats or projects",
-                                    showsAction: searchQuery.isEmpty,
-                                    action: openNewChat
+                                HomeInboxEmptyState(
+                                    title: "No results",
+                                    subtitle: "No chats, Projects, or sources match \"\(searchQuery)\". Clear search or try fewer words.",
+                                    symbolName: "magnifyingglass",
+                                    actionTitle: "Clear search",
+                                    actionSymbolName: "xmark.circle",
+                                    action: clearHomeSearch
                                 )
-                                .frame(maxWidth: .infinity)
-                                .containerRelativeFrame(.vertical)
+                                .padding(.horizontal, 16)
+                                .padding(.top, 18)
+                                .frame(maxWidth: .infinity, alignment: .top)
 
                                 // v2: HomeTrustReadinessCard removed — trust state
                                 // lives inside the chat thread, not on Home.
                             }
+                            .containerRelativeFrame(.vertical, alignment: .top)
                         }
                     }
 
@@ -340,6 +345,12 @@ struct HomeScreen: View {
                 await shareStore.refreshSharedWithMe(showErrors: false)
             }
         }
+    }
+
+    private func clearHomeSearch() {
+        homeStore.searchText = ""
+        homeStore.isSearchVisible = false
+        homeStore.resetDefaultFilter()
     }
 
 

@@ -141,7 +141,7 @@ enum HomeOrchestrationPlanner {
             title: isEnabled ? "Council room" : "Recommended Council",
             subtitle: subtitle,
             detail: isEnabled ? "Compare model views before committing." : "Enable the default multi-model lineup.",
-            statusText: isEnabled ? "enabled" : "available",
+            statusText: isEnabled ? "Ready" : "Available",
             symbolName: "person.3.fill",
             tone: .violet,
             action: action
@@ -166,7 +166,7 @@ enum HomeOrchestrationPlanner {
             title: "Agent task",
             subtitle: route,
             detail: detail,
-            statusText: hostedAvailable ? "connected" : (mobileAvailable ? "phone" : "not set up"),
+            statusText: hostedAvailable ? "Connected" : (mobileAvailable ? "Phone route" : "Set up"),
             symbolName: hostedAvailable ? "terminal" : "iphone",
             tone: .blue,
             action: .stagePrompt(HomeStagedPrompt(
