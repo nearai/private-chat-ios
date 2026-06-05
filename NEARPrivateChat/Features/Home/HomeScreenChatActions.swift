@@ -80,6 +80,10 @@ extension HomeScreen {
         case .openAgentSettings:
             AppHaptics.lightImpact()
             openAccountSettings(deepLink: .ironclawAgent)
+        case .editCouncilLineup:
+            AppHaptics.selection()
+            homeStore.showingHomeCouncilPicker = true
+            chatStore.bannerMessage = "Add at least two models to run Council."
         case .useAutoCouncil:
             AppHaptics.selection()
             chatStore.useDefaultCouncilLineup()

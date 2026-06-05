@@ -490,6 +490,27 @@ extension PrivateChatCoreTests {
     }
 
     @MainActor
+    func testChatSendCoordinatorSurfacesPreConversationCouncilFailureAsTranscriptTurn() async {
+        let host = PreConversationFailureSendHost()
+        let coordinator = ChatSendCoordinator(host: host)
+
+        let didHandleSend = await coordinator.sendForBridge(
+            "Say hello in one sentence.",
+            attachments: []
+        )
+
+        XCTAssertTrue(didHandleSend)
+        XCTAssertFalse(host.sendIsStreaming)
+        XCTAssertEqual(host.sendMessages.count, 2)
+        XCTAssertEqual(host.sendMessages.first?.role, .user)
+        XCTAssertEqual(host.sendMessages.first?.text, "Say hello in one sentence.")
+        XCTAssertEqual(host.sendMessages.last?.role, .assistant)
+        XCTAssertEqual(host.sendMessages.last?.status, "failed")
+        XCTAssertEqual(host.sendMessages.last?.text, "HTTP 401 - Missing authorization header")
+        XCTAssertEqual(host.banners.last, "HTTP 401 - Missing authorization header")
+    }
+
+    @MainActor
     func testChatSessionCoordinatorOwnsProjectSelectionTransitions() {
         let keepConversation = ConversationSummary(
             id: "conv-keep",
@@ -1589,6 +1610,194 @@ extension PrivateChatCoreTests {
 private extension PrivateChatCoreTests {
     static func conversationItemsResponseJSON(_ json: String) throws -> ConversationItemsResponse {
         try JSONDecoder().decode(ConversationItemsResponse.self, from: Data(json.utf8))
+    }
+}
+
+@MainActor
+private final class PreConversationFailureSendHost: ChatSendCoordinatorHost {
+    private let timelineStore = MessageTimelineStore()
+    private let conversationFailure = NSError(
+        domain: "PreConversationFailureSendHost",
+        code: 401,
+        userInfo: [NSLocalizedDescriptionKey: "HTTP 401 - Missing authorization header"]
+    )
+
+    var banners: [String] = []
+    var sendDraftText = ""
+    var sendPendingAttachments: [ChatAttachment] = []
+    var sendPendingLargePasteTexts: [String: String] = [:]
+    var sendPendingSharedFileURLs: [String: URL] = [:]
+    var sendIsStreaming = false
+    var sendRouteReadinessIssue: ChatRouteReadinessIssue?
+    var sendPendingHostedHandoffPreflight: HostedIronclawHandoffPreflight?
+    var sendSelectedModel = ModelOption.nearPrivateDefaultModelID
+    var sendSelectedConversation: ConversationSummary? { nil }
+    var sendSelectedProjectID: String? { nil }
+    var sendMessages: [ChatMessage] {
+        get { timelineStore.messages }
+        set { timelineStore.messages = newValue }
+    }
+    var sendCurrentAssistantMessageID: String?
+    var sendCurrentCouncilAssistantMessageIDs: [String] = []
+    var sendCouncilStopRequestedBatchID: String?
+    var sendStreamTask: Task<Void, Never>?
+    var sendMessageTimelineStore: MessageTimelineStore { timelineStore }
+    var sendCurrentUserMessageMetadata: MessageMetadata? { nil }
+    var sendModelsAreEmpty: Bool { false }
+    var sendBillingSnapshotIsMissing: Bool { false }
+
+    func normalizedSendDraftInput(_ draft: String) -> String { draft }
+
+    func promptSourcePrivacyOverrideForSend(for prompt: String, hasAttachments: Bool) -> ChatPromptSourcePrivacyOverride {
+        ChatPromptSourcePrivacyOverride()
+    }
+
+    func applyPromptSourcePrivacyOverrideForSend(_ override: ChatPromptSourcePrivacyOverride) {}
+
+    func activeAttachmentsForSend(promptAttachments: [ChatAttachment]) -> [ChatAttachment] {
+        promptAttachments
+    }
+
+    func promptOnlyAttachmentsForSend(from attachments: [ChatAttachment]) -> [ChatAttachment] {
+        attachments
+    }
+
+    func consumeLocalSendFastPathIfNeeded(
+        text: String,
+        promptAttachments: [ChatAttachment],
+        activeAttachments: [ChatAttachment]
+    ) -> Bool {
+        false
+    }
+
+    func actionSurfaceTextForSend(
+        text: String,
+        attachments: [ChatAttachment],
+        override: ChatPromptSourcePrivacyOverride
+    ) -> String {
+        text
+    }
+
+    func routeCurrentPromptIfNeededForSend(_ text: String, attachments: [ChatAttachment]) {}
+
+    func hostedHandoffPreflightForSend(
+        text: String,
+        promptAttachments: [ChatAttachment]
+    ) -> HostedIronclawHandoffPreflight? {
+        nil
+    }
+
+    func currentRouteReadinessIssueForSend(
+        for text: String,
+        appendUserMessage: Bool
+    ) -> ChatRouteReadinessIssue? {
+        nil
+    }
+
+    func blockSendForRouteReadinessForSend(_ issue: ChatRouteReadinessIssue) {
+        sendRouteReadinessIssue = issue
+    }
+
+    func captureInferredMemoryForSend(from text: String) {}
+
+    func discardActiveDraftForSend() {}
+
+    func resolvePromptAttachmentsForSendBridge(_ promptAttachments: [ChatAttachment]) async throws -> [ChatAttachment] {
+        promptAttachments
+    }
+
+    func displayFailureMessageForSend(_ rawValue: String) -> String {
+        rawValue
+    }
+
+    func localFailureMessageForSend(from text: String) -> String? {
+        nil
+    }
+
+    func isExternalModelForSend(_ modelID: String) -> Bool {
+        false
+    }
+
+    func refreshModelsForSend() async {}
+
+    func scheduleAccountBackgroundRefreshForSend() {}
+
+    func ensureSelectedModelIsAvailableForSend() {}
+
+    func phoneAgentMissionPromptIfNeededForSend(for text: String) -> String? {
+        nil
+    }
+
+    func requestCouncilModelIDsForSend(for modelID: String) -> [String] {
+        [modelID, "Qwen/Qwen3.5-122B-A10B"]
+    }
+
+    func localDocumentPayloadsForSend(
+        attachments: [ChatAttachment]
+    ) -> [DocumentTextExtractor.LocalDocumentContextPayload] {
+        []
+    }
+
+    func documentAugmentedPromptForSend(
+        _ prompt: String,
+        question: String,
+        attachments: [ChatAttachment]
+    ) -> String {
+        prompt
+    }
+
+    func ensureConversationForSend(
+        firstMessage: String,
+        attachments: [ChatAttachment]
+    ) async throws -> ConversationSummary {
+        throw conversationFailure
+    }
+
+    func activateConversationForSend(_ conversation: ConversationSummary) {}
+
+    func organizePhoneAgentConversationIfNeededForSend(
+        conversation: ConversationSummary,
+        originalText: String,
+        routedText: String
+    ) {}
+
+    func sendCouncilTurnBridge(
+        text: String,
+        routedText: String,
+        attachments: [ChatAttachment],
+        conversation: ConversationSummary,
+        modelIDs: [String],
+        previousResponseID: String?,
+        initiator: String
+    ) async throws {}
+
+    func assistantTrustMetadataForSend(
+        for model: String?,
+        webSearchUsed: Bool?,
+        capturedAt: Date
+    ) -> MessageTrustMetadata? {
+        nil
+    }
+
+    func streamResponseWithFallbackForSend(
+        initialModel: String,
+        text: String,
+        attachments: [ChatAttachment],
+        conversationID: String,
+        previousResponseID: String?,
+        initiator: String
+    ) async throws -> String {
+        initialModel
+    }
+
+    func saveLocalMessagesForSend(conversationID: String) {}
+
+    func scheduleMessageLoadForSend(conversation: ConversationSummary, preferCached: Bool) {}
+
+    func scheduleConversationListRefreshForSend() {}
+
+    func showBannerForSend(_ message: String) {
+        banners.append(message)
     }
 }
 

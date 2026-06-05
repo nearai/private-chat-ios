@@ -144,13 +144,54 @@ extension PrivateChatCoreTests {
             routeLabel: "NEAR Private",
             isCouncilModeEnabled: false,
             defaultCouncilModelCount: 3,
-            councilModelNames: [],
+            councilModelNames: ["GLM 5.1"],
             hostedAgentAvailable: false,
             mobileAgentAvailable: false
         )
 
-        XCTAssertEqual(plan.liveItems.first(where: { $0.id == "council-room" })?.action, .useAutoCouncil)
+        let councilItem = plan.liveItems.first(where: { $0.id == "council-room" })
+        XCTAssertEqual(councilItem?.title, "Recommended Council")
+        XCTAssertEqual(councilItem?.subtitle, "3 models available")
+        XCTAssertEqual(councilItem?.detail, "Enable the recommended multi-model lineup.")
+        XCTAssertEqual(councilItem?.action, .useAutoCouncil)
         XCTAssertEqual(plan.commands.first(where: { $0.id == "council" })?.action, .useAutoCouncil)
+    }
+
+    func testHomeOrchestrationPlannerAsksToCompleteIncompleteCouncilLineup() {
+        let project = ChatProject(
+            id: "project-ironclaw",
+            name: "IronClaw Reborn Plan",
+            createdAt: Date(timeIntervalSince1970: 1_700_200_000),
+            conversationIDs: []
+        )
+        let plan = HomeOrchestrationPlanner.make(
+            briefings: [],
+            projects: [project],
+            conversations: [],
+            selectedProjectID: project.id,
+            isStreaming: false,
+            routeLabel: "Private Council",
+            isCouncilModeEnabled: true,
+            defaultCouncilModelCount: 1,
+            councilModelNames: ["GLM 5.1"],
+            hostedAgentAvailable: true,
+            mobileAgentAvailable: false
+        )
+
+        let councilItem = plan.liveItems.first(where: { $0.id == "council-room" })
+        XCTAssertEqual(councilItem?.title, "Finish Council setup")
+        XCTAssertEqual(councilItem?.subtitle, "1 model selected")
+        XCTAssertEqual(councilItem?.detail, "Add at least one more model before running Council.")
+        XCTAssertEqual(councilItem?.statusText, "Needs 2")
+        XCTAssertEqual(councilItem?.tone, .amber)
+        XCTAssertEqual(councilItem?.action, .editCouncilLineup)
+        XCTAssertEqual(plan.subtitle, "1 Project / Agent")
+        XCTAssertFalse(plan.subtitle.contains("Council"))
+
+        let councilCommand = plan.commands.first(where: { $0.id == "council" })
+        XCTAssertEqual(councilCommand?.title, "Edit Council")
+        XCTAssertEqual(councilCommand?.action, .editCouncilLineup)
+        XCTAssertFalse(plan.commands.contains { $0.title == "Run Council" })
     }
 
     func testCouncilMessageProgressTracksFirstTokenAndUsableAnswer() {

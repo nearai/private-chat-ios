@@ -427,6 +427,9 @@ final class ChatSendCoordinator {
             host.sendStreamTask = nil
         }
 
+        var failureModel = host.sendSelectedModel
+        var failurePreviousResponseID = previousResponseIDOverride
+
         do {
             if host.sendModelsAreEmpty {
                 await host.refreshModelsForSend()
@@ -461,6 +464,8 @@ final class ChatSendCoordinator {
             let previousAssistantMessage = host.sendMessages.last(where: { $0.role == .assistant })
             let previousResponseID = previousResponseIDOverride ??
                 previousAssistantMessage.flatMap { host.isExternalModelForSend($0.model ?? "") ? nil : $0.responseID }
+            failureModel = requestModel
+            failurePreviousResponseID = previousResponseID
             let requestInitiator = initiator ?? (existingConversation == nil ? "new_chat" : "new_message")
             let councilModelIDs = appendUserMessage ? host.requestCouncilModelIDsForSend(for: requestModel) : []
             let apiAttachments = attachments.filter { !$0.isLocalOnly }
@@ -577,17 +582,15 @@ final class ChatSendCoordinator {
             return true
         } catch {
             let displayError = host.displayFailureMessageForSend(error.localizedDescription)
-            if let currentAssistantMessageID = host.sendCurrentAssistantMessageID {
-                host.sendMessageTimelineStore.updateMessage(currentAssistantMessageID) { message in
-                    message.isStreaming = false
-                    message.status = "failed"
-                    if let localFailure = host.localFailureMessageForSend(from: message.text) {
-                        message.text = localFailure
-                    } else if message.text.isEmpty {
-                        message.text = displayError
-                    }
-                }
-            }
+            markVisibleFailureTurnIfNeeded(
+                host: host,
+                text: text,
+                model: failureModel,
+                previousResponseID: failurePreviousResponseID,
+                attachments: attachments,
+                appendUserMessage: appendUserMessage,
+                displayError: displayError
+            )
             if let selectedConversation = host.sendSelectedConversation,
                host.sendMessages.contains(where: { host.isExternalModelForSend($0.model ?? "") }) {
                 host.saveLocalMessagesForSend(conversationID: selectedConversation.id)
@@ -595,5 +598,74 @@ final class ChatSendCoordinator {
             host.showBannerForSend(displayError)
             return true
         }
+    }
+
+    private func markVisibleFailureTurnIfNeeded(
+        host: ChatSendCoordinatorHost,
+        text: String,
+        model: String,
+        previousResponseID: String?,
+        attachments: [ChatAttachment],
+        appendUserMessage: Bool,
+        displayError: String
+    ) {
+        func markFailure(_ message: inout ChatMessage) {
+            message.isStreaming = false
+            message.status = "failed"
+            if let localFailure = host.localFailureMessageForSend(from: message.text) {
+                message.text = localFailure
+            } else if message.text.isEmpty {
+                message.text = displayError
+            } else if !message.text.localizedCaseInsensitiveContains(displayError) {
+                message.text += "\n\nResponse failed: \(displayError)"
+            }
+        }
+
+        if let currentAssistantMessageID = host.sendCurrentAssistantMessageID {
+            host.sendMessageTimelineStore.updateMessage(currentAssistantMessageID, mutate: markFailure)
+            return
+        }
+
+        if !host.sendCurrentCouncilAssistantMessageIDs.isEmpty {
+            for messageID in host.sendCurrentCouncilAssistantMessageIDs {
+                host.sendMessageTimelineStore.updateMessage(messageID, mutate: markFailure)
+            }
+            return
+        }
+
+        guard appendUserMessage else { return }
+
+        let userMessage = ChatMessage(
+            id: "local-user-\(UUID().uuidString)",
+            role: .user,
+            text: text,
+            model: model,
+            createdAt: Date(),
+            status: "completed",
+            responseID: nil,
+            previousResponseID: previousResponseID,
+            isStreaming: false,
+            attachments: attachments,
+            metadata: host.sendCurrentUserMessageMetadata
+        )
+        let assistantCreatedAt = Date().addingTimeInterval(0.01)
+        let assistantMessage = ChatMessage(
+            id: "local-assistant-\(UUID().uuidString)",
+            role: .assistant,
+            text: displayError,
+            model: model,
+            createdAt: assistantCreatedAt,
+            status: "failed",
+            responseID: nil,
+            previousResponseID: previousResponseID,
+            isStreaming: false,
+            trustMetadata: host.assistantTrustMetadataForSend(
+                for: model,
+                webSearchUsed: nil,
+                capturedAt: assistantCreatedAt
+            )
+        )
+        host.sendMessages.append(userMessage)
+        host.sendMessages.append(assistantMessage)
     }
 }

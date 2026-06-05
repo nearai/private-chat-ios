@@ -104,6 +104,7 @@ enum HomeOrchestrationAction: Equatable {
     case openProject(String)
     case openConversation(String)
     case openAgentSettings
+    case editCouncilLineup
     case useAutoCouncil
     case newBriefing
     case runSetupDefaults

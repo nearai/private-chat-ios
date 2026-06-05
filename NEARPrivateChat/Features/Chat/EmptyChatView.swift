@@ -342,22 +342,31 @@ struct EmptyChatView: View {
         Button {
             fillDraft(for: suggestion)
         } label: {
-            Label(suggestion.title, systemImage: suggestion.symbolName)
-                .font(.footnote.weight(.medium))
-                .labelStyle(.titleAndIcon)
-                .foregroundStyle(Color.textSecondary)
-                .lineLimit(2)
-                .minimumScaleFactor(0.90)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 12)
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color.appBorder, lineWidth: 1)
-                }
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: suggestion.symbolName)
+                    .font(.system(size: 15, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Color.textSecondary)
+                    .frame(width: 24, height: 24)
+
+                Text(suggestion.title)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.90)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
+            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.appBorder, lineWidth: 1)
+            }
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel("Use suggestion, \(suggestion.title)")
         .accessibilityHint(accessibilityHint(for: suggestion))
     }
@@ -379,17 +388,14 @@ struct EmptyChatView: View {
         }
     }
 
-    private var suggestionRows: [[EmptyChatStarterSuggestion]] {
-        stride(from: 0, to: emptyPromptSuggestions.count, by: 2).map { start in
-            Array(emptyPromptSuggestions[start..<min(start + 2, emptyPromptSuggestions.count)])
-        }
-    }
-
     private var suggestionColumns: [GridItem] {
         if dynamicTypeSize.isAccessibilitySize {
             return [GridItem(.flexible(minimum: 220), spacing: 8)]
         }
-        return [GridItem(.adaptive(minimum: 148), spacing: 8)]
+        return [
+            GridItem(.flexible(minimum: 0), spacing: 8),
+            GridItem(.flexible(minimum: 0), spacing: 8)
+        ]
     }
 
     private var emptyPromptSuggestions: [EmptyChatStarterSuggestion] {

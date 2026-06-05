@@ -49,6 +49,8 @@ final class NEARPrivateChatUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["IronClaw Reborn Plan context active"].exists || app.staticTexts["IronClaw Reborn Plan"].exists)
         XCTAssertTrue(app.staticTexts["Add prompt first"].exists)
         XCTAssertFalse(app.staticTexts["Type to prepare"].exists)
+        XCTAssertFalse(app.staticTexts["1 model selected"].exists)
+        XCTAssertFalse(app.staticTexts["Enable the default multi-model lineup."].exists)
         XCTAssertTrue(app.buttons["Brief project"].exists)
         XCTAssertTrue(app.buttons["Context to actions"].exists)
         XCTAssertTrue(app.buttons["Draft trackers"].exists)

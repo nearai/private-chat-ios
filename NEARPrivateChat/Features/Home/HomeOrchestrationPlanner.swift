@@ -27,6 +27,13 @@ enum HomeOrchestrationPlanner {
 
         items.append(contentsOf: liveBriefings.prefix(2).map(briefingItem))
 
+        let selectedCouncilModelCount = councilModelNames
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .count
+        let isCouncilAvailableForHome = isCouncilModeEnabled
+            ? selectedCouncilModelCount >= 2
+            : defaultCouncilModelCount >= 2
+
         if isCouncilModeEnabled || defaultCouncilModelCount >= 2 {
             items.append(councilItem(
                 isEnabled: isCouncilModeEnabled,
@@ -64,7 +71,7 @@ enum HomeOrchestrationPlanner {
         let subtitle = surfaceSubtitle(
             liveBriefingCount: liveBriefings.count,
             projectCount: projects.count,
-            isCouncilAvailable: isCouncilModeEnabled || defaultCouncilModelCount >= 2,
+            isCouncilAvailable: isCouncilAvailableForHome,
             isAgentAvailable: hostedAgentAvailable || mobileAgentAvailable
         )
 
@@ -75,6 +82,7 @@ enum HomeOrchestrationPlanner {
             commands: commandItems(
                 selectedProject: sortedProjects.first,
                 isCouncilModeEnabled: isCouncilModeEnabled,
+                selectedCouncilModelCount: selectedCouncilModelCount,
                 defaultCouncilModelCount: defaultCouncilModelCount,
                 agentAvailable: hostedAgentAvailable || mobileAgentAvailable,
                 includesSetupDefaultsCommand: includesSetupDefaultsCommand
@@ -120,15 +128,21 @@ enum HomeOrchestrationPlanner {
         modelNames: [String]
     ) -> HomeOrchestrationItem {
         let names = modelNames.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let selectedCount = names.count
+        let needsMoreSelectedModels = isEnabled && selectedCount < 2
         let subtitle: String
-        if names.isEmpty {
+        if !isEnabled {
+            subtitle = defaultModelCount > 1 ? "\(defaultModelCount) models available" : "Set up Council"
+        } else if names.isEmpty {
             subtitle = defaultModelCount > 1 ? "\(defaultModelCount) models available" : "Multi-model route"
         } else {
-            let count = min(names.count, 3)
+            let count = min(selectedCount, 3)
             subtitle = count == 1 ? "1 model selected" : "\(count) models selected"
         }
 
-        let action: HomeOrchestrationAction = isEnabled
+        let action: HomeOrchestrationAction = needsMoreSelectedModels
+            ? .editCouncilLineup
+            : isEnabled
             ? .stagePrompt(HomeStagedPrompt(
                 prompt: "Run a Council pass on this decision. Have each model state agreement, dissent, risk, and a recommended move, then synthesize.",
                 banner: "Council prompt ready."
@@ -138,12 +152,14 @@ enum HomeOrchestrationPlanner {
         return HomeOrchestrationItem(
             id: "council-room",
             kind: .council,
-            title: isEnabled ? "Council room" : "Recommended Council",
+            title: needsMoreSelectedModels ? "Finish Council setup" : (isEnabled ? "Council room" : "Recommended Council"),
             subtitle: subtitle,
-            detail: isEnabled ? "Compare model views before committing." : "Enable the default multi-model lineup.",
-            statusText: isEnabled ? "Ready" : "Available",
-            symbolName: "person.3.fill",
-            tone: .violet,
+            detail: needsMoreSelectedModels
+                ? "Add at least one more model before running Council."
+                : isEnabled ? "Compare model views before committing." : "Enable the recommended multi-model lineup.",
+            statusText: needsMoreSelectedModels ? "Needs 2" : (isEnabled ? "Ready" : "Available"),
+            symbolName: needsMoreSelectedModels ? "person.badge.plus" : "person.3.fill",
+            tone: needsMoreSelectedModels ? .amber : .violet,
             action: action
         )
     }
@@ -260,6 +276,7 @@ enum HomeOrchestrationPlanner {
     private static func commandItems(
         selectedProject: ChatProject?,
         isCouncilModeEnabled: Bool,
+        selectedCouncilModelCount: Int,
         defaultCouncilModelCount: Int,
         agentAvailable: Bool,
         includesSetupDefaultsCommand: Bool
@@ -319,7 +336,16 @@ enum HomeOrchestrationPlanner {
             )
         }
 
-        if isCouncilModeEnabled {
+        if isCouncilModeEnabled, selectedCouncilModelCount < 2 {
+            commands.append(
+                HomeOrchestrationCommand(
+                    id: "council",
+                    title: "Edit Council",
+                    symbolName: "person.badge.plus",
+                    action: .editCouncilLineup
+                )
+            )
+        } else if isCouncilModeEnabled {
             commands.append(
                 HomeOrchestrationCommand(
                     id: "council",
