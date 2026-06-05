@@ -21,6 +21,7 @@ struct HomeOrchestrationSurface: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
+            filterStrip
             liveGrid
             scheduledSection
         }
@@ -42,8 +43,6 @@ struct HomeOrchestrationSurface: View {
 
             Spacer(minLength: 8)
 
-            filterMenu
-
             Button {
                 onAction(.newBriefing)
             } label: {
@@ -56,32 +55,6 @@ struct HomeOrchestrationSurface: View {
             .buttonStyle(.plain)
             .accessibilityLabel("New workflow")
         }
-    }
-
-    private var filterMenu: some View {
-        Menu {
-            ForEach(HomeOrchestrationFilter.allCases) { filter in
-                Button {
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.86)) {
-                        selectedFilter = filter
-                        showsAllItems = false
-                    }
-                } label: {
-                    Label(filter.title, systemImage: filter.symbolName)
-                }
-            }
-        } label: {
-            Image(systemName: selectedFilter == .all ? "line.3.horizontal.decrease.circle" : selectedFilter.symbolName)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(selectedFilter == .all ? Color.textSecondary : Color.actionPrimary)
-                .frame(width: 32, height: 32)
-                .background(Color.appPanelBackground, in: Circle())
-                .overlay {
-                    Circle()
-                        .stroke(selectedFilter == .all ? Color.appBorder : Color.actionPrimary.opacity(0.25), lineWidth: 1)
-                }
-        }
-        .accessibilityLabel("Filter next actions")
     }
 
     private var commandStrip: some View {
@@ -133,6 +106,8 @@ struct HomeOrchestrationSurface: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Show \(filter.title)")
+                .accessibilityValue(selectedFilter == filter ? "Selected" : "")
             }
         }
         .accessibilityElement(children: .contain)
