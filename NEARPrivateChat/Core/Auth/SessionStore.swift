@@ -99,8 +99,7 @@ final class SessionStore: NSObject, ObservableObject {
 
     @discardableResult
     func handleIncomingURL(_ url: URL) -> Bool {
-        guard url.scheme == api.configuration.callbackScheme,
-              url.host?.lowercased() == api.configuration.callbackURL.host?.lowercased() else {
+        guard api.configuration.isAuthCallback(url) else {
             return false
         }
         do {

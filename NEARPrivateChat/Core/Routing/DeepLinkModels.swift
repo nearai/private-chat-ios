@@ -5,12 +5,36 @@ struct AppConfiguration {
     var baseURL: URL
     var callbackScheme: String
     var callbackURL: URL
+    var additionalCallbackSchemes: [String]
+    var universalAuthCallbackURL: URL?
 
     static let production = AppConfiguration(
         baseURL: URL(string: "https://private.near.ai")!,
         callbackScheme: "nearprivatechat",
-        callbackURL: URL(string: "nearprivatechat://auth")!
+        callbackURL: URL(string: "nearprivatechat://auth")!,
+        additionalCallbackSchemes: ["privatechat"],
+        universalAuthCallbackURL: URL(string: "https://app.privatechat.com/auth/callback")!
     )
+
+    func isAuthCallback(_ url: URL) -> Bool {
+        let scheme = url.scheme?.lowercased()
+        let host = url.host?.lowercased()
+        let callbackHost = callbackURL.host?.lowercased()
+
+        let callbackSchemes = ([callbackScheme] + additionalCallbackSchemes)
+            .map { $0.lowercased() }
+        if let scheme,
+           callbackSchemes.contains(scheme),
+           host == callbackHost,
+           url.path.isEmpty {
+            return true
+        }
+
+        guard let universalAuthCallbackURL else { return false }
+        return scheme == universalAuthCallbackURL.scheme?.lowercased()
+            && host == universalAuthCallbackURL.host?.lowercased()
+            && url.path == universalAuthCallbackURL.path
+    }
 }
 
 struct AppDeepLinkAction: Equatable {

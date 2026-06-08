@@ -24,6 +24,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>nearprivatechat</string>
+				<string>privatechat</string>
 			</array>
 		</dict>
 	</array>

@@ -137,17 +137,33 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(values["code_challenge_method"], "S256")
     }
 
-    func testCloudOAuthProvidersDoNotOpenKnownBadNativeCallbackURLs() throws {
+    func testCloudOAuthProvidersUseHostedCallbackRoutes() throws {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
 
-        for provider in [OAuthProvider.google, .github] {
-            XCTAssertThrowsError(
-                try api.authURL(for: provider, state: "nonce-1", codeChallenge: "challenge-1"),
-                provider.rawValue
-            ) { error in
-                XCTAssertTrue(error.localizedDescription.contains("iOS callback URL"))
-            }
+        for (provider, path) in [(OAuthProvider.google, "/v1/auth/google"), (.github, "/v1/auth/github")] {
+            let url = try api.authURL(for: provider, state: "nonce-1", codeChallenge: "challenge-1")
+            let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+            let values = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+            let callback = try XCTUnwrap(values["frontend_callback"])
+
+            XCTAssertEqual(components.path, path, provider.rawValue)
+            XCTAssertEqual(callback, "nearprivatechat://auth?state=nonce-1", provider.rawValue)
+            XCTAssertEqual(values["state"], "nonce-1", provider.rawValue)
+            XCTAssertEqual(values["response_type"], "code", provider.rawValue)
+            XCTAssertEqual(values["code_challenge"], "challenge-1", provider.rawValue)
+            XCTAssertEqual(values["code_challenge_method"], "S256", provider.rawValue)
         }
+    }
+
+    func testAuthCallbackConfigurationAcceptsMobileAliasesAndUniversalLink() throws {
+        let configuration = AppConfiguration.production
+
+        XCTAssertTrue(configuration.isAuthCallback(URL(string: "nearprivatechat://auth?token=token&state=nonce-1")!))
+        XCTAssertTrue(configuration.isAuthCallback(URL(string: "privatechat://auth?token=token&state=nonce-1")!))
+        XCTAssertTrue(configuration.isAuthCallback(URL(string: "https://app.privatechat.com/auth/callback?token=token&state=nonce-1")!))
+        XCTAssertFalse(configuration.isAuthCallback(URL(string: "nearprivatechat://auth/other?token=token&state=nonce-1")!))
+        XCTAssertFalse(configuration.isAuthCallback(URL(string: "https://app.privatechat.com/other?token=token&state=nonce-1")!))
+        XCTAssertFalse(configuration.isAuthCallback(URL(string: "https://app.privatechat.com.evil.example/auth/callback?token=token&state=nonce-1")!))
     }
 
     func testSessionPersistenceKeepsLegacyAuthStorageKeys() {

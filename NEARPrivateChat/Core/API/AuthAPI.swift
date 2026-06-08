@@ -33,11 +33,10 @@ final class PrivateChatAuthAPI: AuthAPI {
         switch provider {
         case .near:
             components?.path = "/near-login"
-        case .google, .github:
-            throw APIError.status(
-                503,
-                "\(provider.shortName) sign-in needs the hosted auth service to allow the iOS callback URL. Use NEAR sign-in in this TestFlight build."
-            )
+        case .google:
+            components?.path = "/v1/auth/google"
+        case .github:
+            components?.path = "/v1/auth/github"
         }
         let callbackURL = Self.callbackURL(configuration.callbackURL, state: state)
         var queryItems = [
