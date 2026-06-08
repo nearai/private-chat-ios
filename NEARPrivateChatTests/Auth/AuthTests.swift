@@ -12,7 +12,7 @@ extension PrivateChatCoreTests {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
         let url = URL(string: "nearprivatechat://auth?code=auth-code-1&state=nonce-1")!
 
-        let callback = try api.parseAuthCallback(url, expectedState: "nonce-1")
+        let callback = try authCodeCallback(from: api.parseAuthCallback(url, expectedState: "nonce-1"))
 
         XCTAssertEqual(callback.code, "auth-code-1")
         XCTAssertEqual(callback.state, "nonce-1")
@@ -31,12 +31,12 @@ extension PrivateChatCoreTests {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
         let url = URL(string: "nearprivatechat://auth#code=auth-code-1&state=nonce-1")!
 
-        let callback = try api.parseAuthCallback(url, expectedState: "nonce-1")
+        let callback = try authCodeCallback(from: api.parseAuthCallback(url, expectedState: "nonce-1"))
 
         XCTAssertEqual(callback.code, "auth-code-1")
     }
 
-    func testAuthCallbackRejectsBearerTokenAliases() {
+    func testAuthCallbackAcceptsBearerTokenAliasesAfterStateValidation() throws {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
         let aliases = [
             "token",
@@ -46,8 +46,12 @@ extension PrivateChatCoreTests {
             "bearer_token"
         ]
         for alias in aliases {
-            let url = URL(string: "nearprivatechat://auth?\(alias)=session-token&state=nonce-1")!
-            XCTAssertThrowsError(try api.parseAuthCallback(url, expectedState: "nonce-1"), alias)
+            let url = URL(string: "nearprivatechat://auth?\(alias)=session-token&session_id=session-id-1&is_new_user=true&state=nonce-1")!
+            let session = try authSession(from: api.parseAuthCallback(url, expectedState: "nonce-1"))
+
+            XCTAssertEqual(session.token, "session-token", alias)
+            XCTAssertEqual(session.sessionID, "session-id-1", alias)
+            XCTAssertTrue(session.isNewUser, alias)
         }
     }
 
@@ -69,7 +73,7 @@ extension PrivateChatCoreTests {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
         let url = URL(string: "nearprivatechat://auth?state=provider-state&code=auth-code-1&state=nonce-1")!
 
-        let callback = try api.parseAuthCallback(url, expectedState: "nonce-1")
+        let callback = try authCodeCallback(from: api.parseAuthCallback(url, expectedState: "nonce-1"))
 
         XCTAssertEqual(callback.code, "auth-code-1")
         XCTAssertEqual(callback.providerState, "provider-state")
@@ -117,14 +121,15 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(decoded.id, "user-123")
     }
 
-    func testAuthURLUsesPKCECodeFlowForProviderLogin() throws {
+    func testAuthURLUsesPKCECodeFlowForNearLogin() throws {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
 
-        let url = try api.authURL(for: OAuthProvider.github, state: "nonce-1", codeChallenge: "challenge-1")
+        let url = try api.authURL(for: OAuthProvider.near, state: "nonce-1", codeChallenge: "challenge-1")
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
         let values = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
         let callback = try XCTUnwrap(values["frontend_callback"])
 
+        XCTAssertEqual(components.path, "/near-login")
         XCTAssertTrue(callback.contains("state=nonce-1"))
         XCTAssertEqual(values["state"], "nonce-1")
         XCTAssertEqual(values["response_type"], "code")
@@ -132,22 +137,17 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(values["code_challenge_method"], "S256")
     }
 
-    func testAuthURLCanRequestPKCECodeFlow() throws {
+    func testCloudOAuthProvidersDoNotOpenKnownBadNativeCallbackURLs() throws {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
 
-        let url = try api.authURL(
-            for: OAuthProvider.github,
-            state: "nonce-1",
-            codeChallenge: "challenge-1"
-        )
-        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
-        let values = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
-
-        XCTAssertTrue(values["frontend_callback"]?.contains("state=nonce-1") == true)
-        XCTAssertEqual(values["state"], "nonce-1")
-        XCTAssertEqual(values["response_type"], "code")
-        XCTAssertEqual(values["code_challenge"], "challenge-1")
-        XCTAssertEqual(values["code_challenge_method"], "S256")
+        for provider in [OAuthProvider.google, .github] {
+            XCTAssertThrowsError(
+                try api.authURL(for: provider, state: "nonce-1", codeChallenge: "challenge-1"),
+                provider.rawValue
+            ) { error in
+                XCTAssertTrue(error.localizedDescription.contains("iOS callback URL"))
+            }
+        }
     }
 
     func testSessionPersistenceKeepsLegacyAuthStorageKeys() {
@@ -370,4 +370,28 @@ extension PrivateChatCoreTests {
 
         XCTAssertThrowsError(try api.parseAuthCallback(url))
     }
+}
+
+private func authCodeCallback(
+    from result: AuthCallbackResult,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) throws -> AuthCodeCallback {
+    guard case .authorizationCode(let callback) = result else {
+        XCTFail("Expected authorization-code callback.", file: file, line: line)
+        throw APIError.invalidCallback
+    }
+    return callback
+}
+
+private func authSession(
+    from result: AuthCallbackResult,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) throws -> AuthSession {
+    guard case .session(let session) = result else {
+        XCTFail("Expected session callback.", file: file, line: line)
+        throw APIError.invalidCallback
+    }
+    return session
 }

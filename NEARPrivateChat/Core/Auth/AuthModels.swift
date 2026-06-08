@@ -16,6 +16,14 @@ enum OAuthProvider: String, CaseIterable, Identifiable {
         }
     }
 
+    var shortName: String {
+        switch self {
+        case .near: "NEAR"
+        case .google: "Google"
+        case .github: "GitHub"
+        }
+    }
+
     var symbolName: String {
         switch self {
         case .near: "hexagon"
@@ -83,6 +91,11 @@ struct AuthCodeCallback: Equatable {
     var code: String
     var state: String
     var providerState: String?
+}
+
+enum AuthCallbackResult: Equatable {
+    case authorizationCode(AuthCodeCallback)
+    case session(AuthSession)
 }
 
 struct AuthCodeExchangePayload: Encodable {

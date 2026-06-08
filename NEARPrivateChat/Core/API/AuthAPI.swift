@@ -5,7 +5,7 @@ protocol AuthAPI: AnyObject {
     var authToken: String? { get set }
 
     func authURL(for provider: OAuthProvider, state: String?, codeChallenge: String?) throws -> URL
-    func parseAuthCallback(_ url: URL, expectedState: String?) throws -> AuthCodeCallback
+    func parseAuthCallback(_ url: URL, expectedState: String?) throws -> AuthCallbackResult
     func exchangeAuthCode(provider: OAuthProvider, callback: AuthCodeCallback, codeVerifier: String) async throws -> AuthSession
     func fetchProfile() async throws -> UserProfile
     func signOut(sessionID: String) async throws
@@ -34,7 +34,10 @@ final class PrivateChatAuthAPI: AuthAPI {
         case .near:
             components?.path = "/near-login"
         case .google, .github:
-            components?.path = "/v1/auth/\(provider.rawValue)"
+            throw APIError.status(
+                503,
+                "\(provider.shortName) sign-in needs the hosted auth service to allow the iOS callback URL. Use NEAR sign-in in this TestFlight build."
+            )
         }
         let callbackURL = Self.callbackURL(configuration.callbackURL, state: state)
         var queryItems = [
@@ -56,7 +59,7 @@ final class PrivateChatAuthAPI: AuthAPI {
     func parseAuthCallback(
         _ url: URL,
         expectedState: String? = nil
-    ) throws -> AuthCodeCallback {
+    ) throws -> AuthCallbackResult {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             throw APIError.invalidCallback
         }
@@ -69,16 +72,25 @@ final class PrivateChatAuthAPI: AuthAPI {
         guard hasExpectedState else {
             throw APIError.status(401, "Sign-in callback failed state validation.")
         }
-        guard Self.authToken(from: values) == nil else {
-            throw APIError.status(426, "This app no longer accepts bearer tokens through sign-in links. Update the auth service to return an authorization code.")
+        if let token = Self.authToken(from: values) {
+            return .session(
+                AuthSession(
+                    token: token,
+                    sessionID: Self.sessionID(from: values) ?? "",
+                    expiresAt: nil,
+                    isNewUser: Self.boolValue(from: values, names: ["is_new_user", "isNewUser"]) ?? false
+                )
+            )
         }
         guard let code = Self.firstNonEmptyValue(named: "code", in: values) else {
             throw APIError.invalidCallback
         }
-        return AuthCodeCallback(
-            code: code,
-            state: expectedState,
-            providerState: callbackStates.first { $0 != expectedState }
+        return .authorizationCode(
+            AuthCodeCallback(
+                code: code,
+                state: expectedState,
+                providerState: callbackStates.first { $0 != expectedState }
+            )
         )
     }
 
@@ -173,6 +185,32 @@ final class PrivateChatAuthAPI: AuthAPI {
         ] {
             if let token = firstNonEmptyValue(named: name, in: values) {
                 return token
+            }
+        }
+        return nil
+    }
+
+    private static func sessionID(from values: [String: [String]]) -> String? {
+        for name in ["session_id", "sessionID", "sessionId"] {
+            if let sessionID = firstNonEmptyValue(named: name, in: values) {
+                return sessionID
+            }
+        }
+        return nil
+    }
+
+    private static func boolValue(from values: [String: [String]], names: [String]) -> Bool? {
+        for name in names {
+            guard let rawValue = firstNonEmptyValue(named: name, in: values)?.lowercased() else {
+                continue
+            }
+            switch rawValue {
+            case "1", "true", "yes":
+                return true
+            case "0", "false", "no":
+                return false
+            default:
+                continue
             }
         }
         return nil

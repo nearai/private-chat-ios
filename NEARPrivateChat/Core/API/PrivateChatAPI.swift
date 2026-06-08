@@ -51,7 +51,7 @@ final class PrivateChatAPI: AuthAPI,
         try authClient.authURL(for: provider, state: state, codeChallenge: codeChallenge)
     }
 
-    func parseAuthCallback(_ url: URL, expectedState: String? = nil) throws -> AuthCodeCallback {
+    func parseAuthCallback(_ url: URL, expectedState: String? = nil) throws -> AuthCallbackResult {
         try authClient.parseAuthCallback(url, expectedState: expectedState)
     }
 

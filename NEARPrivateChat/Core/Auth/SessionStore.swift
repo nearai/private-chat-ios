@@ -109,7 +109,7 @@ final class SessionStore: NSObject, ObservableObject {
             clearPendingAuthState()
             Task {
                 do {
-                    let newSession = try await api.exchangeAuthCode(
+                    let newSession = try await completeAuthentication(
                         provider: pendingRequest.provider,
                         callback: callback,
                         codeVerifier: pendingRequest.codeVerifier
@@ -187,7 +187,7 @@ final class SessionStore: NSObject, ObservableObject {
             )
             let callbackURL = try await startWebAuthentication(url: url)
             let callback = try api.parseAuthCallback(callbackURL, expectedState: pendingRequest.state)
-            let newSession = try await api.exchangeAuthCode(
+            let newSession = try await completeAuthentication(
                 provider: provider,
                 callback: callback,
                 codeVerifier: pendingRequest.codeVerifier
@@ -199,6 +199,26 @@ final class SessionStore: NSObject, ObservableObject {
         } catch {
             clearPendingAuthState()
             showBanner(Self.userFacingAuthenticationError(error))
+        }
+    }
+
+    private func completeAuthentication(
+        provider: OAuthProvider,
+        callback: AuthCallbackResult,
+        codeVerifier: String
+    ) async throws -> AuthSession {
+        switch callback {
+        case .authorizationCode(let codeCallback):
+            return try await api.exchangeAuthCode(
+                provider: provider,
+                callback: codeCallback,
+                codeVerifier: codeVerifier
+            )
+        case .session(let session):
+            guard !session.token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw APIError.invalidCallback
+            }
+            return session
         }
     }
 
