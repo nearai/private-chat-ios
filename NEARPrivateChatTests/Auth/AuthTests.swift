@@ -155,15 +155,13 @@ extension PrivateChatCoreTests {
         }
     }
 
-    func testAuthCallbackConfigurationAcceptsMobileAliasesAndUniversalLink() throws {
+    func testAuthCallbackConfigurationAcceptsOnlyOwnedAppScheme() throws {
         let configuration = AppConfiguration.production
 
         XCTAssertTrue(configuration.isAuthCallback(URL(string: "nearprivatechat://auth?token=token&state=nonce-1")!))
-        XCTAssertTrue(configuration.isAuthCallback(URL(string: "privatechat://auth?token=token&state=nonce-1")!))
-        XCTAssertTrue(configuration.isAuthCallback(URL(string: "https://app.privatechat.com/auth/callback?token=token&state=nonce-1")!))
+        XCTAssertFalse(configuration.isAuthCallback(URL(string: "privatechat://auth?token=token&state=nonce-1")!))
         XCTAssertFalse(configuration.isAuthCallback(URL(string: "nearprivatechat://auth/other?token=token&state=nonce-1")!))
-        XCTAssertFalse(configuration.isAuthCallback(URL(string: "https://app.privatechat.com/other?token=token&state=nonce-1")!))
-        XCTAssertFalse(configuration.isAuthCallback(URL(string: "https://app.privatechat.com.evil.example/auth/callback?token=token&state=nonce-1")!))
+        XCTAssertFalse(configuration.isAuthCallback(URL(string: "https://private.near.ai/auth/callback?token=token&state=nonce-1")!))
     }
 
     func testSessionPersistenceKeepsLegacyAuthStorageKeys() {

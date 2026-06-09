@@ -5,15 +5,11 @@ struct AppConfiguration {
     var baseURL: URL
     var callbackScheme: String
     var callbackURL: URL
-    var additionalCallbackSchemes: [String]
-    var universalAuthCallbackURL: URL?
 
     static let production = AppConfiguration(
         baseURL: URL(string: "https://private.near.ai")!,
         callbackScheme: "nearprivatechat",
-        callbackURL: URL(string: "nearprivatechat://auth")!,
-        additionalCallbackSchemes: ["privatechat"],
-        universalAuthCallbackURL: URL(string: "https://app.privatechat.com/auth/callback")!
+        callbackURL: URL(string: "nearprivatechat://auth")!
     )
 
     func isAuthCallback(_ url: URL) -> Bool {
@@ -21,19 +17,13 @@ struct AppConfiguration {
         let host = url.host?.lowercased()
         let callbackHost = callbackURL.host?.lowercased()
 
-        let callbackSchemes = ([callbackScheme] + additionalCallbackSchemes)
-            .map { $0.lowercased() }
         if let scheme,
-           callbackSchemes.contains(scheme),
+           scheme == callbackScheme.lowercased(),
            host == callbackHost,
            url.path.isEmpty {
             return true
         }
-
-        guard let universalAuthCallbackURL else { return false }
-        return scheme == universalAuthCallbackURL.scheme?.lowercased()
-            && host == universalAuthCallbackURL.host?.lowercased()
-            && url.path == universalAuthCallbackURL.path
+        return false
     }
 }
 
