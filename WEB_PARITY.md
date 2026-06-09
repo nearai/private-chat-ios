@@ -8,7 +8,7 @@ This ledger is intentionally blunt: every feature confirmed in the web repo is e
 
 | Web feature | Upstream evidence | iOS status | Notes |
 | --- | --- | --- | --- |
-| OAuth login with hosted callbacks | `src/api/base-client.ts`, `src/pages/WelcomePage.tsx` | Implemented | NEAR, Google, and GitHub OAuth return into `nearprivatechat://auth`. |
+| OAuth login with hosted callbacks | `src/api/base-client.ts`, `src/pages/WelcomePage.tsx` | Implemented | NEAR, Google, and GitHub OAuth return into `nearai://auth`. |
 | Conversation list/create/items/delete | `src/api/chat/client.ts` | Implemented | Uses `/v1/conversations`, `/v1/conversations/{id}/items`, and delete. |
 | Rename chat | `src/components/sidebar/ChatMenu.tsx` | Implemented | Native rename sheet updates conversation metadata title. |
 | Pin/unpin chat | `src/api/chat/client.ts` | Implemented | Native leading swipe and toolbar action call `/pin`. |

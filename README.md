@@ -52,7 +52,7 @@ The helper starts the local IronClaw gateway, then exposes it through Cloudflare
 - Billing visibility through `/v1/subscriptions/plans` and `/v1/subscriptions`, with clearer payment/credit-required error copy.
 - Main-chat transcript copy plus native TXT, JSON, and paginated PDF export from the conversation menu.
 - Signed JSON transcript export with per-message hashes, transcript hash, route/attestation metadata, and a device-Keychain Ed25519 signing identity; `verifier/` contains offline CLI and browser verification.
-- `nearprivatechat://agent`, `nearprivatechat://verified`, and `nearprivatechat://chat/new?...` deep links open phone-ready Agent or proof-ready private chat starts without colliding with `nearprivatechat://auth` sign-in callbacks.
+- `nearprivatechat://agent`, `nearprivatechat://verified`, and `nearprivatechat://chat/new?...` deep links open phone-ready Agent or proof-ready private chat starts without colliding with `nearai://auth` sign-in callbacks.
 - Model list from `/v1/model/list`, ranked private-first with GLM and strong Qwen routes at the top, then higher-end frontier routes when the current plan allows them. Older/smaller models such as o3, o4-mini, GPT OSS, mini, lite, flash, Gemma, and stale provider versions are hidden from the picker.
 - LLM Council mode based on IronClaw's `llm-council` skill: pick 2-3 available NEAR AI chat models, use a default cross-vendor lineup when available, stream each model in parallel, view grouped per-model answers, and receive a final synthesis while individual model failures stay isolated.
 - Open-weight default preference for GLM/Kimi/DeepSeek/Qwen before closed-provider models, while keeping weaker open models available only as hidden fallback where useful.
@@ -113,7 +113,7 @@ For a physical iPhone, connect the phone over USB, unlock it, trust the Mac, ena
 ./scripts/run-device.sh
 ```
 
-The app registers the custom callback scheme `nearprivatechat://auth`. Production sign-in uses PKCE authorization-code callbacks with an active state verifier; bearer-token callbacks are rejected by the app. The debug token-paste path is internal-only and shown only in debug builds.
+The app registers the custom callback scheme `nearai://auth`. Production sign-in uses PKCE authorization-code callbacks with an active state verifier; bearer-token callbacks are rejected by the app. The debug token-paste path is internal-only and shown only in debug builds.
 
 ## Manual Xcode Steps
 

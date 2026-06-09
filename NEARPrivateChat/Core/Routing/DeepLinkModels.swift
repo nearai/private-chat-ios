@@ -5,11 +5,13 @@ struct AppConfiguration {
     var baseURL: URL
     var callbackScheme: String
     var callbackURL: URL
+    var deepLinkScheme: String
 
     static let production = AppConfiguration(
         baseURL: URL(string: "https://private.near.ai")!,
-        callbackScheme: "nearprivatechat",
-        callbackURL: URL(string: "nearprivatechat://auth")!
+        callbackScheme: "nearai",
+        callbackURL: URL(string: "nearai://auth")!,
+        deepLinkScheme: "nearprivatechat"
     )
 
     func isAuthCallback(_ url: URL) -> Bool {
@@ -53,8 +55,8 @@ struct AppDeepLinkAction: Equatable {
     var draft: String?
     var hostedBridgeImport: HostedBridgeImport?
 
-    static func parse(_ url: URL, callbackScheme: String = AppConfiguration.production.callbackScheme) -> AppDeepLinkAction? {
-        guard url.scheme == callbackScheme,
+    static func parse(_ url: URL, deepLinkScheme: String = AppConfiguration.production.deepLinkScheme) -> AppDeepLinkAction? {
+        guard url.scheme == deepLinkScheme,
               url.host?.lowercased() != "auth" else {
             return nil
         }

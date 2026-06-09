@@ -10,7 +10,7 @@ import UIKit
 extension PrivateChatCoreTests {
     func testAuthCallbackAcceptsAuthorizationCodeWithMatchingState() throws {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
-        let url = URL(string: "nearprivatechat://auth?code=auth-code-1&state=nonce-1")!
+        let url = URL(string: "nearai://auth?code=auth-code-1&state=nonce-1")!
 
         let callback = try authCodeCallback(from: api.parseAuthCallback(url, expectedState: "nonce-1"))
 
@@ -20,8 +20,8 @@ extension PrivateChatCoreTests {
 
     func testAuthCallbackRejectsMissingOrWrongState() {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
-        let missingStateURL = URL(string: "nearprivatechat://auth?code=auth-code-1")!
-        let wrongStateURL = URL(string: "nearprivatechat://auth?code=auth-code-1&state=other")!
+        let missingStateURL = URL(string: "nearai://auth?code=auth-code-1")!
+        let wrongStateURL = URL(string: "nearai://auth?code=auth-code-1&state=other")!
 
         XCTAssertThrowsError(try api.parseAuthCallback(missingStateURL, expectedState: "nonce-1"))
         XCTAssertThrowsError(try api.parseAuthCallback(wrongStateURL, expectedState: "nonce-1"))
@@ -29,7 +29,7 @@ extension PrivateChatCoreTests {
 
     func testAuthCallbackAcceptsFragmentAuthorizationCode() throws {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
-        let url = URL(string: "nearprivatechat://auth#code=auth-code-1&state=nonce-1")!
+        let url = URL(string: "nearai://auth#code=auth-code-1&state=nonce-1")!
 
         let callback = try authCodeCallback(from: api.parseAuthCallback(url, expectedState: "nonce-1"))
 
@@ -46,7 +46,7 @@ extension PrivateChatCoreTests {
             "bearer_token"
         ]
         for alias in aliases {
-            let url = URL(string: "nearprivatechat://auth?\(alias)=session-token&session_id=session-id-1&is_new_user=true&state=nonce-1")!
+            let url = URL(string: "nearai://auth?\(alias)=session-token&session_id=session-id-1&is_new_user=true&state=nonce-1")!
             let session = try authSession(from: api.parseAuthCallback(url, expectedState: "nonce-1"))
 
             XCTAssertEqual(session.token, "session-token", alias)
@@ -71,7 +71,7 @@ extension PrivateChatCoreTests {
 
     func testAuthCallbackToleratesDuplicateStateValues() throws {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
-        let url = URL(string: "nearprivatechat://auth?state=provider-state&code=auth-code-1&state=nonce-1")!
+        let url = URL(string: "nearai://auth?state=provider-state&code=auth-code-1&state=nonce-1")!
 
         let callback = try authCodeCallback(from: api.parseAuthCallback(url, expectedState: "nonce-1"))
 
@@ -81,14 +81,14 @@ extension PrivateChatCoreTests {
 
     func testAuthCallbackRejectsProviderManagedStateByDefault() {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
-        let url = URL(string: "nearprivatechat://auth?code=auth-code-1&state=provider-state")!
+        let url = URL(string: "nearai://auth?code=auth-code-1&state=provider-state")!
 
         XCTAssertThrowsError(try api.parseAuthCallback(url, expectedState: "nonce-1"))
     }
 
     func testAuthCallbackRejectsMissingAppStateForActiveWebSession() {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
-        let url = URL(string: "nearprivatechat://auth/auth/callback?code=auth-code-1")!
+        let url = URL(string: "nearai://auth/auth/callback?code=auth-code-1")!
 
         XCTAssertThrowsError(try api.parseAuthCallback(url, expectedState: "nonce-1"))
     }
@@ -147,7 +147,7 @@ extension PrivateChatCoreTests {
             let callback = try XCTUnwrap(values["frontend_callback"])
 
             XCTAssertEqual(components.path, path, provider.rawValue)
-            XCTAssertEqual(callback, "nearprivatechat://auth?state=nonce-1", provider.rawValue)
+            XCTAssertEqual(callback, "nearai://auth?state=nonce-1", provider.rawValue)
             XCTAssertEqual(values["state"], "nonce-1", provider.rawValue)
             XCTAssertEqual(values["response_type"], "code", provider.rawValue)
             XCTAssertEqual(values["code_challenge"], "challenge-1", provider.rawValue)
@@ -158,9 +158,10 @@ extension PrivateChatCoreTests {
     func testAuthCallbackConfigurationAcceptsOnlyOwnedAppScheme() throws {
         let configuration = AppConfiguration.production
 
-        XCTAssertTrue(configuration.isAuthCallback(URL(string: "nearprivatechat://auth?token=token&state=nonce-1")!))
+        XCTAssertTrue(configuration.isAuthCallback(URL(string: "nearai://auth?token=token&state=nonce-1")!))
         XCTAssertFalse(configuration.isAuthCallback(URL(string: "privatechat://auth?token=token&state=nonce-1")!))
-        XCTAssertFalse(configuration.isAuthCallback(URL(string: "nearprivatechat://auth/other?token=token&state=nonce-1")!))
+        XCTAssertFalse(configuration.isAuthCallback(URL(string: "nearprivatechat://auth?token=token&state=nonce-1")!))
+        XCTAssertFalse(configuration.isAuthCallback(URL(string: "nearai://auth/other?token=token&state=nonce-1")!))
         XCTAssertFalse(configuration.isAuthCallback(URL(string: "https://private.near.ai/auth/callback?token=token&state=nonce-1")!))
     }
 
@@ -258,7 +259,7 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(verified.route, .verified)
         XCTAssertTrue(verified.researchMode)
 
-        XCTAssertNil(AppDeepLinkAction.parse(URL(string: "nearprivatechat://auth?token=abc&state=nonce-1")!))
+        XCTAssertNil(AppDeepLinkAction.parse(URL(string: "nearai://auth?token=abc&state=nonce-1")!))
         XCTAssertNil(AppDeepLinkAction.parse(URL(string: "https://private.near.ai/c/conv_123")!))
     }
 
@@ -380,7 +381,7 @@ extension PrivateChatCoreTests {
 
     func testAuthCallbackRequiresActiveState() {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
-        let url = URL(string: "nearprivatechat://auth?token=session-token&state=nonce-1")!
+        let url = URL(string: "nearai://auth?token=session-token&state=nonce-1")!
 
         XCTAssertThrowsError(try api.parseAuthCallback(url))
     }

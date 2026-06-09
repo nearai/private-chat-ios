@@ -150,7 +150,7 @@ final class PrivateChatAuthAPI: AuthAPI {
         var values: [String: [String]] = [:]
         append(components.queryItems, to: &values)
         if let fragment = components.fragment,
-           let fragmentComponents = URLComponents(string: "nearprivatechat://auth?\(fragment)") {
+           let fragmentComponents = URLComponents(string: "nearai://auth?\(fragment)") {
             append(fragmentComponents.queryItems, to: &values)
         }
         return values

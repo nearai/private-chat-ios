@@ -23,6 +23,7 @@
 			<string>ai.near.privatechat.ios</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>nearai</string>
 				<string>nearprivatechat</string>
 			</array>
 		</dict>
