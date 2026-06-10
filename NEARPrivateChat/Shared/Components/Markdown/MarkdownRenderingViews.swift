@@ -792,12 +792,13 @@ private struct MarkdownMathBlock: View {
             .background(Color.brandBlue.opacity(0.06))
 
             ScrollView(.horizontal, showsIndicators: true) {
-                Text(formula.isEmpty ? " " : formula)
-                    .font(.system(.footnote, design: .monospaced))
-                    .foregroundStyle(.primary)
-                    .textSelection(.enabled)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack {
+                    Spacer(minLength: 0)
+                    MathFormulaView(formula: formula)
+                        .padding(12)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity)
             }
         }
         .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
@@ -955,11 +956,16 @@ private struct InlineMarkdownText: View {
             case let .text(value):
                 output += sanitizedMarkdownAttributedText(for: value)
             case let .math(formula):
-                var math = AttributedString(" \(formula) ")
-                math.inlinePresentationIntent = .code
-                math.foregroundColor = .actionPrimary
-                math.backgroundColor = Color.actionPrimary.opacity(0.10)
-                output += math
+                let model = MathFormulaRenderModel.build(from: formula)
+                if let math = model.inlineAttributedString() {
+                    output += math
+                } else {
+                    var fallback = AttributedString(" \(formula) ")
+                    fallback.inlinePresentationIntent = .code
+                    fallback.foregroundColor = .actionPrimary
+                    fallback.backgroundColor = Color.actionPrimary.opacity(0.10)
+                    output += fallback
+                }
             }
         }
         return output
