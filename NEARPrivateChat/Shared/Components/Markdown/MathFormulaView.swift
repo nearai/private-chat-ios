@@ -10,7 +10,8 @@ indirect enum MathFormulaRenderModel: Equatable {
     case fallback(String)
 
     static func build(from source: String) -> MathFormulaRenderModel {
-        MathFormulaModelParser(source: source).parse()
+        var parser = MathFormulaModelParser(source: source)
+        return parser.parse()
     }
 
     var isSimpleInline: Bool {
