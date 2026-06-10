@@ -183,7 +183,15 @@ struct InputBar: View {
             "Source mode",
             isPresented: $showingSourceModeOptions,
             titleVisibility: .visible,
-            actions: { sourceModeOptionsDialog }
+            actions: { sourceModeOptionsDialog },
+            message: {
+                // Honest per-route framing: web sources render only when the
+                // route returns them; the private route may answer from model
+                // knowledge and your files alone.
+                Text(chatStore.selectedRouteKind == .nearPrivate
+                    ? "Web sources appear when the private route returns them; private answers may come from model knowledge and your files. For guaranteed live web grounding, use a Cloud model."
+                    : "Choose what grounds the next answer.")
+            }
         )
         .confirmationDialog(
             "Reasoning effort",

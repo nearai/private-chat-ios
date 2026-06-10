@@ -10,6 +10,8 @@ struct SourceCarousel: View {
     let onSelect: (Int) -> Void
 
     var body: some View {
+        // Clipped + width-constrained: .scrollClipDisabled() let 300pt cards
+        // draw past the screen edge and bleed out of the bubble column.
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 10) {
                 ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
@@ -17,9 +19,10 @@ struct SourceCarousel: View {
                         .onTapGesture { onSelect(index) }
                 }
             }
-            .padding(.trailing, 24)
         }
-        .scrollClipDisabled()
+        .contentMargins(.trailing, 24, for: .scrollContent)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityIdentifier("sources.carousel")
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(sources.count) source\(sources.count == 1 ? "" : "s")")
     }
@@ -47,7 +50,7 @@ private struct SourceCard: View {
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
             }
-            .frame(width: 280, height: 88, alignment: .topLeading)
+            .frame(width: 260, height: 88, alignment: .topLeading)
             .padding(12)
             .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
@@ -64,7 +67,7 @@ private struct SourceCard: View {
                 .background(Color.actionPrimary, in: Circle())
                 .padding(12)
         }
-        .frame(width: 304, height: 112, alignment: .topLeading)
+        .frame(width: 284, height: 112, alignment: .topLeading)
         .contentShape(Rectangle())
         .accessibilityLabel("Source \(index), \(source.displayTitle), \(source.host)")
     }

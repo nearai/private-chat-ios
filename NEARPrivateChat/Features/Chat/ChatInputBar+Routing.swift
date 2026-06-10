@@ -99,6 +99,7 @@ extension InputBar {
             }
             .padding(.horizontal, 2)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     var selectedModelSupportsReasoningEffort: Bool {

@@ -17,3 +17,7 @@
 *.pid
 *.token
 *.env
+
+# Xcode user state
+xcuserdata/
+*.xcuserstate

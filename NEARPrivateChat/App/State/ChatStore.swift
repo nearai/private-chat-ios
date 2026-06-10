@@ -5823,7 +5823,7 @@ final class ChatStore: ObservableObject {
             councilModelIDs = []
             projectStore.selectProjectID(nil, persist: false)
             draft = ""
-        case .trackerFailure:
+        case .trackerFailure, .markdownGallery:
             selectedConversation = nil
             messages = []
             draft = ""

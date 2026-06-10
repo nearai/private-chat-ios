@@ -28,9 +28,15 @@ struct CouncilMessageRow: View {
                                 .foregroundStyle(Color.textSecondary)
                         }
                     } else {
-                        Text(message.text.isEmpty ? "No answer yet." : message.text)
-                            .lineSpacing(4)
-                            .textSelection(.enabled)
+                        if message.text.isEmpty {
+                            Text("No answer yet.")
+                                .lineSpacing(4)
+                                .textSelection(.enabled)
+                        } else if message.isStreaming {
+                            StreamingMarkdownText(text: message.text)
+                        } else {
+                            MarkdownMessageText(text: message.text)
+                        }
                     }
                 }
                 .font(.body)

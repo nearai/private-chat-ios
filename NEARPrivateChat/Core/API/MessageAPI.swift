@@ -208,6 +208,13 @@ final class PrivateChatMessageAPI: MessageAPI {
                     "The model is currently unavailable."
             )
         default:
+            #if DEBUG
+            // Live probe support: if the private route DOES run web search
+            // under event names we don't parse, this is where they surface.
+            if let type = object["type"] as? String, type.contains("search") || type.contains("tool") {
+                print("[MessageAPI] unrecognized SSE event type: \(type)")
+            }
+            #endif
             return nil
         }
     }

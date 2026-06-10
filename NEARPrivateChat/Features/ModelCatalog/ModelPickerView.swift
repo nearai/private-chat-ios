@@ -608,8 +608,16 @@ struct ModelPickerView: View {
     }
 
     private func councilCandidateRow(model: ModelOption, showsDivider: Bool) -> some View {
-        let isSelected = modelCatalogStore.councilIndex(for: model.id) != nil
-        let isEnabled = isSelected || modelCatalogStore.activeCouncilModels.count < modelCatalogStore.maxCouncilModelCount
+        councilCandidateRow(model: model, showsDivider: showsDivider, snapshot: modelCatalogStore.councilSelectionSnapshot())
+    }
+
+    private func councilCandidateRow(
+        model: ModelOption,
+        showsDivider: Bool,
+        snapshot: (ids: Set<String>, slots: [String: Int])
+    ) -> some View {
+        let isSelected = snapshot.ids.contains(model.id)
+        let isEnabled = isSelected || snapshot.ids.count < modelCatalogStore.maxCouncilModelCount
         return ModelSpecRow(
             symbolName: isSelected ? "checkmark.circle.fill" : "plus.circle",
             symbolColor: isSelected ? Color.actionPrimary : (model.isNearCloudModel ? Color.brandBlue : Color.textSecondary),

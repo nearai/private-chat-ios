@@ -56,6 +56,8 @@ struct DemoCaptureScreenHost: View {
                     schedule: "Every weekday · 8:00am",
                     deliveries: ThreadedBriefingView.demoDeliveries
                 )
+            case .markdownGallery:
+                DemoMarkdownGalleryView()
             case .trackerFailure:
                 // Failure-state QA surface: a tracker whose run failed must show
                 // the reason and a Run again affordance, never "No delivery yet".

@@ -680,6 +680,7 @@ private struct MarkdownBulletList: View {
                         .foregroundStyle(.secondary)
                     InlineMarkdownText(text: item)
                         .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -699,6 +700,7 @@ private struct MarkdownNumberedList: View {
                         .frame(minWidth: 22, alignment: .trailing)
                     InlineMarkdownText(text: item.1)
                         .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -808,39 +810,101 @@ private struct MarkdownMathBlock: View {
 
 private struct MarkdownTable: View {
     let rows: [[String]]
+    @State private var showingDetail = false
 
     private var columnCount: Int {
         rows.map(\.count).max() ?? 0
     }
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: true) {
-            Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
-                    GridRow {
-                        ForEach(0..<columnCount, id: \.self) { columnIndex in
-                            InlineMarkdownText(text: row.indices.contains(columnIndex) ? row[columnIndex] : "")
-                                .font(rowIndex == 0 ? .caption.weight(.semibold) : .caption)
-                                .foregroundStyle(rowIndex == 0 ? .primary : .secondary)
-                                .lineLimit(2)
-                                .minimumScaleFactor(0.82)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 7)
-                                .frame(
-                                    minWidth: columnIndex == 0 ? 74 : 92,
-                                    maxWidth: columnIndex == 0 ? 96 : 128,
-                                    alignment: .leading
-                                )
-                                .background(rowIndex == 0 ? Color.brandBlue.opacity(0.08) : Color.clear)
-                        }
+        Group {
+            if columnCount <= 3 {
+                // Narrow tables fill the bubble width and wrap fully —
+                // hard 96/128pt caps were truncating every cell with "…".
+                tableGrid(cellMaxWidth: .infinity, cellLineLimit: nil)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                ScrollView(.horizontal, showsIndicators: true) {
+                    tableGrid(cellMaxWidth: 200, cellLineLimit: 4)
+                }
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { showingDetail = true }
+        .sheet(isPresented: $showingDetail) {
+            MarkdownTableDetailSheet(rows: rows)
+        }
+        .accessibilityHint("Tap to view the full table.")
+    }
+
+    private func tableGrid(cellMaxWidth: CGFloat?, cellLineLimit: Int?) -> some View {
+        Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
+                GridRow {
+                    ForEach(0..<columnCount, id: \.self) { columnIndex in
+                        InlineMarkdownText(text: row.indices.contains(columnIndex) ? row[columnIndex] : "")
+                            .font(rowIndex == 0 ? .caption.weight(.semibold) : .caption)
+                            .foregroundStyle(rowIndex == 0 ? .primary : .secondary)
+                            .lineLimit(cellLineLimit)
+                            .truncationMode(.tail)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .frame(
+                                minWidth: 64,
+                                maxWidth: cellMaxWidth,
+                                alignment: .leading
+                            )
+                            .background(rowIndex == 0 ? Color.brandBlue.opacity(0.08) : Color.clear)
                     }
                 }
             }
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+/// Full-content table view: each row as a key-value card (header column =
+/// label), no truncation anywhere. Reached by tapping any inline table.
+private struct MarkdownTableDetailSheet: View {
+    let rows: [[String]]
+    @Environment(\.dismiss) private var dismiss
+
+    private var header: [String] { rows.first ?? [] }
+    private var bodyRows: [[String]] { Array(rows.dropFirst()) }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(Array(bodyRows.enumerated()), id: \.offset) { _, row in
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(row.enumerated()), id: \.offset) { columnIndex, cell in
+                            VStack(alignment: .leading, spacing: 1) {
+                                if header.indices.contains(columnIndex) {
+                                    Text(header[columnIndex])
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                }
+                                InlineMarkdownText(text: cell)
+                                    .font(.callout)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+            .navigationTitle("Table")
+            .platformInlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
         }
     }
 }

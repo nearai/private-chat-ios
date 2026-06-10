@@ -88,7 +88,7 @@ struct DemoCaptureRootView: View {
             return 8_000_000_000
         case .chatStarters:
             return 4_000_000_000
-        case .chatFailure, .trackerFailure:
+        case .chatFailure, .trackerFailure, .markdownGallery:
             return 4_000_000_000
         case .briefingBuilder:
             return 4_000_000_000

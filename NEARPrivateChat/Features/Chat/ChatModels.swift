@@ -250,13 +250,18 @@ struct WebSearchSource: Codable, Hashable, Identifiable {
     }
 
     var sourceInitials: String {
-        let base = host
-            .split(separator: ".")
-            .first
-            .map(String.init) ?? host
+        // "www." prefixes and punycode hosts produced "#" / "WW" chips that
+        // read as broken icons. Fall back through host → title → "W".
+        let hostParts = host.split(separator: ".").map(String.init)
+        let base = hostParts.first(where: { $0.lowercased() != "www" && !$0.lowercased().hasPrefix("xn--") })
+            ?? hostParts.first
+            ?? host
         let letters = base.uppercased().filter { $0.isLetter || $0.isNumber }
-        let initials = String(letters.prefix(2))
-        return initials.isEmpty ? "#" : initials
+        if let initials = letters.isEmpty ? nil : String(letters.prefix(2)), !initials.isEmpty {
+            return initials
+        }
+        let titleLetters = (title ?? "").uppercased().filter { $0.isLetter || $0.isNumber }
+        return titleLetters.isEmpty ? "W" : String(titleLetters.prefix(2))
     }
 
     init(type: String? = nil, url: String, title: String? = nil, publishedAt: String? = nil, snippet: String? = nil) {

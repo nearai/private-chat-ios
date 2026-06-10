@@ -44,7 +44,9 @@
 		A10000000000000000000014 /* PrivateTelemetryPolicy.md in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* PrivateTelemetryPolicy.md */; };
 		A10000000000000000000015 /* AskOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* AskOrchestrator.swift */; };
 		A10000000000000000000016 /* MarkdownRenderingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* MarkdownRenderingViews.swift */; };
+		BA4BCE12B0D2D63840AEB430 /* StreamingMarkdownText.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC1FEC94E3F78F74BBA99B3 /* StreamingMarkdownText.swift */; };
 		A10000000000000000000017 /* DemoCaptureViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* DemoCaptureViews.swift */; };
+		BA3F0411707FA15603013FA1 /* DemoMarkdownGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAB6C55053E4ABD92CB8E619 /* DemoMarkdownGalleryView.swift */; };
 		A10000000000000000000018 /* MessagePresentationHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* MessagePresentationHelpers.swift */; };
 		A1000000000000000000001B /* AgentActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001B /* AgentActivityController.swift */; };
 		A10000000000000000000021 /* ConversationTranscriptClipboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* ConversationTranscriptClipboard.swift */; };
@@ -367,7 +369,9 @@
 		A20000000000000000000016 /* PrivateTelemetryPolicy.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PrivateTelemetryPolicy.md; sourceTree = "<group>"; };
 		A20000000000000000000017 /* AskOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskOrchestrator.swift; sourceTree = "<group>"; };
 		A20000000000000000000018 /* MarkdownRenderingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownRenderingViews.swift; sourceTree = "<group>"; };
+		BAC1FEC94E3F78F74BBA99B3 /* StreamingMarkdownText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingMarkdownText.swift; sourceTree = "<group>"; };
 		A20000000000000000000019 /* DemoCaptureViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoCaptureViews.swift; sourceTree = "<group>"; };
+		BAB6C55053E4ABD92CB8E619 /* DemoMarkdownGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoMarkdownGalleryView.swift; sourceTree = "<group>"; };
 		A2000000000000000000001A /* MessagePresentationHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagePresentationHelpers.swift; sourceTree = "<group>"; };
 		A2000000000000000000001B /* AgentActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActivityController.swift; sourceTree = "<group>"; };
 		A20000000000000000000021 /* ConversationTranscriptClipboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTranscriptClipboard.swift; sourceTree = "<group>"; };
@@ -989,6 +993,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000018 /* MarkdownRenderingViews.swift */,
+				BAC1FEC94E3F78F74BBA99B3 /* StreamingMarkdownText.swift */,
 			);
 			path = Markdown;
 			sourceTree = "<group>";
@@ -1114,6 +1119,7 @@
 				AE200000000000000000000F /* MessageWidgetSupportViews.swift */,
 				F20000000000000000000003 /* EmptyChatView.swift */,
 				A20000000000000000000019 /* DemoCaptureViews.swift */,
+				BAB6C55053E4ABD92CB8E619 /* DemoMarkdownGalleryView.swift */,
 				AF2000000000000000000001 /* CouncilRoomView.swift */,
 				AF2000000000000000000002 /* CouncilRoomRows.swift */,
 				AF2000000000000000000003 /* CouncilSynthesisCard.swift */,
@@ -1772,7 +1778,9 @@
 				C10000000000000000000011 /* ModelCatalogStore.swift in Sources */,
 				C10000000000000000000012 /* ChatSessionStores.swift in Sources */,
 				A10000000000000000000016 /* MarkdownRenderingViews.swift in Sources */,
+				BA4BCE12B0D2D63840AEB430 /* StreamingMarkdownText.swift in Sources */,
 				A10000000000000000000017 /* DemoCaptureViews.swift in Sources */,
+				BA3F0411707FA15603013FA1 /* DemoMarkdownGalleryView.swift in Sources */,
 				A10000000000000000000018 /* MessagePresentationHelpers.swift in Sources */,
 				9100000000000000000000A1 /* BriefingSnapshot.swift in Sources */,
 				9100000000000000000000A3 /* AgentActivityAttributes.swift in Sources */,

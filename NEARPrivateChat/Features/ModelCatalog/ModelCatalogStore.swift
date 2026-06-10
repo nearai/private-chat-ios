@@ -59,8 +59,13 @@ final class ModelCatalogStore: ObservableObject {
     @Published var councilModelIDs: [String] {
         didSet {
             persistCouncilModelIDs()
+            cachedActiveCouncilModels = nil
         }
     }
+    /// Resolving council IDs against the catalog is O(catalog) and was being
+    /// recomputed per picker row per render — cache it; invalidated when the
+    /// lineup or the catalog changes.
+    private var cachedActiveCouncilModels: [ModelOption]?
     @Published var pinnedModelIDs: [String] {
         didSet {
             persistPinnedModelIDs()
@@ -164,12 +169,14 @@ final class ModelCatalogStore: ObservableObject {
     }
 
     func replaceModels(_ newModels: [ModelOption]) {
+        cachedActiveCouncilModels = nil
         guard models != newModels else { return }
         models = newModels
     }
 
     func replaceNearCloudModels(_ newModels: [ModelOption]) {
         guard nearCloudModels != newModels else { return }
+        cachedActiveCouncilModels = nil
         nearCloudModels = newModels
     }
 
@@ -275,7 +282,21 @@ final class ModelCatalogStore: ObservableObject {
     }
 
     var activeCouncilModels: [ModelOption] {
-        normalizedCouncilModels(from: councilModelIDs)
+        if let cachedActiveCouncilModels { return cachedActiveCouncilModels }
+        let resolved = normalizedCouncilModels(from: councilModelIDs)
+        cachedActiveCouncilModels = resolved
+        return resolved
+    }
+
+    /// O(1) selection lookups for the council picker: membership set + slot
+    /// numbers, computed once per render instead of per row.
+    func councilSelectionSnapshot() -> (ids: Set<String>, slots: [String: Int]) {
+        let models = activeCouncilModels
+        var slots: [String: Int] = [:]
+        for (index, model) in models.enumerated() where slots[model.id] == nil {
+            slots[model.id] = index
+        }
+        return (Set(models.map(\.id)), slots)
     }
 
     var maxCouncilModelCount: Int {
@@ -503,8 +524,11 @@ final class ModelCatalogStore: ObservableObject {
                 selectedModel = ids[0]
             }
             councilModelIDs = ids
-            routeDidChangeHandler?()
-            showBanner(ids.count > 1 ? "Removed \(model.displayName) from the council." : "Council mode off.")
+            let removalBanner = ids.count > 1 ? "Removed \(model.displayName) from the council." : "Council mode off."
+            Task { @MainActor in
+                self.routeDidChangeHandler?()
+                self.showBanner(removalBanner)
+            }
             return
         }
 
@@ -520,8 +544,11 @@ final class ModelCatalogStore: ObservableObject {
         if selectedModelOption?.isIronclawModel == true {
             selectedModel = councilModelIDs.first ?? modelID
         }
-        routeDidChangeHandler?()
-        showBanner(councilModelIDs.count > 1 ? "LLM Council enabled with \(councilModelIDs.count) models." : "Added \(model.displayName).")
+        let additionBanner = councilModelIDs.count > 1 ? "LLM Council enabled with \(councilModelIDs.count) models." : "Added \(model.displayName)."
+        Task { @MainActor in
+            self.routeDidChangeHandler?()
+            self.showBanner(additionBanner)
+        }
     }
 
     func useDefaultCouncilLineup() {

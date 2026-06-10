@@ -87,10 +87,7 @@ struct StreamingMessageText: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text(Self.streamingPreview(from: message.text))
-                .lineSpacing(2)
-                .lineLimit(12)
-                .textSelection(.enabled)
+            StreamingMarkdownText(text: Self.streamingPreview(from: message.text))
         }
     }
 

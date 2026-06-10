@@ -217,10 +217,9 @@ private struct CouncilAnswerPreview: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
-                Text(previewText)
+                Text(MarkdownStreamSanitizer.strippedInline(previewText))
                     .font(.callout)
                     .lineSpacing(2)
-                    .lineLimit(12)
                     .foregroundStyle(.primary)
                     .textSelection(.enabled)
             }
