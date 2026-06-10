@@ -14,6 +14,8 @@ struct AssistantInlineActions: View {
     let onSources: () -> Void
 
     var body: some View {
+        // Width-constrained so trailing affordances (the sources pill) clip at
+        // the scroll edge instead of bleeding past the screen.
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
                 actionButton(symbolName: "doc.on.doc", label: "Copy", action: onCopy)
@@ -48,7 +50,7 @@ struct AssistantInlineActions: View {
                 }
             }
         }
-        .scrollClipDisabled()
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 2)
     }
 
