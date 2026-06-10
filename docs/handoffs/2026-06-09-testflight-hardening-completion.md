@@ -9,8 +9,9 @@ Branch: `main` (work committed on top of `55a40b0`)
 All five handoff lanes landed, plus eight gaps the handoff missed. Full unit
 suite green: **506 passed, 0 failed** (three pre-existing `main` failures were
 verified against clean HEAD in a throwaway worktree, then fixed as stale
-expectations). Simulator-verified with screenshots. Build 5 archived and
-uploaded per the procedure at the bottom.
+expectations). Simulator-verified with screenshots. Build 5 is committed and
+archived; the App Store Connect upload is the one step that needs a human —
+see "Upload status" at the bottom.
 
 ## What the inherited patch already had (verified, kept)
 
@@ -113,3 +114,28 @@ a failed turn (Failed + Retry only) — the canonical trust contrast.
 
 Suggested phone pass once build 5 processes: the handoff's Hostile Product
 Test Matrix, unchanged.
+
+## Upload status (action needed)
+
+- Commits: `1a3f83f` (hardening), `1d46c7d` (build bump to 5).
+- Archive: `build/Archives/NEARPrivateChat-20260609-b5-unsigned.xcarchive`
+  (** ARCHIVE SUCCEEDED **, log `/tmp/npc-archive.log`).
+- Export/upload **failed headlessly**: `error: exportArchive Failed to Use
+  Accounts` — Xcode's ASC account keychain item can't be read outside a GUI
+  session ("missing Xcode-Username"), there is no ASC API key on this machine,
+  and no Apple Distribution signing identity in the login keychain. Log:
+  `/tmp/npc-export.log`.
+- To finish (either path):
+  1. Open Xcode once (so the ASC account session is live), then rerun:
+     ```sh
+     cd /Users/abhishekvaidyanathan/Documents/Playground/NEARPrivateChatIOS
+     xcodebuild -exportArchive \
+       -archivePath "$PWD/build/Archives/NEARPrivateChat-20260609-b5-unsigned.xcarchive" \
+       -exportPath "$PWD/build/ExportBuild5" \
+       -exportOptionsPlist "$PWD/build/ExportOptions-b5.plist" \
+       -allowProvisioningUpdates
+     ```
+  2. Or drop an App Store Connect API key at
+     `~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8` and add
+     `-authenticationKeyID <KEYID> -authenticationKeyIssuerID <ISSUER>` to the
+     same command — that makes future uploads fully headless.
