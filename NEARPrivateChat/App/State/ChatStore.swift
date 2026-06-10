@@ -5369,7 +5369,12 @@ final class ChatStore: ObservableObject {
         let soulPrompt = SoulPromptComposer.promptBlock(profile: soulPromptProfile, route: route)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let formatPrompt = SoulPromptComposer.markdownFormatContract.trimmingCharacters(in: .whitespacesAndNewlines)
-        let userPrompt = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Cap the user's advanced system-prompt field at source; MessageAPI
+        // fences + re-caps the full composed block before it reaches the wire.
+        let userPrompt = Self.clipped(
+            systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines),
+            maxCharacters: 4_000
+        )
         let modePrompt = sourceModeInstructions().trimmingCharacters(in: .whitespacesAndNewlines)
         // Personal memory is injected ONLY for the private near.ai route — never
         // cloud, council cloud legs, or hosted/IronClaw routes — so on-device

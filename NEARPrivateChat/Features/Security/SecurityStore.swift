@@ -74,10 +74,10 @@ final class SecurityStore: ObservableObject {
                 model: selectedModelID
             )
             attestationFetchErrorMessage = nil
-            showBanner("Attestation refreshed.")
+            showBanner("Proof refreshed.")
         } catch {
             attestationFetchErrorMessage = error.localizedDescription
-            showBanner(error.localizedDescription)
+            showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
         }
     }
 
