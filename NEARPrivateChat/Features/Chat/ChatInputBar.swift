@@ -8,6 +8,7 @@ import UIKit
 struct InputBar: View {
     @EnvironmentObject var chatStore: ChatStore
     @EnvironmentObject var sessionStore: SessionStore
+    @EnvironmentObject var routeHealth: RouteHealthMonitor
     @ObservedObject var transcriptStore: ChatTranscriptStore
     @ObservedObject var composerStore: ChatComposerStore
     @Environment(\.accessibilityReduceMotion) var reduceMotion
@@ -45,6 +46,10 @@ struct InputBar: View {
                 ) { attachment in
                     chatStore.removePendingAttachment(attachment)
                 }
+                DocumentContextIndicator(
+                    attachments: composerStore.pendingAttachments,
+                    stagingStore: composerStore.attachmentStagingStore
+                )
             }
 
             if composerStore.isUploadingAttachment {
@@ -58,14 +63,7 @@ struct InputBar: View {
                 .padding(.horizontal, 2)
             }
 
-            if let issue = composerStore.routeReadinessIssue {
-                RouteReadinessRecoveryCard(
-                    issue: issue,
-                    onPrimaryAction: { handleRouteReadinessRecovery(issue.recoveryAction) },
-                    onSwitchPrivate: { chatStore.performRouteReadinessRecovery(.switchToPrivate) },
-                    onViewCapabilities: { showingCapabilities = true }
-                )
-            }
+            composerRecoveryCards
 
             if !visibleSlashCommands.isEmpty {
                 slashCommandTray
@@ -85,6 +83,7 @@ struct InputBar: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(transcriptStore.isStreaming)
+                .accessibilityIdentifier("composer.attach")
                 .accessibilityLabel("Add attachment")
                 .accessibilityHint("Choose files, photos, camera capture, or pasteboard text.")
 
@@ -109,6 +108,7 @@ struct InputBar: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .center)
                     .disabled(transcriptStore.isStreaming)
+                    .accessibilityIdentifier("composer.input")
                     .accessibilityLabel("Message")
                     .accessibilityHint(transcriptStore.isStreaming ? "Stop the current response before editing the draft." : "Enter a message or slash command.")
 
@@ -159,6 +159,7 @@ struct InputBar: View {
                     .opacity(reduceMotion ? (sendDisabled ? 0.72 : 1) : 1)
                     .animation(sendButtonAnimation, value: canSend)
                     .animation(sendButtonAnimation, value: transcriptStore.isStreaming)
+                    .accessibilityIdentifier("composer.send")
                     .accessibilityLabel(transcriptStore.isStreaming ? "Stop response" : "Send message")
                     .accessibilityHint(transcriptStore.isStreaming ? "Stops the current response." : "Sends the draft and staged attachments.")
                 }

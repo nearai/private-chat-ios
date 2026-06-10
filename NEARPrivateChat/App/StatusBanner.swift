@@ -15,5 +15,6 @@ struct StatusBanner: View {
             .frame(maxWidth: 360, alignment: .leading)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
             .shadow(color: .black.opacity(0.12), radius: 16, y: 6)
+            .accessibilityIdentifier("app.banner")
     }
 }

@@ -53,6 +53,7 @@ struct CouncilResponseGroup: View {
                 if messages.contains(where: \.hasUsableCouncilAnswer) {
                     Button { showingRoom = true } label: {
                         Label("Room", systemImage: "person.3.fill")
+                            .accessibilityIdentifier("council.room")
                             .font(.caption2.weight(.bold))
                             .labelStyle(.titleAndIcon)
                     }
@@ -112,6 +113,7 @@ struct CouncilResponseGroup: View {
                 }
             )
         }
+        .accessibilityIdentifier("council.group")
     }
 
     @ViewBuilder

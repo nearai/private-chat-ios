@@ -134,6 +134,38 @@ final class AttachmentStagingStore: ObservableObject {
         pendingDocumentTexts[id]
     }
 
+    func hasDocumentText(for id: String) -> Bool {
+        pendingDocumentTexts[id] != nil
+    }
+
+    /// Moves staged text from a pre-upload attachment ID to the uploaded file
+    /// ID so prompt-time lookups hit.
+    func rekeyDocumentText(from oldID: String, to newID: String) {
+        guard oldID != newID, let text = pendingDocumentTexts.removeValue(forKey: oldID) else { return }
+        pendingDocumentTextIDs.removeAll { $0 == oldID }
+        stageDocumentText(text, for: newID)
+    }
+
+    /// Attachments whose server-side content IS extracted document text and
+    /// can therefore be re-staged by downloading the file.
+    nonisolated static func isRecoverableDocumentText(_ attachment: ChatAttachment) -> Bool {
+        if ["pdf_text", "table_text"].contains(attachment.kind) { return true }
+        let name = attachment.name.lowercased()
+        return name.hasSuffix("-pdf-text.txt") || name.hasSuffix("-table-text.txt") || name.hasSuffix("-rows.txt")
+    }
+
+    /// Re-stages extracted text for attachments that lost it (in-memory store,
+    /// app restart) by fetching the uploaded text file. Best-effort: a failed
+    /// fetch leaves the attachment as filename-only.
+    func ensureDocumentTextsAvailable(for attachments: [ChatAttachment], using fileService: FileService) async {
+        for attachment in attachments where pendingDocumentTexts[attachment.id] == nil {
+            guard Self.isRecoverableDocumentText(attachment) else { continue }
+            guard let text = try? await fileService.fetchFileText(attachment.id),
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            stageDocumentText(String(text.prefix(Self.maxStagedDocumentChars)), for: attachment.id)
+        }
+    }
+
     func documentPayloads(for attachments: [ChatAttachment]) -> [DocumentTextExtractor.LocalDocumentContextPayload] {
         attachments.compactMap { attachment -> DocumentTextExtractor.LocalDocumentContextPayload? in
             guard let text = pendingDocumentTexts[attachment.id] else { return nil }
@@ -174,8 +206,15 @@ final class AttachmentStagingStore: ObservableObject {
             } else if let fileURL = pendingSharedFileURLs[attachment.id] {
                 isUploadingAttachment = true
                 defer { isUploadingAttachment = false }
-                var uploaded = try await fileService.uploadFile(from: fileURL)
-                uploaded.name = attachment.name
+                // Same extracting path as the in-app picker, so shared PDFs/
+                // tables reach the model as content, not just a filename.
+                let result = try await fileService.uploadAttachment(from: fileURL, keepDocumentsOnDevice: false)
+                var uploaded = result.attachment
+                if let staged = result.stagedDocumentText {
+                    stageDocumentText(staged.text, for: staged.attachmentID)
+                } else {
+                    uploaded.name = attachment.name
+                }
                 resolved.append(uploaded)
                 uploadedAttachments.append(uploaded)
                 uploadedSharedFileIDs.append(attachment.id)

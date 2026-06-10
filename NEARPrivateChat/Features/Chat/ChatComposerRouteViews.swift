@@ -157,3 +157,85 @@ struct RouteReadinessRecoveryCard: View {
         }
     }
 }
+
+/// One-tap disclosed recovery for a restricted private send: re-run THIS turn
+/// via the cloud privacy proxy without changing the selected model. When no
+/// cloud key is configured, the primary action becomes adding one.
+struct ProxyRetryCard: View {
+    let offer: ProxyRetryOffer
+    let proxyDisplayName: String?
+    let onAccept: () -> Void
+    let onAddCloudKey: () -> Void
+    let onDecline: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "eye.slash")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.brandBlue)
+                    .frame(width: 28, height: 28)
+                    .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Private route is busy")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.primary)
+                    Text(message)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button(action: offer.proxyModelID == nil ? onAddCloudKey : onAccept) {
+                    Label(primaryTitle, systemImage: offer.proxyModelID == nil ? "key" : "cloud")
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 32)
+                        .background(Color.primaryAction, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("message.recovery.proxy")
+
+                Button(action: onDecline) {
+                    Text("Not now")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.primaryAction)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 32)
+                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.appBorder, lineWidth: 1)
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(10)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.brandBlue.opacity(0.16), lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Private route is busy. \(message)")
+    }
+
+    private var message: String {
+        if offer.proxyModelID == nil {
+            return "Add a NEAR AI Cloud key to answer this turn through the anonymizing privacy proxy, or retry private in a moment."
+        }
+        let name = proxyDisplayName ?? "a cloud model"
+        return "Answer this turn through the anonymizing privacy proxy (\(name)). Your default model stays private."
+    }
+
+    private var primaryTitle: String {
+        offer.proxyModelID == nil ? "Add NEAR AI Cloud key" : "Answer via privacy proxy"
+    }
+}

@@ -2,19 +2,11 @@ import SwiftUI
 
 extension HomeScreen {
     func openNewChat() {
-        guard !chatStore.isStreaming else {
-            chatStore.bannerMessage = "Finish or cancel the current response before starting a chat."
-            return
-        }
         chatStore.startNewConversation()
         onStartNewChat()
     }
 
     func startPrivateChatFromFirstRun() {
-        guard !chatStore.isStreaming else {
-            chatStore.bannerMessage = "Finish or cancel the current response before starting a chat."
-            return
-        }
 
         if let accountID = sessionStore.setupAccountID,
            UserSetupStorage.needsFirstRunSetup(for: accountID) {
@@ -31,10 +23,6 @@ extension HomeScreen {
     }
 
     func startQuickStartFromFirstRun(_ preset: UserSetupStarterPreset) {
-        guard !chatStore.isStreaming else {
-            chatStore.bannerMessage = "Finish or cancel the current response before starting a chat."
-            return
-        }
 
         let profile: UserSetupProfile
         if let accountID = sessionStore.setupAccountID,
@@ -59,10 +47,6 @@ extension HomeScreen {
     }
 
     func openConversation(_ conversation: ConversationSummary) {
-        guard !chatStore.isStreaming else {
-            chatStore.bannerMessage = "Finish or cancel the current response before switching chats."
-            return
-        }
         chatStore.selectConversation(conversation)
         onOpenChat()
     }
@@ -99,10 +83,6 @@ extension HomeScreen {
     }
 
     func stageHomeOrchestrationPrompt(_ stagedPrompt: HomeStagedPrompt) {
-        guard !chatStore.isStreaming else {
-            chatStore.bannerMessage = "Finish or cancel the current response before staging a prompt."
-            return
-        }
 
         if let projectID = stagedPrompt.projectID,
            let project = projectStore.visibleProjects.first(where: { $0.id == projectID }) {
@@ -121,10 +101,6 @@ extension HomeScreen {
     }
 
     func stageProjectPrompt(_ prompt: String) {
-        guard !chatStore.isStreaming else {
-            chatStore.bannerMessage = "Finish or cancel the current response before staging a Project prompt."
-            return
-        }
 
         chatStore.startNewConversation()
         chatStore.draft = prompt

@@ -622,6 +622,7 @@ struct ModelPickerView: View {
             isEnabled: isEnabled,
             action: { modelCatalogStore.toggleCouncilModel(model.id) }
         )
+        .accessibilityIdentifier("council.candidate.\(model.id)")
     }
 
     private func manualCouncilSubtitle(for model: ModelOption) -> String {

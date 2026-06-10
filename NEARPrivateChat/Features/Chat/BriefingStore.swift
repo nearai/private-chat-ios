@@ -95,7 +95,16 @@ final class BriefingStore: ObservableObject {
         Self.scheduleReminderNotifications(for: briefings[index])
     }
 
-    func run(_ briefing: Briefing) async {
+    /// Exponential retry backoff after consecutive failed runs: 15m, 30m, 1h,
+    /// 2h, 4h, capped at 6h. Keeps a broken route from being hammered on every
+    /// app foreground while still retrying on its own.
+    static func retryBackoff(afterConsecutiveFailures count: Int) -> TimeInterval {
+        let base: TimeInterval = 15 * 60
+        let capped = min(max(count, 1), 6)
+        return min(base * pow(2, Double(capped - 1)), 6 * 3600)
+    }
+
+    func run(_ briefing: Briefing, now: Date = Date()) async {
         guard let snapshot = briefings.first(where: { $0.id == briefing.id }) else { return }
         let outcome = await runner(snapshot)
         // Re-resolve after the await; the list may have changed during the call.
@@ -109,16 +118,22 @@ final class BriefingStore: ObservableObject {
             // briefing stays due on its normal cadence.
             briefings[index].lastFailureAt = nil
             briefings[index].lastFailureMessage = nil
+            briefings[index].consecutiveFailureCount = 0
+            briefings[index].nextRetryAt = nil
             save()
             return
         case let .failed(message):
             // On failure (e.g. signed out), leave lastRunAt untouched so the
-            // briefing stays due and retries, rather than silently skipping its
-            // next run.
+            // briefing stays due — but gate the retry behind exponential
+            // backoff instead of refiring on every foreground.
             let trimmed = message?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             briefings[index].latestResult = nil
-            briefings[index].lastFailureAt = Date()
+            briefings[index].lastFailureAt = now
             briefings[index].lastFailureMessage = trimmed.isEmpty ? "Run failed before producing a result." : trimmed
+            briefings[index].consecutiveFailureCount += 1
+            briefings[index].nextRetryAt = now.addingTimeInterval(
+                Self.retryBackoff(afterConsecutiveFailures: briefings[index].consecutiveFailureCount)
+            )
             save()
             return
         case let .delivered(widget):
@@ -143,9 +158,11 @@ final class BriefingStore: ObservableObject {
             }
         }
         briefings[index].latestResult = delivered
-        briefings[index].lastRunAt = Date()
+        briefings[index].lastRunAt = now
         briefings[index].lastFailureAt = nil
         briefings[index].lastFailureMessage = nil
+        briefings[index].consecutiveFailureCount = 0
+        briefings[index].nextRetryAt = nil
         // A conditional alert is one-shot: it only delivers when its threshold is
         // crossed, so once it fires we pause it rather than re-notifying every
         // cycle while the condition still holds. It stays on Today as a record the
@@ -249,10 +266,17 @@ final class BriefingStore: ObservableObject {
         }
     }
 
+    private var isRunningDue = false
+
     func runDue(now: Date = Date()) async {
+        // Launch fires this from multiple lifecycle hooks; re-entrancy would
+        // double-run every due briefing.
+        guard !isRunningDue else { return }
+        isRunningDue = true
+        defer { isRunningDue = false }
         let dueIDs = Set(dueBriefings(now: now).map(\.id))
         for briefing in briefings where dueIDs.contains(briefing.id) {
-            await run(briefing)
+            await run(briefing, now: now)
         }
     }
 
@@ -261,6 +285,9 @@ final class BriefingStore: ObservableObject {
             guard !briefing.isPaused else { return false }
             // Snoozed trackers skip runs until the snooze elapses, then resume.
             if let snoozedUntil = briefing.snoozedUntil, snoozedUntil > now { return false }
+            // Failed runs retry on an exponential backoff, not every foreground.
+            // Manual Run-now calls run() directly and bypasses this gate.
+            if let nextRetryAt = briefing.nextRetryAt, nextRetryAt > now { return false }
             let baseline = briefing.lastRunAt ?? briefing.createdAt
             guard let nextRun = briefing.schedule.nextRun(after: baseline, calendar: briefing.scheduleCalendar) else { return false }
             return nextRun <= now

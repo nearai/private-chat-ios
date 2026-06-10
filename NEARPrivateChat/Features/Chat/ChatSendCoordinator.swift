@@ -8,6 +8,7 @@ protocol ChatSendCoordinatorHost: AnyObject {
     var sendPendingSharedFileURLs: [String: URL] { get set }
     var sendIsStreaming: Bool { get set }
     var sendRouteReadinessIssue: ChatRouteReadinessIssue? { get set }
+    var sendProxyRetryOffer: ProxyRetryOffer? { get set }
     var sendPendingHostedHandoffPreflight: HostedIronclawHandoffPreflight? { get set }
     var sendSelectedModel: String { get set }
     var sendSelectedConversation: ConversationSummary? { get }
@@ -38,6 +39,8 @@ protocol ChatSendCoordinatorHost: AnyObject {
     func resolvePromptAttachmentsForSendBridge(_ promptAttachments: [ChatAttachment]) async throws -> [ChatAttachment]
     func displayFailureMessageForSend(_ rawValue: String) -> String
     func localFailureMessageForSend(from text: String) -> String?
+    func privacyProxyModelIDForSend() -> String?
+    func isRestrictedRouteErrorForSend(_ error: Error) -> Bool
     func isExternalModelForSend(_ modelID: String) -> Bool
     func refreshModelsForSend() async
     func scheduleAccountBackgroundRefreshForSend()
@@ -46,6 +49,7 @@ protocol ChatSendCoordinatorHost: AnyObject {
     func requestCouncilModelIDsForSend(for modelID: String) -> [String]
     func localDocumentPayloadsForSend(attachments: [ChatAttachment]) -> [DocumentTextExtractor.LocalDocumentContextPayload]
     func documentAugmentedPromptForSend(_ prompt: String, question: String, attachments: [ChatAttachment]) -> String
+    func ensureDocumentTextsForSend(attachments: [ChatAttachment]) async
     func ensureConversationForSend(firstMessage: String, attachments: [ChatAttachment]) async throws -> ConversationSummary
     func activateConversationForSend(_ conversation: ConversationSummary)
     func organizePhoneAgentConversationIfNeededForSend(conversation: ConversationSummary, originalText: String, routedText: String)
@@ -212,8 +216,9 @@ final class ChatSendCoordinator {
         )
         host.sendCurrentCouncilAssistantMessageIDs = []
         host.sendCouncilStopRequestedBatchID = nil
-        if let selectedConversation = host.sendSelectedConversation,
-           host.sendMessages.contains(where: { host.isExternalModelForSend($0.model ?? "") }) {
+        // Always persist: partial private/council text must survive a cancel
+        // (the merge rules preserve "cancelled" turns on re-open).
+        if let selectedConversation = host.sendSelectedConversation {
             host.saveLocalMessagesForSend(conversationID: selectedConversation.id)
         }
     }
@@ -387,9 +392,11 @@ final class ChatSendCoordinator {
         attachments: [ChatAttachment],
         previousResponseIDOverride: String? = nil,
         initiator: String? = nil,
-        appendUserMessage: Bool = true
+        appendUserMessage: Bool = true,
+        modelOverride: String? = nil
     ) async -> Bool {
         guard let host else { return false }
+        host.sendProxyRetryOffer = nil
         let promptAttachments = host.promptOnlyAttachmentsForSend(from: attachments)
         let promptSourceOverride = host.promptSourcePrivacyOverrideForSend(
             for: text,
@@ -460,7 +467,9 @@ final class ChatSendCoordinator {
             let mission = host.phoneAgentMissionPromptIfNeededForSend(for: text)
             var routedText = mission ?? actionSurfaceText
             let existingConversation = host.sendSelectedConversation
-            let requestModel = host.sendSelectedModel
+            // modelOverride = single-turn disclosed route switch (proxy retry);
+            // the user's selected model is deliberately left unchanged.
+            let requestModel = modelOverride ?? host.sendSelectedModel
             let apiAttachments = attachments.filter { !$0.isLocalOnly }
             let previousAssistantMessage = host.sendMessages.last(where: { $0.role == .assistant })
             let candidatePreviousResponseID = previousResponseIDOverride ??
@@ -469,7 +478,10 @@ final class ChatSendCoordinator {
             failureModel = requestModel
             failurePreviousResponseID = previousResponseID
             let requestInitiator = initiator ?? (existingConversation == nil ? "new_chat" : "new_message")
-            let councilModelIDs = appendUserMessage ? host.requestCouncilModelIDsForSend(for: requestModel) : []
+            // Proxy retries are single-model by design — no council fan-out.
+            let councilModelIDs = (appendUserMessage && modelOverride == nil)
+                ? host.requestCouncilModelIDsForSend(for: requestModel)
+                : []
             let localDocPayloads = host.localDocumentPayloadsForSend(attachments: attachments.filter(\.isLocalOnly))
             if !localDocPayloads.isEmpty {
                 if DocumentTextExtractor.localDocsAllowedForRoute(councilModelIDs: councilModelIDs, singleModelID: requestModel) {
@@ -492,9 +504,19 @@ final class ChatSendCoordinator {
                     originalText: text,
                     routedText: mission ?? actionSurfaceText
                 )
+                // Council members get the same document excerpts as single-model
+                // sends (previously skipped — file turns reached members as bare
+                // filenames). Same all-private privacy gate as on-device docs.
+                await host.ensureDocumentTextsForSend(attachments: apiAttachments)
+                let councilText = DocumentTextExtractor.localDocsAllowedForRoute(
+                    councilModelIDs: councilModelIDs,
+                    singleModelID: requestModel
+                )
+                    ? host.documentAugmentedPromptForSend(routedText, question: text, attachments: apiAttachments)
+                    : routedText
                 try await host.sendCouncilTurnBridge(
                     text: text,
-                    routedText: routedText,
+                    routedText: councilText,
                     attachments: apiAttachments,
                     conversation: conversation,
                     modelIDs: councilModelIDs,
@@ -544,6 +566,11 @@ final class ChatSendCoordinator {
                 routedText: mission ?? actionSurfaceText
             )
 
+            if mission == nil {
+                // Re-stage extracted text lost to an app restart (it is held
+                // in memory only) so the context block below has content.
+                await host.ensureDocumentTextsForSend(attachments: apiAttachments)
+            }
             let finalText = mission == nil
                 ? host.documentAugmentedPromptForSend(routedText, question: text, attachments: apiAttachments)
                 : routedText
@@ -592,6 +619,15 @@ final class ChatSendCoordinator {
                 appendUserMessage: appendUserMessage,
                 displayError: displayError
             )
+            offerProxyRetryIfApplicable(
+                host: host,
+                error: error,
+                failedModel: failureModel,
+                attemptedModelOverride: modelOverride,
+                text: text,
+                attachments: attachments,
+                previousResponseID: failurePreviousResponseID
+            )
             if let selectedConversation = host.sendSelectedConversation,
                host.sendMessages.contains(where: { host.isExternalModelForSend($0.model ?? "") }) {
                 host.saveLocalMessagesForSend(conversationID: selectedConversation.id)
@@ -599,6 +635,57 @@ final class ChatSendCoordinator {
             host.showBannerForSend(displayError)
             return true
         }
+    }
+
+    /// A restricted PRIVATE-route failure gets a one-tap "answer via privacy
+    /// proxy" offer. Never built for cloud/agent failures or for a turn that
+    /// was already a proxy retry.
+    private func offerProxyRetryIfApplicable(
+        host: ChatSendCoordinatorHost,
+        error: Error,
+        failedModel: String,
+        attemptedModelOverride: String?,
+        text: String,
+        attachments: [ChatAttachment],
+        previousResponseID: String?
+    ) {
+        guard attemptedModelOverride == nil,
+              host.isRestrictedRouteErrorForSend(error),
+              ChatStore.routeKind(forModelID: failedModel) == .nearPrivate else {
+            return
+        }
+        host.sendProxyRetryOffer = ProxyRetryOffer(
+            id: host.sendCurrentAssistantMessageID ?? "proxy-retry-\(UUID().uuidString)",
+            originalModelID: failedModel,
+            proxyModelID: host.privacyProxyModelIDForSend(),
+            text: text,
+            attachments: attachments,
+            previousResponseID: previousResponseID,
+            conversationID: host.sendSelectedConversation?.id
+        )
+    }
+
+    /// Re-sends the offered turn through the privacy proxy. The selected model
+    /// stays unchanged; the proxy answer is labeled by its own trust metadata.
+    func acceptProxyRetry() {
+        guard let host, let offer = host.sendProxyRetryOffer, !host.sendIsStreaming else { return }
+        host.sendProxyRetryOffer = nil
+        guard let proxyModelID = offer.proxyModelID else { return }
+        host.showBannerForSend("Answering via privacy proxy for this turn. Your default model is unchanged.")
+        host.sendStreamTask = Task { [weak self] in
+            _ = await self?.send(
+                offer.text,
+                attachments: offer.attachments,
+                previousResponseIDOverride: offer.previousResponseID,
+                initiator: "proxy_retry",
+                appendUserMessage: false,
+                modelOverride: proxyModelID
+            )
+        }
+    }
+
+    func declineProxyRetry() {
+        host?.sendProxyRetryOffer = nil
     }
 
     private func markVisibleFailureTurnIfNeeded(

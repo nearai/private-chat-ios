@@ -7,12 +7,28 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		5A00000000000000000000D1 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B00000000000000000000D1 /* ShareViewController.swift */; };
+		5A00000000000000000000D2 /* BriefingSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A1 /* BriefingSnapshot.swift */; };
+		5A00000000000000000000D5 /* NEARPrivateChatShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5B00000000000000000000D5 /* NEARPrivateChatShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		8620D04654734D82B250546C /* ChatLocalIntentDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47DF59A499534BE180D52C8B /* ChatLocalIntentDispatcher.swift */; };
+		9100000000000000000000A1 /* BriefingSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A1 /* BriefingSnapshot.swift */; };
+		9100000000000000000000A3 /* AgentActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A3 /* AgentActivityAttributes.swift */; };
+		9100000000000000000000B1 /* BriefingSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A1 /* BriefingSnapshot.swift */; };
+		9100000000000000000000B2 /* BriefingWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000B2 /* BriefingWidgetBundle.swift */; };
+		9100000000000000000000B3 /* BriefingWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000B3 /* BriefingWidget.swift */; };
+		9100000000000000000000B4 /* AgentActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A3 /* AgentActivityAttributes.swift */; };
+		9100000000000000000000B6 /* AgentLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000B6 /* AgentLiveActivity.swift */; };
+		9100000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		9F2C1A81E6F74E53A6D1D05B /* ChatLocalIntentWidgetService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2C1A80E6F74E53A6D1D05B /* ChatLocalIntentWidgetService.swift */; };
+		9F2C1A83E6F74E53A6D1D05B /* ChatLocalIntentTranscriptWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2C1A82E6F74E53A6D1D05B /* ChatLocalIntentTranscriptWriter.swift */; };
+		9F2C1A85E6F74E53A6D1D05B /* ChatLocalIntentResponseFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2C1A84E6F74E53A6D1D05B /* ChatLocalIntentResponseFormatter.swift */; };
+		9F2C1A87E6F74E53A6D1D05B /* ChatLocalIntentBriefingFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2C1A86E6F74E53A6D1D05B /* ChatLocalIntentBriefingFactory.swift */; };
+		9F2C1A89E6F74E53A6D1D05B /* ChatLocalIntentExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2C1A88E6F74E53A6D1D05B /* ChatLocalIntentExecutor.swift */; };
 		A10000000000000000000001 /* NEARPrivateChatApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* NEARPrivateChatApp.swift */; };
 		A10000000000000000000003 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* KeychainStore.swift */; };
 		A10000000000000000000004 /* PrivateChatAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* PrivateChatAPI.swift */; };
 		A10000000000000000000005 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* SessionStore.swift */; };
 		A10000000000000000000006 /* ChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* ChatStore.swift */; };
-		A1000000000000000000001B /* AgentActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001B /* AgentActivityController.swift */; };
 		A10000000000000000000007 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* AuthView.swift */; };
 		A10000000000000000000008 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* AppShellView.swift */; };
 		A10000000000000000000009 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* Assets.xcassets */; };
@@ -22,7 +38,6 @@
 		A1000000000000000000000E /* WebGroundingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* WebGroundingService.swift */; };
 		A1000000000000000000000F /* ConversationExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* ConversationExport.swift */; };
 		A10000000000000000000010 /* ChatImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* ChatImport.swift */; };
-		A10000000000000000000021 /* ConversationTranscriptClipboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* ConversationTranscriptClipboard.swift */; };
 		A10000000000000000000011 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* PrivacyInfo.xcprivacy */; };
 		A10000000000000000000012 /* AttestationStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* AttestationStatus.swift */; };
 		A10000000000000000000013 /* PrivateTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* PrivateTelemetry.swift */; };
@@ -31,62 +46,52 @@
 		A10000000000000000000016 /* MarkdownRenderingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* MarkdownRenderingViews.swift */; };
 		A10000000000000000000017 /* DemoCaptureViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* DemoCaptureViews.swift */; };
 		A10000000000000000000018 /* MessagePresentationHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* MessagePresentationHelpers.swift */; };
-		B10000000000000000000001 /* PrivateChatCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* PrivateChatCoreTests.swift */; };
-		BA1000000000000000000001 /* APITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000001 /* APITests.swift */; };
-		BA1000000000000000000002 /* AccountTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000002 /* AccountTests.swift */; };
-		BA1000000000000000000003 /* AgentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000003 /* AgentTests.swift */; };
-		BA1000000000000000000004 /* AuthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000004 /* AuthTests.swift */; };
-		BA1000000000000000000005 /* BriefingTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000005 /* BriefingTrackerTests.swift */; };
-		BA1000000000000000000006 /* ComposerAndSendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000006 /* ComposerAndSendTests.swift */; };
-		BA1000000000000000000008 /* QuickIntentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000008 /* QuickIntentTests.swift */; };
-		BA1000000000000000000009 /* WidgetAndActionSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000009 /* WidgetAndActionSurfaceTests.swift */; };
-		BA100000000000000000000A /* ExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000A /* ExportTests.swift */; };
-		BA100000000000000000000B /* FileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000B /* FileTests.swift */; };
-		BA100000000000000000000C /* HomeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000C /* HomeTests.swift */; };
-		BA100000000000000000000D /* CouncilTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000D /* CouncilTests.swift */; };
-		BA100000000000000000000E /* ModelCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000E /* ModelCatalogTests.swift */; };
-		BA100000000000000000000F /* ProjectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000F /* ProjectTests.swift */; };
-		BA1000000000000000000010 /* RoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000010 /* RoutingTests.swift */; };
-		BA1000000000000000000011 /* SecurityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000011 /* SecurityTests.swift */; };
-		BA1000000000000000000012 /* SetupApplicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000012 /* SetupApplicationTests.swift */; };
-		BA1000000000000000000013 /* SetupPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000013 /* SetupPersistenceTests.swift */; };
-		BA1000000000000000000014 /* SetupPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000014 /* SetupPlanTests.swift */; };
-		BA1000000000000000000015 /* SetupRestoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000015 /* SetupRestoreTests.swift */; };
-		BA1000000000000000000016 /* SharingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000016 /* SharingTests.swift */; };
-		BA1000000000000000000017 /* StreamingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000017 /* StreamingTests.swift */; };
-		DD1000000000000000000001 /* NEARPrivateChatUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD2000000000000000000001 /* NEARPrivateChatUITests.swift */; };
-		C10000000000000000000001 /* AppHaptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000001 /* AppHaptics.swift */; };
-		C10000000000000000000002 /* HomeSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000002 /* HomeSearchIndex.swift */; };
-		C10000000000000000000003 /* HomeSupportingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000003 /* HomeSupportingViews.swift */; };
-		C10000000000000000000004 /* ChatScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000004 /* ChatScreenView.swift */; };
-		C10000000000000000000005 /* ModelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000005 /* ModelPickerView.swift */; };
-		C10000000000000000000006 /* ChipFlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000006 /* ChipFlowLayout.swift */; };
-		C10000000000000000000007 /* ShareViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000007 /* ShareViews.swift */; };
-		F1E000000000000000000001 /* ShareSupportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2E000000000000000000001 /* ShareSupportViews.swift */; };
-		C10000000000000000000008 /* ProjectContextViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000008 /* ProjectContextViews.swift */; };
-		F1D700000100000000000000 /* ProjectContextSupportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2D700000100000000000000 /* ProjectContextSupportViews.swift */; };
-		D1AC00000100000000000000 /* ProjectEditorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2AC00000100000000000000 /* ProjectEditorViews.swift */; };
-		C10000000000000000000009 /* AccountCapabilitiesViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000009 /* AccountCapabilitiesViews.swift */; };
-		F1A000000000000000000001 /* AccountSettingsDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A000000000000000000001 /* AccountSettingsDetailViews.swift */; };
-		F1A000000000000000000002 /* AccountCapabilityCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A000000000000000000002 /* AccountCapabilityCenterView.swift */; };
-		F1A000000000000000000003 /* AccountCapabilitySupportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A000000000000000000003 /* AccountCapabilitySupportViews.swift */; };
-		F1A000000000000000000004 /* AccountConnectionCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A000000000000000000004 /* AccountConnectionCards.swift */; };
-		C1000000000000000000000A /* SecurityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000A /* SecurityView.swift */; };
-		F1C000000000000000000001 /* SecurityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C000000000000000000001 /* SecurityStore.swift */; };
-		F1C000000000000000000002 /* SecuritySupportRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C000000000000000000002 /* SecuritySupportRows.swift */; };
-		F1C000000000000000000003 /* SecurityProofReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C000000000000000000003 /* SecurityProofReportView.swift */; };
-		C1000000000000000000000B /* AgentWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000B /* AgentWorkspaceView.swift */; };
-		F1D000000000000000000001 /* AgentWorkspaceSetupViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2D000000000000000000001 /* AgentWorkspaceSetupViews.swift */; };
-		F1D000000000000000000002 /* AgentMissionControlPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2D000000000000000000002 /* AgentMissionControlPanel.swift */; };
-		C1000000000000000000000C /* ChatMessageViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000C /* ChatMessageViews.swift */; };
-		C1000000000000000000000D /* HostedHandoffPreflightSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */; };
-		C1000000000000000000000E /* ChatInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000E /* ChatInputBar.swift */; };
+		A1000000000000000000001B /* AgentActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001B /* AgentActivityController.swift */; };
+		A10000000000000000000021 /* ConversationTranscriptClipboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* ConversationTranscriptClipboard.swift */; };
+		AB1000000000000000000001 /* HomeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000001 /* HomeStore.swift */; };
+		AB1000000000000000000002 /* HomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000002 /* HomeScreen.swift */; };
+		AB1000000000000000000003 /* HomeScreenReadModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000003 /* HomeScreenReadModels.swift */; };
+		AB1000000000000000000004 /* HomeSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000004 /* HomeSidebar.swift */; };
+		AB1000000000000000000005 /* HomeScreenInboxSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000005 /* HomeScreenInboxSections.swift */; };
+		AB1000000000000000000006 /* HomeScreenLaunchComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000006 /* HomeScreenLaunchComposer.swift */; };
+		AB1000000000000000000007 /* HomeScreenChatActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000007 /* HomeScreenChatActions.swift */; };
+		AB1000000000000000000008 /* HomeScreenLaunchActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000008 /* HomeScreenLaunchActions.swift */; };
+		AB1000000000000000000009 /* HomeScreenSetupActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000009 /* HomeScreenSetupActions.swift */; };
+		AB100000000000000000000A /* HomeChromeViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB200000000000000000000A /* HomeChromeViews.swift */; };
+		AB100000000000000000000B /* HomeConversationRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB200000000000000000000B /* HomeConversationRows.swift */; };
+		AB100000000000000000000C /* HomeLaunchComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB200000000000000000000C /* HomeLaunchComposer.swift */; };
+		AB100000000000000000000D /* HomeInboxSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB200000000000000000000D /* HomeInboxSection.swift */; };
+		AB100000000000000000000E /* HomeProjectSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB200000000000000000000E /* HomeProjectSection.swift */; };
+		AB100000000000000000000F /* HomeSetupLaunchCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB200000000000000000000F /* HomeSetupLaunchCard.swift */; };
+		AB1000000000000000000010 /* HomeSetupSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000010 /* HomeSetupSurface.swift */; };
+		AB1000000000000000000011 /* HomeSetupSuggestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000011 /* HomeSetupSuggestions.swift */; };
+		AB1000000000000000000012 /* HomeTrustSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000012 /* HomeTrustSurface.swift */; };
+		AB1000000000000000000013 /* HomeOrchestrationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000013 /* HomeOrchestrationModels.swift */; };
+		AB1000000000000000000014 /* HomeOrchestrationPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000014 /* HomeOrchestrationPlanner.swift */; };
+		AB1000000000000000000015 /* HomeOrchestrationPlanner+Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000015 /* HomeOrchestrationPlanner+Formatting.swift */; };
+		AC1000000000000000000001 /* SetupUseCases.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000001 /* SetupUseCases.swift */; };
+		AC1000000000000000000002 /* UserSetupStarterPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000002 /* UserSetupStarterPreset.swift */; };
+		AC1000000000000000000003 /* SetupStarterContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000003 /* SetupStarterContent.swift */; };
+		AC1000000000000000000004 /* UserSetupProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000004 /* UserSetupProfile.swift */; };
+		AC1000000000000000000005 /* UserSetupProfile+RuntimeDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000005 /* UserSetupProfile+RuntimeDefaults.swift */; };
+		AC1000000000000000000006 /* UserSetupProfile+Suggestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000006 /* UserSetupProfile+Suggestions.swift */; };
+		AC1000000000000000000007 /* UserSetupProfile+Actions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000007 /* UserSetupProfile+Actions.swift */; };
+		AC1000000000000000000008 /* SetupRouteDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000008 /* SetupRouteDefaults.swift */; };
+		AC1000000000000000000009 /* AppSetupPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000009 /* AppSetupPlan.swift */; };
+		AC100000000000000000000A /* AppSetupPlan+RouteDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC200000000000000000000A /* AppSetupPlan+RouteDetail.swift */; };
+		AC100000000000000000000B /* SetupRestorePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC200000000000000000000B /* SetupRestorePlanner.swift */; };
+		AC100000000000000000000C /* CapabilityNextStepPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC200000000000000000000C /* CapabilityNextStepPlanner.swift */; };
+		AC100000000000000000000D /* UserSetupStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC200000000000000000000D /* UserSetupStorage.swift */; };
+		AC100000000000000000000E /* SetupStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC200000000000000000000E /* SetupStore.swift */; };
+		AC100000000000000000000F /* UserSetupControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC200000000000000000000F /* UserSetupControls.swift */; };
+		AC1000000000000000000010 /* SetupPlanPreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000010 /* SetupPlanPreviewCard.swift */; };
 		AD1000000000000000000001 /* ChatInputBar+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2000000000000000000001 /* ChatInputBar+State.swift */; };
 		AD1000000000000000000002 /* ChatInputBar+Routing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2000000000000000000002 /* ChatInputBar+Routing.swift */; };
 		AD1000000000000000000003 /* ChatInputBar+SlashCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2000000000000000000003 /* ChatInputBar+SlashCommands.swift */; };
 		AD1000000000000000000004 /* ChatInputBar+AttachmentActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2000000000000000000004 /* ChatInputBar+AttachmentActions.swift */; };
 		AD1000000000000000000005 /* ChatCameraCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2000000000000000000005 /* ChatCameraCaptureView.swift */; };
 		AD1000000000000000000006 /* ChatComposerRouteViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2000000000000000000006 /* ChatComposerRouteViews.swift */; };
+		BA01474BE5F3183997F2AB85 /* DocumentContextIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2A8FD7EE789490B6DB2987 /* DocumentContextIndicator.swift */; };
 		AD1000000000000000000007 /* ChatAttachmentShelf.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2000000000000000000007 /* ChatAttachmentShelf.swift */; };
 		AD1000000000000000000008 /* VoiceDictation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2000000000000000000008 /* VoiceDictation.swift */; };
 		AD1000000000000000000009 /* ChatAttachmentDropViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2000000000000000000009 /* ChatAttachmentDropViews.swift */; };
@@ -94,7 +99,6 @@
 		AD100000000000000000000B /* CouncilResponseGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD200000000000000000000B /* CouncilResponseGroup.swift */; };
 		AD100000000000000000000C /* ChatToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD200000000000000000000C /* ChatToolbar.swift */; };
 		AD100000000000000000000D /* ChatToolbarChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD200000000000000000000D /* ChatToolbarChrome.swift */; };
-		D1AA00000100000000000000 /* ChatToolbarMenuContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2AA00000100000000000000 /* ChatToolbarMenuContent.swift */; };
 		AE1000000000000000000001 /* MessageStreamingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE2000000000000000000001 /* MessageStreamingViews.swift */; };
 		AE1000000000000000000002 /* MessageStatusViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE2000000000000000000002 /* MessageStatusViews.swift */; };
 		AE1000000000000000000003 /* EditUserMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE2000000000000000000003 /* EditUserMessageView.swift */; };
@@ -139,32 +143,51 @@
 		AF100000000000000000001B /* DemoProofAndModelViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF200000000000000000001B /* DemoProofAndModelViews.swift */; };
 		AF100000000000000000001C /* DemoIronClawViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF200000000000000000001C /* DemoIronClawViews.swift */; };
 		AF100000000000000000001D /* DemoResultComparisonViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF200000000000000000001D /* DemoResultComparisonViews.swift */; };
+		B10000000000000000000001 /* PrivateChatCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* PrivateChatCoreTests.swift */; };
+		B1C800000100000000000000 /* ChatMessageLoadCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C800000100000000000000 /* ChatMessageLoadCoordinator.swift */; };
+		B1C900000100000000000000 /* ArchivedChatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C900000100000000000000 /* ArchivedChatsView.swift */; };
+		BA1000000000000000000001 /* APITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000001 /* APITests.swift */; };
+		BA1000000000000000000002 /* AccountTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000002 /* AccountTests.swift */; };
+		BA1000000000000000000003 /* AgentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000003 /* AgentTests.swift */; };
+		BA1000000000000000000004 /* AuthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000004 /* AuthTests.swift */; };
+		BA1000000000000000000005 /* BriefingTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000005 /* BriefingTrackerTests.swift */; };
+		BA1000000000000000000006 /* ComposerAndSendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000006 /* ComposerAndSendTests.swift */; };
+		BA1000000000000000000008 /* QuickIntentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000008 /* QuickIntentTests.swift */; };
+		BA1000000000000000000009 /* WidgetAndActionSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000009 /* WidgetAndActionSurfaceTests.swift */; };
+		BA100000000000000000000A /* ExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000A /* ExportTests.swift */; };
+		BA100000000000000000000B /* FileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000B /* FileTests.swift */; };
+		BA100000000000000000000C /* HomeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000C /* HomeTests.swift */; };
+		BA100000000000000000000D /* CouncilTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000D /* CouncilTests.swift */; };
+		BA100000000000000000000E /* ModelCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000E /* ModelCatalogTests.swift */; };
+		BA100000000000000000000F /* ProjectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000F /* ProjectTests.swift */; };
+		BA1000000000000000000010 /* RoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000010 /* RoutingTests.swift */; };
+		BAAECF5B53082ED7D9098AC8 /* RouteHealthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA9F903202E6EFC0F851AB3A /* RouteHealthTests.swift */; };
+		BA1000000000000000000011 /* SecurityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000011 /* SecurityTests.swift */; };
+		BA1000000000000000000012 /* SetupApplicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000012 /* SetupApplicationTests.swift */; };
+		BA1000000000000000000013 /* SetupPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000013 /* SetupPersistenceTests.swift */; };
+		BA1000000000000000000014 /* SetupPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000014 /* SetupPlanTests.swift */; };
+		BA1000000000000000000015 /* SetupRestoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000015 /* SetupRestoreTests.swift */; };
+		BA1000000000000000000016 /* SharingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000016 /* SharingTests.swift */; };
+		BA1000000000000000000017 /* StreamingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000017 /* StreamingTests.swift */; };
+		C10000000000000000000001 /* AppHaptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000001 /* AppHaptics.swift */; };
+		C10000000000000000000002 /* HomeSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000002 /* HomeSearchIndex.swift */; };
+		C10000000000000000000003 /* HomeSupportingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000003 /* HomeSupportingViews.swift */; };
+		C10000000000000000000004 /* ChatScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000004 /* ChatScreenView.swift */; };
+		C10000000000000000000005 /* ModelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000005 /* ModelPickerView.swift */; };
+		C10000000000000000000006 /* ChipFlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000006 /* ChipFlowLayout.swift */; };
+		C10000000000000000000007 /* ShareViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000007 /* ShareViews.swift */; };
+		C10000000000000000000008 /* ProjectContextViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000008 /* ProjectContextViews.swift */; };
+		C10000000000000000000009 /* AccountCapabilitiesViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000009 /* AccountCapabilitiesViews.swift */; };
+		C1000000000000000000000A /* SecurityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000A /* SecurityView.swift */; };
+		C1000000000000000000000B /* AgentWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000B /* AgentWorkspaceView.swift */; };
+		C1000000000000000000000C /* ChatMessageViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000C /* ChatMessageViews.swift */; };
+		C1000000000000000000000D /* HostedHandoffPreflightSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */; };
+		C1000000000000000000000E /* ChatInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000E /* ChatInputBar.swift */; };
 		C1000000000000000000000F /* MessageTimelineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000F /* MessageTimelineStore.swift */; };
 		C10000000000000000000010 /* ComposerState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000010 /* ComposerState.swift */; };
 		C10000000000000000000011 /* ModelCatalogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000011 /* ModelCatalogStore.swift */; };
 		C10000000000000000000012 /* ChatSessionStores.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000012 /* ChatSessionStores.swift */; };
 		C10000000000000000000013 /* HomeOrchestrationSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000013 /* HomeOrchestrationSurface.swift */; };
-		AB1000000000000000000001 /* HomeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000001 /* HomeStore.swift */; };
-		AB1000000000000000000002 /* HomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000002 /* HomeScreen.swift */; };
-		AB1000000000000000000003 /* HomeScreenReadModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000003 /* HomeScreenReadModels.swift */; };
-		AB1000000000000000000004 /* HomeSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000004 /* HomeSidebar.swift */; };
-		AB1000000000000000000005 /* HomeScreenInboxSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000005 /* HomeScreenInboxSections.swift */; };
-		AB1000000000000000000006 /* HomeScreenLaunchComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000006 /* HomeScreenLaunchComposer.swift */; };
-		AB1000000000000000000007 /* HomeScreenChatActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000007 /* HomeScreenChatActions.swift */; };
-		AB1000000000000000000008 /* HomeScreenLaunchActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000008 /* HomeScreenLaunchActions.swift */; };
-		AB1000000000000000000009 /* HomeScreenSetupActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000009 /* HomeScreenSetupActions.swift */; };
-		AB100000000000000000000A /* HomeChromeViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB200000000000000000000A /* HomeChromeViews.swift */; };
-		AB100000000000000000000B /* HomeConversationRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB200000000000000000000B /* HomeConversationRows.swift */; };
-		AB100000000000000000000C /* HomeLaunchComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB200000000000000000000C /* HomeLaunchComposer.swift */; };
-		AB100000000000000000000D /* HomeInboxSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB200000000000000000000D /* HomeInboxSection.swift */; };
-		AB100000000000000000000E /* HomeProjectSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB200000000000000000000E /* HomeProjectSection.swift */; };
-		AB100000000000000000000F /* HomeSetupLaunchCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB200000000000000000000F /* HomeSetupLaunchCard.swift */; };
-		AB1000000000000000000010 /* HomeSetupSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000010 /* HomeSetupSurface.swift */; };
-		AB1000000000000000000011 /* HomeSetupSuggestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000011 /* HomeSetupSuggestions.swift */; };
-		AB1000000000000000000012 /* HomeTrustSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000012 /* HomeTrustSurface.swift */; };
-		AB1000000000000000000013 /* HomeOrchestrationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000013 /* HomeOrchestrationModels.swift */; };
-		AB1000000000000000000014 /* HomeOrchestrationPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000014 /* HomeOrchestrationPlanner.swift */; };
-		AB1000000000000000000015 /* HomeOrchestrationPlanner+Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000015 /* HomeOrchestrationPlanner+Formatting.swift */; };
 		D10000000000000000000001 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000001 /* AppEnvironment.swift */; };
 		D10000000000000000000002 /* AppLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000002 /* AppLifecycle.swift */; };
 		D10000000000000000000003 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000003 /* RootView.swift */; };
@@ -174,6 +197,11 @@
 		D10000000000000000000007 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000007 /* AppRouter.swift */; };
 		D10000000000000000000009 /* UserSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000009 /* UserSetupView.swift */; };
 		D1000000000000000000000A /* RoutePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000000000000000000000A /* RoutePlanner.swift */; };
+		BAAE75889CD6F563C26B5A83 /* RouteHealthMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA7EA52B9EA73EEA1C11AED0 /* RouteHealthMonitor.swift */; };
+		D1AA00000100000000000000 /* ChatToolbarMenuContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2AA00000100000000000000 /* ChatToolbarMenuContent.swift */; };
+		D1AB00000100000000000000 /* RenameConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2AB00000100000000000000 /* RenameConversationView.swift */; };
+		D1AC00000100000000000000 /* ProjectEditorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2AC00000100000000000000 /* ProjectEditorViews.swift */; };
+		DD1000000000000000000001 /* NEARPrivateChatUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD2000000000000000000001 /* NEARPrivateChatUITests.swift */; };
 		E10000000000000000000001 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* DesignTokens.swift */; };
 		E10000000000000000000002 /* BrandMarks.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000002 /* BrandMarks.swift */; };
 		E10000000000000000000003 /* ViewPlatformExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000003 /* ViewPlatformExtensions.swift */; };
@@ -187,36 +215,8 @@
 		F10000000000000000000006 /* ModelCatalogModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000006 /* ModelCatalogModels.swift */; };
 		F10000000000000000000007 /* ChatRoutingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000007 /* ChatRoutingModels.swift */; };
 		F10000000000000000000008 /* AgentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000008 /* AgentModels.swift */; };
-		F1B000000000000000000001 /* AccountStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B000000000000000000001 /* AccountStore.swift */; };
-		F1B000000000000000000002 /* AgentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B000000000000000000002 /* AgentStore.swift */; };
 		F10000000000000000000009 /* ChatModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000009 /* ChatModels.swift */; };
-		F1000000000000000000B001 /* BriefingFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000B001 /* BriefingFeature.swift */; };
-		F1000000000000000000B002 /* CouncilRoomFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000B002 /* CouncilRoomFeature.swift */; };
-		F1000000000000000000B003 /* ThreadedFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000B003 /* ThreadedFeature.swift */; };
-		F1000000000000000000B004 /* LiveDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000B004 /* LiveDataService.swift */; };
-		8620D04654734D82B250546C /* ChatLocalIntentDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47DF59A499534BE180D52C8B /* ChatLocalIntentDispatcher.swift */; };
-		9F2C1A81E6F74E53A6D1D05B /* ChatLocalIntentWidgetService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2C1A80E6F74E53A6D1D05B /* ChatLocalIntentWidgetService.swift */; };
-		9F2C1A83E6F74E53A6D1D05B /* ChatLocalIntentTranscriptWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2C1A82E6F74E53A6D1D05B /* ChatLocalIntentTranscriptWriter.swift */; };
-		9F2C1A85E6F74E53A6D1D05B /* ChatLocalIntentResponseFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2C1A84E6F74E53A6D1D05B /* ChatLocalIntentResponseFormatter.swift */; };
-		9F2C1A87E6F74E53A6D1D05B /* ChatLocalIntentBriefingFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2C1A86E6F74E53A6D1D05B /* ChatLocalIntentBriefingFactory.swift */; };
-		9F2C1A89E6F74E53A6D1D05B /* ChatLocalIntentExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2C1A88E6F74E53A6D1D05B /* ChatLocalIntentExecutor.swift */; };
 		F1000000000000000000000A /* SetupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000000A /* SetupModels.swift */; };
-		AC1000000000000000000001 /* SetupUseCases.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000001 /* SetupUseCases.swift */; };
-		AC1000000000000000000002 /* UserSetupStarterPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000002 /* UserSetupStarterPreset.swift */; };
-		AC1000000000000000000003 /* SetupStarterContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000003 /* SetupStarterContent.swift */; };
-		AC1000000000000000000004 /* UserSetupProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000004 /* UserSetupProfile.swift */; };
-		AC1000000000000000000005 /* UserSetupProfile+RuntimeDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000005 /* UserSetupProfile+RuntimeDefaults.swift */; };
-		AC1000000000000000000006 /* UserSetupProfile+Suggestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000006 /* UserSetupProfile+Suggestions.swift */; };
-		AC1000000000000000000007 /* UserSetupProfile+Actions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000007 /* UserSetupProfile+Actions.swift */; };
-		AC1000000000000000000008 /* SetupRouteDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000008 /* SetupRouteDefaults.swift */; };
-		AC1000000000000000000009 /* AppSetupPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000009 /* AppSetupPlan.swift */; };
-		AC100000000000000000000A /* AppSetupPlan+RouteDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC200000000000000000000A /* AppSetupPlan+RouteDetail.swift */; };
-		AC100000000000000000000B /* SetupRestorePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC200000000000000000000B /* SetupRestorePlanner.swift */; };
-		AC100000000000000000000C /* CapabilityNextStepPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC200000000000000000000C /* CapabilityNextStepPlanner.swift */; };
-		AC100000000000000000000D /* UserSetupStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC200000000000000000000D /* UserSetupStorage.swift */; };
-		AC100000000000000000000E /* SetupStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC200000000000000000000E /* SetupStore.swift */; };
-		AC100000000000000000000F /* UserSetupControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC200000000000000000000F /* UserSetupControls.swift */; };
-		AC1000000000000000000010 /* SetupPlanPreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000010 /* SetupPlanPreviewCard.swift */; };
 		F1000000000000000000000B /* APIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000000B /* APIModels.swift */; };
 		F1000000000000000000000C /* FileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000000C /* FileModels.swift */; };
 		F1000000000000000000000D /* AccountModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000000D /* AccountModels.swift */; };
@@ -225,36 +225,20 @@
 		F10000000000000000000010 /* SecurityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000010 /* SecurityModels.swift */; };
 		F10000000000000000000011 /* ResponseStreamEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000011 /* ResponseStreamEvent.swift */; };
 		F10000000000000000000012 /* ProjectStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000012 /* ProjectStore.swift */; };
-		F1A600000100000000000000 /* ProjectService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A600000100000000000000 /* ProjectService.swift */; };
-		F1A700000100000000000000 /* ConversationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A700000100000000000000 /* ConversationRepository.swift */; };
-		F1A700000200000000000000 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A700000200000000000000 /* ConversationStore.swift */; };
-		B1C900000100000000000000 /* ArchivedChatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C900000100000000000000 /* ArchivedChatsView.swift */; };
-		D1AB00000100000000000000 /* RenameConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2AB00000100000000000000 /* RenameConversationView.swift */; };
-		F1A700000300000000000000 /* MessageRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A700000300000000000000 /* MessageRepository.swift */; };
-		F1A800000100000000000000 /* ChatSendCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A800000100000000000000 /* ChatSendCoordinator.swift */; };
-		B1C800000100000000000000 /* ChatMessageLoadCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C800000100000000000000 /* ChatMessageLoadCoordinator.swift */; };
 		F10000000000000000000013 /* FileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000013 /* FileStore.swift */; };
-		F1A500000100000000000000 /* FileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A500000100000000000000 /* FileService.swift */; };
-		F1A500000200000000000000 /* AttachmentStagingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A500000200000000000000 /* AttachmentStagingStore.swift */; };
-		F1A500000300000000000000 /* DocumentTextExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A500000300000000000000 /* DocumentTextExtractor.swift */; };
-		F1A500000400000000000000 /* VisionTextExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A500000400000000000000 /* VisionTextExtractor.swift */; };
 		F10000000000000000000014 /* ShareStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000014 /* ShareStore.swift */; };
-		F1A400000100000000000000 /* SharingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A400000100000000000000 /* SharingService.swift */; };
 		F10000000000000000000015 /* MessageStreamService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000015 /* MessageStreamService.swift */; };
 		F10000000000000000000016 /* CouncilStreamService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000016 /* CouncilStreamService.swift */; };
 		F10000000000000000000017 /* SoulPromptComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000017 /* SoulPromptComposer.swift */; };
 		F10000000000000000000018 /* SetupSoulPromptBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000018 /* SetupSoulPromptBuilder.swift */; };
-		9100000000000000000000A1 /* BriefingSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A1 /* BriefingSnapshot.swift */; };
-		9100000000000000000000A3 /* AgentActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A3 /* AgentActivityAttributes.swift */; };
-		9100000000000000000000B1 /* BriefingSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A1 /* BriefingSnapshot.swift */; };
-		9100000000000000000000B2 /* BriefingWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000B2 /* BriefingWidgetBundle.swift */; };
-		9100000000000000000000B3 /* BriefingWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000B3 /* BriefingWidget.swift */; };
-		9100000000000000000000B4 /* AgentActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A3 /* AgentActivityAttributes.swift */; };
-		9100000000000000000000B6 /* AgentLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000B6 /* AgentLiveActivity.swift */; };
-		9100000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		5A00000000000000000000D1 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B00000000000000000000D1 /* ShareViewController.swift */; };
-		5A00000000000000000000D2 /* BriefingSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9200000000000000000000A1 /* BriefingSnapshot.swift */; };
-		5A00000000000000000000D5 /* NEARPrivateChatShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 5B00000000000000000000D5 /* NEARPrivateChatShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		F1000000000000000000B001 /* BriefingFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000B001 /* BriefingFeature.swift */; };
+		F1000000000000000000B002 /* CouncilRoomFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000B002 /* CouncilRoomFeature.swift */; };
+		F1000000000000000000B003 /* ThreadedFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000B003 /* ThreadedFeature.swift */; };
+		F1000000000000000000B004 /* LiveDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000B004 /* LiveDataService.swift */; };
+		F1A000000000000000000001 /* AccountSettingsDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A000000000000000000001 /* AccountSettingsDetailViews.swift */; };
+		F1A000000000000000000002 /* AccountCapabilityCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A000000000000000000002 /* AccountCapabilityCenterView.swift */; };
+		F1A000000000000000000003 /* AccountCapabilitySupportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A000000000000000000003 /* AccountCapabilitySupportViews.swift */; };
+		F1A000000000000000000004 /* AccountConnectionCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A000000000000000000004 /* AccountConnectionCards.swift */; };
 		F1A200000100000000000000 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A200000100000000000000 /* APIClient.swift */; };
 		F1A200000200000000000000 /* AuthAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A200000200000000000000 /* AuthAPI.swift */; };
 		F1A200000300000000000000 /* ConversationAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A200000300000000000000 /* ConversationAPI.swift */; };
@@ -274,9 +258,42 @@
 		F1A300000700000000000000 /* ProjectPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A300000800000000000000 /* ProjectPersistence.swift */; };
 		F1A300000800000000000000 /* AgentThreadPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A300000900000000000000 /* AgentThreadPersistence.swift */; };
 		F1A300000900000000000000 /* SessionPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A300000A00000000000000 /* SessionPersistence.swift */; };
+		F1A400000100000000000000 /* SharingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A400000100000000000000 /* SharingService.swift */; };
+		F1A500000100000000000000 /* FileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A500000100000000000000 /* FileService.swift */; };
+		F1A500000200000000000000 /* AttachmentStagingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A500000200000000000000 /* AttachmentStagingStore.swift */; };
+		F1A500000300000000000000 /* DocumentTextExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A500000300000000000000 /* DocumentTextExtractor.swift */; };
+		F1A500000400000000000000 /* VisionTextExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A500000400000000000000 /* VisionTextExtractor.swift */; };
+		F1A600000100000000000000 /* ProjectService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A600000100000000000000 /* ProjectService.swift */; };
+		F1A700000100000000000000 /* ConversationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A700000100000000000000 /* ConversationRepository.swift */; };
+		F1A700000200000000000000 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A700000200000000000000 /* ConversationStore.swift */; };
+		F1A700000300000000000000 /* MessageRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A700000300000000000000 /* MessageRepository.swift */; };
+		F1A800000100000000000000 /* ChatSendCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A800000100000000000000 /* ChatSendCoordinator.swift */; };
+		F1B000000000000000000001 /* AccountStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B000000000000000000001 /* AccountStore.swift */; };
+		F1B000000000000000000002 /* AgentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B000000000000000000002 /* AgentStore.swift */; };
+		F1C000000000000000000001 /* SecurityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C000000000000000000001 /* SecurityStore.swift */; };
+		F1C000000000000000000002 /* SecuritySupportRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C000000000000000000002 /* SecuritySupportRows.swift */; };
+		F1C000000000000000000003 /* SecurityProofReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C000000000000000000003 /* SecurityProofReportView.swift */; };
+		F1D000000000000000000001 /* AgentWorkspaceSetupViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2D000000000000000000001 /* AgentWorkspaceSetupViews.swift */; };
+		F1D000000000000000000002 /* AgentMissionControlPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2D000000000000000000002 /* AgentMissionControlPanel.swift */; };
+		F1D700000100000000000000 /* ProjectContextSupportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2D700000100000000000000 /* ProjectContextSupportViews.swift */; };
+		F1E000000000000000000001 /* ShareSupportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2E000000000000000000001 /* ShareSupportViews.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		5D00000000000000000000D2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A60000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5D00000000000000000000D1;
+			remoteInfo = NEARPrivateChatShareExtension;
+		};
+		9600000000000000000000C2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A60000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9500000000000000000000C1;
+			remoteInfo = NEARPrivateChatWidgetExtension;
+		};
 		B60000000000000000000001 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = A60000000000000000000001 /* Project object */;
@@ -291,29 +308,48 @@
 			remoteGlobalIDString = A50000000000000000000001;
 			remoteInfo = NEARPrivateChat;
 		};
-		9600000000000000000000C2 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = A60000000000000000000001 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 9500000000000000000000C1;
-			remoteInfo = NEARPrivateChatWidgetExtension;
-		};
-		5D00000000000000000000D2 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = A60000000000000000000001 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 5D00000000000000000000D1;
-			remoteInfo = NEARPrivateChatShareExtension;
-		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		9800000000000000000000C4 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				9100000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex in Embed Foundation Extensions */,
+				5A00000000000000000000D5 /* NEARPrivateChatShareExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		47DF59A499534BE180D52C8B /* ChatLocalIntentDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentDispatcher.swift; sourceTree = "<group>"; };
+		5B00000000000000000000D1 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		5B00000000000000000000D2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		5B00000000000000000000D3 /* NEARPrivateChatShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NEARPrivateChatShareExtension.entitlements; sourceTree = "<group>"; };
+		5B00000000000000000000D5 /* NEARPrivateChatShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NEARPrivateChatShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		9200000000000000000000A1 /* BriefingSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingSnapshot.swift; sourceTree = "<group>"; };
+		9200000000000000000000A2 /* NEARPrivateChat.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NEARPrivateChat.entitlements; sourceTree = "<group>"; };
+		9200000000000000000000A3 /* AgentActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActivityAttributes.swift; sourceTree = "<group>"; };
+		9200000000000000000000B2 /* BriefingWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingWidgetBundle.swift; sourceTree = "<group>"; };
+		9200000000000000000000B3 /* BriefingWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingWidget.swift; sourceTree = "<group>"; };
+		9200000000000000000000B4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		9200000000000000000000B5 /* NEARPrivateChatWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NEARPrivateChatWidget.entitlements; sourceTree = "<group>"; };
+		9200000000000000000000B6 /* AgentLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLiveActivity.swift; sourceTree = "<group>"; };
+		9200000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NEARPrivateChatWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		9F2C1A80E6F74E53A6D1D05B /* ChatLocalIntentWidgetService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentWidgetService.swift; sourceTree = "<group>"; };
+		9F2C1A82E6F74E53A6D1D05B /* ChatLocalIntentTranscriptWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentTranscriptWriter.swift; sourceTree = "<group>"; };
+		9F2C1A84E6F74E53A6D1D05B /* ChatLocalIntentResponseFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentResponseFormatter.swift; sourceTree = "<group>"; };
+		9F2C1A86E6F74E53A6D1D05B /* ChatLocalIntentBriefingFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentBriefingFactory.swift; sourceTree = "<group>"; };
+		9F2C1A88E6F74E53A6D1D05B /* ChatLocalIntentExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentExecutor.swift; sourceTree = "<group>"; };
 		A20000000000000000000001 /* NEARPrivateChatApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NEARPrivateChatApp.swift; sourceTree = "<group>"; };
 		A20000000000000000000003 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		A20000000000000000000004 /* PrivateChatAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateChatAPI.swift; sourceTree = "<group>"; };
 		A20000000000000000000005 /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
 		A20000000000000000000006 /* ChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStore.swift; sourceTree = "<group>"; };
-		A2000000000000000000001B /* AgentActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActivityController.swift; sourceTree = "<group>"; };
 		A20000000000000000000007 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -325,7 +361,6 @@
 		A20000000000000000000010 /* WebGroundingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebGroundingService.swift; sourceTree = "<group>"; };
 		A20000000000000000000011 /* ConversationExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationExport.swift; sourceTree = "<group>"; };
 		A20000000000000000000012 /* ChatImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatImport.swift; sourceTree = "<group>"; };
-		A20000000000000000000021 /* ConversationTranscriptClipboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTranscriptClipboard.swift; sourceTree = "<group>"; };
 		A20000000000000000000013 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A20000000000000000000014 /* AttestationStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttestationStatus.swift; sourceTree = "<group>"; };
 		A20000000000000000000015 /* PrivateTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateTelemetry.swift; sourceTree = "<group>"; };
@@ -334,64 +369,52 @@
 		A20000000000000000000018 /* MarkdownRenderingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownRenderingViews.swift; sourceTree = "<group>"; };
 		A20000000000000000000019 /* DemoCaptureViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoCaptureViews.swift; sourceTree = "<group>"; };
 		A2000000000000000000001A /* MessagePresentationHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagePresentationHelpers.swift; sourceTree = "<group>"; };
-		B20000000000000000000001 /* PrivateChatCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateChatCoreTests.swift; sourceTree = "<group>"; };
-		BA2000000000000000000001 /* APITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APITests.swift; sourceTree = "<group>"; };
-		BA2000000000000000000002 /* AccountTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountTests.swift; sourceTree = "<group>"; };
-		BA2000000000000000000003 /* AgentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentTests.swift; sourceTree = "<group>"; };
-		BA2000000000000000000004 /* AuthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthTests.swift; sourceTree = "<group>"; };
-		BA2000000000000000000005 /* BriefingTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingTrackerTests.swift; sourceTree = "<group>"; };
-		BA2000000000000000000006 /* ComposerAndSendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerAndSendTests.swift; sourceTree = "<group>"; };
-		BA2000000000000000000008 /* QuickIntentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickIntentTests.swift; sourceTree = "<group>"; };
-		BA2000000000000000000009 /* WidgetAndActionSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetAndActionSurfaceTests.swift; sourceTree = "<group>"; };
-		BA200000000000000000000A /* ExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportTests.swift; sourceTree = "<group>"; };
-		BA200000000000000000000B /* FileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTests.swift; sourceTree = "<group>"; };
-		BA200000000000000000000C /* HomeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeTests.swift; sourceTree = "<group>"; };
-		BA200000000000000000000D /* CouncilTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilTests.swift; sourceTree = "<group>"; };
-		BA200000000000000000000E /* ModelCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogTests.swift; sourceTree = "<group>"; };
-		BA200000000000000000000F /* ProjectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectTests.swift; sourceTree = "<group>"; };
-		BA2000000000000000000010 /* RoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingTests.swift; sourceTree = "<group>"; };
-		BA2000000000000000000011 /* SecurityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityTests.swift; sourceTree = "<group>"; };
-		BA2000000000000000000012 /* SetupApplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupApplicationTests.swift; sourceTree = "<group>"; };
-		BA2000000000000000000013 /* SetupPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupPersistenceTests.swift; sourceTree = "<group>"; };
-		BA2000000000000000000014 /* SetupPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupPlanTests.swift; sourceTree = "<group>"; };
-		BA2000000000000000000015 /* SetupRestoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupRestoreTests.swift; sourceTree = "<group>"; };
-		BA2000000000000000000016 /* SharingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharingTests.swift; sourceTree = "<group>"; };
-		BA2000000000000000000017 /* StreamingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingTests.swift; sourceTree = "<group>"; };
-		B20000000000000000000002 /* NEARPrivateChatTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NEARPrivateChatTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		DD2000000000000000000001 /* NEARPrivateChatUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NEARPrivateChatUITests.swift; sourceTree = "<group>"; };
-		DD2000000000000000000002 /* NEARPrivateChatUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NEARPrivateChatUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		C20000000000000000000001 /* AppHaptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppHaptics.swift; sourceTree = "<group>"; };
-		C20000000000000000000002 /* HomeSearchIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSearchIndex.swift; sourceTree = "<group>"; };
-		C20000000000000000000003 /* HomeSupportingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSupportingViews.swift; sourceTree = "<group>"; };
-		C20000000000000000000004 /* ChatScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatScreenView.swift; sourceTree = "<group>"; };
-		C20000000000000000000005 /* ModelPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPickerView.swift; sourceTree = "<group>"; };
-		C20000000000000000000006 /* ChipFlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipFlowLayout.swift; sourceTree = "<group>"; };
-		C20000000000000000000007 /* ShareViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViews.swift; sourceTree = "<group>"; };
-		F2E000000000000000000001 /* ShareSupportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSupportViews.swift; sourceTree = "<group>"; };
-		C20000000000000000000008 /* ProjectContextViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectContextViews.swift; sourceTree = "<group>"; };
-		F2D700000100000000000000 /* ProjectContextSupportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectContextSupportViews.swift; sourceTree = "<group>"; };
-		D2AC00000100000000000000 /* ProjectEditorViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectEditorViews.swift; sourceTree = "<group>"; };
-		C20000000000000000000009 /* AccountCapabilitiesViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountCapabilitiesViews.swift; sourceTree = "<group>"; };
-		F2A000000000000000000001 /* AccountSettingsDetailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSettingsDetailViews.swift; sourceTree = "<group>"; };
-		F2A000000000000000000002 /* AccountCapabilityCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountCapabilityCenterView.swift; sourceTree = "<group>"; };
-		F2A000000000000000000003 /* AccountCapabilitySupportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountCapabilitySupportViews.swift; sourceTree = "<group>"; };
-		F2A000000000000000000004 /* AccountConnectionCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountConnectionCards.swift; sourceTree = "<group>"; };
-		C2000000000000000000000A /* SecurityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityView.swift; sourceTree = "<group>"; };
-		F2C000000000000000000001 /* SecurityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityStore.swift; sourceTree = "<group>"; };
-		F2C000000000000000000002 /* SecuritySupportRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecuritySupportRows.swift; sourceTree = "<group>"; };
-		F2C000000000000000000003 /* SecurityProofReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityProofReportView.swift; sourceTree = "<group>"; };
-		C2000000000000000000000B /* AgentWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentWorkspaceView.swift; sourceTree = "<group>"; };
-		F2D000000000000000000001 /* AgentWorkspaceSetupViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentWorkspaceSetupViews.swift; sourceTree = "<group>"; };
-		F2D000000000000000000002 /* AgentMissionControlPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentMissionControlPanel.swift; sourceTree = "<group>"; };
-		C2000000000000000000000C /* ChatMessageViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageViews.swift; sourceTree = "<group>"; };
-		C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostedHandoffPreflightSheet.swift; sourceTree = "<group>"; };
-		C2000000000000000000000E /* ChatInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatInputBar.swift; sourceTree = "<group>"; };
+		A2000000000000000000001B /* AgentActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActivityController.swift; sourceTree = "<group>"; };
+		A20000000000000000000021 /* ConversationTranscriptClipboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTranscriptClipboard.swift; sourceTree = "<group>"; };
+		AB2000000000000000000001 /* HomeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeStore.swift; sourceTree = "<group>"; };
+		AB2000000000000000000002 /* HomeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreen.swift; sourceTree = "<group>"; };
+		AB2000000000000000000003 /* HomeScreenReadModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreenReadModels.swift; sourceTree = "<group>"; };
+		AB2000000000000000000004 /* HomeSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSidebar.swift; sourceTree = "<group>"; };
+		AB2000000000000000000005 /* HomeScreenInboxSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreenInboxSections.swift; sourceTree = "<group>"; };
+		AB2000000000000000000006 /* HomeScreenLaunchComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreenLaunchComposer.swift; sourceTree = "<group>"; };
+		AB2000000000000000000007 /* HomeScreenChatActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreenChatActions.swift; sourceTree = "<group>"; };
+		AB2000000000000000000008 /* HomeScreenLaunchActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreenLaunchActions.swift; sourceTree = "<group>"; };
+		AB2000000000000000000009 /* HomeScreenSetupActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreenSetupActions.swift; sourceTree = "<group>"; };
+		AB200000000000000000000A /* HomeChromeViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeChromeViews.swift; sourceTree = "<group>"; };
+		AB200000000000000000000B /* HomeConversationRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeConversationRows.swift; sourceTree = "<group>"; };
+		AB200000000000000000000C /* HomeLaunchComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeLaunchComposer.swift; sourceTree = "<group>"; };
+		AB200000000000000000000D /* HomeInboxSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeInboxSection.swift; sourceTree = "<group>"; };
+		AB200000000000000000000E /* HomeProjectSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeProjectSection.swift; sourceTree = "<group>"; };
+		AB200000000000000000000F /* HomeSetupLaunchCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSetupLaunchCard.swift; sourceTree = "<group>"; };
+		AB2000000000000000000010 /* HomeSetupSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSetupSurface.swift; sourceTree = "<group>"; };
+		AB2000000000000000000011 /* HomeSetupSuggestions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSetupSuggestions.swift; sourceTree = "<group>"; };
+		AB2000000000000000000012 /* HomeTrustSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeTrustSurface.swift; sourceTree = "<group>"; };
+		AB2000000000000000000013 /* HomeOrchestrationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeOrchestrationModels.swift; sourceTree = "<group>"; };
+		AB2000000000000000000014 /* HomeOrchestrationPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeOrchestrationPlanner.swift; sourceTree = "<group>"; };
+		AB2000000000000000000015 /* HomeOrchestrationPlanner+Formatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeOrchestrationPlanner+Formatting.swift"; sourceTree = "<group>"; };
+		AC2000000000000000000001 /* SetupUseCases.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupUseCases.swift; sourceTree = "<group>"; };
+		AC2000000000000000000002 /* UserSetupStarterPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSetupStarterPreset.swift; sourceTree = "<group>"; };
+		AC2000000000000000000003 /* SetupStarterContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupStarterContent.swift; sourceTree = "<group>"; };
+		AC2000000000000000000004 /* UserSetupProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSetupProfile.swift; sourceTree = "<group>"; };
+		AC2000000000000000000005 /* UserSetupProfile+RuntimeDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UserSetupProfile+RuntimeDefaults.swift"; sourceTree = "<group>"; };
+		AC2000000000000000000006 /* UserSetupProfile+Suggestions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UserSetupProfile+Suggestions.swift"; sourceTree = "<group>"; };
+		AC2000000000000000000007 /* UserSetupProfile+Actions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UserSetupProfile+Actions.swift"; sourceTree = "<group>"; };
+		AC2000000000000000000008 /* SetupRouteDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupRouteDefaults.swift; sourceTree = "<group>"; };
+		AC2000000000000000000009 /* AppSetupPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSetupPlan.swift; sourceTree = "<group>"; };
+		AC200000000000000000000A /* AppSetupPlan+RouteDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSetupPlan+RouteDetail.swift"; sourceTree = "<group>"; };
+		AC200000000000000000000B /* SetupRestorePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupRestorePlanner.swift; sourceTree = "<group>"; };
+		AC200000000000000000000C /* CapabilityNextStepPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityNextStepPlanner.swift; sourceTree = "<group>"; };
+		AC200000000000000000000D /* UserSetupStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSetupStorage.swift; sourceTree = "<group>"; };
+		AC200000000000000000000E /* SetupStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupStore.swift; sourceTree = "<group>"; };
+		AC200000000000000000000F /* UserSetupControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSetupControls.swift; sourceTree = "<group>"; };
+		AC2000000000000000000010 /* SetupPlanPreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupPlanPreviewCard.swift; sourceTree = "<group>"; };
 		AD2000000000000000000001 /* ChatInputBar+State.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatInputBar+State.swift"; sourceTree = "<group>"; };
 		AD2000000000000000000002 /* ChatInputBar+Routing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatInputBar+Routing.swift"; sourceTree = "<group>"; };
 		AD2000000000000000000003 /* ChatInputBar+SlashCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatInputBar+SlashCommands.swift"; sourceTree = "<group>"; };
 		AD2000000000000000000004 /* ChatInputBar+AttachmentActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatInputBar+AttachmentActions.swift"; sourceTree = "<group>"; };
 		AD2000000000000000000005 /* ChatCameraCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCameraCaptureView.swift; sourceTree = "<group>"; };
 		AD2000000000000000000006 /* ChatComposerRouteViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatComposerRouteViews.swift; sourceTree = "<group>"; };
+		BA2A8FD7EE789490B6DB2987 /* DocumentContextIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentContextIndicator.swift; sourceTree = "<group>"; };
 		AD2000000000000000000007 /* ChatAttachmentShelf.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAttachmentShelf.swift; sourceTree = "<group>"; };
 		AD2000000000000000000008 /* VoiceDictation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceDictation.swift; sourceTree = "<group>"; };
 		AD2000000000000000000009 /* ChatAttachmentDropViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAttachmentDropViews.swift; sourceTree = "<group>"; };
@@ -399,7 +422,6 @@
 		AD200000000000000000000B /* CouncilResponseGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilResponseGroup.swift; sourceTree = "<group>"; };
 		AD200000000000000000000C /* ChatToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatToolbar.swift; sourceTree = "<group>"; };
 		AD200000000000000000000D /* ChatToolbarChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatToolbarChrome.swift; sourceTree = "<group>"; };
-		D2AA00000100000000000000 /* ChatToolbarMenuContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatToolbarMenuContent.swift; sourceTree = "<group>"; };
 		AE2000000000000000000001 /* MessageStreamingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageStreamingViews.swift; sourceTree = "<group>"; };
 		AE2000000000000000000002 /* MessageStatusViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageStatusViews.swift; sourceTree = "<group>"; };
 		AE2000000000000000000003 /* EditUserMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditUserMessageView.swift; sourceTree = "<group>"; };
@@ -444,6 +466,52 @@
 		AF200000000000000000001B /* DemoProofAndModelViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoProofAndModelViews.swift; sourceTree = "<group>"; };
 		AF200000000000000000001C /* DemoIronClawViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoIronClawViews.swift; sourceTree = "<group>"; };
 		AF200000000000000000001D /* DemoResultComparisonViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoResultComparisonViews.swift; sourceTree = "<group>"; };
+		B20000000000000000000001 /* PrivateChatCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateChatCoreTests.swift; sourceTree = "<group>"; };
+		B20000000000000000000002 /* NEARPrivateChatTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NEARPrivateChatTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B2C800000100000000000000 /* ChatMessageLoadCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageLoadCoordinator.swift; sourceTree = "<group>"; };
+		B2C900000100000000000000 /* ArchivedChatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchivedChatsView.swift; sourceTree = "<group>"; };
+		BA2000000000000000000001 /* APITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APITests.swift; sourceTree = "<group>"; };
+		BA2000000000000000000002 /* AccountTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountTests.swift; sourceTree = "<group>"; };
+		BA2000000000000000000003 /* AgentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentTests.swift; sourceTree = "<group>"; };
+		BA2000000000000000000004 /* AuthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthTests.swift; sourceTree = "<group>"; };
+		BA2000000000000000000005 /* BriefingTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingTrackerTests.swift; sourceTree = "<group>"; };
+		BA2000000000000000000006 /* ComposerAndSendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerAndSendTests.swift; sourceTree = "<group>"; };
+		BA2000000000000000000008 /* QuickIntentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickIntentTests.swift; sourceTree = "<group>"; };
+		BA2000000000000000000009 /* WidgetAndActionSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetAndActionSurfaceTests.swift; sourceTree = "<group>"; };
+		BA200000000000000000000A /* ExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportTests.swift; sourceTree = "<group>"; };
+		BA200000000000000000000B /* FileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTests.swift; sourceTree = "<group>"; };
+		BA200000000000000000000C /* HomeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeTests.swift; sourceTree = "<group>"; };
+		BA200000000000000000000D /* CouncilTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilTests.swift; sourceTree = "<group>"; };
+		BA200000000000000000000E /* ModelCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogTests.swift; sourceTree = "<group>"; };
+		BA200000000000000000000F /* ProjectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectTests.swift; sourceTree = "<group>"; };
+		BA2000000000000000000010 /* RoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingTests.swift; sourceTree = "<group>"; };
+		BA9F903202E6EFC0F851AB3A /* RouteHealthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteHealthTests.swift; sourceTree = "<group>"; };
+		BA2000000000000000000011 /* SecurityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityTests.swift; sourceTree = "<group>"; };
+		BA2000000000000000000012 /* SetupApplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupApplicationTests.swift; sourceTree = "<group>"; };
+		BA2000000000000000000013 /* SetupPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupPersistenceTests.swift; sourceTree = "<group>"; };
+		BA2000000000000000000014 /* SetupPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupPlanTests.swift; sourceTree = "<group>"; };
+		BA2000000000000000000015 /* SetupRestoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupRestoreTests.swift; sourceTree = "<group>"; };
+		BA2000000000000000000016 /* SharingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharingTests.swift; sourceTree = "<group>"; };
+		BA2000000000000000000017 /* StreamingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingTests.swift; sourceTree = "<group>"; };
+		C20000000000000000000001 /* AppHaptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppHaptics.swift; sourceTree = "<group>"; };
+		C20000000000000000000002 /* HomeSearchIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSearchIndex.swift; sourceTree = "<group>"; };
+		C20000000000000000000003 /* HomeSupportingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSupportingViews.swift; sourceTree = "<group>"; };
+		C20000000000000000000004 /* ChatScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatScreenView.swift; sourceTree = "<group>"; };
+		C20000000000000000000005 /* ModelPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPickerView.swift; sourceTree = "<group>"; };
+		C20000000000000000000006 /* ChipFlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipFlowLayout.swift; sourceTree = "<group>"; };
+		C20000000000000000000007 /* ShareViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViews.swift; sourceTree = "<group>"; };
+		C20000000000000000000008 /* ProjectContextViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectContextViews.swift; sourceTree = "<group>"; };
+		C20000000000000000000009 /* AccountCapabilitiesViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountCapabilitiesViews.swift; sourceTree = "<group>"; };
+		C2000000000000000000000A /* SecurityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityView.swift; sourceTree = "<group>"; };
+		C2000000000000000000000B /* AgentWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentWorkspaceView.swift; sourceTree = "<group>"; };
+		C2000000000000000000000C /* ChatMessageViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageViews.swift; sourceTree = "<group>"; };
+		C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostedHandoffPreflightSheet.swift; sourceTree = "<group>"; };
+		C2000000000000000000000E /* ChatInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatInputBar.swift; sourceTree = "<group>"; };
+		C2000000000000000000000F /* MessageTimelineStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageTimelineStore.swift; sourceTree = "<group>"; };
+		C20000000000000000000010 /* ComposerState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerState.swift; sourceTree = "<group>"; };
+		C20000000000000000000011 /* ModelCatalogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogStore.swift; sourceTree = "<group>"; };
+		C20000000000000000000012 /* ChatSessionStores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSessionStores.swift; sourceTree = "<group>"; };
+		C20000000000000000000013 /* HomeOrchestrationSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeOrchestrationSurface.swift; sourceTree = "<group>"; };
 		D20000000000000000000001 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		D20000000000000000000002 /* AppLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLifecycle.swift; sourceTree = "<group>"; };
 		D20000000000000000000003 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -453,6 +521,12 @@
 		D20000000000000000000007 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
 		D20000000000000000000009 /* UserSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSetupView.swift; sourceTree = "<group>"; };
 		D2000000000000000000000A /* RoutePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutePlanner.swift; sourceTree = "<group>"; };
+		BA7EA52B9EA73EEA1C11AED0 /* RouteHealthMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteHealthMonitor.swift; sourceTree = "<group>"; };
+		D2AA00000100000000000000 /* ChatToolbarMenuContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatToolbarMenuContent.swift; sourceTree = "<group>"; };
+		D2AB00000100000000000000 /* RenameConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenameConversationView.swift; sourceTree = "<group>"; };
+		D2AC00000100000000000000 /* ProjectEditorViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectEditorViews.swift; sourceTree = "<group>"; };
+		DD2000000000000000000001 /* NEARPrivateChatUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NEARPrivateChatUITests.swift; sourceTree = "<group>"; };
+		DD2000000000000000000002 /* NEARPrivateChatUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NEARPrivateChatUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E20000000000000000000001 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		E20000000000000000000002 /* BrandMarks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandMarks.swift; sourceTree = "<group>"; };
 		E20000000000000000000003 /* ViewPlatformExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewPlatformExtensions.swift; sourceTree = "<group>"; };
@@ -466,36 +540,8 @@
 		F20000000000000000000006 /* ModelCatalogModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogModels.swift; sourceTree = "<group>"; };
 		F20000000000000000000007 /* ChatRoutingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRoutingModels.swift; sourceTree = "<group>"; };
 		F20000000000000000000008 /* AgentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentModels.swift; sourceTree = "<group>"; };
-		F2B000000000000000000001 /* AccountStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStore.swift; sourceTree = "<group>"; };
-		F2B000000000000000000002 /* AgentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStore.swift; sourceTree = "<group>"; };
 		F20000000000000000000009 /* ChatModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatModels.swift; sourceTree = "<group>"; };
-		F2000000000000000000B001 /* BriefingFeature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingFeature.swift; sourceTree = "<group>"; };
-		F2000000000000000000B002 /* CouncilRoomFeature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilRoomFeature.swift; sourceTree = "<group>"; };
-		F2000000000000000000B003 /* ThreadedFeature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadedFeature.swift; sourceTree = "<group>"; };
-		F2000000000000000000B004 /* LiveDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDataService.swift; sourceTree = "<group>"; };
-		47DF59A499534BE180D52C8B /* ChatLocalIntentDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentDispatcher.swift; sourceTree = "<group>"; };
-		9F2C1A80E6F74E53A6D1D05B /* ChatLocalIntentWidgetService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentWidgetService.swift; sourceTree = "<group>"; };
-		9F2C1A82E6F74E53A6D1D05B /* ChatLocalIntentTranscriptWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentTranscriptWriter.swift; sourceTree = "<group>"; };
-		9F2C1A84E6F74E53A6D1D05B /* ChatLocalIntentResponseFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentResponseFormatter.swift; sourceTree = "<group>"; };
-		9F2C1A86E6F74E53A6D1D05B /* ChatLocalIntentBriefingFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentBriefingFactory.swift; sourceTree = "<group>"; };
-		9F2C1A88E6F74E53A6D1D05B /* ChatLocalIntentExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentExecutor.swift; sourceTree = "<group>"; };
 		F2000000000000000000000A /* SetupModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupModels.swift; sourceTree = "<group>"; };
-		AC2000000000000000000001 /* SetupUseCases.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupUseCases.swift; sourceTree = "<group>"; };
-		AC2000000000000000000002 /* UserSetupStarterPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSetupStarterPreset.swift; sourceTree = "<group>"; };
-		AC2000000000000000000003 /* SetupStarterContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupStarterContent.swift; sourceTree = "<group>"; };
-		AC2000000000000000000004 /* UserSetupProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSetupProfile.swift; sourceTree = "<group>"; };
-		AC2000000000000000000005 /* UserSetupProfile+RuntimeDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UserSetupProfile+RuntimeDefaults.swift"; sourceTree = "<group>"; };
-		AC2000000000000000000006 /* UserSetupProfile+Suggestions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UserSetupProfile+Suggestions.swift"; sourceTree = "<group>"; };
-		AC2000000000000000000007 /* UserSetupProfile+Actions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UserSetupProfile+Actions.swift"; sourceTree = "<group>"; };
-		AC2000000000000000000008 /* SetupRouteDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupRouteDefaults.swift; sourceTree = "<group>"; };
-		AC2000000000000000000009 /* AppSetupPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSetupPlan.swift; sourceTree = "<group>"; };
-		AC200000000000000000000A /* AppSetupPlan+RouteDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppSetupPlan+RouteDetail.swift"; sourceTree = "<group>"; };
-		AC200000000000000000000B /* SetupRestorePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupRestorePlanner.swift; sourceTree = "<group>"; };
-		AC200000000000000000000C /* CapabilityNextStepPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityNextStepPlanner.swift; sourceTree = "<group>"; };
-		AC200000000000000000000D /* UserSetupStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSetupStorage.swift; sourceTree = "<group>"; };
-		AC200000000000000000000E /* SetupStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupStore.swift; sourceTree = "<group>"; };
-		AC200000000000000000000F /* UserSetupControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSetupControls.swift; sourceTree = "<group>"; };
-		AC2000000000000000000010 /* SetupPlanPreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupPlanPreviewCard.swift; sourceTree = "<group>"; };
 		F2000000000000000000000B /* APIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModels.swift; sourceTree = "<group>"; };
 		F2000000000000000000000C /* FileModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileModels.swift; sourceTree = "<group>"; };
 		F2000000000000000000000D /* AccountModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountModels.swift; sourceTree = "<group>"; };
@@ -503,65 +549,21 @@
 		F2000000000000000000000F /* SharingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharingModels.swift; sourceTree = "<group>"; };
 		F20000000000000000000010 /* SecurityModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityModels.swift; sourceTree = "<group>"; };
 		F20000000000000000000011 /* ResponseStreamEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseStreamEvent.swift; sourceTree = "<group>"; };
-		C2000000000000000000000F /* MessageTimelineStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageTimelineStore.swift; sourceTree = "<group>"; };
-		C20000000000000000000010 /* ComposerState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerState.swift; sourceTree = "<group>"; };
-		C20000000000000000000011 /* ModelCatalogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogStore.swift; sourceTree = "<group>"; };
-		C20000000000000000000012 /* ChatSessionStores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSessionStores.swift; sourceTree = "<group>"; };
-		C20000000000000000000013 /* HomeOrchestrationSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeOrchestrationSurface.swift; sourceTree = "<group>"; };
-		AB2000000000000000000001 /* HomeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeStore.swift; sourceTree = "<group>"; };
-		AB2000000000000000000002 /* HomeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreen.swift; sourceTree = "<group>"; };
-		AB2000000000000000000003 /* HomeScreenReadModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreenReadModels.swift; sourceTree = "<group>"; };
-		AB2000000000000000000004 /* HomeSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSidebar.swift; sourceTree = "<group>"; };
-		AB2000000000000000000005 /* HomeScreenInboxSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreenInboxSections.swift; sourceTree = "<group>"; };
-		AB2000000000000000000006 /* HomeScreenLaunchComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreenLaunchComposer.swift; sourceTree = "<group>"; };
-		AB2000000000000000000007 /* HomeScreenChatActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreenChatActions.swift; sourceTree = "<group>"; };
-		AB2000000000000000000008 /* HomeScreenLaunchActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreenLaunchActions.swift; sourceTree = "<group>"; };
-		AB2000000000000000000009 /* HomeScreenSetupActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreenSetupActions.swift; sourceTree = "<group>"; };
-		AB200000000000000000000A /* HomeChromeViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeChromeViews.swift; sourceTree = "<group>"; };
-		AB200000000000000000000B /* HomeConversationRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeConversationRows.swift; sourceTree = "<group>"; };
-		AB200000000000000000000C /* HomeLaunchComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeLaunchComposer.swift; sourceTree = "<group>"; };
-		AB200000000000000000000D /* HomeInboxSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeInboxSection.swift; sourceTree = "<group>"; };
-		AB200000000000000000000E /* HomeProjectSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeProjectSection.swift; sourceTree = "<group>"; };
-		AB200000000000000000000F /* HomeSetupLaunchCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSetupLaunchCard.swift; sourceTree = "<group>"; };
-		AB2000000000000000000010 /* HomeSetupSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSetupSurface.swift; sourceTree = "<group>"; };
-		AB2000000000000000000011 /* HomeSetupSuggestions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSetupSuggestions.swift; sourceTree = "<group>"; };
-		AB2000000000000000000012 /* HomeTrustSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeTrustSurface.swift; sourceTree = "<group>"; };
-		AB2000000000000000000013 /* HomeOrchestrationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeOrchestrationModels.swift; sourceTree = "<group>"; };
-		AB2000000000000000000014 /* HomeOrchestrationPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeOrchestrationPlanner.swift; sourceTree = "<group>"; };
-		AB2000000000000000000015 /* HomeOrchestrationPlanner+Formatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeOrchestrationPlanner+Formatting.swift"; sourceTree = "<group>"; };
 		F20000000000000000000012 /* ProjectStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectStore.swift; sourceTree = "<group>"; };
-		F2A600000100000000000000 /* ProjectService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectService.swift; sourceTree = "<group>"; };
-		F2A700000100000000000000 /* ConversationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationRepository.swift; sourceTree = "<group>"; };
-		F2A700000200000000000000 /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
-		B2C900000100000000000000 /* ArchivedChatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchivedChatsView.swift; sourceTree = "<group>"; };
-		D2AB00000100000000000000 /* RenameConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenameConversationView.swift; sourceTree = "<group>"; };
-		F2A700000300000000000000 /* MessageRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRepository.swift; sourceTree = "<group>"; };
-		F2A800000100000000000000 /* ChatSendCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSendCoordinator.swift; sourceTree = "<group>"; };
-		B2C800000100000000000000 /* ChatMessageLoadCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageLoadCoordinator.swift; sourceTree = "<group>"; };
 		F20000000000000000000013 /* FileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileStore.swift; sourceTree = "<group>"; };
-		F2A500000100000000000000 /* FileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileService.swift; sourceTree = "<group>"; };
-		F2A500000200000000000000 /* AttachmentStagingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentStagingStore.swift; sourceTree = "<group>"; };
-		F2A500000300000000000000 /* DocumentTextExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTextExtractor.swift; sourceTree = "<group>"; };
-		F2A500000400000000000000 /* VisionTextExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionTextExtractor.swift; sourceTree = "<group>"; };
 		F20000000000000000000014 /* ShareStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareStore.swift; sourceTree = "<group>"; };
-		F2A400000100000000000000 /* SharingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharingService.swift; sourceTree = "<group>"; };
 		F20000000000000000000015 /* MessageStreamService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageStreamService.swift; sourceTree = "<group>"; };
 		F20000000000000000000016 /* CouncilStreamService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilStreamService.swift; sourceTree = "<group>"; };
 		F20000000000000000000017 /* SoulPromptComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulPromptComposer.swift; sourceTree = "<group>"; };
 		F20000000000000000000018 /* SetupSoulPromptBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupSoulPromptBuilder.swift; sourceTree = "<group>"; };
-		9200000000000000000000A1 /* BriefingSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingSnapshot.swift; sourceTree = "<group>"; };
-		9200000000000000000000A3 /* AgentActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActivityAttributes.swift; sourceTree = "<group>"; };
-		9200000000000000000000A2 /* NEARPrivateChat.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NEARPrivateChat.entitlements; sourceTree = "<group>"; };
-		9200000000000000000000B2 /* BriefingWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingWidgetBundle.swift; sourceTree = "<group>"; };
-		9200000000000000000000B3 /* BriefingWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingWidget.swift; sourceTree = "<group>"; };
-		9200000000000000000000B6 /* AgentLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLiveActivity.swift; sourceTree = "<group>"; };
-		9200000000000000000000B4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		9200000000000000000000B5 /* NEARPrivateChatWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NEARPrivateChatWidget.entitlements; sourceTree = "<group>"; };
-		9200000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NEARPrivateChatWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		5B00000000000000000000D1 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
-		5B00000000000000000000D2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		5B00000000000000000000D3 /* NEARPrivateChatShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NEARPrivateChatShareExtension.entitlements; sourceTree = "<group>"; };
-		5B00000000000000000000D5 /* NEARPrivateChatShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NEARPrivateChatShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		F2000000000000000000B001 /* BriefingFeature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingFeature.swift; sourceTree = "<group>"; };
+		F2000000000000000000B002 /* CouncilRoomFeature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilRoomFeature.swift; sourceTree = "<group>"; };
+		F2000000000000000000B003 /* ThreadedFeature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadedFeature.swift; sourceTree = "<group>"; };
+		F2000000000000000000B004 /* LiveDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDataService.swift; sourceTree = "<group>"; };
+		F2A000000000000000000001 /* AccountSettingsDetailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSettingsDetailViews.swift; sourceTree = "<group>"; };
+		F2A000000000000000000002 /* AccountCapabilityCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountCapabilityCenterView.swift; sourceTree = "<group>"; };
+		F2A000000000000000000003 /* AccountCapabilitySupportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountCapabilitySupportViews.swift; sourceTree = "<group>"; };
+		F2A000000000000000000004 /* AccountConnectionCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountConnectionCards.swift; sourceTree = "<group>"; };
 		F2A200000100000000000000 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		F2A200000200000000000000 /* AuthAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthAPI.swift; sourceTree = "<group>"; };
 		F2A200000300000000000000 /* ConversationAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationAPI.swift; sourceTree = "<group>"; };
@@ -581,9 +583,42 @@
 		F2A300000800000000000000 /* ProjectPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectPersistence.swift; sourceTree = "<group>"; };
 		F2A300000900000000000000 /* AgentThreadPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentThreadPersistence.swift; sourceTree = "<group>"; };
 		F2A300000A00000000000000 /* SessionPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPersistence.swift; sourceTree = "<group>"; };
+		F2A400000100000000000000 /* SharingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharingService.swift; sourceTree = "<group>"; };
+		F2A500000100000000000000 /* FileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileService.swift; sourceTree = "<group>"; };
+		F2A500000200000000000000 /* AttachmentStagingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentStagingStore.swift; sourceTree = "<group>"; };
+		F2A500000300000000000000 /* DocumentTextExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTextExtractor.swift; sourceTree = "<group>"; };
+		F2A500000400000000000000 /* VisionTextExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionTextExtractor.swift; sourceTree = "<group>"; };
+		F2A600000100000000000000 /* ProjectService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectService.swift; sourceTree = "<group>"; };
+		F2A700000100000000000000 /* ConversationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationRepository.swift; sourceTree = "<group>"; };
+		F2A700000200000000000000 /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
+		F2A700000300000000000000 /* MessageRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRepository.swift; sourceTree = "<group>"; };
+		F2A800000100000000000000 /* ChatSendCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSendCoordinator.swift; sourceTree = "<group>"; };
+		F2B000000000000000000001 /* AccountStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStore.swift; sourceTree = "<group>"; };
+		F2B000000000000000000002 /* AgentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStore.swift; sourceTree = "<group>"; };
+		F2C000000000000000000001 /* SecurityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityStore.swift; sourceTree = "<group>"; };
+		F2C000000000000000000002 /* SecuritySupportRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecuritySupportRows.swift; sourceTree = "<group>"; };
+		F2C000000000000000000003 /* SecurityProofReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityProofReportView.swift; sourceTree = "<group>"; };
+		F2D000000000000000000001 /* AgentWorkspaceSetupViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentWorkspaceSetupViews.swift; sourceTree = "<group>"; };
+		F2D000000000000000000002 /* AgentMissionControlPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentMissionControlPanel.swift; sourceTree = "<group>"; };
+		F2D700000100000000000000 /* ProjectContextSupportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectContextSupportViews.swift; sourceTree = "<group>"; };
+		F2E000000000000000000001 /* ShareSupportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSupportViews.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		5E00000000000000000000D3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9800000000000000000000C3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A30000000000000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -605,33 +640,26 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		9800000000000000000000C3 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		5E00000000000000000000D3 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A40000000000000000000001 = {
+		5C00000000000000000000D1 /* NEARPrivateChatShareExtension */ = {
 			isa = PBXGroup;
 			children = (
-				A40000000000000000000002 /* NEARPrivateChat */,
-				9400000000000000000000C1 /* NEARPrivateChatWidget */,
-				5C00000000000000000000D1 /* NEARPrivateChatShareExtension */,
-				B40000000000000000000001 /* NEARPrivateChatTests */,
-				DD4000000000000000000001 /* NEARPrivateChatUITests */,
-				A40000000000000000000003 /* Products */,
+				5B00000000000000000000D1 /* ShareViewController.swift */,
+				5B00000000000000000000D2 /* Info.plist */,
+				5B00000000000000000000D3 /* NEARPrivateChatShareExtension.entitlements */,
 			);
+			path = NEARPrivateChatShareExtension;
+			sourceTree = "<group>";
+		};
+		9400000000000000000000A1 /* Briefing */ = {
+			isa = PBXGroup;
+			children = (
+				9200000000000000000000A1 /* BriefingSnapshot.swift */,
+				9200000000000000000000A3 /* AgentActivityAttributes.swift */,
+			);
+			path = Briefing;
 			sourceTree = "<group>";
 		};
 		9400000000000000000000C1 /* NEARPrivateChatWidget */ = {
@@ -646,23 +674,25 @@
 			path = NEARPrivateChatWidget;
 			sourceTree = "<group>";
 		};
-		5C00000000000000000000D1 /* NEARPrivateChatShareExtension */ = {
+		A40000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
-				5B00000000000000000000D1 /* ShareViewController.swift */,
-				5B00000000000000000000D2 /* Info.plist */,
-				5B00000000000000000000D3 /* NEARPrivateChatShareExtension.entitlements */,
+				A40000000000000000000002 /* NEARPrivateChat */,
+				9400000000000000000000C1 /* NEARPrivateChatWidget */,
+				5C00000000000000000000D1 /* NEARPrivateChatShareExtension */,
+				B40000000000000000000001 /* NEARPrivateChatTests */,
+				DD4000000000000000000001 /* NEARPrivateChatUITests */,
+				A40000000000000000000003 /* Products */,
 			);
-			path = NEARPrivateChatShareExtension;
 			sourceTree = "<group>";
 		};
 		A40000000000000000000002 /* NEARPrivateChat */ = {
 			isa = PBXGroup;
-				children = (
-					D40000000000000000000001 /* App */,
-					D40000000000000000000002 /* Core */,
-					E40000000000000000000001 /* Shared */,
-					D40000000000000000000004 /* Features */,
+			children = (
+				D40000000000000000000001 /* App */,
+				D40000000000000000000002 /* Core */,
+				E40000000000000000000001 /* Shared */,
+				D40000000000000000000004 /* Features */,
 				A20000000000000000000009 /* Info.plist */,
 				9200000000000000000000A2 /* NEARPrivateChat.entitlements */,
 				A20000000000000000000013 /* PrivacyInfo.xcprivacy */,
@@ -670,489 +700,6 @@
 				A2000000000000000000000A /* Assets.xcassets */,
 			);
 			path = NEARPrivateChat;
-			sourceTree = "<group>";
-		};
-		D40000000000000000000001 /* App */ = {
-			isa = PBXGroup;
-			children = (
-				A20000000000000000000001 /* NEARPrivateChatApp.swift */,
-				A20000000000000000000008 /* AppShellView.swift */,
-				D20000000000000000000001 /* AppEnvironment.swift */,
-				D20000000000000000000002 /* AppLifecycle.swift */,
-				D20000000000000000000003 /* RootView.swift */,
-				D20000000000000000000004 /* StatusBanner.swift */,
-				E40000000000000000000018 /* State */,
-			);
-			path = App;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000018 /* State */ = {
-			isa = PBXGroup;
-			children = (
-				A20000000000000000000006 /* ChatStore.swift */,
-				A2000000000000000000001B /* AgentActivityController.swift */,
-			);
-			path = State;
-			sourceTree = "<group>";
-		};
-		D40000000000000000000002 /* Core */ = {
-			isa = PBXGroup;
-			children = (
-				E40000000000000000000010 /* API */,
-				E40000000000000000000011 /* Auth */,
-				E40000000000000000000006 /* DesignSystem */,
-				E40000000000000000000012 /* Export */,
-				F2A300000400000000000000 /* Persistence */,
-				D40000000000000000000003 /* Routing */,
-				E40000000000000000000014 /* Security */,
-				E40000000000000000000015 /* Services */,
-				E40000000000000000000017 /* Streaming */,
-				E40000000000000000000016 /* Telemetry */,
-			);
-			path = Core;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000010 /* API */ = {
-			isa = PBXGroup;
-			children = (
-				F2000000000000000000000B /* APIModels.swift */,
-				F2A200000100000000000000 /* APIClient.swift */,
-				F2A200000200000000000000 /* AuthAPI.swift */,
-				F2A200000300000000000000 /* ConversationAPI.swift */,
-				F2A200000400000000000000 /* MessageAPI.swift */,
-				F2A200000500000000000000 /* ModelAPI.swift */,
-				F2A200000600000000000000 /* FileAPI.swift */,
-				F2A200000700000000000000 /* ShareAPI.swift */,
-				F2A200000800000000000000 /* SettingsAPI.swift */,
-				F2A200000900000000000000 /* BillingAPI.swift */,
-				F2A200000A00000000000000 /* AttestationAPI.swift */,
-				A20000000000000000000004 /* PrivateChatAPI.swift */,
-				A2000000000000000000000D /* IronclawAPI.swift */,
-			);
-			path = API;
-			sourceTree = "<group>";
-		};
-		F2A300000400000000000000 /* Persistence */ = {
-			isa = PBXGroup;
-			children = (
-				F2A300000100000000000000 /* AccountStorageScope.swift */,
-				F2A300000200000000000000 /* FileCache.swift */,
-				F2A300000300000000000000 /* DraftPersistence.swift */,
-				F2A300000500000000000000 /* SettingsPersistence.swift */,
-				F2A300000600000000000000 /* ConversationCache.swift */,
-				F2A300000700000000000000 /* MessageCache.swift */,
-				F2A300000800000000000000 /* ProjectPersistence.swift */,
-				F2A300000900000000000000 /* AgentThreadPersistence.swift */,
-				F2A300000A00000000000000 /* SessionPersistence.swift */,
-			);
-			path = Persistence;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000011 /* Auth */ = {
-			isa = PBXGroup;
-			children = (
-				F20000000000000000000005 /* AuthModels.swift */,
-				A20000000000000000000003 /* KeychainStore.swift */,
-				A20000000000000000000005 /* SessionStore.swift */,
-			);
-			path = Auth;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000006 /* DesignSystem */ = {
-			isa = PBXGroup;
-			children = (
-				C20000000000000000000001 /* AppHaptics.swift */,
-				E20000000000000000000001 /* DesignTokens.swift */,
-				E20000000000000000000005 /* GlassMaterial.swift */,
-			);
-			path = DesignSystem;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000012 /* Export */ = {
-			isa = PBXGroup;
-			children = (
-				A20000000000000000000011 /* ConversationExport.swift */,
-				A20000000000000000000012 /* ChatImport.swift */,
-				A20000000000000000000021 /* ConversationTranscriptClipboard.swift */,
-			);
-			path = Export;
-			sourceTree = "<group>";
-		};
-		D40000000000000000000003 /* Routing */ = {
-			isa = PBXGroup;
-			children = (
-				D20000000000000000000005 /* AppRoute.swift */,
-				D20000000000000000000006 /* AppSheet.swift */,
-				D20000000000000000000007 /* AppRouter.swift */,
-				F20000000000000000000007 /* ChatRoutingModels.swift */,
-				D2000000000000000000000A /* RoutePlanner.swift */,
-				F20000000000000000000004 /* DeepLinkModels.swift */,
-				A20000000000000000000017 /* AskOrchestrator.swift */,
-			);
-			path = Routing;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000014 /* Security */ = {
-			isa = PBXGroup;
-			children = (
-				A20000000000000000000014 /* AttestationStatus.swift */,
-				F20000000000000000000010 /* SecurityModels.swift */,
-			);
-			path = Security;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000017 /* Streaming */ = {
-			isa = PBXGroup;
-			children = (
-				F20000000000000000000011 /* ResponseStreamEvent.swift */,
-				F20000000000000000000015 /* MessageStreamService.swift */,
-				F20000000000000000000016 /* CouncilStreamService.swift */,
-			);
-			path = Streaming;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000015 /* Services */ = {
-			isa = PBXGroup;
-			children = (
-				F20000000000000000000017 /* SoulPromptComposer.swift */,
-				A20000000000000000000010 /* WebGroundingService.swift */,
-			);
-			path = Services;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000016 /* Telemetry */ = {
-			isa = PBXGroup;
-			children = (
-				A20000000000000000000015 /* PrivateTelemetry.swift */,
-			);
-			path = Telemetry;
-			sourceTree = "<group>";
-		};
-		D40000000000000000000004 /* Features */ = {
-			isa = PBXGroup;
-			children = (
-				E40000000000000000000007 /* Auth */,
-				E40000000000000000000008 /* Home */,
-				E40000000000000000000009 /* Chat */,
-				F40000000000000000000002 /* Conversations */,
-				E4000000000000000000000A /* ModelCatalog */,
-				E4000000000000000000000B /* Sharing */,
-				E4000000000000000000000C /* Projects */,
-				F40000000000000000000001 /* Files */,
-				E4000000000000000000000D /* Account */,
-				E4000000000000000000000E /* Security */,
-				E4000000000000000000000F /* Agent */,
-				D40000000000000000000005 /* Setup */,
-			);
-			path = Features;
-			sourceTree = "<group>";
-		};
-		D40000000000000000000005 /* Setup */ = {
-			isa = PBXGroup;
-			children = (
-				F2000000000000000000000A /* SetupModels.swift */,
-				AC2000000000000000000001 /* SetupUseCases.swift */,
-				AC2000000000000000000002 /* UserSetupStarterPreset.swift */,
-				AC2000000000000000000003 /* SetupStarterContent.swift */,
-				AC2000000000000000000004 /* UserSetupProfile.swift */,
-				AC2000000000000000000005 /* UserSetupProfile+RuntimeDefaults.swift */,
-				AC2000000000000000000006 /* UserSetupProfile+Suggestions.swift */,
-				AC2000000000000000000007 /* UserSetupProfile+Actions.swift */,
-				AC2000000000000000000008 /* SetupRouteDefaults.swift */,
-				AC2000000000000000000009 /* AppSetupPlan.swift */,
-				AC200000000000000000000A /* AppSetupPlan+RouteDetail.swift */,
-				AC200000000000000000000B /* SetupRestorePlanner.swift */,
-				AC200000000000000000000C /* CapabilityNextStepPlanner.swift */,
-				AC200000000000000000000D /* UserSetupStorage.swift */,
-				AC200000000000000000000E /* SetupStore.swift */,
-				AC200000000000000000000F /* UserSetupControls.swift */,
-				AC2000000000000000000010 /* SetupPlanPreviewCard.swift */,
-				F20000000000000000000018 /* SetupSoulPromptBuilder.swift */,
-				D20000000000000000000009 /* UserSetupView.swift */,
-			);
-			path = Setup;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000007 /* Auth */ = {
-			isa = PBXGroup;
-			children = (
-				A20000000000000000000007 /* AuthView.swift */,
-			);
-			path = Auth;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000008 /* Home */ = {
-			isa = PBXGroup;
-			children = (
-				F20000000000000000000001 /* ConversationListView.swift */,
-				AB2000000000000000000001 /* HomeStore.swift */,
-				AB2000000000000000000002 /* HomeScreen.swift */,
-				AB2000000000000000000003 /* HomeScreenReadModels.swift */,
-				AB2000000000000000000004 /* HomeSidebar.swift */,
-				AB2000000000000000000005 /* HomeScreenInboxSections.swift */,
-				AB2000000000000000000006 /* HomeScreenLaunchComposer.swift */,
-				AB2000000000000000000007 /* HomeScreenChatActions.swift */,
-				AB2000000000000000000008 /* HomeScreenLaunchActions.swift */,
-				AB2000000000000000000009 /* HomeScreenSetupActions.swift */,
-				AB200000000000000000000A /* HomeChromeViews.swift */,
-				AB200000000000000000000B /* HomeConversationRows.swift */,
-				AB200000000000000000000C /* HomeLaunchComposer.swift */,
-				AB200000000000000000000D /* HomeInboxSection.swift */,
-				AB200000000000000000000E /* HomeProjectSection.swift */,
-				AB200000000000000000000F /* HomeSetupLaunchCard.swift */,
-				AB2000000000000000000010 /* HomeSetupSurface.swift */,
-				AB2000000000000000000011 /* HomeSetupSuggestions.swift */,
-				AB2000000000000000000012 /* HomeTrustSurface.swift */,
-				AB2000000000000000000013 /* HomeOrchestrationModels.swift */,
-				AB2000000000000000000014 /* HomeOrchestrationPlanner.swift */,
-				AB2000000000000000000015 /* HomeOrchestrationPlanner+Formatting.swift */,
-				C20000000000000000000002 /* HomeSearchIndex.swift */,
-				C20000000000000000000013 /* HomeOrchestrationSurface.swift */,
-				C20000000000000000000003 /* HomeSupportingViews.swift */,
-			);
-			path = Home;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000009 /* Chat */ = {
-			isa = PBXGroup;
-			children = (
-				F20000000000000000000009 /* ChatModels.swift */,
-				F2000000000000000000B001 /* BriefingFeature.swift */,
-				F2000000000000000000B002 /* CouncilRoomFeature.swift */,
-				F2000000000000000000B003 /* ThreadedFeature.swift */,
-				F2000000000000000000B004 /* LiveDataService.swift */,
-				47DF59A499534BE180D52C8B /* ChatLocalIntentDispatcher.swift */,
-				9F2C1A80E6F74E53A6D1D05B /* ChatLocalIntentWidgetService.swift */,
-				9F2C1A82E6F74E53A6D1D05B /* ChatLocalIntentTranscriptWriter.swift */,
-				9F2C1A84E6F74E53A6D1D05B /* ChatLocalIntentResponseFormatter.swift */,
-				9F2C1A86E6F74E53A6D1D05B /* ChatLocalIntentBriefingFactory.swift */,
-				9F2C1A88E6F74E53A6D1D05B /* ChatLocalIntentExecutor.swift */,
-				C20000000000000000000010 /* ComposerState.swift */,
-				C20000000000000000000012 /* ChatSessionStores.swift */,
-				F2A800000100000000000000 /* ChatSendCoordinator.swift */,
-				B2C800000100000000000000 /* ChatMessageLoadCoordinator.swift */,
-				C2000000000000000000000F /* MessageTimelineStore.swift */,
-				F2A700000300000000000000 /* MessageRepository.swift */,
-				C20000000000000000000004 /* ChatScreenView.swift */,
-				C2000000000000000000000E /* ChatInputBar.swift */,
-				AD2000000000000000000001 /* ChatInputBar+State.swift */,
-				AD2000000000000000000002 /* ChatInputBar+Routing.swift */,
-				AD2000000000000000000003 /* ChatInputBar+SlashCommands.swift */,
-				AD2000000000000000000004 /* ChatInputBar+AttachmentActions.swift */,
-				AD2000000000000000000005 /* ChatCameraCaptureView.swift */,
-				AD2000000000000000000006 /* ChatComposerRouteViews.swift */,
-				AD2000000000000000000007 /* ChatAttachmentShelf.swift */,
-				AD2000000000000000000008 /* VoiceDictation.swift */,
-				AD2000000000000000000009 /* ChatAttachmentDropViews.swift */,
-				AD200000000000000000000A /* SaveOutputToProjectSheet.swift */,
-				AD200000000000000000000B /* CouncilResponseGroup.swift */,
-				AD200000000000000000000C /* ChatToolbar.swift */,
-				AD200000000000000000000D /* ChatToolbarChrome.swift */,
-				D2AA00000100000000000000 /* ChatToolbarMenuContent.swift */,
-				C2000000000000000000000C /* ChatMessageViews.swift */,
-				AE2000000000000000000001 /* MessageStreamingViews.swift */,
-				AE2000000000000000000002 /* MessageStatusViews.swift */,
-				AE2000000000000000000003 /* EditUserMessageView.swift */,
-				AE2000000000000000000004 /* AgentRunStatusStrip.swift */,
-				AE2000000000000000000005 /* AssistantInlineActions.swift */,
-				AE2000000000000000000006 /* ArtifactOutputView.swift */,
-				AE2000000000000000000007 /* MessageAttachmentStrip.swift */,
-				AE2000000000000000000008 /* SourceCarousel.swift */,
-				AE2000000000000000000009 /* VerifiedFooterView.swift */,
-				AE200000000000000000000A /* SourceSheet.swift */,
-				AE200000000000000000000B /* MessageWidgetCard.swift */,
-				AE200000000000000000000C /* MessageWidgetBodies.swift */,
-				AE200000000000000000000D /* MessageWidgetActionRow.swift */,
-				AE200000000000000000000E /* MessageWidgetActionCandidatePreviewSheet.swift */,
-				AE200000000000000000000F /* MessageWidgetSupportViews.swift */,
-				F20000000000000000000003 /* EmptyChatView.swift */,
-				A20000000000000000000019 /* DemoCaptureViews.swift */,
-				AF2000000000000000000001 /* CouncilRoomView.swift */,
-				AF2000000000000000000002 /* CouncilRoomRows.swift */,
-				AF2000000000000000000003 /* CouncilSynthesisCard.swift */,
-				AF2000000000000000000004 /* CouncilComposerBar.swift */,
-				AF2000000000000000000005 /* CouncilRoomPreview.swift */,
-				AF2000000000000000000006 /* ThreadedBriefingRows.swift */,
-				AF2000000000000000000007 /* ThreadedBriefingMapping.swift */,
-				AF2000000000000000000008 /* ThreadedBriefingPreview.swift */,
-				AF2000000000000000000009 /* BriefingModels.swift */,
-				AF200000000000000000000A /* BriefingSchedule.swift */,
-				AF200000000000000000000B /* BriefingStore.swift */,
-				AF200000000000000000000C /* BriefingTodaySection.swift */,
-				AF200000000000000000000D /* BriefingRows.swift */,
-				AF200000000000000000000E /* BriefingEditorSheet.swift */,
-				AF200000000000000000000F /* BriefingBuilderModels.swift */,
-				AF2000000000000000000010 /* BriefingBuilderViews.swift */,
-				AF2000000000000000000011 /* BriefingStringHelpers.swift */,
-				AF2000000000000000000012 /* BriefingDetailView.swift */,
-				AF2000000000000000000013 /* BriefingTemplates.swift */,
-				AF2000000000000000000014 /* BriefingSamples.swift */,
-				AF2000000000000000000015 /* BriefingSupport.swift */,
-				AF2000000000000000000016 /* BriefingPreviews.swift */,
-				AF2000000000000000000017 /* DemoCaptureScreenHost.swift */,
-				AF2000000000000000000018 /* DemoSceneOverlay.swift */,
-				AF2000000000000000000019 /* DemoOnboardingViews.swift */,
-				AF200000000000000000001A /* DemoFileAttachmentViews.swift */,
-				AF200000000000000000001B /* DemoProofAndModelViews.swift */,
-				AF200000000000000000001C /* DemoIronClawViews.swift */,
-				AF200000000000000000001D /* DemoResultComparisonViews.swift */,
-				A2000000000000000000001A /* MessagePresentationHelpers.swift */,
-			);
-			path = Chat;
-			sourceTree = "<group>";
-		};
-		F40000000000000000000002 /* Conversations */ = {
-			isa = PBXGroup;
-			children = (
-				F2A700000100000000000000 /* ConversationRepository.swift */,
-				F2A700000200000000000000 /* ConversationStore.swift */,
-				B2C900000100000000000000 /* ArchivedChatsView.swift */,
-				D2AB00000100000000000000 /* RenameConversationView.swift */,
-			);
-			path = Conversations;
-			sourceTree = "<group>";
-		};
-		E4000000000000000000000A /* ModelCatalog */ = {
-			isa = PBXGroup;
-			children = (
-				F20000000000000000000006 /* ModelCatalogModels.swift */,
-				C20000000000000000000011 /* ModelCatalogStore.swift */,
-				C20000000000000000000005 /* ModelPickerView.swift */,
-			);
-			path = ModelCatalog;
-			sourceTree = "<group>";
-		};
-		E4000000000000000000000B /* Sharing */ = {
-			isa = PBXGroup;
-			children = (
-				F2000000000000000000000F /* SharingModels.swift */,
-				F20000000000000000000014 /* ShareStore.swift */,
-				F2A400000100000000000000 /* SharingService.swift */,
-				F20000000000000000000002 /* SharedConversationSheet.swift */,
-				C20000000000000000000007 /* ShareViews.swift */,
-				F2E000000000000000000001 /* ShareSupportViews.swift */,
-			);
-			path = Sharing;
-			sourceTree = "<group>";
-		};
-		E4000000000000000000000C /* Projects */ = {
-			isa = PBXGroup;
-			children = (
-				F2000000000000000000000E /* ProjectModels.swift */,
-				F20000000000000000000012 /* ProjectStore.swift */,
-				F2A600000100000000000000 /* ProjectService.swift */,
-				C20000000000000000000008 /* ProjectContextViews.swift */,
-				F2D700000100000000000000 /* ProjectContextSupportViews.swift */,
-				D2AC00000100000000000000 /* ProjectEditorViews.swift */,
-			);
-			path = Projects;
-			sourceTree = "<group>";
-		};
-		E4000000000000000000000D /* Account */ = {
-			isa = PBXGroup;
-			children = (
-				F2000000000000000000000D /* AccountModels.swift */,
-				F2B000000000000000000001 /* AccountStore.swift */,
-				C20000000000000000000009 /* AccountCapabilitiesViews.swift */,
-				F2A000000000000000000002 /* AccountCapabilityCenterView.swift */,
-				F2A000000000000000000003 /* AccountCapabilitySupportViews.swift */,
-				F2A000000000000000000004 /* AccountConnectionCards.swift */,
-				F2A000000000000000000001 /* AccountSettingsDetailViews.swift */,
-			);
-			path = Account;
-			sourceTree = "<group>";
-		};
-		E4000000000000000000000E /* Security */ = {
-			isa = PBXGroup;
-			children = (
-				F2C000000000000000000001 /* SecurityStore.swift */,
-				C2000000000000000000000A /* SecurityView.swift */,
-				F2C000000000000000000003 /* SecurityProofReportView.swift */,
-				F2C000000000000000000002 /* SecuritySupportRows.swift */,
-			);
-			path = Security;
-			sourceTree = "<group>";
-		};
-		E4000000000000000000000F /* Agent */ = {
-			isa = PBXGroup;
-			children = (
-				F20000000000000000000008 /* AgentModels.swift */,
-				F2B000000000000000000002 /* AgentStore.swift */,
-				C2000000000000000000000B /* AgentWorkspaceView.swift */,
-				F2D000000000000000000002 /* AgentMissionControlPanel.swift */,
-				F2D000000000000000000001 /* AgentWorkspaceSetupViews.swift */,
-				C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */,
-				A2000000000000000000000E /* IronclawMobileRuntime.swift */,
-				A2000000000000000000000F /* IronclawMobileStack.swift */,
-			);
-			path = Agent;
-			sourceTree = "<group>";
-		};
-		F40000000000000000000001 /* Files */ = {
-			isa = PBXGroup;
-			children = (
-				F2000000000000000000000C /* FileModels.swift */,
-				F20000000000000000000013 /* FileStore.swift */,
-				F2A500000100000000000000 /* FileService.swift */,
-				F2A500000200000000000000 /* AttachmentStagingStore.swift */,
-				F2A500000300000000000000 /* DocumentTextExtractor.swift */,
-				F2A500000400000000000000 /* VisionTextExtractor.swift */,
-			);
-			path = Files;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000001 /* Shared */ = {
-			isa = PBXGroup;
-			children = (
-				9400000000000000000000A1 /* Briefing */,
-				E40000000000000000000002 /* Components */,
-				E40000000000000000000004 /* Extensions */,
-				E40000000000000000000005 /* Utilities */,
-			);
-			path = Shared;
-			sourceTree = "<group>";
-		};
-		9400000000000000000000A1 /* Briefing */ = {
-			isa = PBXGroup;
-			children = (
-				9200000000000000000000A1 /* BriefingSnapshot.swift */,
-				9200000000000000000000A3 /* AgentActivityAttributes.swift */,
-			);
-			path = Briefing;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000002 /* Components */ = {
-			isa = PBXGroup;
-			children = (
-				E20000000000000000000002 /* BrandMarks.swift */,
-				C20000000000000000000006 /* ChipFlowLayout.swift */,
-				E40000000000000000000003 /* Markdown */,
-			);
-			path = Components;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000003 /* Markdown */ = {
-			isa = PBXGroup;
-			children = (
-				A20000000000000000000018 /* MarkdownRenderingViews.swift */,
-			);
-			path = Markdown;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000004 /* Extensions */ = {
-			isa = PBXGroup;
-			children = (
-				E20000000000000000000003 /* ViewPlatformExtensions.swift */,
-			);
-			path = Extensions;
-			sourceTree = "<group>";
-		};
-		E40000000000000000000005 /* Utilities */ = {
-			isa = PBXGroup;
-			children = (
-				E20000000000000000000004 /* Clipboard.swift */,
-			);
-			path = Utilities;
 			sourceTree = "<group>";
 		};
 		A40000000000000000000003 /* Products */ = {
@@ -1278,6 +825,7 @@
 			isa = PBXGroup;
 			children = (
 				BA2000000000000000000010 /* RoutingTests.swift */,
+				BA9F903202E6EFC0F851AB3A /* RouteHealthTests.swift */,
 			);
 			path = Routing;
 			sourceTree = "<group>";
@@ -1317,6 +865,97 @@
 			path = Streaming;
 			sourceTree = "<group>";
 		};
+		D40000000000000000000001 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000001 /* NEARPrivateChatApp.swift */,
+				A20000000000000000000008 /* AppShellView.swift */,
+				D20000000000000000000001 /* AppEnvironment.swift */,
+				D20000000000000000000002 /* AppLifecycle.swift */,
+				D20000000000000000000003 /* RootView.swift */,
+				D20000000000000000000004 /* StatusBanner.swift */,
+				E40000000000000000000018 /* State */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		D40000000000000000000002 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				E40000000000000000000010 /* API */,
+				E40000000000000000000011 /* Auth */,
+				E40000000000000000000006 /* DesignSystem */,
+				E40000000000000000000012 /* Export */,
+				F2A300000400000000000000 /* Persistence */,
+				D40000000000000000000003 /* Routing */,
+				E40000000000000000000014 /* Security */,
+				E40000000000000000000015 /* Services */,
+				E40000000000000000000017 /* Streaming */,
+				E40000000000000000000016 /* Telemetry */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		D40000000000000000000003 /* Routing */ = {
+			isa = PBXGroup;
+			children = (
+				D20000000000000000000005 /* AppRoute.swift */,
+				D20000000000000000000006 /* AppSheet.swift */,
+				D20000000000000000000007 /* AppRouter.swift */,
+				F20000000000000000000007 /* ChatRoutingModels.swift */,
+				D2000000000000000000000A /* RoutePlanner.swift */,
+				BA7EA52B9EA73EEA1C11AED0 /* RouteHealthMonitor.swift */,
+				F20000000000000000000004 /* DeepLinkModels.swift */,
+				A20000000000000000000017 /* AskOrchestrator.swift */,
+			);
+			path = Routing;
+			sourceTree = "<group>";
+		};
+		D40000000000000000000004 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				E40000000000000000000007 /* Auth */,
+				E40000000000000000000008 /* Home */,
+				E40000000000000000000009 /* Chat */,
+				F40000000000000000000002 /* Conversations */,
+				E4000000000000000000000A /* ModelCatalog */,
+				E4000000000000000000000B /* Sharing */,
+				E4000000000000000000000C /* Projects */,
+				F40000000000000000000001 /* Files */,
+				E4000000000000000000000D /* Account */,
+				E4000000000000000000000E /* Security */,
+				E4000000000000000000000F /* Agent */,
+				D40000000000000000000005 /* Setup */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		D40000000000000000000005 /* Setup */ = {
+			isa = PBXGroup;
+			children = (
+				F2000000000000000000000A /* SetupModels.swift */,
+				AC2000000000000000000001 /* SetupUseCases.swift */,
+				AC2000000000000000000002 /* UserSetupStarterPreset.swift */,
+				AC2000000000000000000003 /* SetupStarterContent.swift */,
+				AC2000000000000000000004 /* UserSetupProfile.swift */,
+				AC2000000000000000000005 /* UserSetupProfile+RuntimeDefaults.swift */,
+				AC2000000000000000000006 /* UserSetupProfile+Suggestions.swift */,
+				AC2000000000000000000007 /* UserSetupProfile+Actions.swift */,
+				AC2000000000000000000008 /* SetupRouteDefaults.swift */,
+				AC2000000000000000000009 /* AppSetupPlan.swift */,
+				AC200000000000000000000A /* AppSetupPlan+RouteDetail.swift */,
+				AC200000000000000000000B /* SetupRestorePlanner.swift */,
+				AC200000000000000000000C /* CapabilityNextStepPlanner.swift */,
+				AC200000000000000000000D /* UserSetupStorage.swift */,
+				AC200000000000000000000E /* SetupStore.swift */,
+				AC200000000000000000000F /* UserSetupControls.swift */,
+				AC2000000000000000000010 /* SetupPlanPreviewCard.swift */,
+				F20000000000000000000018 /* SetupSoulPromptBuilder.swift */,
+				D20000000000000000000009 /* UserSetupView.swift */,
+			);
+			path = Setup;
+			sourceTree = "<group>";
+		};
 		DD4000000000000000000001 /* NEARPrivateChatUITests */ = {
 			isa = PBXGroup;
 			children = (
@@ -1325,28 +964,410 @@
 			path = NEARPrivateChatUITests;
 			sourceTree = "<group>";
 		};
+		E40000000000000000000001 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				9400000000000000000000A1 /* Briefing */,
+				E40000000000000000000002 /* Components */,
+				E40000000000000000000004 /* Extensions */,
+				E40000000000000000000005 /* Utilities */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000002 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				E20000000000000000000002 /* BrandMarks.swift */,
+				C20000000000000000000006 /* ChipFlowLayout.swift */,
+				E40000000000000000000003 /* Markdown */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000003 /* Markdown */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000018 /* MarkdownRenderingViews.swift */,
+			);
+			path = Markdown;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000004 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				E20000000000000000000003 /* ViewPlatformExtensions.swift */,
+			);
+			path = Extensions;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000005 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				E20000000000000000000004 /* Clipboard.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000006 /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				C20000000000000000000001 /* AppHaptics.swift */,
+				E20000000000000000000001 /* DesignTokens.swift */,
+				E20000000000000000000005 /* GlassMaterial.swift */,
+			);
+			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000007 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000007 /* AuthView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000008 /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				F20000000000000000000001 /* ConversationListView.swift */,
+				AB2000000000000000000001 /* HomeStore.swift */,
+				AB2000000000000000000002 /* HomeScreen.swift */,
+				AB2000000000000000000003 /* HomeScreenReadModels.swift */,
+				AB2000000000000000000004 /* HomeSidebar.swift */,
+				AB2000000000000000000005 /* HomeScreenInboxSections.swift */,
+				AB2000000000000000000006 /* HomeScreenLaunchComposer.swift */,
+				AB2000000000000000000007 /* HomeScreenChatActions.swift */,
+				AB2000000000000000000008 /* HomeScreenLaunchActions.swift */,
+				AB2000000000000000000009 /* HomeScreenSetupActions.swift */,
+				AB200000000000000000000A /* HomeChromeViews.swift */,
+				AB200000000000000000000B /* HomeConversationRows.swift */,
+				AB200000000000000000000C /* HomeLaunchComposer.swift */,
+				AB200000000000000000000D /* HomeInboxSection.swift */,
+				AB200000000000000000000E /* HomeProjectSection.swift */,
+				AB200000000000000000000F /* HomeSetupLaunchCard.swift */,
+				AB2000000000000000000010 /* HomeSetupSurface.swift */,
+				AB2000000000000000000011 /* HomeSetupSuggestions.swift */,
+				AB2000000000000000000012 /* HomeTrustSurface.swift */,
+				AB2000000000000000000013 /* HomeOrchestrationModels.swift */,
+				AB2000000000000000000014 /* HomeOrchestrationPlanner.swift */,
+				AB2000000000000000000015 /* HomeOrchestrationPlanner+Formatting.swift */,
+				C20000000000000000000002 /* HomeSearchIndex.swift */,
+				C20000000000000000000013 /* HomeOrchestrationSurface.swift */,
+				C20000000000000000000003 /* HomeSupportingViews.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000009 /* Chat */ = {
+			isa = PBXGroup;
+			children = (
+				F20000000000000000000009 /* ChatModels.swift */,
+				F2000000000000000000B001 /* BriefingFeature.swift */,
+				F2000000000000000000B002 /* CouncilRoomFeature.swift */,
+				F2000000000000000000B003 /* ThreadedFeature.swift */,
+				F2000000000000000000B004 /* LiveDataService.swift */,
+				47DF59A499534BE180D52C8B /* ChatLocalIntentDispatcher.swift */,
+				9F2C1A80E6F74E53A6D1D05B /* ChatLocalIntentWidgetService.swift */,
+				9F2C1A82E6F74E53A6D1D05B /* ChatLocalIntentTranscriptWriter.swift */,
+				9F2C1A84E6F74E53A6D1D05B /* ChatLocalIntentResponseFormatter.swift */,
+				9F2C1A86E6F74E53A6D1D05B /* ChatLocalIntentBriefingFactory.swift */,
+				9F2C1A88E6F74E53A6D1D05B /* ChatLocalIntentExecutor.swift */,
+				C20000000000000000000010 /* ComposerState.swift */,
+				C20000000000000000000012 /* ChatSessionStores.swift */,
+				F2A800000100000000000000 /* ChatSendCoordinator.swift */,
+				B2C800000100000000000000 /* ChatMessageLoadCoordinator.swift */,
+				C2000000000000000000000F /* MessageTimelineStore.swift */,
+				F2A700000300000000000000 /* MessageRepository.swift */,
+				C20000000000000000000004 /* ChatScreenView.swift */,
+				C2000000000000000000000E /* ChatInputBar.swift */,
+				AD2000000000000000000001 /* ChatInputBar+State.swift */,
+				AD2000000000000000000002 /* ChatInputBar+Routing.swift */,
+				AD2000000000000000000003 /* ChatInputBar+SlashCommands.swift */,
+				AD2000000000000000000004 /* ChatInputBar+AttachmentActions.swift */,
+				AD2000000000000000000005 /* ChatCameraCaptureView.swift */,
+				AD2000000000000000000006 /* ChatComposerRouteViews.swift */,
+				BA2A8FD7EE789490B6DB2987 /* DocumentContextIndicator.swift */,
+				AD2000000000000000000007 /* ChatAttachmentShelf.swift */,
+				AD2000000000000000000008 /* VoiceDictation.swift */,
+				AD2000000000000000000009 /* ChatAttachmentDropViews.swift */,
+				AD200000000000000000000A /* SaveOutputToProjectSheet.swift */,
+				AD200000000000000000000B /* CouncilResponseGroup.swift */,
+				AD200000000000000000000C /* ChatToolbar.swift */,
+				AD200000000000000000000D /* ChatToolbarChrome.swift */,
+				D2AA00000100000000000000 /* ChatToolbarMenuContent.swift */,
+				C2000000000000000000000C /* ChatMessageViews.swift */,
+				AE2000000000000000000001 /* MessageStreamingViews.swift */,
+				AE2000000000000000000002 /* MessageStatusViews.swift */,
+				AE2000000000000000000003 /* EditUserMessageView.swift */,
+				AE2000000000000000000004 /* AgentRunStatusStrip.swift */,
+				AE2000000000000000000005 /* AssistantInlineActions.swift */,
+				AE2000000000000000000006 /* ArtifactOutputView.swift */,
+				AE2000000000000000000007 /* MessageAttachmentStrip.swift */,
+				AE2000000000000000000008 /* SourceCarousel.swift */,
+				AE2000000000000000000009 /* VerifiedFooterView.swift */,
+				AE200000000000000000000A /* SourceSheet.swift */,
+				AE200000000000000000000B /* MessageWidgetCard.swift */,
+				AE200000000000000000000C /* MessageWidgetBodies.swift */,
+				AE200000000000000000000D /* MessageWidgetActionRow.swift */,
+				AE200000000000000000000E /* MessageWidgetActionCandidatePreviewSheet.swift */,
+				AE200000000000000000000F /* MessageWidgetSupportViews.swift */,
+				F20000000000000000000003 /* EmptyChatView.swift */,
+				A20000000000000000000019 /* DemoCaptureViews.swift */,
+				AF2000000000000000000001 /* CouncilRoomView.swift */,
+				AF2000000000000000000002 /* CouncilRoomRows.swift */,
+				AF2000000000000000000003 /* CouncilSynthesisCard.swift */,
+				AF2000000000000000000004 /* CouncilComposerBar.swift */,
+				AF2000000000000000000005 /* CouncilRoomPreview.swift */,
+				AF2000000000000000000006 /* ThreadedBriefingRows.swift */,
+				AF2000000000000000000007 /* ThreadedBriefingMapping.swift */,
+				AF2000000000000000000008 /* ThreadedBriefingPreview.swift */,
+				AF2000000000000000000009 /* BriefingModels.swift */,
+				AF200000000000000000000A /* BriefingSchedule.swift */,
+				AF200000000000000000000B /* BriefingStore.swift */,
+				AF200000000000000000000C /* BriefingTodaySection.swift */,
+				AF200000000000000000000D /* BriefingRows.swift */,
+				AF200000000000000000000E /* BriefingEditorSheet.swift */,
+				AF200000000000000000000F /* BriefingBuilderModels.swift */,
+				AF2000000000000000000010 /* BriefingBuilderViews.swift */,
+				AF2000000000000000000011 /* BriefingStringHelpers.swift */,
+				AF2000000000000000000012 /* BriefingDetailView.swift */,
+				AF2000000000000000000013 /* BriefingTemplates.swift */,
+				AF2000000000000000000014 /* BriefingSamples.swift */,
+				AF2000000000000000000015 /* BriefingSupport.swift */,
+				AF2000000000000000000016 /* BriefingPreviews.swift */,
+				AF2000000000000000000017 /* DemoCaptureScreenHost.swift */,
+				AF2000000000000000000018 /* DemoSceneOverlay.swift */,
+				AF2000000000000000000019 /* DemoOnboardingViews.swift */,
+				AF200000000000000000001A /* DemoFileAttachmentViews.swift */,
+				AF200000000000000000001B /* DemoProofAndModelViews.swift */,
+				AF200000000000000000001C /* DemoIronClawViews.swift */,
+				AF200000000000000000001D /* DemoResultComparisonViews.swift */,
+				A2000000000000000000001A /* MessagePresentationHelpers.swift */,
+			);
+			path = Chat;
+			sourceTree = "<group>";
+		};
+		E4000000000000000000000A /* ModelCatalog */ = {
+			isa = PBXGroup;
+			children = (
+				F20000000000000000000006 /* ModelCatalogModels.swift */,
+				C20000000000000000000011 /* ModelCatalogStore.swift */,
+				C20000000000000000000005 /* ModelPickerView.swift */,
+			);
+			path = ModelCatalog;
+			sourceTree = "<group>";
+		};
+		E4000000000000000000000B /* Sharing */ = {
+			isa = PBXGroup;
+			children = (
+				F2000000000000000000000F /* SharingModels.swift */,
+				F20000000000000000000014 /* ShareStore.swift */,
+				F2A400000100000000000000 /* SharingService.swift */,
+				F20000000000000000000002 /* SharedConversationSheet.swift */,
+				C20000000000000000000007 /* ShareViews.swift */,
+				F2E000000000000000000001 /* ShareSupportViews.swift */,
+			);
+			path = Sharing;
+			sourceTree = "<group>";
+		};
+		E4000000000000000000000C /* Projects */ = {
+			isa = PBXGroup;
+			children = (
+				F2000000000000000000000E /* ProjectModels.swift */,
+				F20000000000000000000012 /* ProjectStore.swift */,
+				F2A600000100000000000000 /* ProjectService.swift */,
+				C20000000000000000000008 /* ProjectContextViews.swift */,
+				F2D700000100000000000000 /* ProjectContextSupportViews.swift */,
+				D2AC00000100000000000000 /* ProjectEditorViews.swift */,
+			);
+			path = Projects;
+			sourceTree = "<group>";
+		};
+		E4000000000000000000000D /* Account */ = {
+			isa = PBXGroup;
+			children = (
+				F2000000000000000000000D /* AccountModels.swift */,
+				F2B000000000000000000001 /* AccountStore.swift */,
+				C20000000000000000000009 /* AccountCapabilitiesViews.swift */,
+				F2A000000000000000000002 /* AccountCapabilityCenterView.swift */,
+				F2A000000000000000000003 /* AccountCapabilitySupportViews.swift */,
+				F2A000000000000000000004 /* AccountConnectionCards.swift */,
+				F2A000000000000000000001 /* AccountSettingsDetailViews.swift */,
+			);
+			path = Account;
+			sourceTree = "<group>";
+		};
+		E4000000000000000000000E /* Security */ = {
+			isa = PBXGroup;
+			children = (
+				F2C000000000000000000001 /* SecurityStore.swift */,
+				C2000000000000000000000A /* SecurityView.swift */,
+				F2C000000000000000000003 /* SecurityProofReportView.swift */,
+				F2C000000000000000000002 /* SecuritySupportRows.swift */,
+			);
+			path = Security;
+			sourceTree = "<group>";
+		};
+		E4000000000000000000000F /* Agent */ = {
+			isa = PBXGroup;
+			children = (
+				F20000000000000000000008 /* AgentModels.swift */,
+				F2B000000000000000000002 /* AgentStore.swift */,
+				C2000000000000000000000B /* AgentWorkspaceView.swift */,
+				F2D000000000000000000002 /* AgentMissionControlPanel.swift */,
+				F2D000000000000000000001 /* AgentWorkspaceSetupViews.swift */,
+				C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */,
+				A2000000000000000000000E /* IronclawMobileRuntime.swift */,
+				A2000000000000000000000F /* IronclawMobileStack.swift */,
+			);
+			path = Agent;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000010 /* API */ = {
+			isa = PBXGroup;
+			children = (
+				F2000000000000000000000B /* APIModels.swift */,
+				F2A200000100000000000000 /* APIClient.swift */,
+				F2A200000200000000000000 /* AuthAPI.swift */,
+				F2A200000300000000000000 /* ConversationAPI.swift */,
+				F2A200000400000000000000 /* MessageAPI.swift */,
+				F2A200000500000000000000 /* ModelAPI.swift */,
+				F2A200000600000000000000 /* FileAPI.swift */,
+				F2A200000700000000000000 /* ShareAPI.swift */,
+				F2A200000800000000000000 /* SettingsAPI.swift */,
+				F2A200000900000000000000 /* BillingAPI.swift */,
+				F2A200000A00000000000000 /* AttestationAPI.swift */,
+				A20000000000000000000004 /* PrivateChatAPI.swift */,
+				A2000000000000000000000D /* IronclawAPI.swift */,
+			);
+			path = API;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000011 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				F20000000000000000000005 /* AuthModels.swift */,
+				A20000000000000000000003 /* KeychainStore.swift */,
+				A20000000000000000000005 /* SessionStore.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000012 /* Export */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000011 /* ConversationExport.swift */,
+				A20000000000000000000012 /* ChatImport.swift */,
+				A20000000000000000000021 /* ConversationTranscriptClipboard.swift */,
+			);
+			path = Export;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000014 /* Security */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000014 /* AttestationStatus.swift */,
+				F20000000000000000000010 /* SecurityModels.swift */,
+			);
+			path = Security;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000015 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				F20000000000000000000017 /* SoulPromptComposer.swift */,
+				A20000000000000000000010 /* WebGroundingService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000016 /* Telemetry */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000015 /* PrivateTelemetry.swift */,
+			);
+			path = Telemetry;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000017 /* Streaming */ = {
+			isa = PBXGroup;
+			children = (
+				F20000000000000000000011 /* ResponseStreamEvent.swift */,
+				F20000000000000000000015 /* MessageStreamService.swift */,
+				F20000000000000000000016 /* CouncilStreamService.swift */,
+			);
+			path = Streaming;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000018 /* State */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000006 /* ChatStore.swift */,
+				A2000000000000000000001B /* AgentActivityController.swift */,
+			);
+			path = State;
+			sourceTree = "<group>";
+		};
+		F2A300000400000000000000 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				F2A300000100000000000000 /* AccountStorageScope.swift */,
+				F2A300000200000000000000 /* FileCache.swift */,
+				F2A300000300000000000000 /* DraftPersistence.swift */,
+				F2A300000500000000000000 /* SettingsPersistence.swift */,
+				F2A300000600000000000000 /* ConversationCache.swift */,
+				F2A300000700000000000000 /* MessageCache.swift */,
+				F2A300000800000000000000 /* ProjectPersistence.swift */,
+				F2A300000900000000000000 /* AgentThreadPersistence.swift */,
+				F2A300000A00000000000000 /* SessionPersistence.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
+		F40000000000000000000001 /* Files */ = {
+			isa = PBXGroup;
+			children = (
+				F2000000000000000000000C /* FileModels.swift */,
+				F20000000000000000000013 /* FileStore.swift */,
+				F2A500000100000000000000 /* FileService.swift */,
+				F2A500000200000000000000 /* AttachmentStagingStore.swift */,
+				F2A500000300000000000000 /* DocumentTextExtractor.swift */,
+				F2A500000400000000000000 /* VisionTextExtractor.swift */,
+			);
+			path = Files;
+			sourceTree = "<group>";
+		};
+		F40000000000000000000002 /* Conversations */ = {
+			isa = PBXGroup;
+			children = (
+				F2A700000100000000000000 /* ConversationRepository.swift */,
+				F2A700000200000000000000 /* ConversationStore.swift */,
+				B2C900000100000000000000 /* ArchivedChatsView.swift */,
+				D2AB00000100000000000000 /* RenameConversationView.swift */,
+			);
+			path = Conversations;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A50000000000000000000001 /* NEARPrivateChat */ = {
+		5D00000000000000000000D1 /* NEARPrivateChatShareExtension */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A90000000000000000000003 /* Build configuration list for PBXNativeTarget "NEARPrivateChat" */;
+			buildConfigurationList = 5F00000000000000000000D1 /* Build configuration list for PBXNativeTarget "NEARPrivateChatShareExtension" */;
 			buildPhases = (
-				A70000000000000000000001 /* Sources */,
-				A30000000000000000000001 /* Frameworks */,
-				A80000000000000000000001 /* Resources */,
-				9800000000000000000000C4 /* Embed App Extensions */,
+				5E00000000000000000000D1 /* Sources */,
+				5E00000000000000000000D3 /* Frameworks */,
+				5E00000000000000000000D5 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				9600000000000000000000C3 /* PBXTargetDependency */,
-				5D00000000000000000000D3 /* PBXTargetDependency */,
 			);
-			name = NEARPrivateChat;
-			productName = NEARPrivateChat;
-			productReference = A2000000000000000000000B /* NEARPrivateChat.app */;
-			productType = "com.apple.product-type.application";
+			name = NEARPrivateChatShareExtension;
+			productName = NEARPrivateChatShareExtension;
+			productReference = 5B00000000000000000000D5 /* NEARPrivateChatShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 		9500000000000000000000C1 /* NEARPrivateChatWidgetExtension */ = {
 			isa = PBXNativeTarget;
@@ -1365,22 +1386,25 @@
 			productReference = 9200000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
-		5D00000000000000000000D1 /* NEARPrivateChatShareExtension */ = {
+		A50000000000000000000001 /* NEARPrivateChat */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 5F00000000000000000000D1 /* Build configuration list for PBXNativeTarget "NEARPrivateChatShareExtension" */;
+			buildConfigurationList = A90000000000000000000003 /* Build configuration list for PBXNativeTarget "NEARPrivateChat" */;
 			buildPhases = (
-				5E00000000000000000000D1 /* Sources */,
-				5E00000000000000000000D3 /* Frameworks */,
-				5E00000000000000000000D5 /* Resources */,
+				A70000000000000000000001 /* Sources */,
+				A30000000000000000000001 /* Frameworks */,
+				A80000000000000000000001 /* Resources */,
+				9800000000000000000000C4 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				9600000000000000000000C3 /* PBXTargetDependency */,
+				5D00000000000000000000D3 /* PBXTargetDependency */,
 			);
-			name = NEARPrivateChatShareExtension;
-			productName = NEARPrivateChatShareExtension;
-			productReference = 5B00000000000000000000D5 /* NEARPrivateChatShareExtension.appex */;
-			productType = "com.apple.product-type.app-extension";
+			name = NEARPrivateChat;
+			productName = NEARPrivateChat;
+			productReference = A2000000000000000000000B /* NEARPrivateChat.app */;
+			productType = "com.apple.product-type.application";
 		};
 		B50000000000000000000001 /* NEARPrivateChatTests */ = {
 			isa = PBXNativeTarget;
@@ -1424,8 +1448,14 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 2650;
 				TargetAttributes = {
+					5D00000000000000000000D1 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					9500000000000000000000C1 = {
+						CreatedOnToolsVersion = 26.5;
+					};
 					A50000000000000000000001 = {
 						CreatedOnToolsVersion = 15.0;
 					};
@@ -1436,12 +1466,6 @@
 					DD5000000000000000000001 = {
 						CreatedOnToolsVersion = 15.0;
 						TestTargetID = A50000000000000000000001;
-					};
-					9500000000000000000000C1 = {
-						CreatedOnToolsVersion = 26.5;
-					};
-					5D00000000000000000000D1 = {
-						CreatedOnToolsVersion = 26.5;
 					};
 				};
 			};
@@ -1467,29 +1491,11 @@
 		};
 /* End PBXProject section */
 
-/* Begin PBXCopyFilesBuildPhase section */
-		9800000000000000000000C4 /* Embed App Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				9100000000000000000000C1 /* NEARPrivateChatWidgetExtension.appex in Embed App Extensions */,
-				5A00000000000000000000D5 /* NEARPrivateChatShareExtension.appex in Embed App Extensions */,
-			);
-			name = "Embed App Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
-
 /* Begin PBXResourcesBuildPhase section */
-		A80000000000000000000001 /* Resources */ = {
+		5E00000000000000000000D5 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10000000000000000000009 /* Assets.xcassets in Resources */,
-				A10000000000000000000011 /* PrivacyInfo.xcprivacy in Resources */,
-				A10000000000000000000014 /* PrivateTelemetryPolicy.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1500,24 +1506,48 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		5E00000000000000000000D5 /* Resources */ = {
+		A80000000000000000000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000009 /* Assets.xcassets in Resources */,
+				A10000000000000000000011 /* PrivacyInfo.xcprivacy in Resources */,
+				A10000000000000000000014 /* PrivateTelemetryPolicy.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		5E00000000000000000000D1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5A00000000000000000000D1 /* ShareViewController.swift in Sources */,
+				5A00000000000000000000D2 /* BriefingSnapshot.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9700000000000000000000C1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9100000000000000000000B2 /* BriefingWidgetBundle.swift in Sources */,
+				9100000000000000000000B3 /* BriefingWidget.swift in Sources */,
+				9100000000000000000000B6 /* AgentLiveActivity.swift in Sources */,
+				9100000000000000000000B1 /* BriefingSnapshot.swift in Sources */,
+				9100000000000000000000B4 /* AgentActivityAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A70000000000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000001 /* NEARPrivateChatApp.swift in Sources */,
-					A10000000000000000000012 /* AttestationStatus.swift in Sources */,
-					A10000000000000000000015 /* AskOrchestrator.swift in Sources */,
-					A10000000000000000000013 /* PrivateTelemetry.swift in Sources */,
+				A10000000000000000000012 /* AttestationStatus.swift in Sources */,
+				A10000000000000000000015 /* AskOrchestrator.swift in Sources */,
+				A10000000000000000000013 /* PrivateTelemetry.swift in Sources */,
 				A10000000000000000000003 /* KeychainStore.swift in Sources */,
 				A10000000000000000000004 /* PrivateChatAPI.swift in Sources */,
 				F1A200000100000000000000 /* APIClient.swift in Sources */,
@@ -1527,19 +1557,19 @@
 				F1A200000500000000000000 /* ModelAPI.swift in Sources */,
 				F1A200000600000000000000 /* FileAPI.swift in Sources */,
 				F1A200000700000000000000 /* ShareAPI.swift in Sources */,
-					F1A200000800000000000000 /* SettingsAPI.swift in Sources */,
-					F1A200000900000000000000 /* BillingAPI.swift in Sources */,
-					F1A200000A00000000000000 /* AttestationAPI.swift in Sources */,
-					F1A300000100000000000000 /* AccountStorageScope.swift in Sources */,
-					F1A300000200000000000000 /* FileCache.swift in Sources */,
-					F1A300000300000000000000 /* DraftPersistence.swift in Sources */,
-					F1A300000400000000000000 /* SettingsPersistence.swift in Sources */,
-					F1A300000500000000000000 /* ConversationCache.swift in Sources */,
-					F1A300000600000000000000 /* MessageCache.swift in Sources */,
-					F1A300000700000000000000 /* ProjectPersistence.swift in Sources */,
-					F1A300000800000000000000 /* AgentThreadPersistence.swift in Sources */,
-					F1A300000900000000000000 /* SessionPersistence.swift in Sources */,
-					A1000000000000000000000B /* IronclawAPI.swift in Sources */,
+				F1A200000800000000000000 /* SettingsAPI.swift in Sources */,
+				F1A200000900000000000000 /* BillingAPI.swift in Sources */,
+				F1A200000A00000000000000 /* AttestationAPI.swift in Sources */,
+				F1A300000100000000000000 /* AccountStorageScope.swift in Sources */,
+				F1A300000200000000000000 /* FileCache.swift in Sources */,
+				F1A300000300000000000000 /* DraftPersistence.swift in Sources */,
+				F1A300000400000000000000 /* SettingsPersistence.swift in Sources */,
+				F1A300000500000000000000 /* ConversationCache.swift in Sources */,
+				F1A300000600000000000000 /* MessageCache.swift in Sources */,
+				F1A300000700000000000000 /* ProjectPersistence.swift in Sources */,
+				F1A300000800000000000000 /* AgentThreadPersistence.swift in Sources */,
+				F1A300000900000000000000 /* SessionPersistence.swift in Sources */,
+				A1000000000000000000000B /* IronclawAPI.swift in Sources */,
 				A1000000000000000000000C /* IronclawMobileRuntime.swift in Sources */,
 				A1000000000000000000000D /* IronclawMobileStack.swift in Sources */,
 				A1000000000000000000000E /* WebGroundingService.swift in Sources */,
@@ -1605,6 +1635,7 @@
 				AD1000000000000000000004 /* ChatInputBar+AttachmentActions.swift in Sources */,
 				AD1000000000000000000005 /* ChatCameraCaptureView.swift in Sources */,
 				AD1000000000000000000006 /* ChatComposerRouteViews.swift in Sources */,
+				BA01474BE5F3183997F2AB85 /* DocumentContextIndicator.swift in Sources */,
 				AD1000000000000000000007 /* ChatAttachmentShelf.swift in Sources */,
 				AD1000000000000000000008 /* VoiceDictation.swift in Sources */,
 				AD1000000000000000000009 /* ChatAttachmentDropViews.swift in Sources */,
@@ -1666,6 +1697,7 @@
 				D10000000000000000000007 /* AppRouter.swift in Sources */,
 				D10000000000000000000009 /* UserSetupView.swift in Sources */,
 				D1000000000000000000000A /* RoutePlanner.swift in Sources */,
+				BAAE75889CD6F563C26B5A83 /* RouteHealthMonitor.swift in Sources */,
 				E10000000000000000000001 /* DesignTokens.swift in Sources */,
 				E10000000000000000000002 /* BrandMarks.swift in Sources */,
 				E10000000000000000000003 /* ViewPlatformExtensions.swift in Sources */,
@@ -1748,27 +1780,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		9700000000000000000000C1 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				9100000000000000000000B2 /* BriefingWidgetBundle.swift in Sources */,
-				9100000000000000000000B3 /* BriefingWidget.swift in Sources */,
-				9100000000000000000000B6 /* AgentLiveActivity.swift in Sources */,
-				9100000000000000000000B1 /* BriefingSnapshot.swift in Sources */,
-				9100000000000000000000B4 /* AgentActivityAttributes.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		5E00000000000000000000D1 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				5A00000000000000000000D1 /* ShareViewController.swift in Sources */,
-				5A00000000000000000000D2 /* BriefingSnapshot.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		B70000000000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1789,6 +1800,7 @@
 				BA100000000000000000000E /* ModelCatalogTests.swift in Sources */,
 				BA100000000000000000000F /* ProjectTests.swift in Sources */,
 				BA1000000000000000000010 /* RoutingTests.swift in Sources */,
+				BAAECF5B53082ED7D9098AC8 /* RouteHealthTests.swift in Sources */,
 				BA1000000000000000000011 /* SecurityTests.swift in Sources */,
 				BA1000000000000000000012 /* SetupApplicationTests.swift in Sources */,
 				BA1000000000000000000013 /* SetupPersistenceTests.swift in Sources */,
@@ -1810,6 +1822,16 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		5D00000000000000000000D3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5D00000000000000000000D1 /* NEARPrivateChatShareExtension */;
+			targetProxy = 5D00000000000000000000D2 /* PBXContainerItemProxy */;
+		};
+		9600000000000000000000C3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9500000000000000000000C1 /* NEARPrivateChatWidgetExtension */;
+			targetProxy = 9600000000000000000000C2 /* PBXContainerItemProxy */;
+		};
 		B60000000000000000000002 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = A50000000000000000000001 /* NEARPrivateChat */;
@@ -1820,19 +1842,137 @@
 			target = A50000000000000000000001 /* NEARPrivateChat */;
 			targetProxy = DD6000000000000000000001 /* PBXContainerItemProxy */;
 		};
-		9600000000000000000000C3 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 9500000000000000000000C1 /* NEARPrivateChatWidgetExtension */;
-			targetProxy = 9600000000000000000000C2 /* PBXContainerItemProxy */;
-		};
-		5D00000000000000000000D3 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 5D00000000000000000000D1 /* NEARPrivateChatShareExtension */;
-			targetProxy = 5D00000000000000000000D2 /* PBXContainerItemProxy */;
-		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		5F00000000000000000000A1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = NEARPrivateChatShareExtension/NEARPrivateChatShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NEARPrivateChatShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Send to Private Chat";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.near.privatechat.ios.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		5F00000000000000000000A2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = NEARPrivateChatShareExtension/NEARPrivateChatShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NEARPrivateChatShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Send to Private Chat";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.near.privatechat.ios.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		9900000000000000000000A1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = NEARPrivateChatWidget/NEARPrivateChatWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NEARPrivateChatWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Private Chat";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.near.privatechat.ios.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		9900000000000000000000A2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = NEARPrivateChatWidget/NEARPrivateChatWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NEARPrivateChatWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Private Chat";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.near.privatechat.ios.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 		A90000000000000000000004 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1867,6 +2007,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = RYJ2LB9649;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -1889,6 +2030,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -1928,6 +2070,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = RYJ2LB9649;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -1943,6 +2086,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -1956,7 +2100,6 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = NEARPrivateChat/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -1984,7 +2127,6 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = NEARPrivateChat/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -2007,11 +2149,9 @@
 		B90000000000000000000002 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 5;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -2034,11 +2174,9 @@
 		B90000000000000000000003 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 5;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -2060,10 +2198,8 @@
 		DD9000000000000000000002 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 5;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = NEARPrivateChatUITests;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -2073,7 +2209,7 @@
 					"@loader_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.near.privatechat.ios.ui-tests;
+				PRODUCT_BUNDLE_IDENTIFIER = "ai.near.privatechat.ios.ui-tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -2088,10 +2224,8 @@
 		DD9000000000000000000003 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 5;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = NEARPrivateChatUITests;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -2101,7 +2235,7 @@
 					"@loader_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.near.privatechat.ios.ui-tests;
+				PRODUCT_BUNDLE_IDENTIFIER = "ai.near.privatechat.ios.ui-tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -2111,141 +2245,27 @@
 			};
 			name = Release;
 		};
-		9900000000000000000000A1 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = NEARPrivateChatWidget/NEARPrivateChatWidget.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
-				DEVELOPMENT_TEAM = "";
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = NEARPrivateChatWidget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Private Chat";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.near.privatechat.ios.widget;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
-			};
-			name = Debug;
-		};
-		9900000000000000000000A2 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = NEARPrivateChatWidget/NEARPrivateChatWidget.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
-				DEVELOPMENT_TEAM = "";
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = NEARPrivateChatWidget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Private Chat";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.near.privatechat.ios.widget;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
-			};
-			name = Release;
-		};
-		5F00000000000000000000A1 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = NEARPrivateChatShareExtension/NEARPrivateChatShareExtension.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
-				DEVELOPMENT_TEAM = "";
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = NEARPrivateChatShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Send to Private Chat";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.near.privatechat.ios.share;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
-			};
-			name = Debug;
-		};
-		5F00000000000000000000A2 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = NEARPrivateChatShareExtension/NEARPrivateChatShareExtension.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
-				DEVELOPMENT_TEAM = "";
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = NEARPrivateChatShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Send to Private Chat";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.near.privatechat.ios.share;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		5F00000000000000000000D1 /* Build configuration list for PBXNativeTarget "NEARPrivateChatShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5F00000000000000000000A1 /* Debug */,
+				5F00000000000000000000A2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		9900000000000000000000C1 /* Build configuration list for PBXNativeTarget "NEARPrivateChatWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9900000000000000000000A1 /* Debug */,
+				9900000000000000000000A2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		A90000000000000000000001 /* Build configuration list for PBXProject "NEARPrivateChat" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -2278,24 +2298,6 @@
 			buildConfigurations = (
 				DD9000000000000000000002 /* Debug */,
 				DD9000000000000000000003 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		9900000000000000000000C1 /* Build configuration list for PBXNativeTarget "NEARPrivateChatWidgetExtension" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				9900000000000000000000A1 /* Debug */,
-				9900000000000000000000A2 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		5F00000000000000000000D1 /* Build configuration list for PBXNativeTarget "NEARPrivateChatShareExtension" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				5F00000000000000000000A1 /* Debug */,
-				5F00000000000000000000A2 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

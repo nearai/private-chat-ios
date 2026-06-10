@@ -726,6 +726,15 @@ final class ModelCatalogStore: ObservableObject {
         preferredAvailableModel(excluding: unavailableModel.map { Set([$0]) } ?? Set<String>())
     }
 
+    /// The cloud privacy-proxy model offered when the private route is
+    /// restricted. Requires a configured NEAR AI Cloud key (owned by the
+    /// caller); never returns agent routes.
+    func preferredPrivacyProxyModel(nearCloudKeyConfigured: Bool) -> String? {
+        guard nearCloudKeyConfigured else { return nil }
+        let cloudModels = pickerModels.filter { $0.isNearCloudModel && !$0.isDeprecatedPickerModel }
+        return rankedModels(from: cloudModels).first?.id ?? cloudModels.first?.id
+    }
+
     func preferredAvailableModel(excluding unavailableModels: Set<String>) -> String? {
         let availableModels = pickerModels.filter { !$0.isExternalModel }
         let availableIDs = Set(availableModels.map(\.id))

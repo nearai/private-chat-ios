@@ -62,6 +62,15 @@ final class FileService {
         try await fileAPI.uploadFile(from: url)
     }
 
+    /// Downloads an uploaded extracted-text file (e.g. "…-pdf-text.txt") so its
+    /// content can be re-staged after an app restart — staged document text is
+    /// in-memory only, which previously meant project files attached in an
+    /// earlier session reached the model as a bare filename.
+    func fetchFileText(_ fileID: String) async throws -> String? {
+        let data = try await fileAPI.fetchFilePreviewContent(fileID, maxBytes: APIClient.maxFilePreviewBytes)
+        return String(data: data, encoding: .utf8)
+    }
+
     func uploadAttachment(from url: URL, keepDocumentsOnDevice: Bool) async throws -> FileAttachmentUploadResult {
         let hasAccess = url.startAccessingSecurityScopedResource()
         defer {

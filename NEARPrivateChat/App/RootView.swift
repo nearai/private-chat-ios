@@ -75,7 +75,31 @@ struct RootView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .overlay(alignment: .bottomTrailing) {
+            // ReleaseGate state beacon: lets the live harness wait on app state
+            // instead of scraping pixels. Invisible in normal use; only present
+            // when launched with -NEARReleaseGate.
+            #if DEBUG
+            if Self.isReleaseGateRun {
+                Text(gateStateDescription)
+                    .font(.system(size: 4))
+                    .frame(width: 4, height: 4)
+                    .opacity(0.02)
+                    .accessibilityIdentifier("gate.state")
+                    .accessibilityLabel(gateStateDescription)
+            }
+            #endif
+        }
     }
+
+    #if DEBUG
+    static let isReleaseGateRun = ProcessInfo.processInfo.arguments.contains("-NEARReleaseGate")
+
+    private var gateStateDescription: String {
+        let lastStatus = chatStore.messages.last?.status ?? "none"
+        return "streaming=\(chatStore.isStreaming ? "1" : "0");last=\(lastStatus);count=\(chatStore.messages.count)"
+    }
+    #endif
 
     @ViewBuilder
     private var authenticatedRoot: some View {

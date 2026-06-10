@@ -13,6 +13,9 @@ struct BriefingFollowUpResult {
     var text: String?
     var widget: MessageWidget?
     var error: String?
+    /// When a failure can be retried through the privacy proxy, the model to
+    /// use — surfaces a one-tap "Use privacy proxy" button on the failed reply.
+    var proxyModelID: String?
 
     var succeeded: Bool {
         text != nil || widget != nil
@@ -50,6 +53,10 @@ struct ThreadReply: Identifiable, Hashable {
     /// An assistant reply can carry a rendered widget (e.g. a real historical
     /// price chart) instead of, or alongside, text.
     var widget: MessageWidget? = nil
+    /// Failed replies that can be retried via the privacy proxy carry the
+    /// proxy model + the original question, so the row offers one tap.
+    var proxyModelID: String? = nil
+    var proxyRetryQuestion: String? = nil
 }
 
 struct DeliveryThread: Identifiable, Hashable {
@@ -87,7 +94,7 @@ struct ThreadedBriefingView: View {
     /// Sends a follow-up `(question, context)` to the chat backend and returns
     /// the assistant's reply (text and/or a rendered widget). Injected by the
     /// parent (which holds ChatStore). Nil in previews → replies recorded locally.
-    private let onAskFollowUp: ((String, String) async -> BriefingFollowUpResult)?
+    private let onAskFollowUp: ((String, String, String?) async -> BriefingFollowUpResult)?
 
     @State private var deliveries: [BriefingDelivery]
     @State private var replyText = ""
@@ -102,7 +109,7 @@ struct ThreadedBriefingView: View {
         deliveries: [BriefingDelivery],
         store: BriefingStore? = nil,
         briefingID: UUID? = nil,
-        onAskFollowUp: ((String, String) async -> BriefingFollowUpResult)? = nil,
+        onAskFollowUp: ((String, String, String?) async -> BriefingFollowUpResult)? = nil,
         onClose: @escaping () -> Void = {}
     ) {
         self.title = title
@@ -129,7 +136,9 @@ struct ThreadedBriefingView: View {
                                 : nil
                         )
                         if let thread = delivery.thread {
-                            ThreadInlineView(thread: thread)
+                            ThreadInlineView(thread: thread, onUseProxy: { reply in
+                                retryReplyViaProxy(reply)
+                            })
                         }
                     }
                 }
@@ -204,6 +213,7 @@ struct ThreadedBriefingView: View {
             Menu {
                 if store != nil, briefingID != nil {
                     Button { runNow() } label: { Label("Run now", systemImage: "arrow.clockwise") }
+                        .accessibilityIdentifier("tracker.runNow")
                     // A one-shot alert auto-pauses after firing; let the user re-arm it.
                     if let briefing = liveBriefing, briefing.isConditional, briefing.isPaused {
                         Button { reArm() } label: { Label("Re-arm alert", systemImage: "bell.badge") }
@@ -304,16 +314,25 @@ struct ThreadedBriefingView: View {
             ThreadedBriefingView.transcript(of: priorReplies)
         ].filter { !$0.isEmpty }.joined(separator: "\n\n")
         isReplying = true
+        runFollowUp(question: text, context: context, viaProxyModelID: nil, verifiedLabel: "NEAR Private")
+    }
+
+    /// Runs a follow-up (optionally through the privacy proxy) and appends the
+    /// reply. Failed private replies carry a one-tap proxy retry offer.
+    private func runFollowUp(question: String, context: String, viaProxyModelID: String?, verifiedLabel: String) {
+        guard let onAskFollowUp else { isReplying = false; return }
         Task {
-            let answer = await onAskFollowUp(text, context)
+            let answer = await onAskFollowUp(question, context, viaProxyModelID)
             await MainActor.run {
                 let body = answer.text ?? (answer.widget == nil ? answer.error ?? BriefingFollowUpResult.failure(nil).error ?? "" : "")
                 let reply = ThreadReply(
                     role: .assistant,
                     text: body,
-                    verifiedModel: answer.succeeded ? "NEAR Private" : nil,
+                    verifiedModel: answer.succeeded ? verifiedLabel : nil,
                     ago: "just now",
-                    widget: answer.widget
+                    widget: answer.widget,
+                    proxyModelID: answer.succeeded ? nil : answer.proxyModelID,
+                    proxyRetryQuestion: answer.succeeded ? nil : question
                 )
                 if let target = deliveries.indices.last {
                     appendReply(reply, at: target, bumpCount: false)
@@ -321,6 +340,20 @@ struct ThreadedBriefingView: View {
                 isReplying = false
             }
         }
+    }
+
+    /// One-tap retry of a failed thread reply through the privacy proxy.
+    private func retryReplyViaProxy(_ reply: ThreadReply) {
+        guard let proxyModelID = reply.proxyModelID,
+              let question = reply.proxyRetryQuestion,
+              let index = deliveries.indices.last else { return }
+        let priorReplies = deliveries[index].thread?.replies ?? []
+        let context = [
+            ThreadedBriefingView.replyContext(for: deliveries[index]),
+            ThreadedBriefingView.transcript(of: priorReplies)
+        ].filter { !$0.isEmpty }.joined(separator: "\n\n")
+        isReplying = true
+        runFollowUp(question: question, context: context, viaProxyModelID: proxyModelID, verifiedLabel: "Privacy proxy")
     }
 
     /// Appends a reply to the last delivery's inline thread (creating the thread

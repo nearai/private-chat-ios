@@ -18,6 +18,7 @@ struct AppShellView: View {
                 onStartNewChat: { showingCompactChat = true },
                 onRunSetupAgain: onRunSetupAgain
             )
+            .accessibilityIdentifier("home.conversationList")
             .navigationDestination(isPresented: $showingCompactChat) {
                 ChatView()
                     .navigationTitle(conversationStore.selectedConversationTitle)

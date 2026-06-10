@@ -122,7 +122,7 @@ final class ChatMessageLoadCoordinator {
             if cachedMessages?.isEmpty == false {
                 callbacks.showBanner("Could not refresh this chat. Showing cached messages.")
             } else {
-                callbacks.showBanner(error.localizedDescription)
+                callbacks.showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
             }
         }
     }

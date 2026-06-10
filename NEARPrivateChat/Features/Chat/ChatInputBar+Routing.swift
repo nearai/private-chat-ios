@@ -1,6 +1,34 @@
 import SwiftUI
 
 extension InputBar {
+    /// Recovery surfaces above the composer: route-readiness issues and the
+    /// one-tap proxy retry for restricted private sends. Extracted from the
+    /// InputBar body to keep the type-checker happy.
+    @ViewBuilder
+    var composerRecoveryCards: some View {
+        if let issue = composerStore.routeReadinessIssue {
+            RouteReadinessRecoveryCard(
+                issue: issue,
+                onPrimaryAction: { handleRouteReadinessRecovery(issue.recoveryAction) },
+                onSwitchPrivate: { chatStore.performRouteReadinessRecovery(.switchToPrivate) },
+                onViewCapabilities: { showingCapabilities = true }
+            )
+        }
+
+        if let offer = composerStore.proxyRetryOffer {
+            ProxyRetryCard(
+                offer: offer,
+                proxyDisplayName: offer.proxyModelID.map { chatStore.pickerModels.first(where: { $0.id == offer.proxyModelID })?.displayName ?? ModelOption.humanize(modelID: $0) },
+                onAccept: { chatStore.acceptProxyRetry() },
+                onAddCloudKey: {
+                    chatStore.declineProxyRetry()
+                    chatStore.performRouteReadinessRecovery(.addNearCloudKey)
+                },
+                onDecline: { chatStore.declineProxyRetry() }
+            )
+        }
+    }
+
     var composerRoutingControls: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 5) {
@@ -15,6 +43,7 @@ extension InputBar {
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("composer.chip.model")
                 .accessibilityLabel("Model \(chatStore.selectedModelDisplayName)")
                 .accessibilityHint("Choose a private, Cloud, Council, or Agent model for the next message.")
 
@@ -29,10 +58,29 @@ extension InputBar {
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("composer.chip.council")
                 .accessibilityLabel(chatStore.isCouncilModeEnabled ? "LLM Council active" : "Configure LLM Council")
                 .accessibilityHint("Opens the Council lineup for the next message.")
 
                 sourceModeControl
+
+                if routeHealth.isTripped(.nearPrivate) {
+                    Button {
+                        AppHaptics.selection()
+                        chatStore.retryPrivateRouteNow()
+                    } label: {
+                        ComposerRouteChip(
+                            title: "Private busy",
+                            symbolName: "exclamationmark.shield",
+                            isActive: true,
+                            showsChevron: false
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("composer.chip.privateBusy")
+                    .accessibilityLabel("Private route busy")
+                    .accessibilityHint("Tap to re-enable the private route and retry on the next message.")
+                }
 
                 if selectedModelSupportsReasoningEffort {
                     Button {
@@ -121,6 +169,7 @@ extension InputBar {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("composer.chip.source")
         .accessibilityLabel("Source mode \(composerSourceTitle)")
         .accessibilityHint("Choose web, saved link, file, combined, or research context for the next message.")
     }

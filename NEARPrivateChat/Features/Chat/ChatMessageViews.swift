@@ -199,6 +199,7 @@ struct MessageBubble: View {
                         Label("Failed", systemImage: "exclamationmark.triangle")
                             .font(.caption)
                             .foregroundStyle(.red)
+                            .accessibilityIdentifier("message.failedRow")
                         Button {
                             chatStore.regenerateResponse(for: message)
                         } label: {
@@ -207,6 +208,24 @@ struct MessageBubble: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .accessibilityIdentifier("message.retry")
+                    }
+                }
+
+                if message.status == "cancelled", message.role == .assistant, !message.isStreaming {
+                    HStack(spacing: 12) {
+                        Label("Stopped", systemImage: "stop.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            chatStore.regenerateResponse(for: message)
+                        } label: {
+                            Label("Regenerate", systemImage: "arrow.clockwise")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .accessibilityIdentifier("message.regenerateStopped")
                     }
                 }
 
@@ -217,6 +236,7 @@ struct MessageBubble: View {
                 }
             }
             .frame(maxWidth: message.role == .user ? 560 : 740, alignment: message.role == .user ? .trailing : .leading)
+            .accessibilityIdentifier("message.\(message.role == .user ? "user" : "assistant")")
 
             if message.role != .user {
                 Spacer(minLength: 36)
@@ -250,7 +270,7 @@ struct MessageBubble: View {
             case .success:
                 chatStore.bannerMessage = "Answer exported."
             case let .failure(error):
-                chatStore.bannerMessage = error.localizedDescription
+                chatStore.bannerMessage = MessageRepository.displayFailureMessage(error.localizedDescription)
             }
         }
         .onAppear {
@@ -319,7 +339,7 @@ struct MessageBubble: View {
             answerExportFilename = selectedAnswerFilename(format: format)
             showingAnswerExporter = true
         } catch {
-            chatStore.bannerMessage = error.localizedDescription
+            chatStore.bannerMessage = MessageRepository.displayFailureMessage(error.localizedDescription)
         }
     }
 

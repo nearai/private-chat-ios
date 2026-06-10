@@ -263,9 +263,15 @@ struct Briefing: Codable, Hashable, Identifiable {
     var isPinned: Bool
     /// User-steered: skip scheduled runs until this time (snooze), then resume.
     var snoozedUntil: Date?
+    /// Failed-run streak driving the retry backoff (reset on success/quiet).
+    var consecutiveFailureCount: Int
+    /// Scheduled runs are skipped until this time after failures, so a broken
+    /// route is retried with exponential backoff instead of on every foreground.
+    /// Manual Run-now bypasses it.
+    var nextRetryAt: Date?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, prompt, schedule, isPaused, createdAt, lastRunAt, latestResult, kind, accountID, timeZoneIdentifier, lastFailureAt, lastFailureMessage, council, condition, history, isPinned, snoozedUntil
+        case id, title, prompt, schedule, isPaused, createdAt, lastRunAt, latestResult, kind, accountID, timeZoneIdentifier, lastFailureAt, lastFailureMessage, council, condition, history, isPinned, snoozedUntil, consecutiveFailureCount, nextRetryAt
     }
 
     init(
@@ -286,7 +292,9 @@ struct Briefing: Codable, Hashable, Identifiable {
         condition: BriefingCondition? = nil,
         history: [TrackerSample] = [],
         isPinned: Bool = false,
-        snoozedUntil: Date? = nil
+        snoozedUntil: Date? = nil,
+        consecutiveFailureCount: Int = 0,
+        nextRetryAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -306,6 +314,8 @@ struct Briefing: Codable, Hashable, Identifiable {
         self.history = history
         self.isPinned = isPinned
         self.snoozedUntil = snoozedUntil
+        self.consecutiveFailureCount = consecutiveFailureCount
+        self.nextRetryAt = nextRetryAt
     }
 
     /// True when this tracker is gated on a condition (a threshold alert).
@@ -354,7 +364,9 @@ extension Briefing {
             condition: try? c.decode(BriefingCondition.self, forKey: .condition),
             history: (try? c.decode([TrackerSample].self, forKey: .history)) ?? [],
             isPinned: (try? c.decode(Bool.self, forKey: .isPinned)) ?? false,
-            snoozedUntil: try? c.decode(Date.self, forKey: .snoozedUntil)
+            snoozedUntil: try? c.decode(Date.self, forKey: .snoozedUntil),
+            consecutiveFailureCount: (try? c.decode(Int.self, forKey: .consecutiveFailureCount)) ?? 0,
+            nextRetryAt: try? c.decode(Date.self, forKey: .nextRetryAt)
         )
     }
 }

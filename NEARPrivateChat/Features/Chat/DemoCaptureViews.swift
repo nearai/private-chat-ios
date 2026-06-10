@@ -163,7 +163,7 @@ struct LiveDataDemoView: View {
 /// affordance renders and behaves like the real screen.
 @MainActor
 func demoFailedTrackerContext() -> (store: BriefingStore, briefing: Briefing) {
-    let failureCopy = "Access temporarily restricted on the selected model route. Choose another private model or try again in a moment."
+    let failureCopy = "The private route is temporarily busy. Use the privacy proxy for this turn, or retry private in a moment."
     let briefing = Briefing(
         title: "NEAR price",
         prompt: "Track the NEAR price and summarize the move.",

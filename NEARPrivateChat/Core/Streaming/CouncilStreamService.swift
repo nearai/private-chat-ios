@@ -134,15 +134,25 @@ struct CouncilStreamService {
             modelID.localizedCaseInsensitiveContains("synthesis")
     }
 
+    /// Per-member response clip and a TOTAL budget across all members — large
+    /// synthesis prompts were timing out / dropping the connection after long
+    /// council runs.
+    static let maxPerResponseChars = 5_000
+    static let maxTotalSynthesisResponseChars = 12_000
+
     static func synthesisPrompt(
         originalPrompt: String,
         routedPrompt: String,
         responses: [(String, String)]
     ) -> String {
+        let perResponseBudget = min(
+            maxPerResponseChars,
+            maxTotalSynthesisResponseChars / max(responses.count, 1)
+        )
         let councilResponses = responses.map { modelName, text in
             """
             ## \(modelName)
-            \(clipped(text, maxCharacters: 5_000))
+            \(clipped(text, maxCharacters: perResponseBudget))
             """
         }.joined(separator: "\n\n")
         let routeNote = originalPrompt == routedPrompt ? "" : "\n\nRouted prompt actually sent:\n\(clipped(routedPrompt, maxCharacters: 2_000))"

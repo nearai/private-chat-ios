@@ -1,5 +1,21 @@
 import Foundation
 
+/// A failed private send the user can re-run through the privacy proxy with
+/// one tap. Built only for restricted-route failures; never auto-applied —
+/// switching a private turn to the cloud proxy is a per-turn, disclosed choice.
+struct ProxyRetryOffer: Identifiable, Equatable {
+    /// The failed assistant message this offer belongs to.
+    let id: String
+    let originalModelID: String
+    /// Nil when no NEAR AI Cloud key is configured — the card then offers to
+    /// add one instead of re-sending.
+    let proxyModelID: String?
+    let text: String
+    let attachments: [ChatAttachment]
+    let previousResponseID: String?
+    let conversationID: String?
+}
+
 struct ChatRouteReadinessIssue: Identifiable, Hashable {
     enum BlockedRoute: String, Hashable {
         case nearCloud

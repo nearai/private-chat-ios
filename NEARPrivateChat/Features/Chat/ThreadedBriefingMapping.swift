@@ -6,7 +6,7 @@ extension ThreadedBriefingView {
     init(
         briefing: Briefing,
         store: BriefingStore? = nil,
-        onAskFollowUp: ((String, String) async -> BriefingFollowUpResult)? = nil,
+        onAskFollowUp: ((String, String, String?) async -> BriefingFollowUpResult)? = nil,
         onClose: @escaping () -> Void = {}
     ) {
         self.init(

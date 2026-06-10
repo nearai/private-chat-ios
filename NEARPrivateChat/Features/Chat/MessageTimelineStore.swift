@@ -226,6 +226,9 @@ final class MessageTimelineStore: ObservableObject {
             updateMessage(assistantMessageID) { message in
                 message.isStreaming = false
                 message.status = "cancelled"
+                if message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    message.text = "Stopped before any output."
+                }
             }
         }
         for messageID in councilAssistantMessageIDs {
@@ -233,6 +236,9 @@ final class MessageTimelineStore: ObservableObject {
             updateMessage(messageID) { message in
                 message.isStreaming = false
                 message.status = "cancelled"
+                if message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    message.text = "Stopped before any output."
+                }
             }
         }
     }

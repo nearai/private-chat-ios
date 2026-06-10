@@ -945,7 +945,7 @@ extension PrivateChatCoreTests {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
             .appendingPathComponent("briefings.json")
-        let restrictedCopy = "Access temporarily restricted on the selected model route. Choose another private model or try again in a moment."
+        let restrictedCopy = "The private route is temporarily busy. Use the privacy proxy for this turn, or retry private in a moment."
 
         final class OutcomeBox: @unchecked Sendable { var outcome: BriefingRunOutcome = .quiet }
         let box = OutcomeBox()

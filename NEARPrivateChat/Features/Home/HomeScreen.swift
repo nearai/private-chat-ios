@@ -322,8 +322,13 @@ struct HomeScreen: View {
             ThreadedBriefingView(
                 briefing: briefing,
                 store: briefingStore,
-                onAskFollowUp: { question, context in
-                    await chatStore.answerBriefingFollowUp(question: question, context: context, briefing: briefing)
+                onAskFollowUp: { question, context, proxyModelID in
+                    await chatStore.answerBriefingFollowUp(
+                        question: question,
+                        context: context,
+                        briefing: briefing,
+                        viaProxyModelID: proxyModelID
+                    )
                 }
             ) { homeStore.openedBriefing = nil }
         }

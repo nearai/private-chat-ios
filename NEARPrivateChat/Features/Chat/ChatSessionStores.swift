@@ -73,6 +73,9 @@ final class ChatComposerStore: ObservableObject {
 
     @Published var draft = ""
     @Published var routeReadinessIssue: ChatRouteReadinessIssue?
+    /// One-tap "answer via privacy proxy" offer for the latest restricted
+    /// private send. Cleared on new sends and conversation switches.
+    @Published var proxyRetryOffer: ProxyRetryOffer?
 
     private var cancellables: Set<AnyCancellable> = []
 
@@ -195,16 +198,22 @@ final class ChatSessionCoordinator {
     func openConversation(
         _ conversation: ConversationSummary,
         isStreaming: Bool,
+        cancelActiveStream: () -> Void,
         persistCurrentDraft: () -> Void,
         scheduleMessageLoad: (ConversationSummary) -> Void,
         transitionDraftScope: () -> Void,
         showBanner: (String) -> Void
     ) -> Bool {
-        guard !isStreaming else {
-            showBanner("Finish or cancel the current response before switching chats.")
-            return false
+        // Switching no longer blocks on a running answer: the stream is
+        // stopped, its partial text persisted into the chat it belongs to, and
+        // the user moves on. cancelActiveStream must run BEFORE the selection
+        // changes so the save lands in the right conversation.
+        if isStreaming {
+            cancelActiveStream()
+            showBanner("Stopped the previous answer — its partial text is saved in that chat.")
         }
 
+        composerStore.proxyRetryOffer = nil
         persistCurrentDraft()
         conversationStore.selectConversation(conversation)
         scheduleMessageLoad(conversation)
@@ -215,16 +224,18 @@ final class ChatSessionCoordinator {
     @discardableResult
     func startNewConversation(
         isStreaming: Bool,
+        cancelActiveStream: () -> Void,
         persistCurrentDraft: () -> Void,
         cancelMessageLoad: () -> Void,
         transitionDraftScope: () -> Void,
         showBanner: (String) -> Void
     ) -> Bool {
-        guard !isStreaming else {
-            showBanner("Finish or cancel the current response before starting a new chat.")
-            return false
+        if isStreaming {
+            cancelActiveStream()
+            showBanner("Stopped the previous answer — its partial text is saved in that chat.")
         }
 
+        composerStore.proxyRetryOffer = nil
         persistCurrentDraft()
         conversationStore.startNewConversation()
         cancelMessageLoad()

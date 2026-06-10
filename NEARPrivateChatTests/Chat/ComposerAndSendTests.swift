@@ -408,9 +408,11 @@ extension PrivateChatCoreTests {
         var cancelCount = 0
         var banners: [String] = []
 
+        var streamCancelCount = 0
         let opened = coordinator.openConversation(
             firstConversation,
             isStreaming: false,
+            cancelActiveStream: { streamCancelCount += 1 },
             persistCurrentDraft: { persistCount += 1 },
             scheduleMessageLoad: { scheduledConversationIDs.append($0.id) },
             transitionDraftScope: { transitionCount += 1 },
@@ -435,6 +437,7 @@ extension PrivateChatCoreTests {
 
         let startedNew = coordinator.startNewConversation(
             isStreaming: false,
+            cancelActiveStream: { streamCancelCount += 1 },
             persistCurrentDraft: { persistCount += 1 },
             cancelMessageLoad: { cancelCount += 1 },
             transitionDraftScope: { transitionCount += 1 },
@@ -460,32 +463,37 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(conversationStore.selectedConversation?.id, sendConversation.id)
         XCTAssertEqual(transitionCount, 3)
 
-        let blockedOpen = coordinator.openConversation(
+        // Switching mid-stream no longer blocks: the active stream is cancelled
+        // (partial text persisted by cancelStream) and the switch proceeds.
+        let openedWhileStreaming = coordinator.openConversation(
             blockedConversation,
             isStreaming: true,
+            cancelActiveStream: { streamCancelCount += 1 },
             persistCurrentDraft: { persistCount += 1 },
             scheduleMessageLoad: { scheduledConversationIDs.append($0.id) },
             transitionDraftScope: { transitionCount += 1 },
             showBanner: { banners.append($0) }
         )
-        let blockedStart = coordinator.startNewConversation(
+        let startedWhileStreaming = coordinator.startNewConversation(
             isStreaming: true,
+            cancelActiveStream: { streamCancelCount += 1 },
             persistCurrentDraft: { persistCount += 1 },
             cancelMessageLoad: { cancelCount += 1 },
             transitionDraftScope: { transitionCount += 1 },
             showBanner: { banners.append($0) }
         )
 
-        XCTAssertFalse(blockedOpen)
-        XCTAssertFalse(blockedStart)
-        XCTAssertEqual(conversationStore.selectedConversation?.id, sendConversation.id)
-        XCTAssertEqual(scheduledConversationIDs, [firstConversation.id])
-        XCTAssertEqual(persistCount, 2)
-        XCTAssertEqual(cancelCount, 1)
-        XCTAssertEqual(transitionCount, 3)
+        XCTAssertTrue(openedWhileStreaming)
+        XCTAssertTrue(startedWhileStreaming)
+        XCTAssertEqual(streamCancelCount, 2)
+        XCTAssertNil(conversationStore.selectedConversation) // startNew cleared it
+        XCTAssertEqual(scheduledConversationIDs, [firstConversation.id, blockedConversation.id])
+        XCTAssertEqual(persistCount, 4)
+        XCTAssertEqual(cancelCount, 2)
+        XCTAssertEqual(transitionCount, 5)
         XCTAssertEqual(Array(banners.suffix(2)), [
-            "Finish or cancel the current response before switching chats.",
-            "Finish or cancel the current response before starting a new chat."
+            "Stopped the previous answer — its partial text is saved in that chat.",
+            "Stopped the previous answer — its partial text is saved in that chat."
         ])
     }
 
@@ -1122,7 +1130,7 @@ extension PrivateChatCoreTests {
         )
         XCTAssertEqual(
             store.displayFailureMessageForSend("Access temporarily restricted. Please try again later."),
-            "Access temporarily restricted on the selected model route. Choose another private model or try again in a moment."
+            "The private route is temporarily busy. Use the privacy proxy for this turn, or retry private in a moment."
         )
     }
 
@@ -1744,6 +1752,16 @@ private final class PreConversationFailureSendHost: ChatSendCoordinatorHost {
     var sendSelectedConversation: ConversationSummary? { nil }
     var sendSelectedProjectID: String? { nil }
     var shouldFailCreateConversation = true
+    var sendProxyRetryOffer: ProxyRetryOffer?
+    var privacyProxyModelIDStub: String?
+
+    func privacyProxyModelIDForSend() -> String? { privacyProxyModelIDStub }
+
+    func isRestrictedRouteErrorForSend(_ error: Error) -> Bool {
+        RouteHealthMonitor.isRestrictedClassError(error)
+    }
+
+    func ensureDocumentTextsForSend(attachments: [ChatAttachment]) async {}
     var councilModelIDsOverride: [String] = [ModelOption.nearPrivateDefaultModelID, "Qwen/Qwen3.5-122B-A10B"]
     var lastStreamPreviousResponseID: String?
     var lastStreamAttachmentIDs: [String] = []

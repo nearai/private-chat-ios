@@ -62,7 +62,7 @@ final class ShareStore: ObservableObject {
             loadedShareInfoConversationID = conversation.id
         } catch {
             if showErrors {
-                showBanner(error.localizedDescription)
+                showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
             }
         }
     }
@@ -81,7 +81,7 @@ final class ShareStore: ObservableObject {
             sharedWithMe = try await service.refreshSharedWithMe()
         } catch {
             if showErrors {
-                showBanner(error.localizedDescription)
+                showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
             }
         }
     }
@@ -93,7 +93,7 @@ final class ShareStore: ObservableObject {
             showBanner("Public link enabled.")
             return publicURL(for: conversation)
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
             return nil
         }
     }
@@ -112,7 +112,7 @@ final class ShareStore: ObservableObject {
             await loadShares(for: conversation)
             showBanner(recipientCount == 1 ? "Access granted." : "Access granted to \(recipientCount) people.")
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -130,7 +130,7 @@ final class ShareStore: ObservableObject {
             await loadShares(for: conversation)
             showBanner("Organization access granted.")
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -148,7 +148,7 @@ final class ShareStore: ObservableObject {
             shareGroups = try await service.refreshShareGroups()
         } catch {
             if showErrors {
-                showBanner(error.localizedDescription)
+                showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
             }
         }
     }
@@ -159,7 +159,7 @@ final class ShareStore: ObservableObject {
             upsertShareGroup(group)
             showBanner("Share group created.")
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -169,7 +169,7 @@ final class ShareStore: ObservableObject {
             upsertShareGroup(updatedGroup)
             showBanner("Share group updated.")
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -179,7 +179,7 @@ final class ShareStore: ObservableObject {
             shareGroups.removeAll { $0.id == group.id }
             showBanner("Share group deleted.")
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -197,7 +197,7 @@ final class ShareStore: ObservableObject {
             await loadShares(for: conversation)
             showBanner("Group access granted.")
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -207,7 +207,7 @@ final class ShareStore: ObservableObject {
             await loadShares(for: conversation)
             showBanner("Access removed.")
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -218,7 +218,7 @@ final class ShareStore: ObservableObject {
             await loadShares(for: conversation)
             showBanner("Public link disabled.")
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -236,7 +236,7 @@ final class ShareStore: ObservableObject {
                 sourceLabel: sourceLabel
             )
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
         }
     }
 

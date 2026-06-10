@@ -86,7 +86,7 @@ struct ChatToolbar: View {
             case .success:
                 chatStore.bannerMessage = "Conversation exported."
             case let .failure(error):
-                chatStore.bannerMessage = error.localizedDescription
+                chatStore.bannerMessage = MessageRepository.displayFailureMessage(error.localizedDescription)
             }
         }
         .confirmationDialog(
@@ -445,7 +445,7 @@ struct ChatToolbar: View {
             )
             showingExporter = true
         } catch {
-            chatStore.bannerMessage = error.localizedDescription
+            chatStore.bannerMessage = MessageRepository.displayFailureMessage(error.localizedDescription)
         }
     }
 

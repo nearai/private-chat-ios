@@ -92,16 +92,40 @@ struct MessageRepository {
     static func mergedMessages(remoteMessages: [ChatMessage], localCache: [ChatMessage]?) -> [ChatMessage] {
         guard let localCache, !localCache.isEmpty else { return remoteMessages }
         let remoteIDs = Set(remoteMessages.map(\.id))
-        let containsExternalLocalTurn = localCache.contains { message in
-            isExternalModel(message.model ?? "")
-        }
-        guard containsExternalLocalTurn else { return remoteMessages }
+        let remoteResponseIDs = Set(remoteMessages.compactMap(\.responseID))
 
+        // Per-message preservation: council turns (members + synthesis) and
+        // failed/cancelled/approval turns exist only locally — the server's
+        // /items feed does not return them, so dropping them here is what made
+        // council answers vanish on re-open. Plain completed private assistant
+        // turns still defer to the server copy (they round-trip under server
+        // IDs; preserving them would duplicate).
+        let cacheHasExternalTurn = localCache.contains { isExternalModel($0.model ?? "") }
+        let remoteUserTexts = Set(
+            remoteMessages
+                .filter { $0.role == .user }
+                .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+        )
         let localOnly = localCache.filter { message in
             guard !remoteIDs.contains(message.id) else { return false }
+            // If the server ever starts returning this turn (same responseID
+            // under a different item ID), prefer the remote copy.
+            if let responseID = message.responseID, remoteResponseIDs.contains(responseID) {
+                return false
+            }
             if isExternalModel(message.model ?? "") { return true }
-            if message.status == "failed" || message.status == "approval" { return true }
-            return message.role == .user
+            if message.councilBatchID?.isEmpty == false { return true }
+            if message.model == ModelOption.llmCouncilSynthesisModelID { return true }
+            if ["failed", "approval", "cancelled"].contains(message.status) { return true }
+            if message.role == .user {
+                // External-route chats keep their local user turns (the server
+                // never stores them). Private user turns round-trip, so only
+                // keep ones the server provably doesn't have (e.g. the prompt
+                // of a failed send) — matched by text to avoid duplicates.
+                if cacheHasExternalTurn { return true }
+                return !remoteUserTexts.contains(message.text.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            return false
         }
         guard !localOnly.isEmpty else { return remoteMessages }
         return (remoteMessages + localOnly).sorted { lhs, rhs in
@@ -262,6 +286,25 @@ struct MessageRepository {
         return rawMessage.map(displayFailureMessage)
     }
 
+    /// Maps transport-layer URLErrors to user copy BEFORE any string matching,
+    /// so raw "Error Domain=NSURLErrorDomain Code=-1005 …" dumps never surface.
+    static func transportFailureMessage(_ urlError: URLError) -> String? {
+        switch urlError.code {
+        case .networkConnectionLost:
+            return "Connection dropped mid-answer — retry. Your prompt is kept."
+        case .timedOut:
+            return "The model took too long to respond — retry, or switch models."
+        case .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff:
+            return "You're offline. Reconnect, then retry."
+        case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed:
+            return "Can't reach the private backend right now — retry in a moment."
+        case .secureConnectionFailed, .serverCertificateUntrusted:
+            return "Secure connection failed. Check your network, then retry."
+        default:
+            return nil
+        }
+    }
+
     static func displayFailureMessage(_ rawValue: String) -> String {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let lowercased = trimmed.lowercased()
@@ -270,7 +313,19 @@ struct MessageRepository {
             return "Access denied by the NEAR Private API. Sign in again or choose another available model."
         }
         if lowercased.contains("temporarily restricted") {
-            return "Access temporarily restricted on the selected model route. Choose another private model or try again in a moment."
+            return "The private route is temporarily busy. Use the privacy proxy for this turn, or retry private in a moment."
+        }
+        if lowercased.contains("-1005") || lowercased.contains("network connection was lost") {
+            return "Connection dropped mid-answer — retry. Your prompt is kept."
+        }
+        if lowercased.contains("-1001") || lowercased.contains("request timed out") {
+            return "The model took too long to respond — retry, or switch models."
+        }
+        if lowercased.contains("-1009") || lowercased.contains("not connected to the internet") || lowercased.contains("appears to be offline") {
+            return "You're offline. Reconnect, then retry."
+        }
+        if lowercased.contains("response stream ended early") {
+            return "The answer stream was interrupted — retry to continue."
         }
         if lowercased.contains("402") ||
             lowercased.contains("payment required") ||

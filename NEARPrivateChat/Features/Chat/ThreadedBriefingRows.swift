@@ -116,6 +116,7 @@ struct BotDeliveryRow: View {
 
 struct ThreadInlineView: View {
     let thread: DeliveryThread
+    var onUseProxy: ((ThreadReply) -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -157,6 +158,17 @@ struct ThreadInlineView: View {
                                 }
                                 if let model = reply.verifiedModel {
                                     ThreadVerifiedFooter(model: model, sources: reply.verifiedSources, ago: reply.ago ?? "just now")
+                                }
+                                if reply.proxyModelID != nil, let onUseProxy {
+                                    Button {
+                                        onUseProxy(reply)
+                                    } label: {
+                                        Label("Use privacy proxy", systemImage: "eye.slash")
+                                            .font(.system(size: 13, weight: .semibold))
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                    .accessibilityIdentifier("thread.useProxy")
                                 }
                             }
                         }
