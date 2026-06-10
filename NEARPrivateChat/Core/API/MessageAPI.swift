@@ -304,9 +304,27 @@ final class PrivateChatMessageAPI: MessageAPI {
         let capped = trimmed.count > maxUserInstructionCharacters
             ? String(trimmed.prefix(maxUserInstructionCharacters)) + "\n…(preferences truncated)"
             : trimmed
+        // Neutralize any line the user wrote that imitates a fence marker —
+        // case-, whitespace-, and dash-insensitive, so "-----end user
+        // preferences-----" or a non-breaking-space variant can't pose as a
+        // real closing delimiter. A matched line is prefixed so it stays
+        // readable as data but no longer reads as a structural marker.
         let sanitized = capped
-            .replacingOccurrences(of: "-----END USER PREFERENCES-----", with: "----- END USER PREFERENCES -----")
-            .replacingOccurrences(of: "-----BEGIN USER PREFERENCES-----", with: "----- BEGIN USER PREFERENCES -----")
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { rawLine -> String in
+                let normalized = String(rawLine)
+                    .lowercased()
+                    .replacingOccurrences(of: " ", with: "")
+                    .replacingOccurrences(of: "\u{00A0}", with: "")
+                    .replacingOccurrences(of: "-", with: "")
+                    .replacingOccurrences(of: "\u{2013}", with: "")
+                    .replacingOccurrences(of: "\u{2014}", with: "")
+                if normalized.contains("enduserpreferences") || normalized.contains("beginuserpreferences") {
+                    return "| " + rawLine
+                }
+                return String(rawLine)
+            }
+            .joined(separator: "\n")
         return """
 
 

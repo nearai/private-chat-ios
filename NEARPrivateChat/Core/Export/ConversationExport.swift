@@ -1139,8 +1139,19 @@ enum ConversationExportBuilder {
         formula.contains("\n") ? "$$\n\(formula)\n$$" : "$$\(formula)$$"
     }
 
-    private static func xmlEscaped(_ value: String) -> String {
-        value
+    static func xmlEscaped(_ value: String) -> String {
+        // Drop scalars XML 1.0 forbids even as entities (C0 controls except
+        // tab/newline/CR, plus U+FFFE/U+FFFF). A literal control char from
+        // model output or a pasted attachment otherwise produces a .docx Word
+        // refuses to open ("unreadable content").
+        let cleaned = String(String.UnicodeScalarView(value.unicodeScalars.filter { scalar in
+            let v = scalar.value
+            if v == 0x9 || v == 0xA || v == 0xD { return true }
+            if v < 0x20 { return false }
+            if v == 0xFFFE || v == 0xFFFF { return false }
+            return true
+        }))
+        return cleaned
             .replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")

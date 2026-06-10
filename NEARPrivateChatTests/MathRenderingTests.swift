@@ -2,6 +2,23 @@ import XCTest
 @testable import NEARPrivateChat
 
 extension PrivateChatCoreTests {
+    func testMathFormulaParserTerminatesOnOrphanScriptMarkers() {
+        // Regression: a leading/orphan ^ or _ once spun the parser forever,
+        // hanging the render thread. These must return (to .fallback), fast.
+        for adversarial in ["^2", "_x", "x^^y", "{^}", "^", "_"] {
+            let model = MathFormulaRenderModel.build(from: adversarial)
+            XCTAssertEqual(model, .fallback(adversarial), "Expected fallback for \(adversarial)")
+        }
+        // A long script chain is bounded, not unbounded.
+        let chain = String(repeating: "x^", count: 5_000) + "x"
+        XCTAssertEqual(MathFormulaRenderModel.build(from: chain), .fallback(chain))
+        // An oversized formula short-circuits to fallback.
+        let huge = String(repeating: "a", count: 3_000)
+        XCTAssertEqual(MathFormulaRenderModel.build(from: huge), .fallback(huge))
+        // A valid base still parses (no false positive from the guards).
+        XCTAssertNotEqual(MathFormulaRenderModel.build(from: "x^2"), .fallback("x^2"))
+    }
+
     func testMathFormulaModelParsesScriptsFractionsSymbolsAndFallbacks() {
         let scripts = MathFormulaRenderModel.build(from: "x^2 + y_i")
         guard case let .row(scriptNodes) = scripts else {

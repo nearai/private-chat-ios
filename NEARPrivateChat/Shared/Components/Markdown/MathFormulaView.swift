@@ -157,8 +157,17 @@ private struct MathFormulaModelParser {
         self.index = self.source.startIndex
     }
 
+    /// A single inline/block formula longer than this falls back to source
+    /// rather than being parsed — bounds worst-case parse/render cost on
+    /// adversarial model output.
+    static let maxFormulaLength = 2_000
+    /// Most scripts one atom can carry before we stop wrapping — guards
+    /// against `x^x^x^…` building an unbounded render tree.
+    private static let maxScriptChain = 8
+
     mutating func parse() -> MathFormulaRenderModel {
         guard !source.isEmpty else { return .fallback(source) }
+        guard source.count <= Self.maxFormulaLength else { return .fallback(source) }
         let nodes = parseExpression(closing: nil, depth: 0)
         guard !failed, index == source.endIndex else {
             return .fallback(source)
@@ -173,7 +182,10 @@ private struct MathFormulaModelParser {
         }
 
         var nodes: [MathFormulaRenderModel] = []
-        while index < source.endIndex {
+        // `!failed` in the condition is load-bearing: a non-advancing failure
+        // (e.g. a leading `^`/`_`) would otherwise spin forever on the same
+        // character, hanging whichever thread renders the formula.
+        while !failed, index < source.endIndex {
             if let closing, source[index] == closing {
                 break
             }
@@ -183,7 +195,13 @@ private struct MathFormulaModelParser {
             }
 
             var atom = parseAtom(depth: depth)
+            var scriptCount = 0
             while !failed, index < source.endIndex, source[index] == "^" || source[index] == "_" {
+                guard scriptCount < Self.maxScriptChain else {
+                    failed = true
+                    break
+                }
+                scriptCount += 1
                 let marker = source[index]
                 advance()
                 let script = parseScriptArgument(depth: depth)
@@ -215,8 +233,12 @@ private struct MathFormulaModelParser {
         case "{":
             return parseGroup(depth: depth)
         case "^", "_":
+            // Consume the orphan marker so the caller's loop always advances,
+            // even though we mark the parse as failed (→ source fallback).
+            let marker = source[index]
+            advance()
             failed = true
-            return .text(String(source[index]), style: .math)
+            return .text(String(marker), style: .math)
         default:
             return parsePlainRun()
         }
