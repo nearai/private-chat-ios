@@ -103,7 +103,7 @@ extension PrivateChatCoreTests {
         XCTAssertNotNil(store.attestationSnapshot)
         XCTAssertNil(store.attestationFetchErrorMessage)
         XCTAssertFalse(store.isLoadingAttestation)
-        XCTAssertEqual(banners.last, "Attestation refreshed.")
+        XCTAssertEqual(banners.last, "Proof refreshed.")
         XCTAssertEqual(
             store.currentAttestationStatus(
                 selectedModelID: "zai-org/GLM-5.1-FP8",

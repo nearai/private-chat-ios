@@ -683,13 +683,15 @@ private struct MarkdownList: View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(items) { item in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Color.clear
-                        .frame(width: CGFloat(item.level) * 18)
                     markerView(for: item)
                     InlineMarkdownText(text: item.text)
                         .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                // Indent per nesting level via padding, not a flexible
+                // Color.clear spacer — that spacer had no fixed height and
+                // collapsed baseline-aligned rows on top of each other.
+                .padding(.leading, CGFloat(item.level) * 18)
             }
         }
     }

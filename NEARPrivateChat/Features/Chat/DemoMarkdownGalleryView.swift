@@ -48,6 +48,10 @@ struct DemoMarkdownGalleryView: View {
                     StreamingMarkdownText(text: "## Direct answer\n\nThe council **broadly agrees** the framework holds.\n\nStill streaming with **unclosed bold and a dangling heading marker: ## Disagreem")
                 }
 
+                gallerySection("Math rendering") {
+                    MarkdownMessageText(text: "Inline mass-energy $E = mc^2$ and a fraction block:\n\n$$\\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$\n\nGreek and relations: $\\alpha \\leq \\beta \\neq \\gamma$ with a sum $\\sum_{i=1}^{n} x_i$.")
+                }
+
                 gallerySection("Source carousel") {
                     SourceCarousel(sources: [
                         WebSearchSource(type: nil, url: "https://www.reuters.com/world/middle-east", title: "Iran War: Latest Breaking News, Updates & Analysis", publishedAt: nil, snippet: nil),
