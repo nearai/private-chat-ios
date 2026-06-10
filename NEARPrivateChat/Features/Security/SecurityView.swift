@@ -35,9 +35,9 @@ struct SecurityView: View {
                             .foregroundStyle(.primary)
                     }
                     .padding(14)
-                            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .overlay {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.pill))
+                    .overlay {
+                        RoundedRectangle.app(AppRadius.pill)
                             .stroke(Color.appBorder, lineWidth: 1)
                     }
                     reportCard
@@ -200,7 +200,7 @@ struct SecurityView: View {
                 } else {
                     Image(systemName: proof.symbolName)
                         .font(.system(size: 44, weight: .semibold))
-                        .foregroundStyle(proof.tintColor)
+                        .foregroundStyle(proofTextTint(for: proof.state))
                 }
             }
 
@@ -267,12 +267,12 @@ struct SecurityView: View {
             // identical labels read as redundant. Only the primary CTA in
             // `actionStack` stays.
         }
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.control))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle.app(AppRadius.control)
                 .stroke(Color.appBorder, lineWidth: 1)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle.app(AppRadius.control))
     }
 
     private var routeDisclosureCard: some View {
@@ -304,9 +304,9 @@ struct SecurityView: View {
             )
         }
         .padding(12)
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.pill))
         .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle.app(AppRadius.pill)
                 .stroke(Color.appBorder, lineWidth: 1)
         }
     }
@@ -315,7 +315,7 @@ struct SecurityView: View {
         HStack(alignment: .top, spacing: 9) {
             Image(systemName: symbolName)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.actionPrimary)
+                .foregroundStyle(Color.actionPrimaryText)
                 .frame(width: 24, height: 24)
                 .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
@@ -407,32 +407,20 @@ struct SecurityView: View {
                 symbolName: routeSymbolName
             )
         }
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.control))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle.app(AppRadius.control)
                 .stroke(Color.appBorder, lineWidth: 1)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle.app(AppRadius.control))
     }
 
     private var actionStack: some View {
         VStack(spacing: 6) {
             if let snapshot = attestationSnapshot {
-                Button {
+                PrimaryButton("Check proof report", systemImage: "lock.shield") {
                     verifyProofOnDevice(snapshot)
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "lock.shield")
-                            .font(.system(size: 16, weight: .semibold))
-                            Text("Check proof report")
-                            .font(.headline)
-                    }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
-                .buttonStyle(.plain)
 
                 Button {
                     prepareProofReportExport(snapshot)
@@ -443,7 +431,7 @@ struct SecurityView: View {
                             .font(.system(size: 14, weight: .semibold))
                     }
                     .font(.headline)
-                    .foregroundStyle(Color.actionPrimary)
+                    .foregroundStyle(Color.actionPrimaryText)
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
                 }
@@ -459,7 +447,7 @@ struct SecurityView: View {
                         .padding(.top, 4)
                 }
             } else if canFetchAttestation {
-                Button {
+                PrimaryButton {
                     Task { await refreshAttestationReport() }
                 } label: {
                     HStack(spacing: 8) {
@@ -472,14 +460,8 @@ struct SecurityView: View {
                                 .font(.system(size: 16, weight: .semibold))
                         }
                         Text(isLoadingAttestation ? "Fetching proof" : "Fetch proof")
-                            .font(.headline)
                     }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
-                .buttonStyle(.plain)
                 .disabled(isLoadingAttestation)
             } else {
                 Text(proofActionsUnavailableText)
@@ -520,8 +502,21 @@ struct SecurityView: View {
         return AnyView(
             Image(systemName: isCovered ? "checkmark.seal.fill" : "shield")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(isCovered ? Color.proofVerified : Color.textTertiary)
+                .foregroundStyle(isCovered ? Color.proofVerifiedText : Color.textTertiary)
         )
+    }
+
+    private func proofTextTint(for state: ProofState) -> Color {
+        switch state {
+        case .verified:
+            return .proofVerifiedText
+        case .stale, .verifying:
+            return .proofStaleText
+        case .mismatch:
+            return .proofMismatch
+        case .unknown, .private_, .proxied, .unverified:
+            return .textSecondary
+        }
     }
 
     private var hardwareSummary: String {
