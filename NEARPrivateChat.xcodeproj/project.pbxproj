@@ -100,6 +100,7 @@
 		AD1000000000000000000009 /* ChatAttachmentDropViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2000000000000000000009 /* ChatAttachmentDropViews.swift */; };
 		AD100000000000000000000A /* SaveOutputToProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD200000000000000000000A /* SaveOutputToProjectSheet.swift */; };
 		AD100000000000000000000B /* CouncilResponseGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD200000000000000000000B /* CouncilResponseGroup.swift */; };
+		BA0CDCDF8B6891C1252559A0 /* CouncilAnswerTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAF466720CED819AD7F5F6F4 /* CouncilAnswerTabs.swift */; };
 		AD100000000000000000000C /* ChatToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD200000000000000000000C /* ChatToolbar.swift */; };
 		AD100000000000000000000D /* ChatToolbarChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD200000000000000000000D /* ChatToolbarChrome.swift */; };
 		AE1000000000000000000001 /* MessageStreamingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE2000000000000000000001 /* MessageStreamingViews.swift */; };
@@ -161,6 +162,7 @@
 		BA100000000000000000000B /* FileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000B /* FileTests.swift */; };
 		BA100000000000000000000C /* HomeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000C /* HomeTests.swift */; };
 		BA100000000000000000000D /* CouncilTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000D /* CouncilTests.swift */; };
+		BA3535C2ECF1539C6512B391 /* CouncilTabsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA9DBCB8B3E032F6EA6E69A9 /* CouncilTabsTests.swift */; };
 		BA100000000000000000000E /* ModelCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000E /* ModelCatalogTests.swift */; };
 		BA100000000000000000000F /* ProjectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000F /* ProjectTests.swift */; };
 		BA1000000000000000000010 /* RoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000010 /* RoutingTests.swift */; };
@@ -428,6 +430,7 @@
 		AD2000000000000000000009 /* ChatAttachmentDropViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAttachmentDropViews.swift; sourceTree = "<group>"; };
 		AD200000000000000000000A /* SaveOutputToProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveOutputToProjectSheet.swift; sourceTree = "<group>"; };
 		AD200000000000000000000B /* CouncilResponseGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilResponseGroup.swift; sourceTree = "<group>"; };
+		BAF466720CED819AD7F5F6F4 /* CouncilAnswerTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilAnswerTabs.swift; sourceTree = "<group>"; };
 		AD200000000000000000000C /* ChatToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatToolbar.swift; sourceTree = "<group>"; };
 		AD200000000000000000000D /* ChatToolbarChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatToolbarChrome.swift; sourceTree = "<group>"; };
 		AE2000000000000000000001 /* MessageStreamingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageStreamingViews.swift; sourceTree = "<group>"; };
@@ -490,6 +493,7 @@
 		BA200000000000000000000B /* FileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTests.swift; sourceTree = "<group>"; };
 		BA200000000000000000000C /* HomeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeTests.swift; sourceTree = "<group>"; };
 		BA200000000000000000000D /* CouncilTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilTests.swift; sourceTree = "<group>"; };
+		BA9DBCB8B3E032F6EA6E69A9 /* CouncilTabsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilTabsTests.swift; sourceTree = "<group>"; };
 		BA200000000000000000000E /* ModelCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogTests.swift; sourceTree = "<group>"; };
 		BA200000000000000000000F /* ProjectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectTests.swift; sourceTree = "<group>"; };
 		BA2000000000000000000010 /* RoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingTests.swift; sourceTree = "<group>"; };
@@ -818,6 +822,7 @@
 			isa = PBXGroup;
 			children = (
 				BA200000000000000000000D /* CouncilTests.swift */,
+				BA9DBCB8B3E032F6EA6E69A9 /* CouncilTabsTests.swift */,
 				BA200000000000000000000E /* ModelCatalogTests.swift */,
 			);
 			path = ModelCatalog;
@@ -1106,6 +1111,7 @@
 				AD2000000000000000000009 /* ChatAttachmentDropViews.swift */,
 				AD200000000000000000000A /* SaveOutputToProjectSheet.swift */,
 				AD200000000000000000000B /* CouncilResponseGroup.swift */,
+				BAF466720CED819AD7F5F6F4 /* CouncilAnswerTabs.swift */,
 				AD200000000000000000000C /* ChatToolbar.swift */,
 				AD200000000000000000000D /* ChatToolbarChrome.swift */,
 				D2AA00000100000000000000 /* ChatToolbarMenuContent.swift */,
@@ -1658,6 +1664,7 @@
 				AD1000000000000000000009 /* ChatAttachmentDropViews.swift in Sources */,
 				AD100000000000000000000A /* SaveOutputToProjectSheet.swift in Sources */,
 				AD100000000000000000000B /* CouncilResponseGroup.swift in Sources */,
+				BA0CDCDF8B6891C1252559A0 /* CouncilAnswerTabs.swift in Sources */,
 				AD100000000000000000000C /* ChatToolbar.swift in Sources */,
 				AD100000000000000000000D /* ChatToolbarChrome.swift in Sources */,
 				D1AA00000100000000000000 /* ChatToolbarMenuContent.swift in Sources */,
@@ -1816,6 +1823,7 @@
 				BA100000000000000000000B /* FileTests.swift in Sources */,
 				BA100000000000000000000C /* HomeTests.swift in Sources */,
 				BA100000000000000000000D /* CouncilTests.swift in Sources */,
+				BA3535C2ECF1539C6512B391 /* CouncilTabsTests.swift in Sources */,
 				BA100000000000000000000E /* ModelCatalogTests.swift in Sources */,
 				BA100000000000000000000F /* ProjectTests.swift in Sources */,
 				BA1000000000000000000010 /* RoutingTests.swift in Sources */,
