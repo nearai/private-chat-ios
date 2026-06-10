@@ -571,63 +571,322 @@ enum ConversationExportBuilder {
         let margin: CGFloat = 44
         let contentWidth = pageRect.width - margin * 2
         let renderer = UIGraphicsPDFRenderer(bounds: pageRect)
+        let blocks = MarkdownBlock.parse(text)
 
         return renderer.pdfData { context in
             context.beginPage()
             var y = margin
 
-            for rawLine in text.components(separatedBy: .newlines) {
-                let line = pdfLineText(rawLine)
-                let attributes = pdfAttributes(for: rawLine)
-                let drawString = line.isEmpty ? " " : line
-                let textRect = (drawString as NSString).boundingRect(
-                    with: CGSize(width: contentWidth, height: .greatestFiniteMagnitude),
-                    options: [.usesLineFragmentOrigin, .usesFontLeading],
-                    attributes: attributes,
-                    context: nil
-                ).integral
-                let height = max(textRect.height, rawLine.isEmpty ? 8 : 12)
-                if y + height > pageRect.height - margin {
-                    context.beginPage()
-                    y = margin
-                }
-                (drawString as NSString).draw(
-                    with: CGRect(x: margin, y: y, width: contentWidth, height: height),
-                    options: [.usesLineFragmentOrigin, .usesFontLeading],
-                    attributes: attributes,
-                    context: nil
+            for block in blocks {
+                drawPDFBlock(
+                    block,
+                    context: context,
+                    pageRect: pageRect,
+                    margin: margin,
+                    contentWidth: contentWidth,
+                    y: &y
                 )
-                y += height + pdfSpacing(after: rawLine)
             }
         }
     }
 
-    private static func pdfLineText(_ line: String) -> String {
-        line
-            .replacingOccurrences(of: #"^##\s+"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: #"^#\s+"#, with: "", options: .regularExpression)
+    private static func drawPDFBlock(
+        _ block: MarkdownBlock,
+        context: UIGraphicsPDFRendererContext,
+        pageRect: CGRect,
+        margin: CGFloat,
+        contentWidth: CGFloat,
+        y: inout CGFloat
+    ) {
+        switch block.kind {
+        case let .paragraph(text):
+            drawPDFInlineText(
+                text,
+                baseFont: .systemFont(ofSize: 10.5),
+                color: .black,
+                context: context,
+                pageRect: pageRect,
+                margin: margin,
+                x: margin,
+                width: contentWidth,
+                y: &y,
+                spacingAfter: 6
+            )
+        case let .heading(text, level):
+            let fontSize: CGFloat = level == 1 ? 22 : (level == 2 ? 15 : 12.5)
+            let color = level == 1 ? UIColor.black : UIColor(red: 0.0, green: 0.42, blue: 0.75, alpha: 1.0)
+            drawPDFInlineText(
+                text,
+                baseFont: .systemFont(ofSize: fontSize, weight: .bold),
+                color: color,
+                context: context,
+                pageRect: pageRect,
+                margin: margin,
+                x: margin,
+                width: contentWidth,
+                y: &y,
+                spacingAfter: level == 1 ? 14 : 8
+            )
+        case let .list(items):
+            for item in items {
+                let indent = CGFloat(item.level) * 18
+                let marker: String
+                switch item.marker {
+                case .unordered:
+                    marker = "•"
+                case let .ordered(number):
+                    marker = "\(number)."
+                }
+                let markerFont = UIFont.systemFont(ofSize: 10.5, weight: .medium)
+                let markerText = NSAttributedString(
+                    string: marker,
+                    attributes: pdfAttributes(font: markerFont, color: .darkGray)
+                )
+                let markerWidth: CGFloat = 24
+                let itemWidth = contentWidth - indent - markerWidth
+                let itemText = pdfInlineAttributedString(item.text, baseFont: .systemFont(ofSize: 10.5), color: .black)
+                let textHeight = pdfHeight(for: itemText, width: itemWidth)
+                let height = max(textHeight, 13)
+                ensurePDFSpace(height, context: context, pageRect: pageRect, margin: margin, y: &y)
+                markerText.draw(
+                    with: CGRect(x: margin + indent, y: y, width: markerWidth - 4, height: height),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    context: nil
+                )
+                itemText.draw(
+                    with: CGRect(x: margin + indent + markerWidth, y: y, width: itemWidth, height: height),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    context: nil
+                )
+                y += height + 4
+            }
+            y += 2
+        case let .quote(text):
+            let quoteX = margin + 12
+            let barRect = CGRect(x: margin, y: y, width: 3, height: 1)
+            let attributed = pdfInlineAttributedString(
+                text,
+                baseFont: .italicSystemFont(ofSize: 10.5),
+                color: .darkGray
+            )
+            let height = max(pdfHeight(for: attributed, width: contentWidth - 18), 14)
+            ensurePDFSpace(height, context: context, pageRect: pageRect, margin: margin, y: &y)
+            UIColor(red: 0.0, green: 0.42, blue: 0.75, alpha: 0.65).setFill()
+            UIBezierPath(rect: CGRect(x: barRect.minX, y: y, width: barRect.width, height: height)).fill()
+            attributed.draw(
+                with: CGRect(x: quoteX, y: y, width: contentWidth - 18, height: height),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                context: nil
+            )
+            y += height + 8
+        case let .code(code, _):
+            drawPDFCodeBlock(
+                code,
+                context: context,
+                pageRect: pageRect,
+                margin: margin,
+                contentWidth: contentWidth,
+                y: &y
+            )
+        case let .math(formula):
+            drawPDFCodeBlock(
+                mathBlockSource(formula),
+                context: context,
+                pageRect: pageRect,
+                margin: margin,
+                contentWidth: contentWidth,
+                y: &y
+            )
+        case .divider:
+            ensurePDFSpace(12, context: context, pageRect: pageRect, margin: margin, y: &y)
+            UIColor.lightGray.setStroke()
+            UIBezierPath(rect: CGRect(x: margin, y: y + 5, width: contentWidth, height: 1)).stroke()
+            y += 14
+        case let .table(rows):
+            drawPDFTable(
+                rows,
+                context: context,
+                pageRect: pageRect,
+                margin: margin,
+                contentWidth: contentWidth,
+                y: &y
+            )
+        }
     }
 
-    private static func pdfAttributes(for line: String) -> [NSAttributedString.Key: Any] {
+    private static func drawPDFInlineText(
+        _ text: String,
+        baseFont: UIFont,
+        color: UIColor,
+        context: UIGraphicsPDFRendererContext,
+        pageRect: CGRect,
+        margin: CGFloat,
+        x: CGFloat,
+        width: CGFloat,
+        y: inout CGFloat,
+        spacingAfter: CGFloat
+    ) {
+        let attributed = pdfInlineAttributedString(text.isEmpty ? " " : text, baseFont: baseFont, color: color)
+        let height = max(pdfHeight(for: attributed, width: width), 12)
+        ensurePDFSpace(height, context: context, pageRect: pageRect, margin: margin, y: &y)
+        attributed.draw(
+            with: CGRect(x: x, y: y, width: width, height: height),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            context: nil
+        )
+        y += height + spacingAfter
+    }
+
+    private static func drawPDFCodeBlock(
+        _ code: String,
+        context: UIGraphicsPDFRendererContext,
+        pageRect: CGRect,
+        margin: CGFloat,
+        contentWidth: CGFloat,
+        y: inout CGFloat
+    ) {
+        let font = UIFont(name: "Menlo-Regular", size: 9.5) ?? .monospacedSystemFont(ofSize: 9.5, weight: .regular)
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byWordWrapping
         paragraph.lineSpacing = 2
+        let attributed = NSAttributedString(
+            string: code.isEmpty ? " " : code,
+            attributes: [
+                .font: font,
+                .foregroundColor: UIColor.black,
+                .paragraphStyle: paragraph
+            ]
+        )
+        let inset: CGFloat = 8
+        let height = max(pdfHeight(for: attributed, width: contentWidth - inset * 2) + inset * 2, 28)
+        ensurePDFSpace(height, context: context, pageRect: pageRect, margin: margin, y: &y)
+        UIColor(white: 0.96, alpha: 1.0).setFill()
+        UIBezierPath(roundedRect: CGRect(x: margin, y: y, width: contentWidth, height: height), cornerRadius: 6).fill()
+        attributed.draw(
+            with: CGRect(x: margin + inset, y: y + inset, width: contentWidth - inset * 2, height: height - inset * 2),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            context: nil
+        )
+        y += height + 8
+    }
 
-        let font: UIFont
-        let color: UIColor
-        if line.hasPrefix("# ") {
-            font = .systemFont(ofSize: 22, weight: .bold)
-            color = .black
-        } else if line.hasPrefix("## ") {
-            font = .systemFont(ofSize: 14, weight: .semibold)
-            color = UIColor(red: 0.0, green: 0.42, blue: 0.75, alpha: 1.0)
-        } else if line.hasPrefix("Exported:") || line.hasPrefix("Conversation:") || line.hasPrefix("Model:") || line.hasPrefix("Files:") || line.hasPrefix("Sources:") {
-            font = .systemFont(ofSize: 9.5, weight: .medium)
-            color = .darkGray
-        } else {
-            font = .systemFont(ofSize: 10.5, weight: .regular)
-            color = .black
+    private static func drawPDFTable(
+        _ rows: [[String]],
+        context: UIGraphicsPDFRendererContext,
+        pageRect: CGRect,
+        margin: CGFloat,
+        contentWidth: CGFloat,
+        y: inout CGFloat
+    ) {
+        let columnCount = rows.map(\.count).max() ?? 0
+        guard columnCount > 0 else { return }
+        let columnWidths = pdfTableColumnWidths(rows: rows, columnCount: columnCount, contentWidth: contentWidth)
+        let cellPadding: CGFloat = 6
+
+        for (rowIndex, row) in rows.enumerated() {
+            let cellTexts = (0..<columnCount).map { columnIndex -> NSAttributedString in
+                let text = row.indices.contains(columnIndex) ? row[columnIndex] : ""
+                let font = rowIndex == 0 ? UIFont.systemFont(ofSize: 9.5, weight: .semibold) : UIFont.systemFont(ofSize: 9.5)
+                return pdfInlineAttributedString(text, baseFont: font, color: .black)
+            }
+            let rowHeight = max(
+                cellTexts.enumerated().map { index, value in
+                    pdfHeight(for: value, width: columnWidths[index] - cellPadding * 2) + cellPadding * 2
+                }.max() ?? 24,
+                24
+            )
+            ensurePDFSpace(rowHeight, context: context, pageRect: pageRect, margin: margin, y: &y)
+
+            var x = margin
+            for columnIndex in 0..<columnCount {
+                let rect = CGRect(x: x, y: y, width: columnWidths[columnIndex], height: rowHeight)
+                (rowIndex == 0 ? UIColor(red: 0.92, green: 0.96, blue: 1.0, alpha: 1.0) : UIColor.white).setFill()
+                UIBezierPath(rect: rect).fill()
+                UIColor(white: 0.78, alpha: 1.0).setStroke()
+                UIBezierPath(rect: rect).stroke()
+                cellTexts[columnIndex].draw(
+                    with: rect.insetBy(dx: cellPadding, dy: cellPadding),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    context: nil
+                )
+                x += columnWidths[columnIndex]
+            }
+            y += rowHeight
         }
+        y += 10
+    }
+
+    private static func pdfTableColumnWidths(rows: [[String]], columnCount: Int, contentWidth: CGFloat) -> [CGFloat] {
+        let font = UIFont.systemFont(ofSize: 9.5)
+        let rawWidths = (0..<columnCount).map { columnIndex -> CGFloat in
+            let measured = rows.map { row -> CGFloat in
+                guard row.indices.contains(columnIndex) else { return 48 }
+                return ceil((row[columnIndex] as NSString).size(withAttributes: [.font: font]).width) + 18
+            }.max() ?? 64
+            return min(max(measured, 64), 190)
+        }
+        let total = rawWidths.reduce(0, +)
+        guard total > contentWidth else { return rawWidths }
+        return rawWidths.map { max(48, $0 / total * contentWidth) }
+    }
+
+    private static func ensurePDFSpace(
+        _ height: CGFloat,
+        context: UIGraphicsPDFRendererContext,
+        pageRect: CGRect,
+        margin: CGFloat,
+        y: inout CGFloat
+    ) {
+        if y + height > pageRect.height - margin {
+            context.beginPage()
+            y = margin
+        }
+    }
+
+    private static func pdfHeight(for attributed: NSAttributedString, width: CGFloat) -> CGFloat {
+        attributed.boundingRect(
+            with: CGSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            context: nil
+        ).integral.height
+    }
+
+    private static func pdfInlineAttributedString(_ text: String, baseFont: UIFont, color: UIColor) -> NSAttributedString {
+        let output = NSMutableAttributedString()
+        for segment in inlineExportSegments(in: text) {
+            let font = pdfFont(baseFont: baseFont, segment: segment)
+            var attributes = pdfAttributes(font: font, color: segment.url == nil ? color : UIColor.systemBlue)
+            if segment.url != nil {
+                attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            }
+            if segment.isCode {
+                attributes[.backgroundColor] = UIColor(white: 0.94, alpha: 1.0)
+            }
+            output.append(NSAttributedString(string: segment.text, attributes: attributes))
+        }
+        return output
+    }
+
+    private static func pdfFont(baseFont: UIFont, segment: InlineExportSegment) -> UIFont {
+        if segment.isCode {
+            return UIFont(name: "Menlo-Regular", size: baseFont.pointSize) ??
+                .monospacedSystemFont(ofSize: baseFont.pointSize, weight: .regular)
+        }
+
+        var traits: UIFontDescriptor.SymbolicTraits = []
+        if segment.isBold { traits.insert(.traitBold) }
+        if segment.isItalic { traits.insert(.traitItalic) }
+        guard !traits.isEmpty,
+              let descriptor = baseFont.fontDescriptor.withSymbolicTraits(traits) else {
+            return baseFont
+        }
+        return UIFont(descriptor: descriptor, size: baseFont.pointSize)
+    }
+
+    private static func pdfAttributes(font: UIFont, color: UIColor) -> [NSAttributedString.Key: Any] {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byWordWrapping
+        paragraph.lineSpacing = 2
 
         return [
             .font: font,
@@ -635,25 +894,21 @@ enum ConversationExportBuilder {
             .paragraphStyle: paragraph
         ]
     }
-
-    private static func pdfSpacing(after line: String) -> CGFloat {
-        if line.hasPrefix("# ") { return 14 }
-        if line.hasPrefix("## ") { return 8 }
-        return line.isEmpty ? 7 : 4
-    }
     #endif
 
     private static func docxData(markdown: String) throws -> Data {
         try MinimalZIPArchive(entries: [
             MinimalZIPArchive.Entry(path: "[Content_Types].xml", data: Data(docxContentTypesXML.utf8)),
             MinimalZIPArchive.Entry(path: "_rels/.rels", data: Data(docxPackageRelationshipsXML.utf8)),
-            MinimalZIPArchive.Entry(path: "word/document.xml", data: Data(docxDocumentXML(markdown: markdown).utf8))
+            MinimalZIPArchive.Entry(path: "word/_rels/document.xml.rels", data: Data(docxDocumentRelationshipsXML.utf8)),
+            MinimalZIPArchive.Entry(path: "word/document.xml", data: Data(docxDocumentXML(markdown: markdown).utf8)),
+            MinimalZIPArchive.Entry(path: "word/numbering.xml", data: Data(docxNumberingXML.utf8))
         ]).data()
     }
 
     private static let docxContentTypesXML = """
     <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-    <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>
+    <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/></Types>
     """
 
     private static let docxPackageRelationshipsXML = """
@@ -661,49 +916,227 @@ enum ConversationExportBuilder {
     <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>
     """
 
-    private static func docxDocumentXML(markdown: String) -> String {
-        let body = markdown
-            .components(separatedBy: .newlines)
-            .map(docxParagraphXML)
-            .joined()
+    private static let docxDocumentRelationshipsXML = """
+    <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdNumbering" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/></Relationships>
+    """
+
+    private static var docxNumberingXML: String {
+        let bulletGlyphs = ["•", "◦", "▪"]
+        let bullets = (0...8).map { level in
+            let left = 720 + level * 360
+            let glyph = bulletGlyphs[level % bulletGlyphs.count]
+            return """
+            <w:lvl w:ilvl="\(level)"><w:numFmt w:val="bullet"/><w:lvlText w:val="\(glyph)"/><w:pPr><w:ind w:left="\(left)" w:hanging="360"/></w:pPr></w:lvl>
+            """
+        }.joined()
+        let orderedFormats = ["decimal", "lowerLetter", "lowerRoman"]
+        let ordered = (0...8).map { level in
+            let left = 720 + level * 360
+            return """
+            <w:lvl w:ilvl="\(level)"><w:numFmt w:val="\(orderedFormats[level % orderedFormats.count])"/><w:lvlText w:val="%\(level + 1)."/><w:pPr><w:ind w:left="\(left)" w:hanging="360"/></w:pPr></w:lvl>
+            """
+        }.joined()
         return """
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>\(body)<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>
+        <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="hybridMultilevel"/>\(bullets)</w:abstractNum><w:abstractNum w:abstractNumId="2"><w:multiLevelType w:val="hybridMultilevel"/>\(ordered)</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="2"/></w:num></w:numbering>
         """
     }
 
-    private static func docxParagraphXML(_ markdownLine: String) -> String {
-        let text = docxLineText(markdownLine)
-        let escaped = xmlEscaped(text.isEmpty ? " " : text)
-        let paragraphProperties = docxParagraphProperties(for: markdownLine)
-        let runProperties = docxRunProperties(for: markdownLine)
-        return "<w:p>\(paragraphProperties)<w:r>\(runProperties)<w:t xml:space=\"preserve\">\(escaped)</w:t></w:r></w:p>"
+    private static func docxDocumentXML(markdown: String) -> String {
+        let body = MarkdownBlock.parse(markdown)
+            .map(docxBlockXML)
+            .joined()
+        return """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>\(body)<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>
+        """
     }
 
-    private static func docxLineText(_ line: String) -> String {
-        line
-            .replacingOccurrences(of: #"^##\s+"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: #"^#\s+"#, with: "", options: .regularExpression)
+    private static func docxBlockXML(_ block: MarkdownBlock) -> String {
+        switch block.kind {
+        case let .paragraph(text):
+            return docxInlineParagraphXML(text, paragraphProperties: "<w:pPr><w:spacing w:after=\"100\"/></w:pPr>")
+        case let .heading(text, level):
+            let style = min(max(level, 1), 3)
+            let size = style == 1 ? "32" : (style == 2 ? "26" : "23")
+            return docxInlineParagraphXML(
+                text,
+                paragraphProperties: "<w:pPr><w:pStyle w:val=\"Heading\(style)\"/><w:spacing w:before=\"160\" w:after=\"120\"/></w:pPr>",
+                forcedRunProperties: "<w:b/><w:sz w:val=\"\(size)\"/>"
+            )
+        case let .list(items):
+            return items.map(docxListItemXML).joined()
+        case let .quote(text):
+            return docxInlineParagraphXML(
+                text,
+                paragraphProperties: "<w:pPr><w:ind w:left=\"360\"/><w:pBdr><w:left w:val=\"single\" w:sz=\"12\" w:space=\"8\" w:color=\"006ABF\"/></w:pBdr></w:pPr>",
+                forcedRunProperties: "<w:i/><w:color w:val=\"555555\"/>"
+            )
+        case let .code(code, _):
+            return docxCodeParagraphXML(code)
+        case let .math(formula):
+            return docxCodeParagraphXML(mathBlockSource(formula))
+        case .divider:
+            return "<w:p><w:pPr><w:pBdr><w:bottom w:val=\"single\" w:sz=\"6\" w:space=\"1\" w:color=\"CCCCCC\"/></w:pBdr></w:pPr></w:p>"
+        case let .table(rows):
+            return docxTableXML(rows)
+        }
     }
 
-    private static func docxParagraphProperties(for line: String) -> String {
-        if line.hasPrefix("# ") {
-            return "<w:pPr><w:spacing w:after=\"280\"/></w:pPr>"
-        }
-        if line.hasPrefix("## ") {
-            return "<w:pPr><w:spacing w:before=\"160\" w:after=\"120\"/></w:pPr>"
-        }
-        return ""
+    private static func docxInlineParagraphXML(
+        _ text: String,
+        paragraphProperties: String = "",
+        forcedRunProperties: String = ""
+    ) -> String {
+        "<w:p>\(paragraphProperties)\(docxInlineRunsXML(text, forcedRunProperties: forcedRunProperties))</w:p>"
     }
 
-    private static func docxRunProperties(for line: String) -> String {
-        if line.hasPrefix("# ") {
-            return "<w:rPr><w:b/><w:sz w:val=\"32\"/></w:rPr>"
+    private static func docxListItemXML(_ item: MarkdownListItem) -> String {
+        let numID: Int
+        switch item.marker {
+        case .unordered:
+            numID = 1
+        case .ordered:
+            numID = 2
         }
-        if line.hasPrefix("## ") {
-            return "<w:rPr><w:b/><w:color w:val=\"006ABF\"/><w:sz w:val=\"24\"/></w:rPr>"
+        let level = min(item.level, 8)
+        let left = 720 + level * 360
+        let paragraphProperties = """
+        <w:pPr><w:numPr><w:ilvl w:val="\(level)"/><w:numId w:val="\(numID)"/></w:numPr><w:ind w:left="\(left)" w:hanging="360"/></w:pPr>
+        """
+        return docxInlineParagraphXML(item.text, paragraphProperties: paragraphProperties)
+    }
+
+    private static func docxTableXML(_ rows: [[String]]) -> String {
+        let columnCount = rows.map(\.count).max() ?? 0
+        guard columnCount > 0 else { return "" }
+        let grid = (0..<columnCount)
+            .map { _ in "<w:gridCol w:w=\"2400\"/>" }
+            .joined()
+        let rowXML = rows.enumerated().map { rowIndex, row in
+            let cells = (0..<columnCount).map { columnIndex -> String in
+                let value = row.indices.contains(columnIndex) ? row[columnIndex] : ""
+                let shading = rowIndex == 0 ? "<w:shd w:fill=\"EAF4FF\"/>" : ""
+                let runProperties = rowIndex == 0 ? "<w:b/>" : ""
+                return """
+                <w:tc><w:tcPr><w:tcW w:w="2400" w:type="dxa"/>\(shading)</w:tcPr>\(docxInlineParagraphXML(value, forcedRunProperties: runProperties))</w:tc>
+                """
+            }.joined()
+            return "<w:tr>\(cells)</w:tr>"
+        }.joined()
+        return """
+        <w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:color="CCCCCC"/><w:insideH w:val="single" w:sz="4" w:color="CCCCCC"/><w:insideV w:val="single" w:sz="4" w:color="CCCCCC"/></w:tblBorders></w:tblPr><w:tblGrid>\(grid)</w:tblGrid>\(rowXML)</w:tbl>
+        """
+    }
+
+    private static func docxCodeParagraphXML(_ code: String) -> String {
+        let lines = (code.isEmpty ? " " : code).components(separatedBy: .newlines)
+        let runs = lines.enumerated().map { index, line in
+            let lineBreak = index == lines.count - 1 ? "" : "<w:br/>"
+            return """
+            <w:r><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="19"/></w:rPr><w:t xml:space="preserve">\(xmlEscaped(line))</w:t>\(lineBreak)</w:r>
+            """
+        }.joined()
+        return "<w:p><w:pPr><w:shd w:fill=\"F3F4F6\"/><w:spacing w:before=\"100\" w:after=\"120\"/></w:pPr>\(runs)</w:p>"
+    }
+
+    private static func docxInlineRunsXML(_ text: String, forcedRunProperties: String = "") -> String {
+        let segments = inlineExportSegments(in: text.isEmpty ? " " : text)
+        return segments.map { segment in
+            let properties = docxRunPropertiesXML(for: segment, forcedRunProperties: forcedRunProperties)
+            return "<w:r>\(properties)<w:t xml:space=\"preserve\">\(xmlEscaped(segment.text))</w:t></w:r>"
+        }.joined()
+    }
+
+    private static func docxRunPropertiesXML(for segment: InlineExportSegment, forcedRunProperties: String) -> String {
+        var properties = forcedRunProperties
+        if segment.isBold {
+            properties += "<w:b/>"
         }
-        return ""
+        if segment.isItalic {
+            properties += "<w:i/>"
+        }
+        if segment.isCode {
+            properties += "<w:rFonts w:ascii=\"Courier New\" w:hAnsi=\"Courier New\"/><w:shd w:fill=\"F3F4F6\"/>"
+        }
+        if segment.url != nil {
+            properties += "<w:color w:val=\"0563C1\"/><w:u w:val=\"single\"/>"
+        }
+        return properties.isEmpty ? "" : "<w:rPr>\(properties)</w:rPr>"
+    }
+
+    private static func inlineExportSegments(in text: String) -> [InlineExportSegment] {
+        var segments: [InlineExportSegment] = []
+        var plain = ""
+        var index = text.startIndex
+
+        func flushPlain() {
+            guard !plain.isEmpty else { return }
+            segments.append(InlineExportSegment(text: plain))
+            plain = ""
+        }
+
+        while index < text.endIndex {
+            if text[index] == "`",
+               let closing = text[text.index(after: index)...].firstIndex(of: "`") {
+                flushPlain()
+                let contentStart = text.index(after: index)
+                segments.append(InlineExportSegment(text: String(text[contentStart..<closing]), isCode: true))
+                index = text.index(after: closing)
+                continue
+            }
+
+            if text[index...].hasPrefix("**"),
+               let closing = text.range(of: "**", range: text.index(index, offsetBy: 2)..<text.endIndex) {
+                flushPlain()
+                let contentStart = text.index(index, offsetBy: 2)
+                segments.append(InlineExportSegment(text: String(text[contentStart..<closing.lowerBound]), isBold: true))
+                index = closing.upperBound
+                continue
+            }
+
+            if text[index] == "*",
+               let closing = text[text.index(after: index)...].firstIndex(of: "*") {
+                flushPlain()
+                let contentStart = text.index(after: index)
+                segments.append(InlineExportSegment(text: String(text[contentStart..<closing]), isItalic: true))
+                index = text.index(after: closing)
+                continue
+            }
+
+            if let link = markdownLink(at: index, in: text) {
+                flushPlain()
+                segments.append(InlineExportSegment(text: "\(link.label) (\(link.url))", url: link.url))
+                index = link.end
+                continue
+            }
+
+            plain.append(text[index])
+            index = text.index(after: index)
+        }
+
+        flushPlain()
+        return segments.isEmpty ? [InlineExportSegment(text: text)] : segments
+    }
+
+    private static func markdownLink(
+        at index: String.Index,
+        in text: String
+    ) -> (label: String, url: String, end: String.Index)? {
+        guard text[index] == "[" else { return nil }
+        guard let labelEnd = text[text.index(after: index)...].firstIndex(of: "]") else { return nil }
+        let openParen = text.index(after: labelEnd)
+        guard openParen < text.endIndex, text[openParen] == "(" else { return nil }
+        guard let closeParen = text[text.index(after: openParen)...].firstIndex(of: ")") else { return nil }
+        let label = String(text[text.index(after: index)..<labelEnd])
+        let url = String(text[text.index(after: openParen)..<closeParen])
+        guard !label.isEmpty, !url.isEmpty else { return nil }
+        return (label, url, text.index(after: closeParen))
+    }
+
+    private static func mathBlockSource(_ formula: String) -> String {
+        formula.contains("\n") ? "$$\n\(formula)\n$$" : "$$\(formula)$$"
     }
 
     private static func xmlEscaped(_ value: String) -> String {
@@ -714,6 +1147,14 @@ enum ConversationExportBuilder {
             .replacingOccurrences(of: "\"", with: "&quot;")
             .replacingOccurrences(of: "'", with: "&apos;")
     }
+}
+
+private struct InlineExportSegment {
+    var text: String
+    var isBold: Bool = false
+    var isItalic: Bool = false
+    var isCode: Bool = false
+    var url: String?
 }
 
 enum ConversationExportError: LocalizedError, Equatable {

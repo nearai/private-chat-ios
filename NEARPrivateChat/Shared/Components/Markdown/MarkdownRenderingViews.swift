@@ -106,10 +106,8 @@ struct MarkdownMessageText: View {
                     InlineMarkdownText(text: value)
                         .font(level <= 2 ? .headline.weight(.semibold) : .subheadline.weight(.semibold))
                         .padding(.top, 2)
-                case let .unorderedList(items):
-                    MarkdownBulletList(items: items)
-                case let .orderedList(items):
-                    MarkdownNumberedList(items: items)
+                case let .list(items):
+                    MarkdownList(items: items)
                 case let .quote(value):
                     MarkdownQuote(text: value)
                 case let .code(code, language):
@@ -136,12 +134,11 @@ private final class MarkdownBlockCacheBox {
     }
 }
 
-private struct MarkdownBlock: Identifiable {
+struct MarkdownBlock: Identifiable {
     enum Kind {
         case paragraph(String)
         case heading(String, level: Int)
-        case unorderedList([String])
-        case orderedList([(Int, String)])
+        case list([MarkdownListItem])
         case quote(String)
         case code(String, language: String?)
         case math(String)
@@ -220,27 +217,15 @@ private struct MarkdownBlock: Identifiable {
                 continue
             }
 
-            if let firstItem = unorderedListItem(from: trimmed) {
+            if let firstItem = listItem(from: line, itemID: 0) {
                 var items = [firstItem]
                 index += 1
                 while index < lines.count,
-                      let item = unorderedListItem(from: lines[index].trimmingCharacters(in: .whitespacesAndNewlines)) {
+                      let item = listItem(from: lines[index], itemID: items.count) {
                     items.append(item)
                     index += 1
                 }
-                blocks.append(MarkdownBlock(id: nextID(), kind: .unorderedList(items)))
-                continue
-            }
-
-            if let firstItem = orderedListItem(from: trimmed) {
-                var items = [firstItem]
-                index += 1
-                while index < lines.count,
-                      let item = orderedListItem(from: lines[index].trimmingCharacters(in: .whitespacesAndNewlines)) {
-                    items.append(item)
-                    index += 1
-                }
-                blocks.append(MarkdownBlock(id: nextID(), kind: .orderedList(items)))
+                blocks.append(MarkdownBlock(id: nextID(), kind: .list(items)))
                 continue
             }
 
@@ -265,8 +250,7 @@ private struct MarkdownBlock: Identifiable {
                       !current.hasPrefix("```"),
                       !isDivider(current),
                       heading(from: current) == nil,
-                      unorderedListItem(from: current) == nil,
-                      orderedListItem(from: current) == nil,
+                      listItem(from: lines[index], itemID: 0) == nil,
                       !current.hasPrefix(">"),
                       MarkdownMathParser.blockMath(at: index, in: lines) == nil,
                       !isTableStart(at: index, lines: lines) else {
@@ -289,21 +273,33 @@ private struct MarkdownBlock: Identifiable {
         return stripped.isEmpty ? nil : (stripped, level)
     }
 
-    private static func unorderedListItem(from line: String) -> String? {
-        for marker in ["- ", "* ", "+ "] where line.hasPrefix(marker) {
-            return String(line.dropFirst(marker.count))
-        }
-        return nil
-    }
+    private static func listItem(from line: String, itemID: Int) -> MarkdownListItem? {
+        let expanded = line.replacingOccurrences(of: "\t", with: "    ")
+        let leadingSpaces = expanded.prefix(while: { $0 == " " }).count
+        let content = expanded.trimmingCharacters(in: .whitespaces)
+        let level = min(leadingSpaces / 2, 8)
 
-    private static func orderedListItem(from line: String) -> (Int, String)? {
-        let digits = line.prefix(while: { $0.isNumber })
+        for marker in ["- ", "* ", "+ "] where content.hasPrefix(marker) {
+            return MarkdownListItem(
+                id: itemID,
+                level: level,
+                marker: .unordered,
+                text: String(content.dropFirst(marker.count))
+            )
+        }
+
+        let digits = content.prefix(while: { $0.isNumber })
         guard !digits.isEmpty,
               let number = Int(digits),
-              line.dropFirst(digits.count).hasPrefix(". ") else {
+              content.dropFirst(digits.count).hasPrefix(". ") else {
             return nil
         }
-        return (number, String(line.dropFirst(digits.count + 2)))
+        return MarkdownListItem(
+            id: itemID,
+            level: level,
+            marker: .ordered(number),
+            text: String(content.dropFirst(digits.count + 2))
+        )
     }
 
     private static func isDivider(_ line: String) -> Bool {
@@ -333,6 +329,18 @@ private struct MarkdownBlock: Identifiable {
         }
         return columns
     }
+}
+
+struct MarkdownListItem: Identifiable, Equatable {
+    enum Marker: Equatable {
+        case unordered
+        case ordered(Int)
+    }
+
+    let id: Int
+    let level: Int
+    let marker: Marker
+    let text: String
 }
 
 struct MarkdownMathBlockParseResult: Equatable {
@@ -668,41 +676,37 @@ enum MarkdownMathParser {
     }
 }
 
-private struct MarkdownBulletList: View {
-    let items: [String]
+private struct MarkdownList: View {
+    let items: [MarkdownListItem]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+            ForEach(items) { item in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Image(systemName: "circle.fill")
-                        .font(.system(size: 4, weight: .bold))
-                        .foregroundStyle(.secondary)
-                    InlineMarkdownText(text: item)
+                    Color.clear
+                        .frame(width: CGFloat(item.level) * 18)
+                    markerView(for: item)
+                    InlineMarkdownText(text: item.text)
                         .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
     }
-}
 
-private struct MarkdownNumberedList: View {
-    let items: [(Int, String)]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text("\(item.0).")
-                        .font(.callout.monospacedDigit().weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .frame(minWidth: 22, alignment: .trailing)
-                    InlineMarkdownText(text: item.1)
-                        .lineSpacing(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+    @ViewBuilder
+    private func markerView(for item: MarkdownListItem) -> some View {
+        switch item.marker {
+        case .unordered:
+            Image(systemName: "circle.fill")
+                .font(.system(size: 4, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 22, alignment: .trailing)
+        case let .ordered(number):
+            Text("\(number).")
+                .font(.callout.monospacedDigit().weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 22, alignment: .trailing)
         }
     }
 }
