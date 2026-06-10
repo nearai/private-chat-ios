@@ -70,6 +70,7 @@
 		AB1000000000000000000012 /* HomeTrustSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000012 /* HomeTrustSurface.swift */; };
 		AB1000000000000000000013 /* HomeOrchestrationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000013 /* HomeOrchestrationModels.swift */; };
 		AB1000000000000000000014 /* HomeOrchestrationPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000014 /* HomeOrchestrationPlanner.swift */; };
+		BAEAD5CF40D2EEC35555488C /* AgentSuggestionPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3CACDAD7D402B23A77778D /* AgentSuggestionPlanner.swift */; };
 		AB1000000000000000000015 /* HomeOrchestrationPlanner+Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000015 /* HomeOrchestrationPlanner+Formatting.swift */; };
 		AC1000000000000000000001 /* SetupUseCases.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000001 /* SetupUseCases.swift */; };
 		AC1000000000000000000002 /* UserSetupStarterPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000002 /* UserSetupStarterPreset.swift */; };
@@ -179,6 +180,7 @@
 		C10000000000000000000006 /* ChipFlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000006 /* ChipFlowLayout.swift */; };
 		C10000000000000000000007 /* ShareViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000007 /* ShareViews.swift */; };
 		C10000000000000000000008 /* ProjectContextViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000008 /* ProjectContextViews.swift */; };
+		BAB291632C24659BEC4DCD2C /* ProjectContextSummaryBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA4656DFD6801F26414A7F3E /* ProjectContextSummaryBar.swift */; };
 		C10000000000000000000009 /* AccountCapabilitiesViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000009 /* AccountCapabilitiesViews.swift */; };
 		C1000000000000000000000A /* SecurityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000A /* SecurityView.swift */; };
 		C1000000000000000000000B /* AgentWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000B /* AgentWorkspaceView.swift */; };
@@ -395,6 +397,7 @@
 		AB2000000000000000000012 /* HomeTrustSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeTrustSurface.swift; sourceTree = "<group>"; };
 		AB2000000000000000000013 /* HomeOrchestrationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeOrchestrationModels.swift; sourceTree = "<group>"; };
 		AB2000000000000000000014 /* HomeOrchestrationPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeOrchestrationPlanner.swift; sourceTree = "<group>"; };
+		BA3CACDAD7D402B23A77778D /* AgentSuggestionPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSuggestionPlanner.swift; sourceTree = "<group>"; };
 		AB2000000000000000000015 /* HomeOrchestrationPlanner+Formatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeOrchestrationPlanner+Formatting.swift"; sourceTree = "<group>"; };
 		AC2000000000000000000001 /* SetupUseCases.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupUseCases.swift; sourceTree = "<group>"; };
 		AC2000000000000000000002 /* UserSetupStarterPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSetupStarterPreset.swift; sourceTree = "<group>"; };
@@ -505,6 +508,7 @@
 		C20000000000000000000006 /* ChipFlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipFlowLayout.swift; sourceTree = "<group>"; };
 		C20000000000000000000007 /* ShareViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViews.swift; sourceTree = "<group>"; };
 		C20000000000000000000008 /* ProjectContextViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectContextViews.swift; sourceTree = "<group>"; };
+		BA4656DFD6801F26414A7F3E /* ProjectContextSummaryBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectContextSummaryBar.swift; sourceTree = "<group>"; };
 		C20000000000000000000009 /* AccountCapabilitiesViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountCapabilitiesViews.swift; sourceTree = "<group>"; };
 		C2000000000000000000000A /* SecurityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityView.swift; sourceTree = "<group>"; };
 		C2000000000000000000000B /* AgentWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentWorkspaceView.swift; sourceTree = "<group>"; };
@@ -1056,6 +1060,7 @@
 				AB2000000000000000000012 /* HomeTrustSurface.swift */,
 				AB2000000000000000000013 /* HomeOrchestrationModels.swift */,
 				AB2000000000000000000014 /* HomeOrchestrationPlanner.swift */,
+				BA3CACDAD7D402B23A77778D /* AgentSuggestionPlanner.swift */,
 				AB2000000000000000000015 /* HomeOrchestrationPlanner+Formatting.swift */,
 				C20000000000000000000002 /* HomeSearchIndex.swift */,
 				C20000000000000000000013 /* HomeOrchestrationSurface.swift */,
@@ -1184,6 +1189,7 @@
 				F20000000000000000000012 /* ProjectStore.swift */,
 				F2A600000100000000000000 /* ProjectService.swift */,
 				C20000000000000000000008 /* ProjectContextViews.swift */,
+				BA4656DFD6801F26414A7F3E /* ProjectContextSummaryBar.swift */,
 				F2D700000100000000000000 /* ProjectContextSupportViews.swift */,
 				D2AC00000100000000000000 /* ProjectEditorViews.swift */,
 			);
@@ -1613,10 +1619,12 @@
 				AB1000000000000000000012 /* HomeTrustSurface.swift in Sources */,
 				AB1000000000000000000013 /* HomeOrchestrationModels.swift in Sources */,
 				AB1000000000000000000014 /* HomeOrchestrationPlanner.swift in Sources */,
+				BAEAD5CF40D2EEC35555488C /* AgentSuggestionPlanner.swift in Sources */,
 				AB1000000000000000000015 /* HomeOrchestrationPlanner+Formatting.swift in Sources */,
 				C10000000000000000000007 /* ShareViews.swift in Sources */,
 				F1E000000000000000000001 /* ShareSupportViews.swift in Sources */,
 				C10000000000000000000008 /* ProjectContextViews.swift in Sources */,
+				BAB291632C24659BEC4DCD2C /* ProjectContextSummaryBar.swift in Sources */,
 				B1C900000100000000000000 /* ArchivedChatsView.swift in Sources */,
 				F1D700000100000000000000 /* ProjectContextSupportViews.swift in Sources */,
 				D1AC00000100000000000000 /* ProjectEditorViews.swift in Sources */,

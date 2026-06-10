@@ -207,6 +207,22 @@ enum EmptyChatStarterCoordinator {
             agentAvailable: agentAvailable
         )
 
+        // On agent routes inside a project, lead with concrete tasks built
+        // from the project's real files/links instead of generic starters.
+        if chatStore.selectedRouteKind.isIronclawRoute, let project = chatStore.selectedProject {
+            let agentSuggestions = AgentSuggestionPlanner.suggestions(
+                projectName: project.name,
+                attachmentNames: project.attachments.map(\.name),
+                linkHosts: project.links.compactMap(\.host),
+                recentConversationTitles: []
+            ).map { EmptyChatStarterSuggestion(title: $0.title, symbolName: $0.symbolName, prompt: $0.prompt) }
+            if !agentSuggestions.isEmpty {
+                defaults = agentSuggestions + defaults.filter { fallback in
+                    !agentSuggestions.contains(where: { $0.title == fallback.title })
+                }
+            }
+        }
+
         if let starter = QuickIntentParser.personalizedStarter(fromMemory: chatStore.memoryStore.items.map(\.text)) {
             let suggestion = EmptyChatStarterSuggestion(
                 title: starter.title,

@@ -171,10 +171,16 @@ enum HomeOrchestrationPlanner {
     ) -> HomeOrchestrationItem {
         let route = hostedAvailable ? "Hosted IronClaw" : "Phone Agent"
         let projectName = selectedProject?.name.nilIfBlank
-        let detail = projectName.map { "Plan work from \($0) context." } ?? "Plan code, research, and tool work before sending."
-        let prompt = projectName.map {
-            "Use \($0) context to plan the next Agent task: goal, files or sources to inspect, risks, and verification."
-        } ?? "Plan the next Agent task: goal, context to inspect, risks, and verification."
+        // Concrete first suggestion from the project's actual content beats a
+        // generic planning template.
+        let suggestion = AgentSuggestionPlanner.suggestions(
+            projectName: projectName,
+            attachmentNames: selectedProject?.attachments.map(\.name) ?? [],
+            linkHosts: selectedProject?.links.compactMap(\.host) ?? [],
+            recentConversationTitles: []
+        ).first
+        let detail = suggestion?.title ?? "Plan code, research, and tool work before sending."
+        let prompt = suggestion?.prompt ?? "Draft a short, concrete work plan: the goal as you understand it, the next three steps, and what you need from me."
 
         return HomeOrchestrationItem(
             id: "agent-builder",

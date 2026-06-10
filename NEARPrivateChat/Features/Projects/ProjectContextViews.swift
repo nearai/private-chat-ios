@@ -333,11 +333,18 @@ struct ProjectFilesView: View {
                     ProjectContextRoutePreviewRow(preview: preview)
                         .padding(.horizontal, 16)
                 }
+                if let project = projectStore.selectedProject {
+                    ProjectContextSummaryBar(project: project)
+                        .padding(.horizontal, 16)
+                }
                 actionShelfSection
+                // Chats lead: a project is primarily its conversations
+                // (matching how the best AI-chat project surfaces read), with
+                // files and instructions as supporting context.
+                chatsSection
                 knowledgeSection
                 instructionsSection
                 memoryNotesSection
-                chatsSection
             }
             .padding(.top, 24)
             .padding(.bottom, 24)
@@ -410,12 +417,12 @@ struct ProjectFilesView: View {
         let notes = projectStore.selectedProjectNotes
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                ProjectSectionLabel("Notes")
+                ProjectSectionLabel("Saved answers")
                 Spacer(minLength: 0)
                 Button {
                     beginAddingNote()
                 } label: {
-                    Label("Add Note", systemImage: "plus")
+                    Label("Add note", systemImage: "plus")
                         .font(.footnote.weight(.semibold))
                 }
                 .buttonStyle(.plain)
@@ -430,7 +437,7 @@ struct ProjectFilesView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "note.text.badge.plus")
                             .foregroundStyle(Color.actionPrimary)
-                        Text("Add a note, decision, reminder, or local-only detail.")
+                        Text("Answers you save land here, plus notes, decisions, and local-only details.")
                             .font(.footnote)
                             .foregroundStyle(Color.textSecondary)
                         Spacer(minLength: 0)

@@ -341,7 +341,7 @@ enum AttestationStatus: Codable, Equatable, Sendable {
             return AttestationStatusCopy(
                 title: "No proof report on this device",
                 detail: "Fetch proof on a NEAR Private model to inspect route and model evidence.",
-                badge: "No report"
+                badge: "Get proof"
             )
         }
     }
@@ -378,14 +378,14 @@ enum AttestationStatus: Codable, Equatable, Sendable {
                 return AttestationStatusCopy(
                     title: "No proof report on this device",
                     detail: "Fetch proof on a NEAR Private model to inspect route and model evidence.",
-                    badge: "No report"
+                    badge: "Get proof"
                 )
             }
         default:
             return AttestationStatusCopy(
                 title: "No proof report on this device",
                 detail: "Fetch proof on a NEAR Private model to inspect route and model evidence.",
-                badge: "No report"
+                badge: "Get proof"
             )
         }
     }

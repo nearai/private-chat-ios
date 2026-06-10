@@ -528,13 +528,21 @@ struct ProjectInstructionsEditorSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Instructions") {
-                    TextField("How should the assistant handle this project?", text: $instructions, axis: .vertical)
+                Section {
+                    TextField("e.g. Always answer as counsel reviewing for the founder side; keep answers under 300 words.", text: $instructions, axis: .vertical)
                         .lineLimit(4...8)
+                } header: {
+                    Text("Instructions")
+                } footer: {
+                    Text("Applies to every chat in this project.")
                 }
-                Section("Notes") {
-                    TextField("What should the assistant remember?", text: $memory, axis: .vertical)
+                Section {
+                    TextField("Durable facts: names, deadlines, decisions already made.", text: $memory, axis: .vertical)
                         .lineLimit(4...8)
+                } header: {
+                    Text("Memory")
+                } footer: {
+                    Text("Facts the assistant should keep in mind across chats.")
                 }
             }
             .navigationTitle("Instructions")

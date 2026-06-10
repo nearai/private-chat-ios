@@ -455,9 +455,9 @@ extension PrivateChatCoreTests {
         let proof = ProofCapsuleViewModel(status: .unknown, modelID: "zai-org/GLM-5.1-FP8")
 
         XCTAssertEqual(copy.title, "No proof report on this device")
-        XCTAssertEqual(copy.badge, "No report")
+        XCTAssertEqual(copy.badge, "Get proof")
         XCTAssertEqual(proof.state, .unknown)
-        XCTAssertEqual(proof.badge, "No report")
+        XCTAssertEqual(proof.badge, "Get proof")
     }
 
     func testAttestationCopyExplainsExternalRoutes() {
