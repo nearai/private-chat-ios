@@ -108,16 +108,21 @@ struct WidgetSourceDot: View {
     let source: WidgetNewsSource
 
     var body: some View {
-        Text(source.label.prefix(1).uppercased())
-            .font(.system(size: 8, weight: .bold))
-            .foregroundStyle(.white)
-            .frame(width: 14, height: 14)
-            .background(dotColor, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+        // Widget sources are model-emitted JSON, so the favicon stays
+        // local-only (default allowsNetworkFavicon: false) — the domain is
+        // used only for the on-device tint and letter.
+        SourceFaviconView(
+            domain: source.domain,
+            size: 14,
+            fallbackText: String(source.label.prefix(1).uppercased()),
+            fallbackColor: dotColor,
+            cornerRadius: 4
+        )
     }
 
     private var dotColor: Color {
         if let hex = source.color, let c = widgetColor(fromHex: hex) { return c }
-        return Color.actionPrimary
+        return SourceFaviconResolver.fallbackTint(for: source.domain)
     }
 }
 

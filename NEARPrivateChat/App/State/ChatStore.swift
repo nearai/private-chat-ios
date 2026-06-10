@@ -222,6 +222,12 @@ final class ChatStore: ObservableObject {
     /// Per-route circuit breaker consulted by every send pipeline. Shared with
     /// the composer UI through AppEnvironment's environmentObject injection.
     let routeHealth: RouteHealthMonitor
+    /// Records the real HTTP status + server message of recent route requests
+    /// for the in-app Connection Diagnostics screen.
+    let diagnostics: ConnectionDiagnostics
+    /// True while a manual or post-login private-session probe is in flight, so
+    /// the diagnostics screen can show progress without a separate store.
+    @Published private(set) var isProbingSession = false
     private var messageRepository: MessageRepository
     private let messageLoadCoordinator: ChatMessageLoadCoordinator
     private let fileService: FileService
@@ -891,9 +897,11 @@ final class ChatStore: ObservableObject {
         messageRepository: MessageRepository? = nil,
         messageTimelineStore: MessageTimelineStore? = nil,
         routeHealth: RouteHealthMonitor? = nil,
+        diagnostics: ConnectionDiagnostics? = nil,
         initialAccountID: String? = nil
     ) {
         self.routeHealth = routeHealth ?? RouteHealthMonitor()
+        self.diagnostics = diagnostics ?? ConnectionDiagnostics()
         self.api = api
         storageAccountID = initialAccountID.map { AccountStorageScope.resolvedAccountID(for: $0) } ??
             AccountStorageScope.transientAccountID(prefix: "chat-store")
@@ -1128,6 +1136,7 @@ final class ChatStore: ObservableObject {
         messageTimelineStore.reset()
         modelCatalogStore.reset()
         routeHealth.resetAll()
+        diagnostics.reset()
         clearAttestationState()
         pendingExternalDeepLink = nil
         pendingHostedHandoffPreflight = nil
@@ -2441,27 +2450,40 @@ final class ChatStore: ObservableObject {
         while true {
             final class TextSink: @unchecked Sendable { var text = "" }
             let sink = TextSink()
+            let route = Self.routeKind(forModelID: currentModel)
             do {
-                try await api.streamResponse(
-                    model: currentModel,
-                    text: prompt,
-                    attachments: [],
-                    conversationID: conversationID,
-                    previousResponseID: nil,
-                    webSearchEnabled: webSearchEnabled,
-                    systemPrompt: activeSystemPrompt(memoryForModel: currentModel),
-                    onEvent: { event in
-                        switch event {
-                        case let .textDelta(delta):
-                            sink.text += delta
-                        case let .itemDone(text):
-                            if sink.text.isEmpty, let text { sink.text = text }
-                        default:
-                            break
+                if Self.isExternalModel(currentModel) {
+                    // Cloud/proxy model IDs are NOT valid on the private streamer.
+                    // A proxy follow-up that lands here must hit the Cloud
+                    // completion API, or it silently fails on the private route.
+                    sink.text = try await cloudBriefingText(
+                        modelID: currentModel,
+                        prompt: prompt,
+                        webSearchEnabled: webSearchEnabled
+                    )
+                } else {
+                    try await api.streamResponse(
+                        model: currentModel,
+                        text: prompt,
+                        attachments: [],
+                        conversationID: conversationID,
+                        previousResponseID: nil,
+                        webSearchEnabled: webSearchEnabled,
+                        systemPrompt: activeSystemPrompt(memoryForModel: currentModel),
+                        onEvent: { event in
+                            switch event {
+                            case let .textDelta(delta):
+                                sink.text += delta
+                            case let .itemDone(text):
+                                if sink.text.isEmpty, let text { sink.text = text }
+                            default:
+                                break
+                            }
                         }
-                    }
-                )
+                    )
+                }
                 routeHealth.recordSuccess(modelID: currentModel)
+                diagnostics.recordSuccess(route: route, modelID: currentModel)
                 let trimmed = sink.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else {
                     return BriefingTextStreamResult(text: nil, failureMessage: "The model returned no visible output.")
@@ -2469,6 +2491,7 @@ final class ChatStore: ObservableObject {
                 return BriefingTextStreamResult(text: trimmed, failureMessage: nil)
             } catch {
                 routeHealth.recordFailure(modelID: currentModel, error: error)
+                diagnostics.record(route: route, modelID: currentModel, error: error)
                 lastFailureMessage = Self.displayFailureMessage(error.localizedDescription)
                 unavailableModels.insert(currentModel)
                 guard !Self.isExternalModel(currentModel),
@@ -2519,13 +2542,21 @@ final class ChatStore: ObservableObject {
            let notice = routeHealth.restrictionNotice(for: Self.routeKind(forModelID: runModelID)) {
             return .failed(notice)
         }
-        guard let conversation = try? await api.createConversation(title: briefing.title) else {
+        // A cloud-routed run doesn't need (and must not depend on) a private
+        // conversation — creating one fails exactly when the private session is
+        // broken, which is when a cloud default model should still work.
+        let conversationID: String
+        if Self.isExternalModel(runModelID) {
+            conversationID = ""
+        } else if let conversation = try? await api.createConversation(title: briefing.title) {
+            conversationID = conversation.id
+        } else {
             return .failed("Could not start a private conversation for this run. Check your connection or sign in again, then run it now.")
         }
         let result = await streamBriefingTextResult(
             model: runModelID,
             prompt: briefing.prompt,
-            conversationID: conversation.id,
+            conversationID: conversationID,
             webSearchEnabled: true
         )
         guard let text = result.text else {
@@ -2571,7 +2602,15 @@ final class ChatStore: ObservableObject {
             return failure
         }
 
-        guard let conversation = try? await api.createConversation(title: "Briefing follow-up") else {
+        // A Cloud/proxy follow-up doesn't need (and shouldn't depend on) a
+        // private conversation — creating one would fail on a broken private
+        // session, the exact case the proxy exists to work around.
+        let conversationID: String
+        if Self.isExternalModel(followUpModelID) {
+            conversationID = ""
+        } else if let conversation = try? await api.createConversation(title: "Briefing follow-up") {
+            conversationID = conversation.id
+        } else {
             return .failure("Could not create a briefing follow-up thread. Sign in again, then retry.")
         }
         let trimmedContext = context.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2594,7 +2633,7 @@ final class ChatStore: ObservableObject {
         let result = await streamBriefingTextResult(
             model: followUpModelID,
             prompt: prompt,
-            conversationID: conversation.id,
+            conversationID: conversationID,
             webSearchEnabled: true
         )
         if let text = result.text {
@@ -3651,6 +3690,25 @@ final class ChatStore: ObservableObject {
         return false
     }
 
+    /// Lightweight, no-token probe of the private session: hits `/v1/users/me`
+    /// with the stored session token. Succeeds only when the private route truly
+    /// accepts the session, so a wallet login that returns a non-session token
+    /// surfaces here (401/403) instead of being discovered on the first chat.
+    /// Records the real outcome into `diagnostics`.
+    @discardableResult
+    func probePrivateSession() async -> ConnectionDiagnostics.Outcome? {
+        guard !isProbingSession else { return diagnostics.lastPrivateOutcome }
+        isProbingSession = true
+        defer { isProbingSession = false }
+        do {
+            _ = try await api.fetchProfile()
+            diagnostics.recordSuccess(route: .nearPrivate, modelID: "session-probe")
+        } catch {
+            diagnostics.record(route: .nearPrivate, modelID: "session-probe", error: error)
+        }
+        return diagnostics.lastPrivateOutcome
+    }
+
     private func streamResponseWithFallback(
         initialModel: String,
         text: String,
@@ -3680,9 +3738,11 @@ final class ChatStore: ObservableObject {
                     assistantMessageID: currentAssistantMessageID
                 )
                 routeHealth.recordSuccess(modelID: currentModel)
+                diagnostics.recordSuccess(route: Self.routeKind(forModelID: currentModel), modelID: currentModel)
                 return currentModel
             } catch {
                 routeHealth.recordFailure(modelID: currentModel, error: error)
+                diagnostics.record(route: Self.routeKind(forModelID: currentModel), modelID: currentModel, error: error)
                 unavailableModels.insert(currentModel)
                 // One fallback hop max: walking the whole catalog against a
                 // restricted route amplified the very rate limit it hit.
@@ -3784,6 +3844,57 @@ final class ChatStore: ObservableObject {
         ) { [weak self] event in
             await self?.apply(streamEvent: event, conversationID: conversationID, assistantMessageID: assistantMessageID)
         }
+    }
+
+    /// Non-streaming Cloud completion for headless briefing runs and proxy
+    /// follow-ups. Mirrors `streamNearCloudModel`'s routing but returns the text
+    /// instead of applying stream events, so `streamBriefingTextResult` can use
+    /// it for cloud/proxy model IDs that the private streamer can't serve.
+    private func cloudBriefingText(modelID: String, prompt: String, webSearchEnabled: Bool) async throws -> String {
+        guard let apiKey = loadNearCloudAPIKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !apiKey.isEmpty else {
+            throw APIError.status(401, "Connect NEAR AI Cloud in Account to use \(modelDisplayName(for: modelID)).")
+        }
+        guard let cloudModelID = nearCloudUnderlyingModelID(for: modelID) else {
+            throw APIError.status(400, "That NEAR AI Cloud model route is not valid.")
+        }
+        // Headless app web grounding, mirroring the live streamNearCloudModel
+        // path: the completion API has no native search, and briefing/follow-up
+        // prompts tell the model to cite current sources. Best-effort — a failed
+        // search degrades to the no-web prompt instead of failing the run.
+        var webContext: WebGroundingContext?
+        if webSearchEnabled,
+           let groundingPrompt = WebGroundingService.searchPrompt(for: prompt, priorUserTexts: []) {
+            webContext = try? await webGroundingService.search(
+                for: groundingPrompt,
+                preferNews: Self.promptNeedsLiveWeb(groundingPrompt)
+            )
+        }
+        let finalPrompt: String
+        if let webContext {
+            finalPrompt = """
+            \(prompt)
+
+            Live web context supplied by the iOS app:
+            \(webContext.promptSection)
+
+            Use this search context for current facts and cite sources by name. Do not say you cannot browse; the app has already fetched the web context.
+            """
+        } else {
+            finalPrompt = prompt
+        }
+        let response = try await api.fetchNearCloudChatCompletion(
+            apiKey: apiKey,
+            model: cloudModelID,
+            prompt: finalPrompt,
+            systemPrompt: nearCloudSystemPrompt(
+                modelID: modelID,
+                modelDisplayName: modelDisplayName(for: modelID),
+                hasWebContext: webContext != nil
+            ),
+            advancedParams: advancedModelParams
+        )
+        return Self.cleanedNearCloudResponse(response)
     }
 
     private func streamNearCloudModel(
@@ -3943,7 +4054,13 @@ final class ChatStore: ObservableObject {
         conversationID: String,
         assistantMessageID: String? = nil
     ) async throws -> WebGroundingContext? {
-        let groundingPrompt = Self.webGroundingPrompt(from: text)
+        let currentGroundingPrompt = Self.webGroundingPrompt(from: text)
+        guard let groundingPrompt = WebGroundingService.searchPrompt(
+            for: currentGroundingPrompt,
+            priorUserTexts: priorUserGroundingPrompts(excludingCurrentText: text)
+        ) else {
+            return nil
+        }
         guard shouldUseAppWebGrounding(model: model, prompt: groundingPrompt) else {
             return nil
         }
@@ -3965,6 +4082,24 @@ final class ChatStore: ObservableObject {
             await apply(streamEvent: .webSearchCompleted(query: query, sources: []), conversationID: conversationID, assistantMessageID: assistantMessageID)
             throw APIError.status(0, "Web search failed before the model call: \(error.localizedDescription)")
         }
+    }
+
+    /// Prior prompts eligible to substitute for a low-signal follow-up's web
+    /// query. Restricted to turns the user sent on non-private routes: a prompt
+    /// deliberately asked on the private route must never be shipped to
+    /// device-side search engines because a later "try again" needed a query.
+    /// Messages without a recorded model are excluded for the same reason.
+    private func priorUserGroundingPrompts(excludingCurrentText text: String) -> [String] {
+        var userTexts = messages.compactMap { message -> String? in
+            guard message.role == .user,
+                  let model = message.model,
+                  Self.routeKind(forModelID: model) != .nearPrivate else { return nil }
+            return message.text
+        }
+        if userTexts.last == text {
+            userTexts.removeLast()
+        }
+        return userTexts.map(Self.webGroundingPrompt(from:))
     }
 
     private static func webGroundingPrompt(from text: String) -> String {

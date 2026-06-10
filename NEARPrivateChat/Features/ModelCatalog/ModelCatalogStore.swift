@@ -691,11 +691,14 @@ final class ModelCatalogStore: ObservableObject {
             return []
         }
         var ids = normalizedCouncilModelIDs(councilModelIDs)
+        // When the user hasn't built a lineup yet, seed it with the selected
+        // model. But once they HAVE an explicit multi-model lineup, honor it
+        // exactly — do NOT force-inject the selected model. Force-injecting was
+        // adding GLM (the default selected model) to an all-cloud council the
+        // user deliberately chose, and the maxCouncilModels cap then dropped
+        // one of their picks.
         if ids.isEmpty, canUseInCouncil(requestModel) {
             ids = [requestModel]
-        }
-        if ids.count > 1, !ids.contains(requestModel), canUseInCouncil(requestModel) {
-            ids.insert(requestModel, at: 0)
         }
         return Array(ids.prefix(Self.maxCouncilModels))
     }

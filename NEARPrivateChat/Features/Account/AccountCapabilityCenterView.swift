@@ -44,6 +44,7 @@ struct CapabilitiesView: View {
     @EnvironmentObject private var modelCatalogStore: ModelCatalogStore
     @EnvironmentObject private var securityStore: SecurityStore
     @EnvironmentObject private var sessionStore: SessionStore
+    @EnvironmentObject private var connectionDiagnostics: ConnectionDiagnostics
     @Environment(\.dismiss) private var dismiss
 
     let onOpenAccountSettings: ((AccountSettingsDeepLink) -> Void)?
@@ -119,6 +120,14 @@ struct CapabilitiesView: View {
                         secondaryAction: nil
                     )
 
+                    NavigationLink {
+                        ConnectionDiagnosticsView()
+                    } label: {
+                        connectionDiagnosticsRow
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("capabilities.diagnostics")
+
                     if let nextStep {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Suggested next step")
@@ -149,6 +158,38 @@ struct CapabilitiesView: View {
             }
         }
         .platformLargeDetent()
+    }
+
+    private var connectionDiagnosticsRow: some View {
+        let needsAttention = connectionDiagnostics.privateLooksUnauthenticated
+        return HStack(spacing: 12) {
+            Image(systemName: needsAttention ? "exclamationmark.triangle.fill" : "waveform.path.ecg")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(needsAttention ? Color.proofStale : Color.textSecondary)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Connection diagnostics")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(needsAttention
+                     ? "Private session isn't authenticating — tap to see details."
+                     : "See the real status of the last request on each route.")
+                    .font(.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(needsAttention ? Color.proofStale.opacity(0.4) : Color.appBorder, lineWidth: 1)
+        }
     }
 
     private var capabilityHeader: some View {

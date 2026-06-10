@@ -62,6 +62,71 @@ extension PrivateChatCoreTests {
         XCTAssertNil(monitor.restrictionNotice(for: .nearCloud))
     }
 
+    func testAuthFailureIsDistinguishedFromRateLimit() {
+        // 401 → auth. A 403 with rate-limit wording → NOT auth. A 403 with
+        // auth wording → auth.
+        XCTAssertTrue(RouteHealthMonitor.isAuthFailure(APIError.status(401, "")))
+        XCTAssertFalse(RouteHealthMonitor.isAuthFailure(APIError.status(403, "Access temporarily restricted")))
+        XCTAssertTrue(RouteHealthMonitor.isAuthFailure(APIError.status(403, "Missing authorization header")))
+        XCTAssertTrue(RouteHealthMonitor.isAuthFailure(APIError.status(401, "invalid or expired authentication token")))
+    }
+
+    @MainActor
+    func testReWrappedPrivateAuthNoticeDoesNotTripAgentBreaker() throws {
+        // The agent pipeline fails fast on an open private breaker by
+        // re-throwing restrictionNotice as APIError.status(403, notice). The
+        // wrapped 403 must still classify as an auth failure, or the agent
+        // breaker trips and the user sees generic "temporarily busy" copy for
+        // what is actually a sign-in problem.
+        let monitor = RouteHealthMonitor()
+        monitor.recordFailure(
+            modelID: "zai-org/GLM-5.1-FP8",
+            error: APIError.status(401, "invalid or expired authentication token")
+        )
+        XCTAssertTrue(monitor.isTripped(.nearPrivate))
+        let notice = try XCTUnwrap(monitor.restrictionNotice(for: .nearPrivate))
+        let rewrapped = APIError.status(403, notice)
+        XCTAssertTrue(RouteHealthMonitor.isAuthFailure(rewrapped))
+
+        // recordFailure's auth-only-trips-private guard must swallow the
+        // re-wrapped 403 for the agent route.
+        monitor.recordFailure(modelID: ModelOption.ironclawMobileModelID, error: rewrapped)
+        XCTAssertFalse(monitor.isTripped(.ironclawMobile))
+    }
+
+    @MainActor
+    func testAuthFailureNoticeSaysSignInNotBusy() throws {
+        let monitor = RouteHealthMonitor()
+        monitor.recordFailure(modelID: "zai-org/GLM-5.1-FP8", error: APIError.status(401, "Missing authorization header"))
+        XCTAssertTrue(monitor.isTripped(.nearPrivate))
+        let notice = try XCTUnwrap(monitor.restrictionNotice(for: .nearPrivate))
+        XCTAssertTrue(notice.localizedCaseInsensitiveContains("sign"))
+        XCTAssertFalse(notice.localizedCaseInsensitiveContains("temporarily busy"))
+    }
+
+    @MainActor
+    func testRateLimitNoticeStillSaysBusyNotSignIn() throws {
+        let monitor = RouteHealthMonitor()
+        monitor.recordFailure(modelID: "zai-org/GLM-5.1-FP8", error: Self.restrictedError)
+        let notice = try XCTUnwrap(monitor.restrictionNotice(for: .nearPrivate))
+        XCTAssertTrue(notice.localizedCaseInsensitiveContains("busy"))
+    }
+
+    @MainActor
+    func testCloudAuthFailureDoesNotTripCloudBreaker() {
+        // A missing/stale NEAR Cloud key throws a local 401 before any network
+        // call; tripping the cloud breaker would lock the route for 60s even
+        // after the user fixes the key. Only private auth failures trip.
+        let monitor = RouteHealthMonitor()
+        let cloudModelID = ModelOption.nearCloudModelID(for: "openai/gpt-5.2")
+        monitor.recordFailure(modelID: cloudModelID, error: APIError.status(401, "Connect NEAR AI Cloud in Account to use GPT-5.2."))
+        XCTAssertFalse(monitor.isTripped(.nearCloud))
+
+        // A cloud 403 rate-limit-class failure still trips.
+        monitor.recordFailure(modelID: cloudModelID, error: APIError.status(403, "Access temporarily restricted"))
+        XCTAssertTrue(monitor.isTripped(.nearCloud))
+    }
+
     func testTransportFailureMessageNeverEmitsNSErrorDump() {
         let mapped = MessageRepository.transportFailureMessage(URLError(.networkConnectionLost))
         XCTAssertEqual(mapped, "Connection dropped mid-answer — retry. Your prompt is kept.")

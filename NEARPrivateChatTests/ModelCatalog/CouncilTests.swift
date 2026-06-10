@@ -75,6 +75,32 @@ extension PrivateChatCoreTests {
 
 
     @MainActor
+    func testRequestCouncilHonorsExplicitLineupWithoutInjectingSelectedModel() {
+        let memberA = "Qwen/Qwen3.5-122B-A10B"
+        let memberB = "Qwen/Qwen3.6-35B-A3B-FP8"
+        let memberC = "moonshotai/Kimi-K2-Instruct"
+        let catalog = ModelCatalogStore(
+            models: [
+                ModelOption(modelID: ModelOption.nearPrivateDefaultModelID, publicModel: true, metadata: nil),
+                ModelOption(modelID: memberA, publicModel: true, metadata: nil),
+                ModelOption(modelID: memberB, publicModel: true, metadata: nil),
+                ModelOption(modelID: memberC, publicModel: true, metadata: nil)
+            ],
+            preferredModelIDs: [ModelOption.nearPrivateDefaultModelID, memberA, memberB, memberC]
+        )
+
+        // GLM stays the selected model while the user builds a deliberate
+        // 3-model lineup that excludes it. The old force-prepend added GLM and
+        // prefix(3) then dropped the user's third pick.
+        catalog.selectedModel = ModelOption.nearPrivateDefaultModelID
+        catalog.councilModelIDs = [memberA, memberB, memberC]
+
+        let resolved = catalog.requestCouncilModelIDs(for: ModelOption.nearPrivateDefaultModelID)
+        XCTAssertFalse(resolved.contains(ModelOption.nearPrivateDefaultModelID), "selected model must not be force-injected")
+        XCTAssertEqual(Set(resolved), Set([memberA, memberB, memberC]), "all three explicit picks survive")
+    }
+
+    @MainActor
     func testRecommendedCouncilLineupDoesNotInventCloudFallbackModels() {
         let store = ChatStore(api: PrivateChatAPI(configuration: .production))
 

@@ -1185,33 +1185,20 @@ private struct SourceLogo: View {
     let fallbackText: String
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(Color.appSecondaryBackground)
-            fallback
-        }
-        .frame(width: 22, height: 22)
-        .clipShape(Circle())
-        .overlay {
-            Circle()
-                .stroke(Color.appBorder.opacity(0.65), lineWidth: 1)
-        }
-    }
-
-    private var fallback: some View {
-        Text(fallbackLabel)
-            .font(fallbackFont)
-            .foregroundStyle(Color.trustVerified)
+        SourceFaviconView(
+            domain: source.host,
+            size: 22,
+            fallbackText: fallbackLabel,
+            cornerRadius: 11,
+            borderColor: Color.appBorder.opacity(0.65),
+            borderWidth: 1,
+            allowsNetworkFavicon: true
+        )
     }
 
     private var fallbackLabel: String {
-        source.sourceInitials == "#" ? fallbackText : source.sourceInitials
-    }
-
-    private var fallbackFont: Font {
-        fallbackLabel == fallbackText
-            ? .caption2.monospacedDigit().weight(.bold)
-            : .caption2.weight(.bold)
+        let label = source.sourceInitials == "#" ? fallbackText : source.sourceInitials
+        return String(label.prefix(1))
     }
 }
 

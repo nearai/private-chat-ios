@@ -23,6 +23,7 @@ struct AppEnvironment {
     let shareStore: ShareStore
     let briefingStore: BriefingStore
     let routeHealthMonitor: RouteHealthMonitor
+    let connectionDiagnostics: ConnectionDiagnostics
 
     @MainActor
     static func production() -> AppEnvironment {
@@ -47,6 +48,7 @@ struct AppEnvironment {
             await conversationStore?.refreshConversations(showErrors: false)
         }
         let routeHealthMonitor = RouteHealthMonitor()
+        let connectionDiagnostics = ConnectionDiagnostics()
         let chatStore = ChatStore(
             api: api,
             fileService: fileService,
@@ -58,6 +60,7 @@ struct AppEnvironment {
             accountStore: accountStore,
             securityStore: securityStore,
             routeHealth: routeHealthMonitor,
+            diagnostics: connectionDiagnostics,
             initialAccountID: AccountStorageScope.signedOutAccountID
         )
         fileStore.bannerHandler = { [weak chatStore] message in
@@ -124,7 +127,8 @@ struct AppEnvironment {
             chatStore: chatStore,
             shareStore: shareStore,
             briefingStore: briefingStore,
-            routeHealthMonitor: routeHealthMonitor
+            routeHealthMonitor: routeHealthMonitor,
+            connectionDiagnostics: connectionDiagnostics
         )
     }
 }

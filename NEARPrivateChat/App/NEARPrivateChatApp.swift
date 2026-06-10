@@ -153,6 +153,7 @@ struct NEARPrivateChatApp: App {
     @StateObject private var shareStore: ShareStore
     @StateObject private var briefingStore: BriefingStore
     @StateObject private var routeHealthMonitor: RouteHealthMonitor
+    @StateObject private var connectionDiagnostics: ConnectionDiagnostics
     @StateObject private var appRouter = AppRouter()
 
     init() {
@@ -170,6 +171,7 @@ struct NEARPrivateChatApp: App {
         _shareStore = StateObject(wrappedValue: environment.shareStore)
         _briefingStore = StateObject(wrappedValue: environment.briefingStore)
         _routeHealthMonitor = StateObject(wrappedValue: environment.routeHealthMonitor)
+        _connectionDiagnostics = StateObject(wrappedValue: environment.connectionDiagnostics)
     }
 
     nonisolated static let briefingRefreshTaskID = "ai.near.privatechat.briefings.refresh"
@@ -197,6 +199,7 @@ struct NEARPrivateChatApp: App {
                 .environmentObject(shareStore)
                 .environmentObject(briefingStore)
                 .environmentObject(routeHealthMonitor)
+                .environmentObject(connectionDiagnostics)
                 .environmentObject(appRouter)
                 .modifier(AppLifecycleModifier(sessionStore: sessionStore, chatStore: chatStore, shareStore: shareStore, briefingStore: briefingStore, router: appRouter))
         }

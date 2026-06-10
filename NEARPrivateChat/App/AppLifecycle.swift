@@ -126,7 +126,14 @@ struct AppLifecycleModifier: ViewModifier {
         chatStore.prepareForAuthenticatedAccount(sessionStore.setupAccountID)
         shareStore.reset()
         sessionStore.scheduleProfileRefresh(force: false)
+        // Probe the private session right after sign-in so an invalid/expired
+        // session token surfaces in diagnostics immediately, instead of being
+        // discovered (and laundered into "temporarily busy") on the first chat.
+        // Concurrent with bootstrap — the probe informs diagnostics, it must
+        // never delay launch.
+        async let probe: ConnectionDiagnostics.Outcome? = chatStore.probePrivateSession()
         await chatStore.bootstrap()
+        _ = await probe
         await shareStore.refreshSharedWithMe(showErrors: false)
     }
 }

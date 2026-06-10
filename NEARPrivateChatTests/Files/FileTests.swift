@@ -567,13 +567,20 @@ extension PrivateChatCoreTests {
         let long = String(repeating: "word ", count: 1000) // ~5000 chars, no "\n\n"
         XCTAssertGreaterThanOrEqual(DocumentChunker.chunk(long, maxChars: 1000).count, 5)
 
-        // contextBlock yields a promptable excerpt block, or nil when irrelevant.
+        // contextBlock yields a promptable excerpt block keyed to the query.
         let block = DocumentChunker.contextBlock(for: "attestation SEV-SNP", in: [doc], topK: 1)
         XCTAssertNotNil(block)
         XCTAssertTrue(block?.contains("attestation") ?? false)
         XCTAssertTrue(block?.contains("Relevant excerpts") ?? false)
-        XCTAssertNil(DocumentChunker.contextBlock(for: "kangaroo", in: [doc]))
+        // A query with no keyword overlap (generic/summary asks) no longer
+        // returns nil — it falls back to the document's opening chunks so the
+        // model always receives content, never just the filename.
+        let fallback = DocumentChunker.contextBlock(for: "kangaroo", in: [doc])
+        XCTAssertNotNil(fallback)
+        XCTAssertTrue(fallback?.contains("Introduction") ?? false)
+        // No documents at all → still nil.
         XCTAssertNil(DocumentChunker.contextBlock(for: "anything", in: []))
+        XCTAssertNil(DocumentChunker.contextBlock(for: "anything", in: [""]))
 
         // Global cross-document ranking: the answer-bearing doc wins regardless of
         // attachment order (the first doc must not hog the budget).
@@ -582,6 +589,49 @@ extension PrivateChatCoreTests {
         let multi = DocumentChunker.contextBlock(for: "quarterly revenue", in: [docA, docB], topK: 1)
         XCTAssertTrue(multi?.contains("revenue") ?? false)
         XCTAssertFalse(multi?.contains("sourdough") ?? true)
+    }
+
+    func testDocumentChunkerFallbackSpreadsAcrossDocuments() throws {
+        // contextBlock chunks with the default 1200-char budget, so pad each
+        // paragraph past ~850 chars to force one chunk per paragraph. The
+        // padding shares no terms with the query ("summarize", "everything").
+        let filler = String(repeating: "plain padding sentence repeats again. ", count: 25)
+        let docA = """
+        Sourdough starter feeding schedule and hydration notes. \(filler)
+
+        Kneading technique and proofing baskets. \(filler)
+
+        Bulk fermentation timing for the levain build. \(filler)
+
+        Scoring patterns and oven steam methods. \(filler)
+        """
+        let docB = """
+        Quarterly revenue reached $4.2 million on enterprise contracts. \(filler)
+
+        Gross margin expanded while churn dropped below two percent. \(filler)
+        """
+        // "summarize everything" matches no chunk → keyword ranking is empty →
+        // the opening-chunks fallback fires. docA alone has 4 chunks, so a
+        // flat 0..<topK take would spend the whole budget on docA; the
+        // round-robin spread must surface BOTH documents.
+        let block = try XCTUnwrap(
+            DocumentChunker.contextBlock(for: "summarize everything", in: [docA, docB], topK: 4)
+        )
+        XCTAssertTrue(block.contains("Sourdough starter"))
+        XCTAssertTrue(block.contains("Quarterly revenue"))
+        // Selected indices come back in flattened (attachment) order: docA's
+        // first chunk precedes docB's content.
+        let aRange = try XCTUnwrap(block.range(of: "Sourdough starter"))
+        let bRange = try XCTUnwrap(block.range(of: "Quarterly revenue"))
+        XCTAssertLessThan(aRange.lowerBound, bRange.lowerBound)
+        // Single document: round-robin over one doc = its opening chunks,
+        // identical to the pre-existing fallback behavior.
+        let single = try XCTUnwrap(
+            DocumentChunker.contextBlock(for: "summarize everything", in: [docA], topK: 2)
+        )
+        XCTAssertTrue(single.contains("Sourdough starter"))
+        XCTAssertTrue(single.contains("Kneading technique"))
+        XCTAssertFalse(single.contains("Bulk fermentation"))
     }
 
     func testPrivacyModeKeepsDelimitedTablesOffUploadFallback() {

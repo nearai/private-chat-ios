@@ -77,19 +77,12 @@ struct FaviconBadge: View {
     let source: WebSearchSource
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-            fallback
-        }
-        .frame(width: 20, height: 20)
-        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-    }
-
-    private var fallback: some View {
-        Text(source.sourceInitials.prefix(1))
-            .font(.caption)
-            .fontWeight(.heavy)
-            .foregroundStyle(Color.textSecondary)
+        SourceFaviconView(
+            domain: source.host,
+            size: 20,
+            fallbackText: String(source.sourceInitials.prefix(1)),
+            cornerRadius: 5,
+            allowsNetworkFavicon: true
+        )
     }
 }

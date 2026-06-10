@@ -436,9 +436,38 @@ enum DocumentChunker {
         // Rank ALL documents' chunks together and take the global top-K, so the
         // answer-bearing document wins the budget regardless of attachment order
         // (ranking per-document then truncating let the first file hog all slots).
-        let allChunks = documents.flatMap { chunk($0) }
-        let indices = rank(allChunks, query: question, topK: topK)
-        guard !indices.isEmpty else { return nil }
+        let perDocument = documents.map { chunk($0) }
+        let allChunks = perDocument.flatMap { $0 }
+        guard !allChunks.isEmpty else { return nil }
+        var indices = rank(allChunks, query: question, topK: topK)
+        if indices.isEmpty {
+            // Generic or summary questions ("summarize this", "what does this
+            // say") share no keywords with the body, so keyword ranking finds
+            // nothing. Returning nil here meant the model received only the
+            // filename — the "PDF extraction doesn't work" report. Fall back to
+            // opening chunks, spread round-robin across documents (every
+            // document's first chunk, then every document's second, …) so a
+            // multi-document "summarize these" hears from every attachment
+            // instead of the first file's opening hogging the whole budget.
+            var documentStarts: [Int] = []
+            var offset = 0
+            for chunks in perDocument {
+                documentStarts.append(offset)
+                offset += chunks.count
+            }
+            let limit = min(topK, allChunks.count)
+            var picked: [Int] = []
+            var depth = 0
+            while picked.count < limit {
+                for (document, chunks) in perDocument.enumerated() where depth < chunks.count {
+                    picked.append(documentStarts[document] + depth)
+                    if picked.count == limit { break }
+                }
+                depth += 1
+            }
+            // Restore flattened (attachment) order for a coherent read.
+            indices = picked.sorted()
+        }
         let joined = indices.map { allChunks[$0] }.joined(separator: "\n\n– – –\n\n")
         return "Relevant excerpts from the attached document(s):\n\"\"\"\n\(joined)\n\"\"\""
     }

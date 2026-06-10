@@ -179,17 +179,20 @@ enum DocumentTextExtractor {
         topK: Int = 5
     ) -> String? {
         let documents = payloads.map(\.text)
-        if let context = DocumentChunker.contextBlock(for: query, in: documents, topK: topK) {
-            return context
+        guard let context = DocumentChunker.contextBlock(for: query, in: documents, topK: topK) else {
+            return nil
         }
-
-        let tablePreviews = payloads
-            .filter { $0.isTable }
-            .flatMap { DocumentChunker.chunk($0.text).prefix(2) }
-            .prefix(topK)
-        guard !tablePreviews.isEmpty else { return nil }
-        let joined = tablePreviews.joined(separator: "\n\n– – –\n\n")
-        return "Relevant excerpts from the attached table(s):\n\"\"\"\n\(joined)\n\"\"\""
+        // contextBlock now falls back to opening chunks when the query shares no
+        // keywords with the body, so it returns content whenever there is any.
+        // When every payload is a table, relabel the generic header so the model
+        // still knows the excerpts are tabular.
+        if payloads.allSatisfy(\.isTable) {
+            return context.replacingOccurrences(
+                of: "Relevant excerpts from the attached document(s):",
+                with: "Relevant excerpts from the attached table(s):"
+            )
+        }
+        return context
     }
 
     nonisolated static func localDocsAllowedForRoute(councilModelIDs: [String], singleModelID: String) -> Bool {

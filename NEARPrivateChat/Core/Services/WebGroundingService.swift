@@ -156,6 +156,138 @@ final class WebGroundingService {
         return query.isEmpty ? "current news" : query
     }
 
+    static func searchPrompt(for text: String, priorUserTexts: [String]) -> String? {
+        let prompt = normalizedQueryInput(text)
+        guard !prompt.isEmpty else { return nil }
+        guard isLowSignalFollowUp(prompt) else { return prompt }
+        return priorUserTexts.reversed().first { candidate in
+            let normalizedCandidate = normalizedQueryInput(candidate)
+            return !normalizedCandidate.isEmpty && !isLowSignalFollowUp(normalizedCandidate)
+        }.map(normalizedQueryInput)
+    }
+
+    static func isLowSignalFollowUp(_ text: String) -> Bool {
+        let normalized = normalizedQueryInput(text)
+        guard !normalized.isEmpty else { return true }
+
+        let lowercased = normalized.lowercased()
+        let words = wordTokens(in: normalized)
+        let loweredWords = words.map { $0.lowercased() }
+        let wordCount = loweredWords.count
+        guard wordCount > 0 else { return true }
+
+        let exactPhrases: Set<String> = [
+            "again",
+            "continue",
+            "do it",
+            "do that",
+            "do the job",
+            "do the job asked",
+            "do the job i asked",
+            "fix it",
+            "go",
+            "go ahead",
+            "keep going",
+            "more",
+            "next",
+            "ok",
+            "okay",
+            "please",
+            "redo",
+            "retry",
+            "run",
+            "run it",
+            "try again",
+            "try one more time",
+            "yes"
+        ]
+        if exactPhrases.contains(lowercased) {
+            return true
+        }
+
+        if wordCount <= 3,
+           loweredWords.count >= 2,
+           loweredWords[0] == "where",
+           ["is", "are", "was", "were"].contains(loweredWords[1]) {
+            let objectWords = Array(loweredWords.dropFirst(2))
+            if objectWords.isEmpty || objectWords.allSatisfy(lowSignalObjectWords.contains) {
+                return true
+            }
+        }
+
+        guard wordCount <= 5 else { return false }
+        if imperativeWords.contains(loweredWords[0]) {
+            let remainder = Array(loweredWords.dropFirst())
+            return remainder.isEmpty || remainder.allSatisfy(lowSignalImperativeWords.contains)
+        }
+        if loweredWords[0] == "please" {
+            let remainder = Array(loweredWords.dropFirst())
+            return remainder.isEmpty || remainder.allSatisfy(lowSignalImperativeWords.contains)
+        }
+
+        return false
+    }
+
+    private static let imperativeWords: Set<String> = [
+        "continue",
+        "do",
+        "fix",
+        "go",
+        "redo",
+        "retry",
+        "run",
+        "try"
+    ]
+
+    private static let lowSignalObjectWords: Set<String> = [
+        "answer",
+        "cost",
+        "data",
+        "info",
+        "it",
+        "job",
+        "price",
+        "result",
+        "results",
+        "source",
+        "sources",
+        "that",
+        "the",
+        "thing",
+        "this"
+    ]
+
+    private static let lowSignalImperativeWords: Set<String> = lowSignalObjectWords.union([
+        "again",
+        "ahead",
+        "asked",
+        "going",
+        "i",
+        "it",
+        "job",
+        "me",
+        "more",
+        "one",
+        "please",
+        "same",
+        "the",
+        "time"
+    ])
+
+    private static func normalizedQueryInput(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\t", with: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters))
+    }
+
+    private static func wordTokens(in value: String) -> [String] {
+        value
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+    }
+
     private static func extractNewsTopic(from prompt: String) -> String? {
         let patterns = [
             #"(?i)\b(?:latest|recent|current)\s+(?:news|updates|developments)\s+(?:on|about|for|in)\s+([^?.!,;]+)"#,
