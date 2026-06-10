@@ -13,6 +13,16 @@ struct MessageWidgetCard: View {
     var onCreateAppAction: ((WidgetActionItem) -> Void)? = nil
 
     var body: some View {
+        // A widget whose kind has no usable payload would otherwise render as a
+        // bare title shell with an empty body. Render nothing instead. Model
+        // extraction already filters these; this guards persisted/programmatic
+        // widgets that reach the card directly.
+        if widget.hasRenderableBody {
+            card
+        }
+    }
+
+    private var card: some View {
         WidgetShell(
             title: widget.title,
             time: widget.time,

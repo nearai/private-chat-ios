@@ -13,7 +13,7 @@ enum ChatLocalIntentResponseFormatter {
     }
 
     static var trackLastNeedsSubject: String {
-        "I’m not sure what to track yet — ask me something first (like “what’s the price of a Rolex GMT Master II”), then say “track that.”"
+        "I’m not sure what to track yet — ask me something first (a price, a stat, a topic), then say “track that.”"
     }
 
     static var nearAccountPrompt: String {

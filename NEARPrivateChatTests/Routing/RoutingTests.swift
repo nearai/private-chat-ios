@@ -393,6 +393,26 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(decision.proofState, .unverified)
     }
 
+    func testAskOrchestratorTreatsCurrentYearAsTimeSensitiveNotAStaleLiteral() {
+        // The recency-year cue is derived from the calendar, so a prompt naming
+        // the current year routes web on the auto path without a hardcoded list
+        // that would go stale each January.
+        let currentYear = Calendar.current.component(.year, from: Date())
+        let decision = AskOrchestrator.decide(
+            AskOrchestrator.Input(
+                prompt: "What happened in \(currentYear)?",
+                selectedRoute: .nearPrivate,
+                hasProjectContext: false,
+                hasPromptAttachments: false,
+                nearCloudKeyConfigured: true,
+                hostedAgentAvailable: false,
+                councilAvailable: false,
+                councilActive: false
+            )
+        )
+        XCTAssertTrue(decision.tools.contains(.web), "Current year should read as time-sensitive.")
+    }
+
     func testSourceRoutingSemanticsResearchIsSingleFocusAcrossSourceModes() {
         let research = RoutePlanner.sourceRoutingSemantics(
             sourceMode: .files,

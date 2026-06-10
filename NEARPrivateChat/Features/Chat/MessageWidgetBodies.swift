@@ -20,6 +20,8 @@ struct WidgetShell<Content: View>: View {
                             .font(.caption.weight(.medium))
                             .foregroundStyle(Color.textSecondary)
                             .lineLimit(1)
+                            .truncationMode(.tail)
+                            .minimumScaleFactor(0.8)
                     }
                     Spacer(minLength: 0)
                     if let time {
@@ -90,6 +92,8 @@ struct WidgetChartBody: View {
                         Text(value)
                             .font(.system(.title2, design: .monospaced).weight(.bold))
                             .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
                     }
                 }
                 Spacer(minLength: 0)
@@ -98,6 +102,8 @@ struct WidgetChartBody: View {
                         Text(delta)
                             .font(.system(.subheadline, design: .monospaced).weight(.medium))
                             .foregroundStyle(widgetTrendColor(chart.trend))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                     }
                     if let timeframe = chart.timeframe {
                         Text(timeframe)
@@ -152,10 +158,14 @@ struct WidgetMetricBody: View {
             Text(metric.value)
                 .font(.system(.title, design: .monospaced).weight(.bold))
                 .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
             if let delta = metric.delta {
                 Text(delta)
                     .font(.system(.subheadline, design: .monospaced).weight(.medium))
                     .foregroundStyle(widgetTrendColor(metric.trend))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
             }
             if let caption = metric.caption {
                 Text(caption)
@@ -170,7 +180,15 @@ struct WidgetMetricBody: View {
 struct WidgetComparisonBody: View {
     let comparison: WidgetComparison
 
-    private var columnCount: Int { max(comparison.columns.count, 1) }
+    // Derive from the widest of headers OR any row, so a row carrying more
+    // cells than there are headers never has its extra values silently dropped.
+    private var columnCount: Int {
+        max(comparison.columns.count, comparison.rows.map(\.cells.count).max() ?? 0, 1)
+    }
+
+    private var headerTitles: [String] {
+        (0..<columnCount).map { i in i < comparison.columns.count ? comparison.columns[i] : "" }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -185,7 +203,7 @@ struct WidgetComparisonBody: View {
                 HStack(alignment: .top, spacing: 8) {
                     Text("")
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    ForEach(Array(comparison.columns.enumerated()), id: \.offset) { _, col in
+                    ForEach(Array(headerTitles.enumerated()), id: \.offset) { _, col in
                         Text(col)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.primary)

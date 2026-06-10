@@ -52,9 +52,13 @@ struct AskOrchestrator: Sendable {
                 "attachment", "pdf", "csv", "project file", "source file"
             ]
         )
+        // Recency-year cues are derived from the calendar, not hardcoded, so the
+        // "this looks time-sensitive" heuristic doesn't go stale each new year.
+        let currentYear = Calendar.current.component(.year, from: Date())
+        let recencyYears = [currentYear, currentYear + 1].map(String.init)
         let needsWeb = containsAny(
             normalized,
-            ["latest", "today", "news", "current", "price", "as of", "2026", "2027", "web", "search", "cite"]
+            ["latest", "today", "news", "current", "price", "as of", "web", "search", "cite"] + recencyYears
         )
         let taskShaped = containsAny(
             normalized,
