@@ -206,6 +206,7 @@
 		D1AB00000100000000000000 /* RenameConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2AB00000100000000000000 /* RenameConversationView.swift */; };
 		D1AC00000100000000000000 /* ProjectEditorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2AC00000100000000000000 /* ProjectEditorViews.swift */; };
 		DD1000000000000000000001 /* NEARPrivateChatUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD2000000000000000000001 /* NEARPrivateChatUITests.swift */; };
+		BA34E74346D73629AD7A2E75 /* ReleaseGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAEAA7ED588C4285F4BEFABF /* ReleaseGateTests.swift */; };
 		E10000000000000000000001 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* DesignTokens.swift */; };
 		E10000000000000000000002 /* BrandMarks.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000002 /* BrandMarks.swift */; };
 		E10000000000000000000003 /* ViewPlatformExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000003 /* ViewPlatformExtensions.swift */; };
@@ -534,6 +535,7 @@
 		D2AB00000100000000000000 /* RenameConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenameConversationView.swift; sourceTree = "<group>"; };
 		D2AC00000100000000000000 /* ProjectEditorViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectEditorViews.swift; sourceTree = "<group>"; };
 		DD2000000000000000000001 /* NEARPrivateChatUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NEARPrivateChatUITests.swift; sourceTree = "<group>"; };
+		BAEAA7ED588C4285F4BEFABF /* ReleaseGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseGateTests.swift; sourceTree = "<group>"; };
 		DD2000000000000000000002 /* NEARPrivateChatUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NEARPrivateChatUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E20000000000000000000001 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		E20000000000000000000002 /* BrandMarks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandMarks.swift; sourceTree = "<group>"; };
@@ -968,6 +970,7 @@
 			isa = PBXGroup;
 			children = (
 				DD2000000000000000000001 /* NEARPrivateChatUITests.swift */,
+				BAEAA7ED588C4285F4BEFABF /* ReleaseGateTests.swift */,
 			);
 			path = NEARPrivateChatUITests;
 			sourceTree = "<group>";
@@ -1832,6 +1835,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				DD1000000000000000000001 /* NEARPrivateChatUITests.swift in Sources */,
+				BA34E74346D73629AD7A2E75 /* ReleaseGateTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

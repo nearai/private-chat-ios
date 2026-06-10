@@ -22,6 +22,14 @@ struct RootView: View {
         .onAppear {
             refreshLegalTermsAcceptance()
         }
+        .task(id: sessionStore.isSignedIn) {
+            #if DEBUG
+            guard Self.isReleaseGateRun,
+                  ProcessInfo.processInfo.arguments.contains("-NEARReleaseGateFixture"),
+                  sessionStore.isSignedIn else { return }
+            await chatStore.stageReleaseGateFixturePDF()
+            #endif
+        }
         .onChange(of: sessionStore.session?.token) { _, _ in
             refreshLegalTermsAcceptance()
         }

@@ -1,5 +1,8 @@
 import Foundation
 import Combine
+#if canImport(UIKit)
+import UIKit
+#endif
 
 @MainActor
 final class ChatStore: ObservableObject {
@@ -5659,6 +5662,37 @@ final class ChatStore: ObservableObject {
     }
 
     #if DEBUG
+    #if canImport(UIKit)
+    private var didStageReleaseGateFixture = false
+
+    /// ReleaseGate seam: the system file picker cannot be driven headlessly,
+    /// so a fixture PDF with a known sentinel is generated at runtime and
+    /// attached through the REAL extraction + upload pipeline when the app is
+    /// launched with -NEARReleaseGateFixture.
+    func stageReleaseGateFixturePDF() async {
+        guard !didStageReleaseGateFixture else { return }
+        didStageReleaseGateFixture = true
+        let body = """
+        Hexagon Series B Term Sheet (Release Gate Fixture)
+
+        Key verification fact: ZEPHYR-7 thermal margin is 42 percent.
+        The raise is $4M on a $40M cap with a 1x non-participating preference.
+        Obligations: monthly investor reporting; 60-day exclusivity window.
+        """
+        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792))
+        let data = renderer.pdfData { context in
+            context.beginPage()
+            body.draw(
+                in: CGRect(x: 48, y: 48, width: 516, height: 700),
+                withAttributes: [.font: UIFont.systemFont(ofSize: 14)]
+            )
+        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("release-gate-term-sheet.pdf")
+        try? data.write(to: url)
+        await addAttachment(from: url)
+    }
+    #endif
+
     func prepareDemoCapture(screen: DemoCaptureScreen = .home) {
         streamTask?.cancel()
         streamTask = nil
