@@ -158,6 +158,7 @@
 		BA1000000000000000000008 /* QuickIntentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000008 /* QuickIntentTests.swift */; };
 		BA1000000000000000000009 /* WidgetAndActionSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000009 /* WidgetAndActionSurfaceTests.swift */; };
 		BA100000000000000000000A /* ExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000A /* ExportTests.swift */; };
+		BA867DD5B9F1DCA2AD33683D /* ExportFidelityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE131E302D7DBE9FE873E83 /* ExportFidelityTests.swift */; };
 		BA100000000000000000000B /* FileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000B /* FileTests.swift */; };
 		BA100000000000000000000C /* HomeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000C /* HomeTests.swift */; };
 		BA100000000000000000000D /* CouncilTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000D /* CouncilTests.swift */; };
@@ -487,6 +488,7 @@
 		BA2000000000000000000008 /* QuickIntentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickIntentTests.swift; sourceTree = "<group>"; };
 		BA2000000000000000000009 /* WidgetAndActionSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetAndActionSurfaceTests.swift; sourceTree = "<group>"; };
 		BA200000000000000000000A /* ExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportTests.swift; sourceTree = "<group>"; };
+		BAE131E302D7DBE9FE873E83 /* ExportFidelityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportFidelityTests.swift; sourceTree = "<group>"; };
 		BA200000000000000000000B /* FileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTests.swift; sourceTree = "<group>"; };
 		BA200000000000000000000C /* HomeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeTests.swift; sourceTree = "<group>"; };
 		BA200000000000000000000D /* CouncilTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilTests.swift; sourceTree = "<group>"; };
@@ -794,6 +796,7 @@
 			isa = PBXGroup;
 			children = (
 				BA200000000000000000000A /* ExportTests.swift */,
+				BAE131E302D7DBE9FE873E83 /* ExportFidelityTests.swift */,
 			);
 			path = Export;
 			sourceTree = "<group>";
@@ -1813,6 +1816,7 @@
 				BA1000000000000000000008 /* QuickIntentTests.swift in Sources */,
 				BA1000000000000000000009 /* WidgetAndActionSurfaceTests.swift in Sources */,
 				BA100000000000000000000A /* ExportTests.swift in Sources */,
+				BA867DD5B9F1DCA2AD33683D /* ExportFidelityTests.swift in Sources */,
 				BA100000000000000000000B /* FileTests.swift in Sources */,
 				BA100000000000000000000C /* HomeTests.swift in Sources */,
 				BA100000000000000000000D /* CouncilTests.swift in Sources */,
