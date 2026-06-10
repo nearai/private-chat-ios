@@ -44,6 +44,7 @@
 		A10000000000000000000014 /* PrivateTelemetryPolicy.md in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* PrivateTelemetryPolicy.md */; };
 		A10000000000000000000015 /* AskOrchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* AskOrchestrator.swift */; };
 		A10000000000000000000016 /* MarkdownRenderingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* MarkdownRenderingViews.swift */; };
+		BA515CE85CF00C67E8423BE5 /* MathFormulaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA71D4A327D3D49D472256A7 /* MathFormulaView.swift */; };
 		BA4BCE12B0D2D63840AEB430 /* StreamingMarkdownText.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC1FEC94E3F78F74BBA99B3 /* StreamingMarkdownText.swift */; };
 		A10000000000000000000017 /* DemoCaptureViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* DemoCaptureViews.swift */; };
 		BA3F0411707FA15603013FA1 /* DemoMarkdownGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAB6C55053E4ABD92CB8E619 /* DemoMarkdownGalleryView.swift */; };
@@ -148,6 +149,7 @@
 		AF100000000000000000001C /* DemoIronClawViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF200000000000000000001C /* DemoIronClawViews.swift */; };
 		AF100000000000000000001D /* DemoResultComparisonViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF200000000000000000001D /* DemoResultComparisonViews.swift */; };
 		B10000000000000000000001 /* PrivateChatCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* PrivateChatCoreTests.swift */; };
+		BA653B1D47B62DCCE22282B1 /* MathRenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA1A46ECBCE25BA34F24A001 /* MathRenderingTests.swift */; };
 		B1C800000100000000000000 /* ChatMessageLoadCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C800000100000000000000 /* ChatMessageLoadCoordinator.swift */; };
 		B1C900000100000000000000 /* ArchivedChatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C900000100000000000000 /* ArchivedChatsView.swift */; };
 		BA1000000000000000000001 /* APITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000001 /* APITests.swift */; };
@@ -377,6 +379,7 @@
 		A20000000000000000000016 /* PrivateTelemetryPolicy.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PrivateTelemetryPolicy.md; sourceTree = "<group>"; };
 		A20000000000000000000017 /* AskOrchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskOrchestrator.swift; sourceTree = "<group>"; };
 		A20000000000000000000018 /* MarkdownRenderingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownRenderingViews.swift; sourceTree = "<group>"; };
+		BA71D4A327D3D49D472256A7 /* MathFormulaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathFormulaView.swift; sourceTree = "<group>"; };
 		BAC1FEC94E3F78F74BBA99B3 /* StreamingMarkdownText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingMarkdownText.swift; sourceTree = "<group>"; };
 		A20000000000000000000019 /* DemoCaptureViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoCaptureViews.swift; sourceTree = "<group>"; };
 		BAB6C55053E4ABD92CB8E619 /* DemoMarkdownGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoMarkdownGalleryView.swift; sourceTree = "<group>"; };
@@ -481,6 +484,7 @@
 		AF200000000000000000001C /* DemoIronClawViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoIronClawViews.swift; sourceTree = "<group>"; };
 		AF200000000000000000001D /* DemoResultComparisonViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoResultComparisonViews.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* PrivateChatCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateChatCoreTests.swift; sourceTree = "<group>"; };
+		BA1A46ECBCE25BA34F24A001 /* MathRenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathRenderingTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* NEARPrivateChatTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NEARPrivateChatTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B2C800000100000000000000 /* ChatMessageLoadCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageLoadCoordinator.swift; sourceTree = "<group>"; };
 		B2C900000100000000000000 /* ArchivedChatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchivedChatsView.swift; sourceTree = "<group>"; };
@@ -738,6 +742,7 @@
 			isa = PBXGroup;
 			children = (
 				B20000000000000000000001 /* PrivateChatCoreTests.swift */,
+				BA1A46ECBCE25BA34F24A001 /* MathRenderingTests.swift */,
 				BA4000000000000000000001 /* API */,
 				BA4000000000000000000002 /* Account */,
 				BA4000000000000000000003 /* Agent */,
@@ -1014,6 +1019,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000018 /* MarkdownRenderingViews.swift */,
+				BA71D4A327D3D49D472256A7 /* MathFormulaView.swift */,
 				BAC1FEC94E3F78F74BBA99B3 /* StreamingMarkdownText.swift */,
 			);
 			path = Markdown;
@@ -1806,6 +1812,7 @@
 				C10000000000000000000011 /* ModelCatalogStore.swift in Sources */,
 				C10000000000000000000012 /* ChatSessionStores.swift in Sources */,
 				A10000000000000000000016 /* MarkdownRenderingViews.swift in Sources */,
+				BA515CE85CF00C67E8423BE5 /* MathFormulaView.swift in Sources */,
 				BA4BCE12B0D2D63840AEB430 /* StreamingMarkdownText.swift in Sources */,
 				A10000000000000000000017 /* DemoCaptureViews.swift in Sources */,
 				BA3F0411707FA15603013FA1 /* DemoMarkdownGalleryView.swift in Sources */,
@@ -1821,6 +1828,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B10000000000000000000001 /* PrivateChatCoreTests.swift in Sources */,
+				BA653B1D47B62DCCE22282B1 /* MathRenderingTests.swift in Sources */,
 				BA1000000000000000000001 /* APITests.swift in Sources */,
 				BA1000000000000000000002 /* AccountTests.swift in Sources */,
 				BA1000000000000000000003 /* AgentTests.swift in Sources */,
