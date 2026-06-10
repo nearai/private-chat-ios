@@ -70,15 +70,18 @@ struct CouncilResponseGroup: View {
                 TimelineView(.periodic(from: Date(), by: 1)) { timeline in
                     progressRows(now: timeline.date)
                 }
-            } else {
-                progressRows(now: Date())
-            }
 
-            if let selectedMessage {
-                CouncilSelectedMessageView(
-                    message: selectedMessage,
-                    chatStore: chatStore,
-                    preferLightweightPreview: hasRunningModels
+                if let selectedMessage {
+                    CouncilSelectedMessageView(
+                        message: selectedMessage,
+                        chatStore: chatStore,
+                        preferLightweightPreview: true
+                    )
+                }
+            } else {
+                CouncilAnswerTabs(
+                    messages: messages,
+                    chatStore: chatStore
                 )
             }
         }
