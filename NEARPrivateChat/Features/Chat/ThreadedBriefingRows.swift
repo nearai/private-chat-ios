@@ -200,10 +200,10 @@ private struct ThreadVerifiedFooter: View {
         HStack(spacing: 5) {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 11))
-                .foregroundStyle(Color.proofVerified)
+                .foregroundStyle(Color.proofVerifiedText)
             Text(footerText)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Color.textSecondary)
+                .foregroundStyle(Color.proofVerifiedText)
         }
         .padding(.top, 2)
     }

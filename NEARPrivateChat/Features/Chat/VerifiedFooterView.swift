@@ -25,7 +25,7 @@ struct VerifiedFooterButton: View {
                     .foregroundStyle(footerTint)
                 Text(footerText)
                     .font(.footnote)
-                    .foregroundStyle(Color.textSecondary)
+                    .foregroundStyle(footerTint)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
@@ -55,9 +55,9 @@ struct VerifiedFooterButton: View {
     private var footerTint: Color {
         switch viewModel.state {
         case .verified:
-            return Color.proofVerified
+            return Color.proofVerifiedText
         case .stale:
-            return Color.proofStale
+            return Color.proofStaleText
         case .mismatch:
             return Color.proofMismatch
         default:

@@ -4,6 +4,29 @@ import SwiftUI
 import UIKit
 #endif
 
+enum AppRadius {
+    static let pill: CGFloat = 8
+    static let control: CGFloat = 12
+    static let card: CGFloat = 16
+    static let sheet: CGFloat = 22
+}
+
+enum AppSpacing {
+    static let xs: CGFloat = 4
+    static let sm: CGFloat = 8
+    static let md: CGFloat = 12
+    static let lg: CGFloat = 16
+    static let xl: CGFloat = 20
+    static let xxl: CGFloat = 24
+    static let xxxl: CGFloat = 32
+}
+
+extension RoundedRectangle {
+    static func app(_ radius: CGFloat) -> RoundedRectangle {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+    }
+}
+
 extension Color {
     struct AccessibleRGB: Equatable {
         let red: Double
@@ -99,6 +122,19 @@ extension Color {
         })
     }
 
+    static let actionPrimaryText = dynamicColor(
+        light: UIColor(red: 0.0, green: 0.369, blue: 0.647, alpha: 1.0),
+        dark: UIColor(red: 0.365, green: 0.733, blue: 1.0, alpha: 1.0)
+    )
+    static let proofVerifiedText = dynamicColor(
+        light: UIColor(red: 0.055, green: 0.478, blue: 0.235, alpha: 1.0),
+        dark: UIColor(red: 0.239, green: 0.863, blue: 0.518, alpha: 1.0)
+    )
+    static let proofStaleText = dynamicColor(
+        light: UIColor(red: 0.541, green: 0.353, blue: 0.0, alpha: 1.0),
+        dark: UIColor(red: 0.965, green: 0.769, blue: 0.325, alpha: 1.0)
+    )
+
     static let appBackground = dynamicColor(
         light: UIColor(red: 0.972, green: 0.974, blue: 0.966, alpha: 1.0),
         dark: UIColor(red: 0.055, green: 0.060, blue: 0.063, alpha: 1.0)
@@ -135,6 +171,9 @@ extension Color {
     static let appHairline = Color.brandBlack.opacity(0.05)
     static let textSecondary = Color.brandDarkGrey.opacity(0.72)
     static let textTertiary = Color.brandBlack.opacity(0.46)
+    static let actionPrimaryText = Color(red: 0.0, green: 0.369, blue: 0.647)
+    static let proofVerifiedText = Color(red: 0.055, green: 0.478, blue: 0.235)
+    static let proofStaleText = Color(red: 0.541, green: 0.353, blue: 0.0)
     #else
     static let appBackground = Color(red: 0.972, green: 0.974, blue: 0.966)
     static let appSecondaryBackground = Color(red: 0.944, green: 0.949, blue: 0.944)
@@ -143,6 +182,9 @@ extension Color {
     static let appHairline = Color.brandBlack.opacity(0.05)
     static let textSecondary = Color.brandDarkGrey.opacity(0.72)
     static let textTertiary = Color.brandBlack.opacity(0.46)
+    static let actionPrimaryText = Color(red: 0.0, green: 0.369, blue: 0.647)
+    static let proofVerifiedText = Color(red: 0.055, green: 0.478, blue: 0.235)
+    static let proofStaleText = Color(red: 0.541, green: 0.353, blue: 0.0)
     #endif
 
     static let surface = Color.appBackground
