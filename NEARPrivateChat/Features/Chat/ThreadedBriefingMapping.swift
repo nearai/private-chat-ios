@@ -26,15 +26,24 @@ extension ThreadedBriefingView {
         let runDate = briefing.lastRunAt ?? Date()
         let timeFormatter = DateFormatter()
         timeFormatter.dateFormat = "h:mma"
+        let isFailed = briefing.status == .failed
         let body = briefing.latestResult.map(summary(for:))
-            ?? "No delivery yet — it will appear here after the next scheduled run."
+            ?? (isFailed
+                ? briefing.lastFailureMessage ?? "Last run failed before producing a result."
+                : "No delivery yet — it will appear here after the next scheduled run.")
+        let deliveryDate = briefing.lastRunAt ?? briefing.lastFailureAt ?? runDate
         return [
             BriefingDelivery(
-                dayLabel: Calendar.current.isDateInToday(runDate) ? "Today" : formatter.string(from: runDate),
-                time: briefing.lastRunAt == nil ? "—" : timeFormatter.string(from: runDate).lowercased(),
-                title: "\(formatter.string(from: runDate)) · briefing",
+                dayLabel: Calendar.current.isDateInToday(deliveryDate) ? "Today" : formatter.string(from: deliveryDate),
+                time: briefing.lastRunAt == nil && !isFailed ? "—" : timeFormatter.string(from: deliveryDate).lowercased(),
+                title: isFailed ? "\(formatter.string(from: deliveryDate)) · run failed" : "\(formatter.string(from: deliveryDate)) · briefing",
+                headline: isFailed ? "Run failed" : nil,
+                // BotDeliveryRow renders summary (not body) when a headline is
+                // present, so the failure reason must ride in summary.
+                summary: isFailed ? body : nil,
                 body: body,
-                unread: briefing.lastRunAt != nil,
+                unread: briefing.lastRunAt != nil || isFailed,
+                isFailure: isFailed,
                 widget: briefing.latestResult
             )
         ]

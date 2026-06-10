@@ -437,17 +437,27 @@ extension PrivateChatCoreTests {
         let widget = MessageWidget(kind: .generic, title: "ETH", note: "$3,000")
         let assistantID = ChatLocalIntentTranscriptWriter.appendAssistant(
             text: "",
-            model: "nearai/test",
             messages: &messages,
             widget: widget,
-            streaming: true,
-            trustMetadata: { _ in nil }
+            streaming: true
         )
         XCTAssertEqual(messages.first?.id, assistantID)
         XCTAssertEqual(messages.first?.role, .assistant)
         XCTAssertEqual(messages.first?.status, "searching")
         XCTAssertTrue(messages.first?.isStreaming == true)
         XCTAssertEqual(messages.first?.widget, widget)
+        // On-device turns must not claim a model answered or carry proof state.
+        XCTAssertNil(messages.first?.model)
+        XCTAssertNil(messages.first?.trustMetadata)
+        XCTAssertEqual(messages.first?.modelDisplayName, "Assistant")
+    }
+
+    func testLocalIntentRepliesNeverShowProofFooter() {
+        let reply = ChatLocalIntentTranscriptWriter.assistantMessage(
+            text: "Created a tracker — **NEAR price · Daily · 08:00**."
+        )
+        XCTAssertFalse(reply.canShowAnswerProofFooter)
+        XCTAssertTrue(reply.canShowAssistantActions) // copy/regenerate still fine
     }
 
     func testQuickIntentParsesUnitConversion() {

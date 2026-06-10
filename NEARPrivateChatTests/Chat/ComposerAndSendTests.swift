@@ -511,6 +511,112 @@ extension PrivateChatCoreTests {
     }
 
     @MainActor
+    func testAttachmentTurnClearsPreviousResponseIDBeforeStreaming() async {
+        let host = PreConversationFailureSendHost()
+        host.shouldFailCreateConversation = false
+        host.councilModelIDsOverride = [ModelOption.nearPrivateDefaultModelID]
+        host.sendMessages = [
+            ChatMessage(
+                id: "previous-assistant",
+                role: .assistant,
+                text: "Previous answer",
+                model: ModelOption.nearPrivateDefaultModelID,
+                createdAt: Date(),
+                status: "completed",
+                responseID: "resp_previous",
+                isStreaming: false
+            )
+        ]
+        let coordinator = ChatSendCoordinator(host: host)
+
+        let didHandleSend = await coordinator.sendForBridge(
+            "summarize this",
+            attachments: [ChatAttachment(id: "file_123", name: "term-sheet.pdf", kind: "user_data", bytes: 1024)]
+        )
+
+        XCTAssertTrue(didHandleSend)
+        XCTAssertNil(host.lastStreamPreviousResponseID)
+        XCTAssertEqual(host.lastStreamAttachmentIDs, ["file_123"])
+    }
+
+    func testConversationItemsDecodeModelIDVariants() throws {
+        let snakeCase = try Self.conversationItemsResponseJSON("""
+        {
+          "data": [
+            {
+              "type": "message",
+              "id": "remote-assistant-snake",
+              "response_id": "resp-snake",
+              "created_at": 1001,
+              "status": "completed",
+              "role": "assistant",
+              "model_id": "zai-org/GLM-5.1-FP8",
+              "content": [{ "type": "output_text", "text": "Loaded snake case model." }]
+            }
+          ],
+          "has_more": false
+        }
+        """)
+        let camelCase = try Self.conversationItemsResponseJSON("""
+        {
+          "data": [
+            {
+              "type": "message",
+              "id": "remote-assistant-camel",
+              "response_id": "resp-camel",
+              "created_at": 1001,
+              "status": "completed",
+              "role": "assistant",
+              "modelId": "Qwen/Qwen3.5-122B-A10B",
+              "content": [{ "type": "output_text", "text": "Loaded camel case model." }]
+            }
+          ],
+          "has_more": false
+        }
+        """)
+
+        XCTAssertEqual(MessageRepository.chatMessages(from: snakeCase.data).first?.model, "zai-org/GLM-5.1-FP8")
+        XCTAssertEqual(MessageRepository.chatMessages(from: camelCase.data).first?.model, "Qwen/Qwen3.5-122B-A10B")
+    }
+
+    func testFailedAssistantTurnsDoNotShowProofFooter() {
+        let failed = ChatMessage(
+            id: "failed-restricted",
+            role: .assistant,
+            text: "Access temporarily restricted. Please try again later.",
+            model: ModelOption.nearPrivateDefaultModelID,
+            createdAt: Date(),
+            status: "failed",
+            responseID: nil,
+            isStreaming: false
+        )
+        let completed = ChatMessage(
+            id: "completed",
+            role: .assistant,
+            text: "Working answer",
+            model: ModelOption.nearPrivateDefaultModelID,
+            createdAt: Date(),
+            status: "completed",
+            responseID: nil,
+            isStreaming: false
+        )
+
+        XCTAssertFalse(failed.canShowAnswerProofFooter)
+        XCTAssertTrue(completed.canShowAnswerProofFooter)
+
+        // Failed turns also hide the inline action row (export, proof, save) —
+        // a failed reply must not carry answer affordances.
+        XCTAssertFalse(failed.canShowAssistantActions)
+        XCTAssertTrue(completed.canShowAssistantActions)
+    }
+
+    func testRelativeFooterSuffixNeverReadsNowAgo() {
+        XCTAssertEqual(VerifiedFooterButton.relativeSuffix("now"), "just now")
+        XCTAssertEqual(VerifiedFooterButton.relativeSuffix("5m"), "5m ago")
+        XCTAssertEqual(VerifiedFooterButton.relativeSuffix("2h"), "2h ago")
+    }
+
+    @MainActor
     func testChatSessionCoordinatorOwnsProjectSelectionTransitions() {
         let keepConversation = ConversationSummary(
             id: "conv-keep",
@@ -1013,6 +1119,10 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(
             store.displayFailureMessageForSend("Failed to check rate limit."),
             "Could not verify account usage before sending. Refresh Account or sign in again, then retry."
+        )
+        XCTAssertEqual(
+            store.displayFailureMessageForSend("Access temporarily restricted. Please try again later."),
+            "Access temporarily restricted on the selected model route. Choose another private model or try again in a moment."
         )
     }
 
@@ -1592,7 +1702,7 @@ extension PrivateChatCoreTests {
         let store = BriefingStore(briefings: [tracker], fileURL: tempFile, runner: { _ in
             counter.n += 1
             let price = counter.n == 1 ? "$14,000" : "$14,800"
-            return MessageWidget(kind: .metric, title: "Rolex GMT", metric: WidgetMetric(label: "Price", value: price))
+            return .delivered(MessageWidget(kind: .metric, title: "Rolex GMT", metric: WidgetMetric(label: "Price", value: price)))
         })
 
         await store.run(tracker)
@@ -1633,6 +1743,10 @@ private final class PreConversationFailureSendHost: ChatSendCoordinatorHost {
     var sendSelectedModel = ModelOption.nearPrivateDefaultModelID
     var sendSelectedConversation: ConversationSummary? { nil }
     var sendSelectedProjectID: String? { nil }
+    var shouldFailCreateConversation = true
+    var councilModelIDsOverride: [String] = [ModelOption.nearPrivateDefaultModelID, "Qwen/Qwen3.5-122B-A10B"]
+    var lastStreamPreviousResponseID: String?
+    var lastStreamAttachmentIDs: [String] = []
     var sendMessages: [ChatMessage] {
         get { timelineStore.messages }
         set { timelineStore.messages = newValue }
@@ -1729,7 +1843,7 @@ private final class PreConversationFailureSendHost: ChatSendCoordinatorHost {
     }
 
     func requestCouncilModelIDsForSend(for modelID: String) -> [String] {
-        [modelID, "Qwen/Qwen3.5-122B-A10B"]
+        councilModelIDsOverride
     }
 
     func localDocumentPayloadsForSend(
@@ -1750,6 +1864,13 @@ private final class PreConversationFailureSendHost: ChatSendCoordinatorHost {
         firstMessage: String,
         attachments: [ChatAttachment]
     ) async throws -> ConversationSummary {
+        if !shouldFailCreateConversation {
+            return ConversationSummary(
+                id: "created-conversation",
+                createdAt: 1_700_000_000,
+                metadata: ConversationMetadata(title: firstMessage)
+            )
+        }
         throw conversationFailure
     }
 
@@ -1787,7 +1908,9 @@ private final class PreConversationFailureSendHost: ChatSendCoordinatorHost {
         previousResponseID: String?,
         initiator: String
     ) async throws -> String {
-        initialModel
+        lastStreamPreviousResponseID = previousResponseID
+        lastStreamAttachmentIDs = attachments.map(\.id)
+        return initialModel
     }
 
     func saveLocalMessagesForSend(conversationID: String) {}

@@ -265,13 +265,13 @@ extension PrivateChatCoreTests {
             "google/gemini-2.5-flash",
             "anthropic/claude-sonnet-4-5",
             "anthropic/claude-haiku-4-5",
-            "openai/o3"
+            "openai/o3",
+            "openai/gpt-oss-120b"
         ].map { ModelOption(modelID: ModelOption.nearCloudModelID(for: $0), publicModel: true, metadata: nil) }
         let visibleCloud = [
             "qwen/qwen3-235b-a22b-thinking-2507",
             "moonshotai/kimi-k2-instruct",
-            "zai-org/glm-4.5",
-            "openai/gpt-oss-120b"
+            "zai-org/glm-4.5"
         ].map { ModelOption(modelID: ModelOption.nearCloudModelID(for: $0), publicModel: true, metadata: nil) }
 
         XCTAssertTrue(hiddenCloud.allSatisfy(\.isDeprecatedPickerModel))

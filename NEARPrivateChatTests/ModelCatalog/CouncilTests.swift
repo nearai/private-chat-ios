@@ -185,7 +185,9 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(councilItem?.statusText, "Needs 2")
         XCTAssertEqual(councilItem?.tone, .amber)
         XCTAssertEqual(councilItem?.action, .editCouncilLineup)
-        XCTAssertEqual(plan.subtitle, "1 Project / Agent")
+        // Subtitle format follows HomeOrchestrationPlanner.surfaceSubtitle; the
+        // invariant under test is that an incomplete lineup never claims Council.
+        XCTAssertEqual(plan.subtitle, "Project context loaded. Agent route ready.")
         XCTAssertFalse(plan.subtitle.contains("Council"))
 
         let councilCommand = plan.commands.first(where: { $0.id == "council" })
@@ -739,7 +741,7 @@ extension PrivateChatCoreTests {
     func testCreateCouncilBriefingPromptLandsCouncilTracker() throws {
         let tempFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("briefings-\(UUID().uuidString).json")
-        let briefingStore = BriefingStore(briefings: [], fileURL: tempFile, runner: { _ in nil })
+        let briefingStore = BriefingStore(briefings: [], fileURL: tempFile, runner: { _ in .failed(nil) })
         let chatStore = ChatStore(api: PrivateChatAPI(configuration: .production))
         chatStore.onCreateTracker = { [weak briefingStore] briefing in
             briefingStore?.add(briefing)

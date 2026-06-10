@@ -79,14 +79,28 @@ struct VerifiedFooterButton: View {
         case .verifying:
             pieces.append("Checking proof")
         default:
-            pieces.append(viewModel.badge)
+            pieces.append(normalizedBadge)
         }
         pieces.append(viewModel.model)
         if viewModel.sourceCount > 0 {
             pieces.append("\(viewModel.sourceCount) source\(viewModel.sourceCount == 1 ? "" : "s")")
         }
-        pieces.append("\(viewModel.ago) ago")
+        pieces.append(Self.relativeSuffix(viewModel.ago))
         return pieces.joined(separator: " · ")
+    }
+
+    // "No model proof" next to a known model name reads as a contradiction;
+    // the proof state it describes is simply "no proof for this answer".
+    private var normalizedBadge: String {
+        let trimmed = viewModel.badge.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.localizedCaseInsensitiveCompare("No model proof") == .orderedSame {
+            return "No proof"
+        }
+        return trimmed
+    }
+
+    static func relativeSuffix(_ ago: String) -> String {
+        ago == "now" ? "just now" : "\(ago) ago"
     }
 }
 

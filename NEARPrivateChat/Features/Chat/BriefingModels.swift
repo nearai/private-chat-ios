@@ -366,3 +366,13 @@ enum BriefingStatus: String, Codable, Hashable {
     case scheduled
     case paused
 }
+
+/// Result of one briefing/tracker run. `quiet` is a clean check that produced
+/// nothing to deliver (a conditional alert whose threshold wasn't met, a digest
+/// with nothing to digest) — distinct from `failed`, which carries the
+/// user-facing reason so the tracker can show it instead of a generic line.
+enum BriefingRunOutcome {
+    case delivered(MessageWidget)
+    case quiet
+    case failed(String?)
+}

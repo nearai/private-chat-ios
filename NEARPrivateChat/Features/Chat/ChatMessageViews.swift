@@ -173,7 +173,7 @@ struct MessageBubble: View {
                     MessageAttachmentStrip(attachments: message.attachments)
                 }
 
-                if message.role == .assistant && !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !message.isStreaming {
+                if message.canShowAssistantActions {
                     AssistantInlineActions(
                         canSaveToProject: chatStore.selectedProject != nil,
                         isSavedToProject: chatStore.isMessageSavedToSelectedProject(message),
@@ -195,9 +195,19 @@ struct MessageBubble: View {
                 }
 
                 if message.status == "failed", !message.shouldShowAgentRunStatus {
-                    Label("Failed", systemImage: "exclamationmark.triangle")
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                    HStack(spacing: 12) {
+                        Label("Failed", systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                        Button {
+                            chatStore.regenerateResponse(for: message)
+                        } label: {
+                            Label("Retry", systemImage: "arrow.clockwise")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
                 }
 
                 if let footerViewModel = verifiedFooterViewModel {
@@ -334,9 +344,7 @@ struct MessageBubble: View {
     }
 
     private var answerProofCapsule: ProofCapsuleViewModel? {
-        guard message.role == .assistant,
-              !message.isStreaming,
-              !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+        guard message.canShowAnswerProofFooter,
               let modelID = message.model else {
             return nil
         }

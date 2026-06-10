@@ -18,6 +18,7 @@ struct ThreadDayDivider: View {
 
 struct BotDeliveryRow: View {
     let delivery: BriefingDelivery
+    var onRetry: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -32,10 +33,10 @@ struct BotDeliveryRow: View {
                         .foregroundStyle(Color.textTertiary)
                     if delivery.unread {
                         HStack(spacing: 4) {
-                            Circle().fill(Color.proofVerified).frame(width: 6, height: 6)
-                            Text("new")
+                            Circle().fill(statusAccent).frame(width: 6, height: 6)
+                            Text(delivery.isFailure ? "failed" : "new")
                                 .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(Color.proofVerified)
+                                .foregroundStyle(statusAccent)
                         }
                     }
                 }
@@ -52,7 +53,7 @@ struct BotDeliveryRow: View {
                 } else if let headline = delivery.headline {
                     Text(headline)
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(delivery.isFailure ? Color.red : Color.primary)
                         .fixedSize(horizontal: false, vertical: true)
                     if let summary = delivery.summary {
                         Text(summary)
@@ -71,6 +72,16 @@ struct BotDeliveryRow: View {
                         .font(.system(size: 14))
                         .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if delivery.isFailure, let onRetry {
+                    Button(action: onRetry) {
+                        Label("Run again", systemImage: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .padding(.top, 4)
                 }
 
                 if !delivery.sources.isEmpty || delivery.replyCount > 0 {
@@ -96,6 +107,10 @@ struct BotDeliveryRow: View {
             }
         }
         .opacity(delivery.collapsed ? 0.5 : 1)
+    }
+
+    private var statusAccent: Color {
+        delivery.isFailure ? .red : .proofVerified
     }
 }
 

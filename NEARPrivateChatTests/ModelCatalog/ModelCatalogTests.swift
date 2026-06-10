@@ -201,15 +201,18 @@ extension PrivateChatCoreTests {
                 )
             ),
             ModelOption(
-                modelID: "openai/gpt-oss-120b",
+                // gpt-oss-120b moved to the deprecated picker deny-list
+                // (ModelCatalogModels.isDeprecatedPickerModel); Kimi K2 is a
+                // current Cloud catalog choice.
+                modelID: "moonshotai/kimi-k2-instruct",
                 publicModel: true,
                 metadata: ModelOption.Metadata(
                     verifiable: false,
                     contextLength: 1_000_000,
-                    modelDisplayName: "GPT OSS 120B",
+                    modelDisplayName: "Kimi K2 Instruct",
                     modelDescription: "Current Cloud catalog model.",
                     modelIcon: nil,
-                    aliases: ["gpt-oss-120b"]
+                    aliases: ["kimi-k2-instruct"]
                 )
             )
         ]

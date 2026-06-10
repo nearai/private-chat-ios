@@ -84,12 +84,14 @@ struct AppEnvironment {
         briefingStore.load()
         #endif
         briefingStore.runner = { [weak chatStore] briefing in
-            guard let chatStore else { return nil }
-            let widget = await chatStore.runBriefing(briefing)
-            if widget != nil {
+            guard let chatStore else {
+                return .failed("The app is still launching. Try running it again in a moment.")
+            }
+            let outcome = await chatStore.runBriefing(briefing)
+            if case .delivered = outcome {
                 chatStore.activityLog.record("Ran briefing “\(briefing.title)”")
             }
-            return widget
+            return outcome
         }
         chatStore.onCreateTracker = { [weak briefingStore] briefing in
             guard let briefingStore else { return }

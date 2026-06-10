@@ -8,8 +8,29 @@ import SwiftUI
 // MARK: - Model
 
 /// Result of a briefing-thread follow-up: prose, a rendered widget (e.g. a real
-/// historical price chart), or both.
-typealias BriefingFollowUpResult = (text: String?, widget: MessageWidget?)
+/// historical price chart), or an explicit failure that should not look verified.
+struct BriefingFollowUpResult {
+    var text: String?
+    var widget: MessageWidget?
+    var error: String?
+
+    var succeeded: Bool {
+        text != nil || widget != nil
+    }
+
+    static func success(text: String? = nil, widget: MessageWidget? = nil) -> BriefingFollowUpResult {
+        BriefingFollowUpResult(text: text, widget: widget, error: nil)
+    }
+
+    static func failure(_ message: String?) -> BriefingFollowUpResult {
+        let trimmed = message?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return BriefingFollowUpResult(
+            text: nil,
+            widget: nil,
+            error: trimmed.isEmpty ? "I couldn’t reach the model just now — try again in a moment." : trimmed
+        )
+    }
+}
 
 struct BriefingSourceTag: Identifiable, Hashable {
     let id = UUID()
@@ -50,6 +71,7 @@ struct BriefingDelivery: Identifiable, Hashable {
     var replyCount: Int = 0
     var unread: Bool = false
     var collapsed: Bool = false
+    var isFailure: Bool = false   // failed run — render error styling + retry
     var widget: MessageWidget? = nil
     var thread: DeliveryThread? = nil
 }
@@ -100,7 +122,12 @@ struct ThreadedBriefingView: View {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     ForEach(deliveries) { delivery in
                         ThreadDayDivider(label: delivery.dayLabel)
-                        BotDeliveryRow(delivery: delivery)
+                        BotDeliveryRow(
+                            delivery: delivery,
+                            onRetry: delivery.isFailure && store != nil && briefingID != nil && !isRunning
+                                ? { runNow() }
+                                : nil
+                        )
                         if let thread = delivery.thread {
                             ThreadInlineView(thread: thread)
                         }
@@ -280,14 +307,11 @@ struct ThreadedBriefingView: View {
         Task {
             let answer = await onAskFollowUp(text, context)
             await MainActor.run {
-                let succeeded = answer.text != nil || answer.widget != nil
-                let body = answer.text ?? (answer.widget == nil
-                    ? "I couldn’t reach the model just now — try again in a moment."
-                    : "")
+                let body = answer.text ?? (answer.widget == nil ? answer.error ?? BriefingFollowUpResult.failure(nil).error ?? "" : "")
                 let reply = ThreadReply(
                     role: .assistant,
                     text: body,
-                    verifiedModel: succeeded ? "NEAR Private" : nil,
+                    verifiedModel: answer.succeeded ? "NEAR Private" : nil,
                     ago: "just now",
                     widget: answer.widget
                 )

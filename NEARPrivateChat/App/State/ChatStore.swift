@@ -2302,17 +2302,8 @@ final class ChatStore: ObservableObject {
         activityLog.record("Created tracker “\(draft.title)” from action card · \(draft.confirmation)")
 
         let sourceLine = draft.source.map { "\nSource: \($0)" } ?? ""
-        let createdAt = Date()
-        let message = ChatMessage(
-            id: "local-assistant-\(UUID().uuidString)",
-            role: .assistant,
-            text: "Created a tracker — **\(draft.confirmation)**. It runs on schedule and lands in Trackers; open it any time to Run now, change, or delete it.\(sourceLine)",
-            model: selectedModel,
-            createdAt: createdAt,
-            status: "completed",
-            responseID: nil,
-            isStreaming: false,
-            trustMetadata: assistantTrustMetadata(for: selectedModel, capturedAt: createdAt)
+        let message = ChatLocalIntentTranscriptWriter.assistantMessage(
+            text: "Created a tracker — **\(draft.confirmation)**. It runs on schedule and lands in Trackers; open it any time to Run now, change, or delete it.\(sourceLine)"
         )
         messages.append(message)
         if let conversationID = selectedConversation?.id {
@@ -2322,9 +2313,6 @@ final class ChatStore: ObservableObject {
         AppHaptics.selection()
     }
 
-    /// Runs a briefing prompt headlessly in a throwaway conversation and returns
-    /// the structured widget the model produced (falling back to a generic text
-    /// widget). Used by the BriefingStore runner; returns nil on any failure.
     /// The agentic Daily Brief: active automations and their latest approved
     /// results, composed into one digest. Shared by the on-demand "brief me"
     /// intent and the scheduled .dailyBrief automation.
@@ -2333,10 +2321,10 @@ final class ChatStore: ObservableObject {
         return BriefDigest.compose(trackers: trackers, market: [])
     }
 
-    func runBriefing(_ briefing: Briefing) async -> MessageWidget? {
+    func runBriefing(_ briefing: Briefing) async -> BriefingRunOutcome {
         // Conditional trackers are gated: evaluate the threshold against live
-        // data and only deliver (non-nil) on a met run, so the rest of the
-        // pipeline (latestResult + notification) fires exactly when it should.
+        // data and only deliver on a met run, so the rest of the pipeline
+        // (latestResult + notification) fires exactly when it should.
         if let condition = briefing.condition {
             return await runConditionalBriefing(briefing, condition: condition)
         }
@@ -2346,7 +2334,8 @@ final class ChatStore: ObservableObject {
         // route through the model so facts, sources, and presentation are not
         // hardcoded in the app.
         if briefing.kind == .dailyBrief {
-            return await briefDigestWidget()
+            guard let digest = await briefDigestWidget() else { return .quiet }
+            return .delivered(digest)
         }
 
         // A council briefing runs several models + a synthesis on each scheduled
@@ -2361,7 +2350,7 @@ final class ChatStore: ObservableObject {
     /// gate is deterministic and local; fired-alert presentation routes through
     /// the model with a value-only metric fallback so notifications are not lost.
     /// Quiet checks are intentionally not logged so the log stays meaningful.
-    private func runConditionalBriefing(_ briefing: Briefing, condition: BriefingCondition) async -> MessageWidget? {
+    private func runConditionalBriefing(_ briefing: Briefing, condition: BriefingCondition) async -> BriefingRunOutcome {
         // A "stock:" coinID prefix marks an equity alert (Yahoo); otherwise crypto.
         let isStock = condition.coinID.hasPrefix("stock:")
         let stockSymbol = isStock ? String(condition.coinID.dropFirst("stock:".count)) : ""
@@ -2369,9 +2358,10 @@ final class ChatStore: ObservableObject {
             ? await LiveDataService.stockUSDPrice(symbol: stockSymbol)
             : await LiveDataService.coinUSDPrice(coinID: condition.coinID)
         guard let price else {
-            return nil // couldn't fetch — don't fire on missing data
+            // Couldn't fetch — don't fire on missing data, but say why.
+            return .failed("Could not fetch the current \(condition.symbol) price to check this alert. It will retry on the next run.")
         }
-        guard condition.isSatisfied(by: price) else { return nil }
+        guard condition.isSatisfied(by: price) else { return .quiet }
         let priceLabel = LiveDataService.usdPriceString(price)
         activityLog.record("Alert fired — \(condition.summary) (now \(priceLabel))")
 
@@ -2391,14 +2381,16 @@ final class ChatStore: ObservableObject {
             kind: .customPrompt,
             council: briefing.council
         )
-        let modelWidget = briefing.council
+        let modelOutcome = briefing.council
             ? await runCouncilBriefing(alertBriefing)
             : await runSingleModelBriefing(alertBriefing)
-        if let modelWidget {
-            return modelWidget
+        if case let .delivered(modelWidget) = modelOutcome {
+            return .delivered(modelWidget)
         }
 
-        return MessageWidget(
+        // The alert DID fire; even if the model follow-up failed, deliver the
+        // deterministic threshold result so the notification is not lost.
+        return .delivered(MessageWidget(
             kind: .metric,
             title: "\(condition.symbol) alert",
             time: "just now",
@@ -2409,7 +2401,66 @@ final class ChatStore: ObservableObject {
                 trend: condition.comparator == .below ? .down : .up,
                 caption: "alert triggered"
             )
-        )
+        ))
+    }
+
+    private struct BriefingTextStreamResult {
+        var text: String?
+        var failureMessage: String?
+    }
+
+    /// One headless model turn → its full text, with private-model fallback when
+    /// a selected route is temporarily blocked or unavailable.
+    private func streamBriefingTextResult(
+        model: String,
+        prompt: String,
+        conversationID: String,
+        webSearchEnabled: Bool
+    ) async -> BriefingTextStreamResult {
+        var currentModel = model
+        var unavailableModels = Set<String>()
+        var lastFailureMessage: String?
+
+        while true {
+            final class TextSink: @unchecked Sendable { var text = "" }
+            let sink = TextSink()
+            do {
+                try await api.streamResponse(
+                    model: currentModel,
+                    text: prompt,
+                    attachments: [],
+                    conversationID: conversationID,
+                    previousResponseID: nil,
+                    webSearchEnabled: webSearchEnabled,
+                    systemPrompt: activeSystemPrompt(memoryForModel: currentModel),
+                    onEvent: { event in
+                        switch event {
+                        case let .textDelta(delta):
+                            sink.text += delta
+                        case let .itemDone(text):
+                            if sink.text.isEmpty, let text { sink.text = text }
+                        default:
+                            break
+                        }
+                    }
+                )
+                let trimmed = sink.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else {
+                    return BriefingTextStreamResult(text: nil, failureMessage: "The model returned no visible output.")
+                }
+                return BriefingTextStreamResult(text: trimmed, failureMessage: nil)
+            } catch {
+                lastFailureMessage = Self.displayFailureMessage(error.localizedDescription)
+                unavailableModels.insert(currentModel)
+                guard !Self.isExternalModel(currentModel),
+                      Self.isRecoverableModelError(error),
+                      let fallbackModel = preferredAvailableModel(excluding: unavailableModels),
+                      fallbackModel != currentModel else {
+                    return BriefingTextStreamResult(text: nil, failureMessage: lastFailureMessage)
+                }
+                currentModel = fallbackModel
+            }
+        }
     }
 
     /// One headless model turn → its full text (nil on failure / empty output).
@@ -2419,33 +2470,13 @@ final class ChatStore: ObservableObject {
         conversationID: String,
         webSearchEnabled: Bool
     ) async -> String? {
-        final class TextSink: @unchecked Sendable { var text = "" }
-        let sink = TextSink()
-        do {
-            try await api.streamResponse(
-                model: model,
-                text: prompt,
-                attachments: [],
-                conversationID: conversationID,
-                previousResponseID: nil,
-                webSearchEnabled: webSearchEnabled,
-                systemPrompt: activeSystemPrompt(memoryForModel: model),
-                onEvent: { event in
-                    switch event {
-                    case let .textDelta(delta):
-                        sink.text += delta
-                    case let .itemDone(text):
-                        if sink.text.isEmpty, let text { sink.text = text }
-                    default:
-                        break
-                    }
-                }
-            )
-        } catch {
-            return nil
-        }
-        let trimmed = sink.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+        let result = await streamBriefingTextResult(
+            model: model,
+            prompt: prompt,
+            conversationID: conversationID,
+            webSearchEnabled: webSearchEnabled
+        )
+        return result.text
     }
 
     /// Renders briefing model output into a widget (structured if the model
@@ -2458,28 +2489,34 @@ final class ChatStore: ObservableObject {
         return MessageWidget(kind: .generic, title: title, time: "just now", note: String(summary.prefix(600)))
     }
 
-    private func runSingleModelBriefing(_ briefing: Briefing) async -> MessageWidget? {
-        guard let conversation = try? await api.createConversation(title: briefing.title),
-              let text = await streamBriefingText(
-                  model: Self.defaultModelID,
-                  prompt: briefing.prompt,
-                  conversationID: conversation.id,
-                  webSearchEnabled: true
-              ) else {
-            return nil
+    private func runSingleModelBriefing(_ briefing: Briefing) async -> BriefingRunOutcome {
+        guard let conversation = try? await api.createConversation(title: briefing.title) else {
+            return .failed("Could not start a private conversation for this run. Check your connection or sign in again, then run it now.")
         }
-        return briefingWidget(from: text, title: briefing.title)
+        let result = await streamBriefingTextResult(
+            model: Self.defaultModelID,
+            prompt: briefing.prompt,
+            conversationID: conversation.id,
+            webSearchEnabled: true
+        )
+        guard let text = result.text else {
+            return .failed(result.failureMessage)
+        }
+        guard let widget = briefingWidget(from: text, title: briefing.title) else {
+            return .failed("The model returned no usable output for this run.")
+        }
+        return .delivered(widget)
     }
 
     /// Answers a follow-up in a briefing thread by routing the question through
     /// the model with the delivery's text as context. Private route only,
     /// consistent with the app's privacy posture.
-    func answerBriefingFollowUp(question: String, context: String, briefing: Briefing) async -> (text: String?, widget: MessageWidget?) {
+    func answerBriefingFollowUp(question: String, context: String, briefing: Briefing) async -> BriefingFollowUpResult {
         let trimmedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedQuestion.isEmpty else { return (nil, nil) }
+        guard !trimmedQuestion.isEmpty else { return .failure(nil) }
 
         guard let conversation = try? await api.createConversation(title: "Briefing follow-up") else {
-            return (nil, nil)
+            return .failure("Could not create a briefing follow-up thread. Sign in again, then retry.")
         }
         let trimmedContext = context.trimmingCharacters(in: .whitespacesAndNewlines)
         let prompt: String
@@ -2498,25 +2535,28 @@ final class ChatStore: ObservableObject {
             Answer concisely. Use web search for anything time-sensitive and cite sources.
             """
         }
-        let text = await streamBriefingText(
+        let result = await streamBriefingTextResult(
             model: Self.defaultModelID,
             prompt: prompt,
             conversationID: conversation.id,
             webSearchEnabled: true
         )
-        return (text, nil)
+        if let text = result.text {
+            return .success(text: text)
+        }
+        return .failure(result.failureMessage)
     }
 
     /// Runs a council (several models in the default lineup) on the briefing
     /// prompt, then synthesizes one answer — the scheduled equivalent of the
     /// live Council. Falls back to a single model if fewer than two are usable.
-    private func runCouncilBriefing(_ briefing: Briefing) async -> MessageWidget? {
+    private func runCouncilBriefing(_ briefing: Briefing) async -> BriefingRunOutcome {
         let modelIDs = defaultCouncilModelIDs()
         guard modelIDs.count > 1 else {
             return await runSingleModelBriefing(briefing)
         }
         guard let conversation = try? await api.createConversation(title: briefing.title) else {
-            return nil
+            return .failed("Could not start a private conversation for this run. Check your connection or sign in again, then run it now.")
         }
 
         // Best-effort Live Activity for the council run: one step per model plus
@@ -2526,28 +2566,35 @@ final class ChatStore: ObservableObject {
         agentActivity.start(title: briefing.title, total: totalSteps)
 
         var responses: [(String, String)] = []
+        var firstFailureMessage: String?
         var stepsDone = 0
         for modelID in modelIDs {
             let displayName = modelDisplayName(for: modelID)
             agentActivity.update(stage: "Asking \(displayName)", completed: stepsDone)
-            if let text = await streamBriefingText(
+            let result = await streamBriefingTextResult(
                 model: modelID,
                 prompt: briefing.prompt,
                 conversationID: conversation.id,
                 webSearchEnabled: true
-            ) {
+            )
+            if let text = result.text {
                 responses.append((displayName, text))
+            } else if firstFailureMessage == nil {
+                firstFailureMessage = result.failureMessage
             }
             stepsDone += 1
             agentActivity.update(stage: "Asking \(displayName)", completed: stepsDone)
         }
         guard let first = responses.first else {
             agentActivity.end()
-            return nil
+            return .failed(firstFailureMessage)
         }
         guard responses.count > 1 else {
             agentActivity.end()
-            return briefingWidget(from: first.1, title: briefing.title)
+            guard let widget = briefingWidget(from: first.1, title: briefing.title) else {
+                return .failed("The council returned no usable output for this run.")
+            }
+            return .delivered(widget)
         }
 
         agentActivity.update(stage: "Synthesizing", completed: modelIDs.count)
@@ -2564,7 +2611,10 @@ final class ChatStore: ObservableObject {
         )
         agentActivity.update(stage: "Synthesizing", completed: totalSteps)
         agentActivity.end()
-        return briefingWidget(from: synthesized ?? first.1, title: briefing.title)
+        guard let widget = briefingWidget(from: synthesized ?? first.1, title: briefing.title) else {
+            return .failed("The council returned no usable output for this run.")
+        }
+        return .delivered(widget)
     }
 
     private func localIntentExecutionEnvironment() -> ChatLocalIntentExecutor.Environment {
@@ -2598,13 +2648,10 @@ final class ChatStore: ObservableObject {
         func appendAssistant(text: String, widget: MessageWidget? = nil, streaming: Bool = false) -> String {
             ChatLocalIntentTranscriptWriter.appendAssistant(
                 text: text,
-                model: model,
                 messages: &messages,
                 widget: widget,
                 streaming: streaming
-            ) { createdAt in
-                assistantTrustMetadata(for: model, capturedAt: createdAt)
-            }
+            )
         }
 
         let priorUserText = messages.filter { $0.role == .user }.dropLast().last?.text
@@ -2661,12 +2708,9 @@ final class ChatStore: ObservableObject {
         messages.append(ChatLocalIntentTranscriptWriter.userMessage(text: prompt, model: model))
         let pendingID = ChatLocalIntentTranscriptWriter.appendAssistant(
             text: "Working on \(intents.count) lookups…",
-            model: model,
             messages: &messages,
             streaming: true
-        ) { createdAt in
-            assistantTrustMetadata(for: model, capturedAt: createdAt)
-        }
+        )
         currentAssistantMessageID = pendingID
         isStreaming = true
 
@@ -2688,13 +2732,9 @@ final class ChatStore: ObservableObject {
                 self.agentActivity.update(stage: "Lookup \(completed) of \(intents.count)", completed: completed)
                 guard let widget else { continue }
                 produced = true
-                let createdAt = Date()
                 let message = ChatLocalIntentTranscriptWriter.assistantMessage(
                     text: "",
-                    model: model,
-                    createdAt: createdAt,
-                    widget: widget,
-                    trustMetadata: self.assistantTrustMetadata(for: model, capturedAt: createdAt)
+                    widget: widget
                 )
                 self.messages.append(message)
             }
@@ -2725,12 +2765,8 @@ final class ChatStore: ObservableObject {
             environment: localIntentExecutionEnvironment(),
             structured: true
         )
-        let assistantCreatedAt = Date()
         messages.append(ChatLocalIntentTranscriptWriter.assistantMessage(
-            text: result.assistantText,
-            model: model,
-            createdAt: assistantCreatedAt,
-            trustMetadata: assistantTrustMetadata(for: model, capturedAt: assistantCreatedAt)
+            text: result.assistantText
         ))
         if result.shouldHaptic {
             AppHaptics.selection()
@@ -5059,6 +5095,7 @@ final class ChatStore: ObservableObject {
         let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
         let lowercased = message.lowercased()
         return lowercased.contains("access denied") ||
+            lowercased.contains("temporarily restricted") ||
             lowercased.contains("forbidden") ||
             lowercased.contains("not authorized") ||
             lowercased.contains("permission") && lowercased.contains("model")
@@ -5114,49 +5151,10 @@ final class ChatStore: ObservableObject {
             (normalized.contains("running") && normalized.contains("configured gateway"))
     }
 
+    // Single source of failure copy: MessageRepository owns the raw-error →
+    // user-facing mapping; this forwards so banner and timeline copy can't drift.
     private static func displayFailureMessage(_ rawValue: String) -> String {
-        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lowercased = trimmed.lowercased()
-
-        if lowercased == "access denied" || lowercased.contains("\"access denied\"") {
-            return "Access denied by the NEAR Private API. Sign in again or choose another available model."
-        }
-
-        if lowercased.contains("402") ||
-            lowercased.contains("payment required") ||
-            (lowercased.contains("billing") && lowercased.contains("required")) ||
-            lowercased.contains("insufficient credits") ||
-            lowercased.contains("budget exceeded") {
-            return "Payment or credits required. Open Account, refresh Billing, then retry with an active plan or budget."
-        }
-
-        if lowercased.contains("chat route needs a valid ironclaw token") {
-            return "Hosted IronClaw is reachable. The Agent token is missing or invalid. Open Account and test the Agent connection."
-        }
-
-        if lowercased.contains("failed to check rate limit") {
-            return "Could not verify account usage before sending. Refresh Account or sign in again, then retry."
-        }
-
-        if lowercased.contains("tool 'http' failed") &&
-            lowercased.contains("request returned redirect") &&
-            lowercased.contains("blocked to prevent ssrf") {
-            return "IronClaw's web fetch tool hit a redirect and blocked it as an SSRF precaution. Upgrade or restart Hosted IronClaw 0.28.2 or newer, then retry."
-        }
-
-        if lowercased.contains("tool error") || lowercased.contains("tool '") || lowercased.contains("tool \"") {
-            return "IronClaw tool failed before producing an answer: \(trimmed)"
-        }
-
-        if lowercased.contains("not available in your plan") {
-            return "\(trimmed) Choose an allowed plan model from the picker or refresh Billing in Account."
-        }
-
-        if lowercased.contains("not authenticated") || lowercased.contains("unauthorized") {
-            return "Sign in to start chatting."
-        }
-
-        return trimmed.isEmpty ? "The request failed." : trimmed
+        MessageRepository.displayFailureMessage(rawValue)
     }
 
     private static func isRawToolFailureText(_ text: String) -> Bool {
@@ -5637,6 +5635,19 @@ final class ChatStore: ObservableObject {
                     await self?.runLiveCouncilBriefingDemo()
                 }
             }
+        case .chatFailure:
+            // Failure-state QA surface: one successful turn next to a failed
+            // turn, so proof/action affordances can be compared side by side.
+            selectedConversation = data.glmConversation
+            messages = Self.demoFailureMessages(now: Date())
+            selectedModel = Self.defaultModelID
+            councilModelIDs = []
+            projectStore.selectProjectID(nil, persist: false)
+            draft = ""
+        case .trackerFailure:
+            selectedConversation = nil
+            messages = []
+            draft = ""
         case .chat, .briefingBuilder, .councilOutput, .cloudModels, .council, .councilRoom, .threaded, .liveData, .project, .share:
             selectedConversation = data.primaryConversation
             messages = data.messages
@@ -5690,17 +5701,64 @@ final class ChatStore: ObservableObject {
             kind: .customPrompt,
             council: true
         )
-        let widget = await runBriefing(briefing)
+        let outcome = await runBriefing(briefing)
         updateMessage("live-council-pending") { message in
             message.isStreaming = false
             message.status = "completed"
-            if let widget {
+            if case let .delivered(widget) = outcome {
                 message.widget = widget
                 message.text = ""
             } else {
                 message.text = "Council produced no result — check sign-in, models, or network."
             }
         }
+    }
+
+    /// One successful answer (proof footer + actions) followed by a failed turn
+    /// (red Failed + Retry only) — the canonical trust-surface contrast.
+    static func demoFailureMessages(now: Date) -> [ChatMessage] {
+        [
+            ChatMessage(
+                id: "df-u1",
+                role: .user,
+                text: "Summarize this term sheet and extract the obligations.",
+                model: nil,
+                createdAt: now.addingTimeInterval(-300),
+                status: "completed",
+                responseID: nil,
+                isStreaming: false
+            ),
+            ChatMessage(
+                id: "df-a1",
+                role: .assistant,
+                text: "Short version: a $4M raise on a $40M cap, 1x non-participating preference, monthly reporting, and a 60-day exclusivity window. The binding obligations sit in sections 4 and 7.",
+                model: Self.defaultModelID,
+                createdAt: now.addingTimeInterval(-295),
+                status: "completed",
+                responseID: "df-a1-r",
+                isStreaming: false
+            ),
+            ChatMessage(
+                id: "df-u2",
+                role: .user,
+                text: "Turn those obligations into a checklist with owners.",
+                model: nil,
+                createdAt: now.addingTimeInterval(-60),
+                status: "completed",
+                responseID: nil,
+                isStreaming: false
+            ),
+            ChatMessage(
+                id: "df-a2",
+                role: .assistant,
+                text: "Access temporarily restricted on the selected model route. Choose another private model or try again in a moment.",
+                model: Self.defaultModelID,
+                createdAt: now.addingTimeInterval(-55),
+                status: "failed",
+                responseID: nil,
+                isStreaming: false
+            )
+        ]
     }
 
     static func demoWidgetMessages(now: Date) -> [ChatMessage] {

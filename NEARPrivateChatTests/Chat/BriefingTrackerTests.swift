@@ -723,8 +723,10 @@ extension PrivateChatCoreTests {
         // present Ethereum's price as if it were the tracked coin.
         let store = ChatStore(api: PrivateChatAPI(configuration: .production))
         let briefing = Briefing(title: "x", prompt: "p", schedule: .daily(hour: 8, minute: 0), kind: .cryptoPrice)
-        let widget = await store.runBriefing(briefing)
-        XCTAssertNil(widget)
+        let outcome = await store.runBriefing(briefing)
+        if case let .delivered(widget) = outcome {
+            XCTFail("A nil-subject cryptoPrice tracker must not deliver a widget, got \(widget).")
+        }
     }
 
     func testTopicNewsTrackerSurvivesStopwordSubstrings() throws {
@@ -811,7 +813,7 @@ extension PrivateChatCoreTests {
     func testCreateTrackerPromptLandsBriefingInStore() throws {
         let tempFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("briefings-\(UUID().uuidString).json")
-        let briefingStore = BriefingStore(briefings: [], fileURL: tempFile, runner: { _ in nil })
+        let briefingStore = BriefingStore(briefings: [], fileURL: tempFile, runner: { _ in .failed(nil) })
         let chatStore = ChatStore(api: PrivateChatAPI(configuration: .production))
         chatStore.onCreateTracker = { [weak briefingStore] briefing in
             briefingStore?.add(briefing)
@@ -882,7 +884,7 @@ extension PrivateChatCoreTests {
                                                           comparator: .below, threshold: 2_000))
         let plain = Briefing(title: "News", prompt: "p", schedule: .daily(hour: 8, minute: 0), kind: .dailyNews)
         let store = BriefingStore(briefings: [alert, plain], fileURL: tempFile,
-                                  runner: { _ in MessageWidget(kind: .generic, title: "x", note: "y") })
+                                  runner: { _ in .delivered(MessageWidget(kind: .generic, title: "x", note: "y")) })
 
         // A conditional alert that delivers a result is one-shot: it auto-pauses.
         await store.run(alert)
@@ -912,7 +914,7 @@ extension PrivateChatCoreTests {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
             .appendingPathComponent("briefings.json")
-        let store = BriefingStore(briefings: [briefing], fileURL: fileURL) { _ in nil }
+        let store = BriefingStore(briefings: [briefing], fileURL: fileURL) { _ in .failed(nil) }
 
         await store.run(briefing)
 
@@ -924,5 +926,53 @@ extension PrivateChatCoreTests {
         XCTAssertNil(updated.lastRunAt)
         XCTAssertEqual(BriefingStore.widgetSummary(for: updated), "Run failed before producing a result.")
         XCTAssertEqual(updated.scheduleCalendar.timeZone.identifier, "America/New_York")
+
+        let delivery = try XCTUnwrap(ThreadedBriefingView.deliveries(for: updated).first)
+        XCTAssertEqual(delivery.headline, "Run failed")
+        XCTAssertEqual(delivery.body, "Run failed before producing a result.")
+        XCTAssertTrue(delivery.title.contains("run failed"))
+        XCTAssertTrue(delivery.isFailure)
+        XCTAssertNotEqual(delivery.time, "—")
+    }
+
+    @MainActor
+    func testBriefingRunCarriesSpecificFailureMessageAndQuietRunClearsIt() async throws {
+        let briefing = Briefing(
+            title: "NEAR price",
+            prompt: "Track the NEAR price.",
+            schedule: .daily(hour: 8, minute: 0)
+        )
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent("briefings.json")
+        let restrictedCopy = "Access temporarily restricted on the selected model route. Choose another private model or try again in a moment."
+
+        final class OutcomeBox: @unchecked Sendable { var outcome: BriefingRunOutcome = .quiet }
+        let box = OutcomeBox()
+        let store = BriefingStore(briefings: [briefing], fileURL: fileURL) { _ in box.outcome }
+
+        // A failed run surfaces the specific route error, not a generic line.
+        box.outcome = .failed(restrictedCopy)
+        await store.run(briefing)
+        var updated = try XCTUnwrap(store.briefings.first)
+        XCTAssertEqual(updated.status, .failed)
+        XCTAssertEqual(updated.lastFailureMessage, restrictedCopy)
+        let failedDelivery = try XCTUnwrap(ThreadedBriefingView.deliveries(for: updated).first)
+        XCTAssertTrue(failedDelivery.isFailure)
+        XCTAssertEqual(failedDelivery.body, restrictedCopy)
+        // The row renders summary (not body) under a "Run failed" headline —
+        // the reason must ride there or the user sees no error at all.
+        XCTAssertEqual(failedDelivery.summary, restrictedCopy)
+
+        // A quiet check (e.g. an alert whose condition wasn't met) is NOT a
+        // failure: it clears the stale failure record instead of re-recording it.
+        box.outcome = .quiet
+        await store.run(briefing)
+        updated = try XCTUnwrap(store.briefings.first)
+        XCTAssertNil(updated.lastFailureAt)
+        XCTAssertNil(updated.lastFailureMessage)
+        XCTAssertNotEqual(updated.status, .failed)
+        let quietDelivery = try XCTUnwrap(ThreadedBriefingView.deliveries(for: updated).first)
+        XCTAssertFalse(quietDelivery.isFailure)
     }
 }

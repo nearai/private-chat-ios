@@ -59,9 +59,13 @@ struct AttachmentStrip: View {
                             .frame(width: 28, height: 28)
                             .background(Color.brandBlue.opacity(0.09), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         VStack(alignment: .leading, spacing: 1) {
+                            // Middle truncation keeps both the document name's start
+                            // and its extension visible on narrow widths.
                             Text(attachmentShelfTitle(for: attachment))
                                 .font(.caption2.weight(.semibold))
                                 .lineLimit(1)
+                                .truncationMode(.middle)
+                                .frame(maxWidth: 180, alignment: .leading)
                             Text(attachmentShelfDetail(for: attachment))
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)

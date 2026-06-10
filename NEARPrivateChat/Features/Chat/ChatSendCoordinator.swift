@@ -461,14 +461,15 @@ final class ChatSendCoordinator {
             var routedText = mission ?? actionSurfaceText
             let existingConversation = host.sendSelectedConversation
             let requestModel = host.sendSelectedModel
+            let apiAttachments = attachments.filter { !$0.isLocalOnly }
             let previousAssistantMessage = host.sendMessages.last(where: { $0.role == .assistant })
-            let previousResponseID = previousResponseIDOverride ??
+            let candidatePreviousResponseID = previousResponseIDOverride ??
                 previousAssistantMessage.flatMap { host.isExternalModelForSend($0.model ?? "") ? nil : $0.responseID }
+            let previousResponseID = apiAttachments.isEmpty ? candidatePreviousResponseID : nil
             failureModel = requestModel
             failurePreviousResponseID = previousResponseID
             let requestInitiator = initiator ?? (existingConversation == nil ? "new_chat" : "new_message")
             let councilModelIDs = appendUserMessage ? host.requestCouncilModelIDsForSend(for: requestModel) : []
-            let apiAttachments = attachments.filter { !$0.isLocalOnly }
             let localDocPayloads = host.localDocumentPayloadsForSend(attachments: attachments.filter(\.isLocalOnly))
             if !localDocPayloads.isEmpty {
                 if DocumentTextExtractor.localDocsAllowedForRoute(councilModelIDs: councilModelIDs, singleModelID: requestModel) {

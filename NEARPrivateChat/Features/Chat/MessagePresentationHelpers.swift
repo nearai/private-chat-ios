@@ -9,6 +9,20 @@ extension View {
 }
 
 extension ChatMessage {
+    var canShowAnswerProofFooter: Bool {
+        let modelID = model?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return canShowAssistantActions && !modelID.isEmpty
+    }
+
+    /// Inline answer actions (copy, export, regenerate, proof, save) apply only
+    /// to real, completed answers — never to failed or still-streaming turns.
+    var canShowAssistantActions: Bool {
+        role == .assistant &&
+            !isStreaming &&
+            status.lowercased() != "failed" &&
+            !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var isAgentRouteMessage: Bool {
         model == ModelOption.ironclawModelID ||
             model == ModelOption.ironclawMobileModelID

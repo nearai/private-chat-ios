@@ -122,6 +122,8 @@ struct ConversationItem: Decodable, Identifiable, Hashable {
         case role
         case content
         case model
+        case modelID = "model_id"
+        case modelId = "modelId"
         case previousResponseID = "previous_response_id"
         case action
         case metadata
@@ -137,6 +139,8 @@ struct ConversationItem: Decodable, Identifiable, Hashable {
         status = try container.decodeIfPresent(String.self, forKey: .status)
         role = try container.decodeIfPresent(ChatRole.self, forKey: .role)
         model = try container.decodeIfPresent(String.self, forKey: .model)
+            ?? container.decodeIfPresent(String.self, forKey: .modelID)
+            ?? container.decodeIfPresent(String.self, forKey: .modelId)
         previousResponseID = try container.decodeIfPresent(String.self, forKey: .previousResponseID)
         action = try container.decodeIfPresent(SearchAction.self, forKey: .action)
         metadata = try container.decodeIfPresent(MessageMetadata.self, forKey: .metadata)

@@ -269,6 +269,9 @@ struct MessageRepository {
         if lowercased == "access denied" || lowercased.contains("\"access denied\"") {
             return "Access denied by the NEAR Private API. Sign in again or choose another available model."
         }
+        if lowercased.contains("temporarily restricted") {
+            return "Access temporarily restricted on the selected model route. Choose another private model or try again in a moment."
+        }
         if lowercased.contains("402") ||
             lowercased.contains("payment required") ||
             (lowercased.contains("billing") && lowercased.contains("required")) ||

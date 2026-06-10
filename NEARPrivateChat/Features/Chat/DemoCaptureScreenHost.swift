@@ -20,7 +20,7 @@ struct DemoCaptureScreenHost: View {
                 DemoPrivateAnswerView()
             case .councilOutput:
                 DemoCouncilComparisonView()
-            case .chat, .composer, .widgets, .generativeChat, .chatStarters, .councilBriefingLive:
+            case .chat, .composer, .widgets, .generativeChat, .chatStarters, .councilBriefingLive, .chatFailure:
                 NavigationStack {
                     ChatView()
                         .navigationTitle(chatStore.selectedConversationTitle)
@@ -56,6 +56,11 @@ struct DemoCaptureScreenHost: View {
                     schedule: "Every weekday · 8:00am",
                     deliveries: ThreadedBriefingView.demoDeliveries
                 )
+            case .trackerFailure:
+                // Failure-state QA surface: a tracker whose run failed must show
+                // the reason and a Run again affordance, never "No delivery yet".
+                let context = demoFailedTrackerContext()
+                ThreadedBriefingView(briefing: context.briefing, store: context.store)
             case .liveData:
                 LiveDataDemoView()
             case .project:

@@ -88,6 +88,8 @@ struct DemoCaptureRootView: View {
             return 8_000_000_000
         case .chatStarters:
             return 4_000_000_000
+        case .chatFailure, .trackerFailure:
+            return 4_000_000_000
         case .briefingBuilder:
             return 4_000_000_000
         case .councilBriefingLive:
@@ -154,6 +156,27 @@ struct LiveDataDemoView: View {
             isLoading = false
         }
     }
+}
+
+/// Failure-state QA context: a tracker whose last run failed with the
+/// restricted-route error, backed by a throwaway store so the Run again
+/// affordance renders and behaves like the real screen.
+@MainActor
+func demoFailedTrackerContext() -> (store: BriefingStore, briefing: Briefing) {
+    let failureCopy = "Access temporarily restricted on the selected model route. Choose another private model or try again in a moment."
+    let briefing = Briefing(
+        title: "NEAR price",
+        prompt: "Track the NEAR price and summarize the move.",
+        schedule: .daily(hour: 8, minute: 0),
+        lastFailureAt: Date().addingTimeInterval(-120),
+        lastFailureMessage: failureCopy
+    )
+    let store = BriefingStore(
+        briefings: [briefing],
+        fileURL: FileManager.default.temporaryDirectory.appendingPathComponent("demo-failed-tracker.json"),
+        runner: { _ in .failed(failureCopy) }
+    )
+    return (store, briefing)
 }
 
 func demoCouncilRoomModel() -> CouncilRoomModel {

@@ -5,7 +5,7 @@ import SwiftUI
 @MainActor
 final class BriefingStore: ObservableObject {
     @Published private(set) var briefings: [Briefing]
-    var runner: (Briefing) async -> MessageWidget?
+    var runner: (Briefing) async -> BriefingRunOutcome
 
     private nonisolated static let notificationAuthorizationGateKey = "briefingNotificationAuthorizationRequestsEnabled"
 
@@ -14,8 +14,8 @@ final class BriefingStore: ObservableObject {
     init(
         briefings: [Briefing] = [],
         fileURL: URL? = nil,
-        runner: @escaping (Briefing) async -> MessageWidget? = { briefing in
-            BriefingSamples.sampleWidget(title: briefing.title)
+        runner: @escaping (Briefing) async -> BriefingRunOutcome = { briefing in
+            .delivered(BriefingSamples.sampleWidget(title: briefing.title))
         }
     ) {
         self.briefings = briefings
@@ -97,17 +97,32 @@ final class BriefingStore: ObservableObject {
 
     func run(_ briefing: Briefing) async {
         guard let snapshot = briefings.first(where: { $0.id == briefing.id }) else { return }
-        let result = await runner(snapshot)
+        let outcome = await runner(snapshot)
         // Re-resolve after the await; the list may have changed during the call.
         guard let index = briefings.firstIndex(where: { $0.id == briefing.id }) else { return }
-        // On failure (e.g. signed out), leave lastRunAt untouched so the briefing
-        // stays due and retries, rather than silently skipping its next run.
-        guard let result else {
-            briefings[index].latestResult = nil
-            briefings[index].lastFailureAt = Date()
-            briefings[index].lastFailureMessage = "Run failed before producing a result."
+        let result: MessageWidget
+        switch outcome {
+        case .quiet:
+            // A clean check with nothing to deliver (e.g. a threshold alert that
+            // didn't fire). Not a failure: keep the last delivery, clear any
+            // stale failure record, and leave lastRunAt untouched so the
+            // briefing stays due on its normal cadence.
+            briefings[index].lastFailureAt = nil
+            briefings[index].lastFailureMessage = nil
             save()
             return
+        case let .failed(message):
+            // On failure (e.g. signed out), leave lastRunAt untouched so the
+            // briefing stays due and retries, rather than silently skipping its
+            // next run.
+            let trimmed = message?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            briefings[index].latestResult = nil
+            briefings[index].lastFailureAt = Date()
+            briefings[index].lastFailureMessage = trimmed.isEmpty ? "Run failed before producing a result." : trimmed
+            save()
+            return
+        case let .delivered(widget):
+            result = widget
         }
         // Accumulate a numeric value from this run, then — once there are ≥2
         // points — surface the trend over time as a chart ("watch chart"). Runs

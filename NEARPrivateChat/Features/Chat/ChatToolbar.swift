@@ -367,7 +367,11 @@ struct ChatToolbar: View {
     }
 
     private func compactAttestationLabel(_ value: String) -> String {
-        return value
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.localizedCaseInsensitiveCompare("No model proof") == .orderedSame {
+            return "No proof"
+        }
+        return trimmed
             .replacingOccurrences(of: "Verified ", with: "")
             .replacingOccurrences(of: " proof", with: "")
     }
