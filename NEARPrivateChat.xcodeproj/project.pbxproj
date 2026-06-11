@@ -171,6 +171,7 @@
 		BAA943CB82964D8442E70D3E /* NEP413SignerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8FE464D42E64654F19B3A0 /* NEP413SignerTests.swift */; };
 		BA1000000000000000000005 /* BriefingTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000005 /* BriefingTrackerTests.swift */; };
 		BA7630D43F932D61CEEA6643 /* WebSearchQueryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA70F2E5E682A1B829B20F6A /* WebSearchQueryTests.swift */; };
+		BAAD4CE5579477843A3EE8F1 /* RoutePromptBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA5FE436D6609F2D9E1D0F8D /* RoutePromptBuilderTests.swift */; };
 		BA1000000000000000000006 /* ComposerAndSendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000006 /* ComposerAndSendTests.swift */; };
 		BA1000000000000000000008 /* QuickIntentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000008 /* QuickIntentTests.swift */; };
 		BA1000000000000000000009 /* WidgetAndActionSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000009 /* WidgetAndActionSurfaceTests.swift */; };
@@ -318,6 +319,7 @@
 		F1A700000200000000000000 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A700000200000000000000 /* ConversationStore.swift */; };
 		F1A700000300000000000000 /* MessageRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A700000300000000000000 /* MessageRepository.swift */; };
 		F1A800000100000000000000 /* ChatSendCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A800000100000000000000 /* ChatSendCoordinator.swift */; };
+		BAAD48D7C3002631B09D9200 /* ChatPromptContextBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8FBE42631F58F139399C49 /* ChatPromptContextBuilder.swift */; };
 		F1B000000000000000000001 /* AccountStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B000000000000000000001 /* AccountStore.swift */; };
 		F1B000000000000000000002 /* AgentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B000000000000000000002 /* AgentStore.swift */; };
 		F1C000000000000000000001 /* SecurityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C000000000000000000001 /* SecurityStore.swift */; };
@@ -545,6 +547,7 @@
 		BA8FE464D42E64654F19B3A0 /* NEP413SignerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NEP413SignerTests.swift; sourceTree = "<group>"; };
 		BA2000000000000000000005 /* BriefingTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingTrackerTests.swift; sourceTree = "<group>"; };
 		BA70F2E5E682A1B829B20F6A /* WebSearchQueryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSearchQueryTests.swift; sourceTree = "<group>"; };
+		BA5FE436D6609F2D9E1D0F8D /* RoutePromptBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutePromptBuilderTests.swift; sourceTree = "<group>"; };
 		BA2000000000000000000006 /* ComposerAndSendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerAndSendTests.swift; sourceTree = "<group>"; };
 		BA2000000000000000000008 /* QuickIntentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickIntentTests.swift; sourceTree = "<group>"; };
 		BA2000000000000000000009 /* WidgetAndActionSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetAndActionSurfaceTests.swift; sourceTree = "<group>"; };
@@ -693,6 +696,7 @@
 		F2A700000200000000000000 /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
 		F2A700000300000000000000 /* MessageRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRepository.swift; sourceTree = "<group>"; };
 		F2A800000100000000000000 /* ChatSendCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSendCoordinator.swift; sourceTree = "<group>"; };
+		BA8FBE42631F58F139399C49 /* ChatPromptContextBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatPromptContextBuilder.swift; sourceTree = "<group>"; };
 		F2B000000000000000000001 /* AccountStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStore.swift; sourceTree = "<group>"; };
 		F2B000000000000000000002 /* AgentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStore.swift; sourceTree = "<group>"; };
 		F2C000000000000000000001 /* SecurityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityStore.swift; sourceTree = "<group>"; };
@@ -878,6 +882,7 @@
 			children = (
 				BA2000000000000000000005 /* BriefingTrackerTests.swift */,
 				BA70F2E5E682A1B829B20F6A /* WebSearchQueryTests.swift */,
+				BA5FE436D6609F2D9E1D0F8D /* RoutePromptBuilderTests.swift */,
 				BA2000000000000000000006 /* ComposerAndSendTests.swift */,
 				BA2000000000000000000008 /* QuickIntentTests.swift */,
 				BA2000000000000000000009 /* WidgetAndActionSurfaceTests.swift */,
@@ -1219,6 +1224,7 @@
 				C20000000000000000000010 /* ComposerState.swift */,
 				C20000000000000000000012 /* ChatSessionStores.swift */,
 				F2A800000100000000000000 /* ChatSendCoordinator.swift */,
+				BA8FBE42631F58F139399C49 /* ChatPromptContextBuilder.swift */,
 				B2C800000100000000000000 /* ChatMessageLoadCoordinator.swift */,
 				C2000000000000000000000F /* MessageTimelineStore.swift */,
 				F2A700000300000000000000 /* MessageRepository.swift */,
@@ -1957,6 +1963,7 @@
 				F10000000000000000000018 /* SetupSoulPromptBuilder.swift in Sources */,
 				C1000000000000000000000F /* MessageTimelineStore.swift in Sources */,
 				F1A800000100000000000000 /* ChatSendCoordinator.swift in Sources */,
+				BAAD48D7C3002631B09D9200 /* ChatPromptContextBuilder.swift in Sources */,
 				B1C800000100000000000000 /* ChatMessageLoadCoordinator.swift in Sources */,
 				F1A700000300000000000000 /* MessageRepository.swift in Sources */,
 				C10000000000000000000010 /* ComposerState.swift in Sources */,
@@ -1990,6 +1997,7 @@
 				BAA943CB82964D8442E70D3E /* NEP413SignerTests.swift in Sources */,
 				BA1000000000000000000005 /* BriefingTrackerTests.swift in Sources */,
 				BA7630D43F932D61CEEA6643 /* WebSearchQueryTests.swift in Sources */,
+				BAAD4CE5579477843A3EE8F1 /* RoutePromptBuilderTests.swift in Sources */,
 				BA1000000000000000000006 /* ComposerAndSendTests.swift in Sources */,
 				BA1000000000000000000008 /* QuickIntentTests.swift in Sources */,
 				BA1000000000000000000009 /* WidgetAndActionSurfaceTests.swift in Sources */,
