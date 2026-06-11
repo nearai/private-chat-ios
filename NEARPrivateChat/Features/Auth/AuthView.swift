@@ -37,6 +37,7 @@ struct AuthView: View {
     // the dependable path. See WebSignInView for the in-app web-login harvest.
     @State private var showingTokenLogin = false
     @State private var showingWebSignIn = false
+    @State private var showingNearAccountSignIn = false
     @State private var token = ""
 
     #if DEBUG
@@ -156,6 +157,17 @@ struct AuthView: View {
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("auth.tokenSignIn")
 
+                    Button {
+                        showingNearAccountSignIn = true
+                    } label: {
+                        Text("Sign in with a NEAR account key")
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(Color.textSecondary)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("auth.nearAccountSignIn")
+
                     #if DEBUG
                     DebugMoreSignInOptions(
                         isOpen: $showingMoreSignInOptions,
@@ -199,6 +211,9 @@ struct AuthView: View {
                 },
                 onCancel: { showingWebSignIn = false }
             )
+        }
+        .sheet(isPresented: $showingNearAccountSignIn) {
+            NearAccountSignInView()
         }
         .sheet(isPresented: $showingTokenLogin) {
             NavigationStack {

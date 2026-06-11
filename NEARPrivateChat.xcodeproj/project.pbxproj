@@ -26,10 +26,14 @@
 		9F2C1A89E6F74E53A6D1D05B /* ChatLocalIntentExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2C1A88E6F74E53A6D1D05B /* ChatLocalIntentExecutor.swift */; };
 		A10000000000000000000001 /* NEARPrivateChatApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* NEARPrivateChatApp.swift */; };
 		A10000000000000000000003 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* KeychainStore.swift */; };
+		BA913E470BE81739B5A9DD0C /* NearKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA60480B9764D09E5B046B0A /* NearKeyStore.swift */; };
+		BA35609D6C7ED6EF4F6578C3 /* NEP413Signer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA1EF1257D9A185D25A9543D /* NEP413Signer.swift */; };
+		BAC1415B33309854487509D9 /* NearBase58.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE54EAA0FA054FE6A446C38 /* NearBase58.swift */; };
 		A10000000000000000000004 /* PrivateChatAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* PrivateChatAPI.swift */; };
 		A10000000000000000000005 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* SessionStore.swift */; };
 		A10000000000000000000006 /* ChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* ChatStore.swift */; };
 		A10000000000000000000007 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* AuthView.swift */; };
+		BA532039BDCA7F292B599FF3 /* NearAccountSignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA519A96BBEFBEF929214563 /* NearAccountSignInView.swift */; };
 		BA7F4FFEA5CF2796C78BE80E /* WebSignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA7848FACAEFEAD2D57DB02A /* WebSignInView.swift */; };
 		A10000000000000000000008 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* AppShellView.swift */; };
 		A10000000000000000000009 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* Assets.xcassets */; };
@@ -159,6 +163,7 @@
 		BA1000000000000000000002 /* AccountTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000002 /* AccountTests.swift */; };
 		BA1000000000000000000003 /* AgentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000003 /* AgentTests.swift */; };
 		BA1000000000000000000004 /* AuthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000004 /* AuthTests.swift */; };
+		BAA943CB82964D8442E70D3E /* NEP413SignerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8FE464D42E64654F19B3A0 /* NEP413SignerTests.swift */; };
 		BA1000000000000000000005 /* BriefingTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000005 /* BriefingTrackerTests.swift */; };
 		BA7630D43F932D61CEEA6643 /* WebSearchQueryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA70F2E5E682A1B829B20F6A /* WebSearchQueryTests.swift */; };
 		BA1000000000000000000006 /* ComposerAndSendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000006 /* ComposerAndSendTests.swift */; };
@@ -366,10 +371,14 @@
 		9F2C1A88E6F74E53A6D1D05B /* ChatLocalIntentExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLocalIntentExecutor.swift; sourceTree = "<group>"; };
 		A20000000000000000000001 /* NEARPrivateChatApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NEARPrivateChatApp.swift; sourceTree = "<group>"; };
 		A20000000000000000000003 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		BA60480B9764D09E5B046B0A /* NearKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearKeyStore.swift; sourceTree = "<group>"; };
+		BA1EF1257D9A185D25A9543D /* NEP413Signer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NEP413Signer.swift; sourceTree = "<group>"; };
+		BAE54EAA0FA054FE6A446C38 /* NearBase58.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearBase58.swift; sourceTree = "<group>"; };
 		A20000000000000000000004 /* PrivateChatAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateChatAPI.swift; sourceTree = "<group>"; };
 		A20000000000000000000005 /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
 		A20000000000000000000006 /* ChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStore.swift; sourceTree = "<group>"; };
 		A20000000000000000000007 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
+		BA519A96BBEFBEF929214563 /* NearAccountSignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearAccountSignInView.swift; sourceTree = "<group>"; };
 		BA7848FACAEFEAD2D57DB02A /* WebSignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSignInView.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -502,6 +511,7 @@
 		BA2000000000000000000002 /* AccountTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountTests.swift; sourceTree = "<group>"; };
 		BA2000000000000000000003 /* AgentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentTests.swift; sourceTree = "<group>"; };
 		BA2000000000000000000004 /* AuthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthTests.swift; sourceTree = "<group>"; };
+		BA8FE464D42E64654F19B3A0 /* NEP413SignerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NEP413SignerTests.swift; sourceTree = "<group>"; };
 		BA2000000000000000000005 /* BriefingTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingTrackerTests.swift; sourceTree = "<group>"; };
 		BA70F2E5E682A1B829B20F6A /* WebSearchQueryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSearchQueryTests.swift; sourceTree = "<group>"; };
 		BA2000000000000000000006 /* ComposerAndSendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerAndSendTests.swift; sourceTree = "<group>"; };
@@ -805,6 +815,7 @@
 			isa = PBXGroup;
 			children = (
 				BA2000000000000000000004 /* AuthTests.swift */,
+				BA8FE464D42E64654F19B3A0 /* NEP413SignerTests.swift */,
 			);
 			path = Auth;
 			sourceTree = "<group>";
@@ -1074,6 +1085,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000007 /* AuthView.swift */,
+				BA519A96BBEFBEF929214563 /* NearAccountSignInView.swift */,
 				BA7848FACAEFEAD2D57DB02A /* WebSignInView.swift */,
 			);
 			path = Auth;
@@ -1306,6 +1318,9 @@
 			children = (
 				F20000000000000000000005 /* AuthModels.swift */,
 				A20000000000000000000003 /* KeychainStore.swift */,
+				BA60480B9764D09E5B046B0A /* NearKeyStore.swift */,
+				BA1EF1257D9A185D25A9543D /* NEP413Signer.swift */,
+				BAE54EAA0FA054FE6A446C38 /* NearBase58.swift */,
 				A20000000000000000000005 /* SessionStore.swift */,
 			);
 			path = Auth;
@@ -1606,6 +1621,9 @@
 				A10000000000000000000015 /* AskOrchestrator.swift in Sources */,
 				A10000000000000000000013 /* PrivateTelemetry.swift in Sources */,
 				A10000000000000000000003 /* KeychainStore.swift in Sources */,
+				BA913E470BE81739B5A9DD0C /* NearKeyStore.swift in Sources */,
+				BA35609D6C7ED6EF4F6578C3 /* NEP413Signer.swift in Sources */,
+				BAC1415B33309854487509D9 /* NearBase58.swift in Sources */,
 				A10000000000000000000004 /* PrivateChatAPI.swift in Sources */,
 				F1A200000100000000000000 /* APIClient.swift in Sources */,
 				F1A200000200000000000000 /* AuthAPI.swift in Sources */,
@@ -1636,6 +1654,7 @@
 				A10000000000000000000005 /* SessionStore.swift in Sources */,
 				A10000000000000000000006 /* ChatStore.swift in Sources */,
 				A10000000000000000000007 /* AuthView.swift in Sources */,
+				BA532039BDCA7F292B599FF3 /* NearAccountSignInView.swift in Sources */,
 				BA7F4FFEA5CF2796C78BE80E /* WebSignInView.swift in Sources */,
 				A10000000000000000000008 /* AppShellView.swift in Sources */,
 				C10000000000000000000001 /* AppHaptics.swift in Sources */,
@@ -1859,6 +1878,7 @@
 				BA1000000000000000000002 /* AccountTests.swift in Sources */,
 				BA1000000000000000000003 /* AgentTests.swift in Sources */,
 				BA1000000000000000000004 /* AuthTests.swift in Sources */,
+				BAA943CB82964D8442E70D3E /* NEP413SignerTests.swift in Sources */,
 				BA1000000000000000000005 /* BriefingTrackerTests.swift in Sources */,
 				BA7630D43F932D61CEEA6643 /* WebSearchQueryTests.swift in Sources */,
 				BA1000000000000000000006 /* ComposerAndSendTests.swift in Sources */,

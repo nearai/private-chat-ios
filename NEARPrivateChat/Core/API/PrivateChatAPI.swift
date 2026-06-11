@@ -67,6 +67,10 @@ final class PrivateChatAPI: AuthAPI,
         try await authClient.signOut(sessionID: sessionID)
     }
 
+    func signInWithNear(signedMessage: NEP413SignedMessage, payload: NEP413Payload) async throws -> AuthSession {
+        try await authClient.signInWithNear(signedMessage: signedMessage, payload: payload)
+    }
+
     func fetchUserSettings() async throws -> UserSettingsResponse {
         try await settingsClient.fetchUserSettings()
     }

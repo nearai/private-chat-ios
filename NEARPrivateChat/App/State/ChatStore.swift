@@ -4511,7 +4511,8 @@ final class ChatStore: ObservableObject {
             await ironclawAPI.waitForThread(
                 settings: settings,
                 authToken: loadIronclawAuthToken(),
-                threadID: approval.threadID
+                threadID: approval.threadID,
+                runID: approval.runID ?? ""
             ) { [weak self] event in
                 await self?.apply(streamEvent: event, conversationID: conversationID)
             }
@@ -4570,7 +4571,8 @@ final class ChatStore: ObservableObject {
             await ironclawAPI.waitForThread(
                 settings: settings,
                 authToken: loadIronclawAuthToken(),
-                threadID: approval.threadID
+                threadID: approval.threadID,
+                runID: approval.runID ?? ""
             ) { [weak self] event in
                 await self?.apply(streamEvent: event, conversationID: conversationID)
             }

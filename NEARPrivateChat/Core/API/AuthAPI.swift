@@ -9,6 +9,7 @@ protocol AuthAPI: AnyObject {
     func exchangeAuthCode(provider: OAuthProvider, callback: AuthCodeCallback, codeVerifier: String) async throws -> AuthSession
     func fetchProfile() async throws -> UserProfile
     func signOut(sessionID: String) async throws
+    func signInWithNear(signedMessage: NEP413SignedMessage, payload: NEP413Payload) async throws -> AuthSession
 }
 
 final class PrivateChatAuthAPI: AuthAPI {
@@ -128,6 +129,33 @@ final class PrivateChatAuthAPI: AuthAPI {
         try await client.request("/v1/users/me", method: "GET", authenticated: true)
     }
 
+    /// Native NEAR sign-in: POSTs a NEP-413 signed message to `/v1/auth/near`
+    /// (the same endpoint the web wallet flow uses) and returns the issued
+    /// session. The server verifies the signature and that the public key is a
+    /// key on `accountId` before issuing a token.
+    func signInWithNear(signedMessage: NEP413SignedMessage, payload: NEP413Payload) async throws -> AuthSession {
+        let body = NearAuthRequest(
+            signedMessage: signedMessage,
+            payload: NearAuthRequest.Payload(
+                message: payload.message,
+                nonce: payload.nonce.map { Int($0) },
+                recipient: payload.recipient
+            )
+        )
+        let response: NearAuthResponse = try await client.request(
+            "/v1/auth/near",
+            method: "POST",
+            body: body,
+            authenticated: false
+        )
+        return AuthSession(
+            token: response.token,
+            sessionID: response.sessionID ?? "",
+            expiresAt: nil,
+            isNewUser: response.isNewUser ?? false
+        )
+    }
+
     func signOut(sessionID: String) async throws {
         guard !sessionID.isEmpty else { return }
         let payload = LogoutPayload(sessionID: sessionID)
@@ -221,5 +249,35 @@ private struct LogoutPayload: Encodable {
 
     enum CodingKeys: String, CodingKey {
         case sessionID = "session_id"
+    }
+}
+
+/// Wire body for `POST /v1/auth/near`, mirroring the production web client:
+/// `{signed_message: {accountId, publicKey, signature}, payload: {message,
+/// nonce: [u8], recipient}}`.
+private struct NearAuthRequest: Encodable {
+    struct Payload: Encodable {
+        let message: String
+        let nonce: [Int]
+        let recipient: String
+    }
+    let signedMessage: NEP413SignedMessage
+    let payload: Payload
+
+    enum CodingKeys: String, CodingKey {
+        case signedMessage = "signed_message"
+        case payload
+    }
+}
+
+private struct NearAuthResponse: Decodable {
+    let token: String
+    let sessionID: String?
+    let isNewUser: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case token
+        case sessionID = "session_id"
+        case isNewUser = "is_new_user"
     }
 }

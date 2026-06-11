@@ -1,61 +1,44 @@
 import Foundation
 
+/// Client for the hosted IronClaw "reborn" agent, WebChat v2 HTTP API
+/// (`/api/webchat/v2/*`, served by `ironclaw-reborn serve`). Replaces the old
+/// `/api/chat/*` gateway shape.
+///
+/// Shape differences this client absorbs so the rest of the app is unchanged:
+/// - Threads, messages, runs, and gates are addressed by path
+///   (`/threads/{thread_id}/messages`, `/runs/{run_id}/gates/{gate_ref}/resolve`).
+/// - Every mutation requires a client-generated idempotency key
+///   (`client_action_id`).
+/// - `send_message` returns a `run_id` immediately and the answer is produced
+///   asynchronously; this client polls run state + the thread timeline (rather
+///   than opening the SSE stream) so the existing `onEvent` callback contract
+///   and poll architecture are preserved.
+/// - Auth is `Authorization: Bearer <token>` where the token is the reborn
+///   `IRONCLAW_REBORN_WEBUI_TOKEN`, configured by the user as the Agent token.
 final class IronclawAPI {
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
 
+    private static let threadsPath = "api/webchat/v2/threads"
+
     func testConnection(settings: IronclawSettings, authToken: String?) async throws -> String {
         let baseURL = try validatedBaseURL(settings.baseURL)
-        var request = URLRequest(url: baseURL.appending(path: "api/chat/thread/new"))
-        request.httpMethod = "POST"
-        request.timeoutInterval = 10
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = Data("{}".utf8)
-        if let authToken, !authToken.isEmpty {
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                throw APIError.status(0, "Hosted IronClaw did not return HTTP.")
-            }
-            guard (200..<300).contains(http.statusCode) else {
-                let body = String(data: data, encoding: .utf8) ?? "Status \(http.statusCode)"
-                if [401, 403].contains(http.statusCode) {
-                    throw APIError.status(http.statusCode, "Hosted IronClaw is reachable. The chat route needs a valid Agent token.")
-                }
-                throw APIError.status(http.statusCode, body)
-            }
-            if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let id = object["id"] as? String,
-               !id.isEmpty {
-                return "IronClaw chat route is ready."
-            }
-            throw APIError.status(0, "IronClaw chat route responded without a thread id.")
-        } catch let error as APIError {
-            throw error
-        } catch {
-            throw APIError.status(0, error.localizedDescription)
+            let thread = try await createThread(baseURL: baseURL, authToken: authToken)
+            return thread.isEmpty
+                ? "IronClaw responded without a thread id."
+                : "IronClaw agent route is ready."
+        } catch let APIError.status(code, _) where [401, 403].contains(code) {
+            throw APIError.status(code, "Hosted IronClaw is reachable. The agent route needs a valid Agent token.")
         }
     }
 
+    /// The reborn core routes do not expose a tool catalogue; tool names are
+    /// surfaced through run events instead. Returns empty so the Agent surface
+    /// degrades gracefully rather than erroring.
     func fetchToolNames(settings: IronclawSettings, authToken: String?) async throws -> [String] {
-        let baseURL = try validatedBaseURL(settings.baseURL)
-        var request = URLRequest(url: baseURL.appending(path: "api/extensions/tools"))
-        request.httpMethod = "GET"
-        request.timeoutInterval = 12
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let authToken, !authToken.isEmpty {
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-
-        let response: IronclawToolsResponse = try await perform(request)
-        return response.tools
-            .map(\.name)
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        _ = try validatedBaseURL(settings.baseURL)
+        return []
     }
 
     func testWorkstationCapability(settings: IronclawSettings, authToken: String?) async throws -> String {
@@ -63,14 +46,9 @@ final class IronclawAPI {
         probeSettings.threadID = ""
         let prompt = """
         Hosted IronClaw preflight from NEAR Private Chat iOS.
-        Please run the minimal local tool command now.
-        Use only built-in hosted tools. Prefer shell.
-        When calling shell, pass the JSON parameter named command, singular.
-        Do not use set -euo pipefail; the hosted shell may execute commands through /bin/sh.
-        Do not call http, GitHub, tool_install, package installers, or any external network.
         Run a minimal local command equivalent to: pwd; git --version; printf '\\nIRONCLAW_WORKSTATION_OK\\n'.
         Then answer with one short sentence containing IRONCLAW_WORKSTATION_OK and whether shell/git worked.
-        If shell is unavailable, use echo if available and say which local tool was unavailable.
+        If shell is unavailable, say which local tool was unavailable.
         """
 
         var output = ""
@@ -100,7 +78,6 @@ final class IronclawAPI {
         if let pendingGate {
             return "Hosted IronClaw reached. Waiting for \(pendingGate.toolName) approval."
         }
-
         let normalized = output
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -124,29 +101,29 @@ final class IronclawAPI {
     ) async throws -> IronclawSendResult {
         let baseURL = try validatedBaseURL(settings.baseURL)
         let threadID = try await resolveThreadID(baseURL: baseURL, settings: settings, authToken: authToken)
+        guard let threadID, !threadID.isEmpty else {
+            throw APIError.status(0, "IronClaw did not return a thread id.")
+        }
         var content = prompt
         if !attachments.isEmpty {
             content += "\n\n\(Self.hostedAttachmentDisclosure(for: attachments))"
         }
 
-        let payload = IronclawSendPayload(
-            content: content,
-            threadID: threadID,
-            timezone: TimeZone.current.identifier
+        let payload = IronclawSendPayload(clientActionID: UUID().uuidString, content: content)
+        var request = jsonRequest(
+            url: baseURL.appending(path: "\(Self.threadsPath)/\(threadID)/messages"),
+            method: "POST",
+            authToken: authToken,
+            timeout: 30
         )
-
-        var request = URLRequest(url: baseURL.appending(path: "api/chat/send"))
-        request.httpMethod = "POST"
-        request.timeoutInterval = 30
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let authToken, !authToken.isEmpty {
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
         request.httpBody = try encoder.encode(payload)
 
-        let response: IronclawSendResponse = try await perform(request)
-        return IronclawSendResult(messageID: response.messageID, status: response.status, threadID: threadID)
+        let response: IronclawSubmitResponse = try await perform(request)
+        return IronclawSendResult(
+            runID: response.resolvedRunID,
+            status: response.status ?? "",
+            threadID: threadID
+        )
     }
 
     func streamPrompt(
@@ -157,7 +134,6 @@ final class IronclawAPI {
         onResolvedThreadID: ((String) async -> Void)? = nil,
         onEvent: @escaping (ResponseStreamEvent) async -> Void
     ) async throws {
-        let requiresToolUse = Self.promptRequiresWorkstationTools(prompt)
         let result = try await sendPrompt(
             prompt: prompt,
             attachments: attachments,
@@ -167,47 +143,23 @@ final class IronclawAPI {
         if let threadID = result.threadID, let onResolvedThreadID {
             await onResolvedThreadID(threadID)
         }
-        if let threadID = result.threadID {
-            var shouldComplete = true
-            for attempt in 0...1 {
-                await onEvent(.reasoningStarted)
-                let outcome = await pollHistoryUntilFinished(
-                    settings: settings,
-                    authToken: authToken,
-                    threadID: threadID,
-                    requiresToolUse: requiresToolUse,
-                    onEvent: onEvent
-                )
-
-                switch outcome {
-                case .completed:
-                    shouldComplete = true
-                    break
-                case .approvalNeeded, .failed:
-                    shouldComplete = false
-                    break
-                case let .needsContinuation(diagnostic):
-                    guard attempt == 0 else {
-                        await onEvent(.failed(Self.emptyFinalAnswerFailure(diagnostic)))
-                        shouldComplete = false
-                        break
-                    }
-                    var retrySettings = settings
-                    retrySettings.threadID = threadID
-                    _ = try await sendPrompt(
-                        prompt: Self.continuationPrompt(originalPrompt: prompt, diagnostic: diagnostic),
-                        attachments: [],
-                        settings: retrySettings,
-                        authToken: authToken
-                    )
-                    continue
-                }
-
-                break
-            }
-            guard shouldComplete else { return }
+        guard let threadID = result.threadID, let runID = result.runID, !runID.isEmpty else {
+            await onEvent(.completed(responseID: nil))
+            return
         }
-        await onEvent(.completed(responseID: nil))
+        await onEvent(.reasoningStarted)
+        let outcome = await pollRunUntilFinished(
+            settings: settings,
+            authToken: authToken,
+            threadID: threadID,
+            runID: runID,
+            onEvent: onEvent
+        )
+        // approvalNeeded / failed terminate without a synthetic completion; the
+        // approval resolution path (or the error) owns the message state.
+        if case .completed = outcome {
+            await onEvent(.completed(responseID: nil))
+        }
     }
 
     func resolveGate(
@@ -216,7 +168,6 @@ final class IronclawAPI {
         approval: IronclawPendingGate,
         action: IronclawApprovalAction
     ) async throws {
-        let baseURL = try validatedBaseURL(settings.baseURL)
         let resolution: String
         if action == .deny && approval.isAuthenticationGate {
             resolution = "cancelled"
@@ -225,25 +176,15 @@ final class IronclawAPI {
         } else {
             resolution = "approved"
         }
-        let payload = IronclawGateResolvePayload(
-            requestID: approval.requestID,
-            threadID: approval.threadID,
+        let always = action == .always && approval.locallyAllowsAlways ? true : nil
+        try await postGateResolution(
+            settings: settings,
+            authToken: authToken,
+            approval: approval,
             resolution: resolution,
-            always: action == .always && approval.locallyAllowsAlways ? true : nil,
-            token: nil
+            always: always,
+            credentialRef: nil
         )
-
-        var request = URLRequest(url: baseURL.appending(path: "api/chat/gate/resolve"))
-        request.httpMethod = "POST"
-        request.timeoutInterval = 20
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let authToken, !authToken.isEmpty {
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        request.httpBody = try encoder.encode(payload)
-
-        let _: IronclawActionResponse = try await perform(request)
     }
 
     func submitGateCredential(
@@ -252,49 +193,249 @@ final class IronclawAPI {
         approval: IronclawPendingGate,
         token: String
     ) async throws {
-        let baseURL = try validatedBaseURL(settings.baseURL)
-        let payload = IronclawGateResolvePayload(
-            requestID: approval.requestID,
-            threadID: approval.threadID,
+        try await postGateResolution(
+            settings: settings,
+            authToken: authToken,
+            approval: approval,
             resolution: "credential_provided",
             always: nil,
-            token: token
+            credentialRef: token
         )
-
-        var request = URLRequest(url: baseURL.appending(path: "api/chat/gate/resolve"))
-        request.httpMethod = "POST"
-        request.timeoutInterval = 20
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let authToken, !authToken.isEmpty {
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        request.httpBody = try encoder.encode(payload)
-
-        let _: IronclawActionResponse = try await perform(request)
     }
 
     func waitForThread(
         settings: IronclawSettings,
         authToken: String?,
         threadID: String,
+        runID: String,
         onEvent: @escaping (ResponseStreamEvent) async -> Void
     ) async {
-        _ = await pollHistoryUntilFinished(
+        guard !runID.isEmpty else {
+            await onEvent(.completed(responseID: nil))
+            return
+        }
+        let outcome = await pollRunUntilFinished(
             settings: settings,
             authToken: authToken,
             threadID: threadID,
-            requiresToolUse: false,
+            runID: runID,
             onEvent: onEvent
         )
-        await onEvent(.completed(responseID: nil))
+        if case .completed = outcome {
+            await onEvent(.completed(responseID: nil))
+        }
+    }
+
+    func fetchLatestResponse(
+        settings: IronclawSettings,
+        authToken: String?,
+        threadID: String
+    ) async throws -> String? {
+        let baseURL = try validatedBaseURL(settings.baseURL)
+        let timeline = try await fetchTimeline(baseURL: baseURL, authToken: authToken, threadID: threadID)
+        return Self.latestAssistantText(in: timeline, runID: nil)
+    }
+
+    // MARK: - Reborn HTTP
+
+    private func createThread(baseURL: URL, authToken: String?) async throws -> String {
+        var request = jsonRequest(
+            url: baseURL.appending(path: Self.threadsPath),
+            method: "POST",
+            authToken: authToken,
+            timeout: 15
+        )
+        request.httpBody = try encoder.encode(IronclawCreateThreadPayload(clientActionID: UUID().uuidString))
+        let response: IronclawCreateThreadResponse = try await perform(request)
+        return response.thread.threadID
+    }
+
+    private func resolveThreadID(
+        baseURL: URL,
+        settings: IronclawSettings,
+        authToken: String?
+    ) async throws -> String? {
+        let configured = settings.threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !configured.isEmpty { return configured }
+        return try await createThread(baseURL: baseURL, authToken: authToken)
+    }
+
+    private func postGateResolution(
+        settings: IronclawSettings,
+        authToken: String?,
+        approval: IronclawPendingGate,
+        resolution: String,
+        always: Bool?,
+        credentialRef: String?
+    ) async throws {
+        let baseURL = try validatedBaseURL(settings.baseURL)
+        let runID = (approval.runID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !runID.isEmpty else {
+            throw APIError.status(0, "This approval is missing its run reference. Resend the request.")
+        }
+        guard let gateRef = approval.requestID
+            .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+            throw APIError.invalidURL
+        }
+        let path = "\(Self.threadsPath)/\(approval.threadID)/runs/\(runID)/gates/\(gateRef)/resolve"
+        var request = jsonRequest(url: baseURL.appending(path: path), method: "POST", authToken: authToken, timeout: 20)
+        request.httpBody = try encoder.encode(IronclawGateResolvePayload(
+            clientActionID: UUID().uuidString,
+            resolution: resolution,
+            always: always,
+            credentialRef: credentialRef
+        ))
+        let _: IronclawResolveGateResponse = try await perform(request)
+    }
+
+    private func fetchRunState(
+        baseURL: URL,
+        authToken: String?,
+        threadID: String,
+        runID: String
+    ) async throws -> IronclawRunState {
+        let request = jsonRequest(
+            url: baseURL.appending(path: "\(Self.threadsPath)/\(threadID)/runs/\(runID)"),
+            method: "GET",
+            authToken: authToken,
+            timeout: 12
+        )
+        return try await perform(request)
+    }
+
+    private func fetchTimeline(
+        baseURL: URL,
+        authToken: String?,
+        threadID: String
+    ) async throws -> IronclawTimelineResponse {
+        guard var components = URLComponents(
+            url: baseURL.appending(path: "\(Self.threadsPath)/\(threadID)/timeline"),
+            resolvingAgainstBaseURL: false
+        ) else {
+            throw APIError.invalidURL
+        }
+        components.queryItems = [URLQueryItem(name: "limit", value: "20")]
+        guard let url = components.url else { throw APIError.invalidURL }
+        let request = jsonRequest(url: url, method: "GET", authToken: authToken, timeout: 12)
+        return try await perform(request)
+    }
+
+    private func pollRunUntilFinished(
+        settings: IronclawSettings,
+        authToken: String?,
+        threadID: String,
+        runID: String,
+        onEvent: @escaping (ResponseStreamEvent) async -> Void
+    ) async -> IronclawPollOutcome {
+        guard let baseURL = try? validatedBaseURL(settings.baseURL) else {
+            await onEvent(.failed("IronClaw endpoint is not a valid Hosted IronClaw URL."))
+            return .failed
+        }
+        let maxAttempts = 180
+
+        for attempt in 0..<maxAttempts {
+            try? await Task.sleep(nanoseconds: attempt == 0 ? 800_000_000 : 2_000_000_000)
+            if Task.isCancelled { return .failed }
+
+            guard let state = try? await fetchRunState(
+                baseURL: baseURL,
+                authToken: authToken,
+                threadID: threadID,
+                runID: runID
+            ) else {
+                continue
+            }
+
+            switch state.status {
+            case "Completed":
+                let text = (try? await fetchTimeline(baseURL: baseURL, authToken: authToken, threadID: threadID))
+                    .flatMap { Self.latestAssistantText(in: $0, runID: runID) } ?? ""
+                let presented = Self.presentationText(from: text)
+                if presented.isEmpty {
+                    await onEvent(.failed("IronClaw finished but returned no answer text. Check the Agent connection logs, then retry."))
+                    return .failed
+                }
+                await onEvent(.itemDone(text: presented))
+                return .completed
+
+            case "Failed", "RecoveryRequired":
+                let reason = state.failure?.category.map { ": \($0)" } ?? "."
+                await onEvent(.failed("IronClaw failed on this turn\(reason) Check Hosted IronClaw logs, then retry."))
+                return .failed
+
+            case "Cancelled":
+                await onEvent(.failed("IronClaw cancelled this turn."))
+                return .failed
+
+            case "BlockedApproval", "BlockedAuth":
+                let gate = Self.makeGate(state: state, threadID: threadID, runID: runID)
+                await onEvent(.approvalNeeded(gate))
+                return .approvalNeeded
+
+            default:
+                // Queued, Running, BlockedResource, BlockedDependentRun,
+                // CancelRequested — keep waiting.
+                await onEvent(.reasoningStarted)
+            }
+        }
+
+        await onEvent(.failed("IronClaw returned no output within six minutes. Check Hosted IronClaw, then retry."))
+        return .failed
+    }
+
+    private static func makeGate(state: IronclawRunState, threadID: String, runID: String) -> IronclawPendingGate {
+        let isAuth = state.status == "BlockedAuth"
+        return IronclawPendingGate(
+            requestID: state.gateRef ?? "gate",
+            threadID: threadID,
+            runID: runID,
+            gateName: isAuth ? "authentication" : "approval",
+            toolName: isAuth ? "an account connection" : "a tool",
+            description: isAuth
+                ? "IronClaw needs you to connect an account to continue."
+                : "IronClaw is requesting approval to run a tool.",
+            parameters: nil,
+            allowsAlways: !isAuth,
+            gateKind: isAuth ? .authentication : .approval,
+            credentialName: nil,
+            authURL: nil,
+            setupURL: nil,
+            instructions: nil,
+            displayName: nil,
+            extensionName: nil
+        )
+    }
+
+    private static func latestAssistantText(in timeline: IronclawTimelineResponse, runID: String?) -> String? {
+        let assistantMessages = timeline.messages.filter {
+            $0.kind == "assistant" && ($0.content?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+        }
+        if let runID,
+           let scoped = assistantMessages.last(where: { $0.turnRunID == runID })?.content {
+            return scoped
+        }
+        return assistantMessages.last?.content
+    }
+
+    // MARK: - HTTP plumbing
+
+    private func jsonRequest(url: URL, method: String, authToken: String?, timeout: TimeInterval) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = timeout
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if method != "GET" {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        if let authToken, !authToken.isEmpty {
+            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        }
+        return request
     }
 
     private func validatedBaseURL(_ rawValue: String) throws -> URL {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            throw APIError.invalidURL
-        }
+        guard !trimmed.isEmpty else { throw APIError.invalidURL }
         let normalized = trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") ? trimmed : "https://\(trimmed)"
         guard let url = URL(string: normalized),
               let scheme = url.scheme?.lowercased(),
@@ -337,14 +478,40 @@ final class IronclawAPI {
         return String(text.prefix(limit)).trimmingCharacters(in: .whitespacesAndNewlines) + "..."
     }
 
+    /// Formats a hosted shell-tool JSON result ({stdout,stderr,exit_code}) into
+    /// readable markdown; passes through plain text unchanged.
+    private static func presentationText(from text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("{"),
+              let data = trimmed.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object.keys.contains("stdout"),
+              object.keys.contains("stderr"),
+              object.keys.contains("exit_code") else {
+            return trimmed
+        }
+        let stdout = (object["stdout"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stderr = (object["stderr"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let exitCode = object["exit_code"] as? Int
+        if stderr.isEmpty {
+            if stdout.contains("\n") { return "```text\n\(stdout)\n```" }
+            if !stdout.isEmpty { return stdout }
+            return "Command completed with exit code \(exitCode ?? 0)."
+        }
+        let statusLine = exitCode.map { "Command exited with code \($0)." } ?? "Command returned stderr."
+        if stdout.isEmpty {
+            return "\(statusLine)\n\n```text\n\(stderr)\n```"
+        }
+        return "\(statusLine)\n\nstdout\n```text\n\(stdout)\n```\n\nstderr\n```text\n\(stderr)\n```"
+    }
+
+    // MARK: - Attachment disclosure (unchanged contract)
+
     static func hostedAttachmentDisclosure(for attachments: [ChatAttachment]) -> String {
         guard !attachments.isEmpty else { return "" }
-
         let listedAttachments = attachments.prefix(20).map(hostedAttachmentMetadataLine)
-
         let omittedCount = attachments.count - listedAttachments.count
         let omittedLine = omittedCount > 0 ? "\n- ...and \(omittedCount) more attachment\(omittedCount == 1 ? "" : "s") listed only by metadata." : ""
-
         return """
         NEAR Private Chat hosted attachment status:
         - This hosted IronClaw request did not attach readable file objects or file bytes out-of-band.
@@ -386,447 +553,118 @@ final class IronclawAPI {
         let escaped = value.replacingOccurrences(of: "\"", with: "\\\"")
         return "\"\(escaped)\""
     }
-
-    private func resolveThreadID(
-        baseURL: URL,
-        settings: IronclawSettings,
-        authToken: String?
-    ) async throws -> String? {
-        let configuredThreadID = settings.threadID.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !configuredThreadID.isEmpty {
-            return configuredThreadID
-        }
-
-        var request = URLRequest(url: baseURL.appending(path: "api/chat/thread/new"))
-        request.httpMethod = "POST"
-        request.timeoutInterval = 15
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let authToken, !authToken.isEmpty {
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-
-        let thread: IronclawThreadInfo = try await perform(request)
-        return thread.id
-    }
-
-    func fetchLatestResponse(
-        settings: IronclawSettings,
-        authToken: String?,
-        threadID: String
-    ) async throws -> String? {
-        try await fetchLatestTurn(settings: settings, authToken: authToken, threadID: threadID)?.response
-    }
-
-    private func fetchLatestTurn(
-        settings: IronclawSettings,
-        authToken: String?,
-        threadID: String
-    ) async throws -> IronclawTurn? {
-        try await fetchHistory(settings: settings, authToken: authToken, threadID: threadID).turns.last
-    }
-
-    private func fetchHistory(
-        settings: IronclawSettings,
-        authToken: String?,
-        threadID: String
-    ) async throws -> IronclawHistoryResponse {
-        let baseURL = try validatedBaseURL(settings.baseURL)
-        guard var components = URLComponents(url: baseURL.appending(path: "api/chat/history"), resolvingAgainstBaseURL: false) else {
-            throw APIError.invalidURL
-        }
-        components.queryItems = [
-            URLQueryItem(name: "thread_id", value: threadID),
-            URLQueryItem(name: "limit", value: "5")
-        ]
-        guard let url = components.url else {
-            throw APIError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 12
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let authToken, !authToken.isEmpty {
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-
-        return try await perform(request)
-    }
-
-    private func pollHistoryUntilFinished(
-        settings: IronclawSettings,
-        authToken: String?,
-        threadID: String,
-        requiresToolUse: Bool,
-        onEvent: @escaping (ResponseStreamEvent) async -> Void
-    ) async -> IronclawPollOutcome {
-        let maxAttempts = 180
-        let failedStateGraceAttempts = 35
-        let emptyCompletedGraceAttempts = 3
-        var failedStateAttempts = 0
-        var emptyCompletedAttempts = 0
-
-        for attempt in 0..<maxAttempts {
-            try? await Task.sleep(nanoseconds: attempt == 0 ? 800_000_000 : 2_000_000_000)
-            if Task.isCancelled { return .failed }
-
-            guard let history = try? await fetchHistory(settings: settings, authToken: authToken, threadID: threadID) else {
-                continue
-            }
-
-            if let pendingGate = history.pendingGate {
-                await onEvent(.approvalNeeded(pendingGate))
-                return .approvalNeeded
-            }
-
-            guard let turn = history.turns.last else {
-                continue
-            }
-
-            let state = turn.state.lowercased()
-            if state == "completed" {
-                let response = Self.presentationText(from: turn.response ?? "")
-                if Self.isEmptyFallbackText(response) {
-                    if requiresToolUse || !turn.toolCalls.isEmpty {
-                        return .needsContinuation(Self.toolCallDiagnostic(from: turn))
-                    }
-                    await onEvent(.failed("IronClaw returned an empty answer. Retry, or check the hosted gateway logs."))
-                    return .failed
-                }
-                if let toolFailure = Self.toolFailureMessage(from: response) {
-                    await onEvent(.failed(toolFailure))
-                    return .failed
-                }
-                if response.isEmpty || Self.isTransportOnlyText(response) {
-                    emptyCompletedAttempts += 1
-                    if emptyCompletedAttempts < emptyCompletedGraceAttempts {
-                        await onEvent(.reasoningStarted)
-                        continue
-                    }
-                    await onEvent(.failed("IronClaw finished but returned no answer text. Check the Agent connection logs, then retry."))
-                    return .failed
-                } else {
-                    await onEvent(.itemDone(text: response))
-                }
-                return .completed
-            }
-            emptyCompletedAttempts = 0
-
-            if state == "failed" {
-                let response = Self.presentationText(from: turn.response ?? "")
-                if !response.isEmpty {
-                    if Self.isEmptyFallbackText(response), requiresToolUse || !turn.toolCalls.isEmpty {
-                        return .needsContinuation(Self.toolCallDiagnostic(from: turn))
-                    }
-                    let message = Self.toolFailureMessage(from: response) ??
-                        "IronClaw failed on this turn: \(response)"
-                    await onEvent(.failed(message))
-                    return .failed
-                }
-                failedStateAttempts += 1
-                if requiresToolUse, !turn.toolCalls.isEmpty {
-                    if turn.completedAt != nil || failedStateAttempts >= failedStateGraceAttempts {
-                        return .needsContinuation(Self.toolCallDiagnostic(from: turn))
-                    }
-                    await onEvent(.reasoningStarted)
-                    continue
-                }
-                if turn.completedAt == nil || failedStateAttempts < failedStateGraceAttempts {
-                    await onEvent(.reasoningStarted)
-                    continue
-                }
-                await onEvent(.failed("IronClaw failed on this turn. Check Hosted IronClaw logs and model credentials, then retry."))
-                return .failed
-            }
-            failedStateAttempts = 0
-
-            await onEvent(.reasoningStarted)
-        }
-
-        await onEvent(.failed("IronClaw returned no output within six minutes. Check Hosted IronClaw, then retry."))
-        return .failed
-    }
-
-    private static func presentationText(from text: String) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("{"),
-              let data = trimmed.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              object.keys.contains("stdout"),
-              object.keys.contains("stderr"),
-              object.keys.contains("exit_code") else {
-            return trimmed
-        }
-
-        let stdout = (object["stdout"] as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let stderr = (object["stderr"] as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let exitCode = object["exit_code"] as? Int
-
-        if stderr.isEmpty {
-            if stdout.contains("\n") {
-                return "```text\n\(stdout)\n```"
-            }
-            if !stdout.isEmpty { return stdout }
-            return "Command completed with exit code \(exitCode ?? 0)."
-        }
-
-        let statusLine = exitCode.map { "Command exited with code \($0)." } ?? "Command returned stderr."
-        if stdout.isEmpty {
-            return "\(statusLine)\n\n```text\n\(stderr)\n```"
-        }
-        return "\(statusLine)\n\nstdout\n```text\n\(stdout)\n```\n\nstderr\n```text\n\(stderr)\n```"
-    }
-
-    private static func promptRequiresWorkstationTools(_ prompt: String) -> Bool {
-        let normalized = prompt.lowercased()
-        return normalized.contains("ironclaw ios coding-agent task") ||
-            normalized.contains("workstation preflight") ||
-            normalized.contains("local workstation") ||
-            normalized.contains("call shell") ||
-            normalized.contains("use shell") ||
-            normalized.contains("nearai_web_search") ||
-            normalized.contains("web search") ||
-            normalized.contains("search the web")
-    }
-
-    private static func isEmptyFallbackText(_ text: String) -> Bool {
-        let normalized = text
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .replacingOccurrences(of: "’", with: "'")
-        return normalized == "i'm not sure how to respond to that." ||
-            normalized == "i am not sure how to respond to that."
-    }
-
-    private static func continuationPrompt(originalPrompt: String, diagnostic: String) -> String {
-        """
-        Continue the same IronClaw iOS tool-assisted task.
-        Your previous final answer was empty after tool execution, so it cannot be shown to the phone user.
-        Please run the remaining hosted tool task now and then produce a visible final answer.
-
-        Tool trace so far:
-        \(diagnostic)
-
-        Rules:
-        - Use the requested hosted tools before answering.
-        - If native tool calls do not work, emit one standalone XML tool call outside markdown, for example:
-        <tool_call>{"name":"shell","arguments":{"command":"pwd && git --version"}}</tool_call>
-        - Put raw command output in a fenced text block.
-        - Finish with a concise summary of what changed and what passed.
-
-        Original request:
-        \(originalPrompt)
-        """
-    }
-
-    private static func emptyFinalAnswerFailure(_ diagnostic: String) -> String {
-        """
-        IronClaw ran hosted tools but produced no answer after retrying.
-
-        Tool trace:
-        \(diagnostic)
-
-        Retry with a smaller task, or check the hosted IronClaw logs.
-        """
-    }
-
-    private static func toolCallDiagnostic(from turn: IronclawTurn) -> String {
-        guard !turn.toolCalls.isEmpty else {
-            return "No tool calls were recorded for this turn."
-        }
-        return turn.toolCalls.prefix(6).enumerated().map { index, call in
-            let status: String
-            if call.hasError {
-                status = "error"
-            } else if call.hasResult {
-                status = "ok"
-            } else {
-                status = "pending"
-            }
-            let preview = (call.resultPreview ?? call.result ?? call.error ?? "")
-                .replacingOccurrences(of: "\n", with: "\\n")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if preview.isEmpty {
-                return "\(index + 1). \(call.name): \(status)"
-            }
-            return "\(index + 1). \(call.name): \(status) - \(shortDiagnostic(preview))"
-        }.joined(separator: "\n")
-    }
-
-    private static func isTransportOnlyText(_ text: String) -> Bool {
-        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalized.isEmpty else { return true }
-        return normalized == "accepted" ||
-            normalized == "running" ||
-            normalized == "queued" ||
-            normalized.contains("accepted") && normalized.contains("gateway") ||
-            normalized.contains("running") && normalized.contains("configured gateway")
-    }
-
-    private static func toolFailureMessage(from text: String) -> String? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
-        let rawMessage: String
-        if trimmed.hasPrefix("{"),
-           let data = trimmed.data(using: .utf8),
-           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            rawMessage = (object["error"] as? String) ??
-                (object["message"] as? String) ??
-                (object["detail"] as? String) ??
-                trimmed
-        } else {
-            rawMessage = trimmed
-        }
-
-        let lowercased = rawMessage.lowercased()
-        guard lowercased.contains("tool '") || lowercased.contains("tool \"") || lowercased.contains("tool error") else {
-            return nil
-        }
-        return rawMessage
-    }
-
-    private static func isFatalGatewayError(_ text: String) -> Bool {
-        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return normalized.contains("unauthorized") ||
-            normalized.contains("not authenticated") ||
-            normalized.contains("invalid token") ||
-            normalized.contains("valid ironclaw token") ||
-            normalized.contains("not available in your plan") ||
-            toolFailureMessage(from: text) != nil
-    }
 }
 
 private enum IronclawPollOutcome {
     case completed
     case approvalNeeded
-    case needsContinuation(String)
     case failed
 }
 
 struct IronclawSendResult: Hashable {
-    let messageID: String
+    let runID: String?
     let status: String
     let threadID: String?
 }
 
-private struct IronclawThreadInfo: Decodable {
-    let id: String
+// MARK: - Reborn DTOs
+
+private struct IronclawCreateThreadPayload: Encodable {
+    let clientActionID: String
+    enum CodingKeys: String, CodingKey { case clientActionID = "client_action_id" }
 }
 
-private struct IronclawToolsResponse: Decodable {
-    let tools: [IronclawToolInfo]
-}
-
-private struct IronclawToolInfo: Decodable {
-    let name: String
-}
-
-private struct IronclawHistoryResponse: Decodable {
-    let turns: [IronclawTurn]
-    let pendingGate: IronclawPendingGate?
-
-    enum CodingKeys: String, CodingKey {
-        case turns
-        case pendingGate = "pending_gate"
+private struct IronclawCreateThreadResponse: Decodable {
+    struct Thread: Decodable {
+        let threadID: String
+        enum CodingKeys: String, CodingKey { case threadID = "thread_id" }
     }
-}
-
-private struct IronclawTurn: Decodable {
-    let response: String?
-    let state: String
-    let userInput: String?
-    let completedAt: String?
-    let toolCalls: [IronclawToolCall]
-
-    enum CodingKeys: String, CodingKey {
-        case response
-        case state
-        case userInput = "user_input"
-        case completedAt = "completed_at"
-        case toolCalls = "tool_calls"
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        response = try container.decodeIfPresent(String.self, forKey: .response)
-        state = try container.decodeIfPresent(String.self, forKey: .state) ?? ""
-        userInput = try container.decodeIfPresent(String.self, forKey: .userInput)
-        completedAt = try container.decodeIfPresent(String.self, forKey: .completedAt)
-        toolCalls = try container.decodeIfPresent([IronclawToolCall].self, forKey: .toolCalls) ?? []
-    }
-}
-
-private struct IronclawToolCall: Decodable {
-    let name: String
-    let hasResult: Bool
-    let hasError: Bool
-    let callID: String?
-    let result: String?
-    let resultPreview: String?
-    let error: String?
-
-    enum CodingKeys: String, CodingKey {
-        case name
-        case hasResult = "has_result"
-        case hasError = "has_error"
-        case callID = "call_id"
-        case result
-        case resultPreview = "result_preview"
-        case error
-    }
+    let thread: Thread
 }
 
 private struct IronclawSendPayload: Encodable {
+    let clientActionID: String
     let content: String
-    let threadID: String?
-    let timezone: String
-
     enum CodingKeys: String, CodingKey {
+        case clientActionID = "client_action_id"
         case content
-        case threadID = "thread_id"
-        case timezone
     }
 }
 
-private struct IronclawSendResponse: Decodable {
-    let messageID: String
-    let status: String
+/// `send_message` is an internally-tagged enum keyed on `outcome`; every variant
+/// carries a run id (`run_id`, or `active_run_id` for `deferred_busy`).
+private struct IronclawSubmitResponse: Decodable {
+    let outcome: String?
+    let status: String?
+    let runID: String?
+    let activeRunID: String?
 
     enum CodingKeys: String, CodingKey {
-        case messageID = "message_id"
+        case outcome
         case status
+        case runID = "run_id"
+        case activeRunID = "active_run_id"
+    }
+
+    var resolvedRunID: String? {
+        runID ?? activeRunID
+    }
+}
+
+private struct IronclawRunState: Decodable {
+    struct Failure: Decodable {
+        let category: String?
+    }
+    let status: String
+    let gateRef: String?
+    let failure: Failure?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case gateRef = "gate_ref"
+        case failure
+    }
+}
+
+private struct IronclawTimelineResponse: Decodable {
+    let messages: [IronclawTimelineMessage]
+}
+
+private struct IronclawTimelineMessage: Decodable {
+    let kind: String
+    let content: String?
+    let turnRunID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case kind
+        case content
+        case turnRunID = "turn_run_id"
     }
 }
 
 private struct IronclawGateResolvePayload: Encodable {
-    let requestID: String
-    let threadID: String
+    let clientActionID: String
     let resolution: String
     let always: Bool?
-    let token: String?
+    let credentialRef: String?
 
     enum CodingKeys: String, CodingKey {
-        case requestID = "request_id"
-        case threadID = "thread_id"
+        case clientActionID = "client_action_id"
         case resolution
         case always
-        case token
+        case credentialRef = "credential_ref"
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(requestID, forKey: .requestID)
-        try container.encode(threadID, forKey: .threadID)
+        try container.encode(clientActionID, forKey: .clientActionID)
         try container.encode(resolution, forKey: .resolution)
         try container.encodeIfPresent(always, forKey: .always)
-        try container.encodeIfPresent(token, forKey: .token)
+        try container.encodeIfPresent(credentialRef, forKey: .credentialRef)
     }
 }
 
-private struct IronclawActionResponse: Decodable {
-    let success: Bool?
-    let message: String?
+private struct IronclawResolveGateResponse: Decodable {
+    let outcome: String?
+    let status: String?
 }

@@ -439,6 +439,12 @@ struct HostedIronclawAttachmentDisclosure: Hashable {
 struct IronclawPendingGate: Codable, Hashable, Identifiable {
     var requestID: String
     var threadID: String
+    /// The reborn run id that owns this gate. Required to build the
+    /// `…/runs/{run_id}/gates/{gate_ref}/resolve` path; nil for the legacy
+    /// gateway shape. Optional so old persisted messages (a `ChatMessage` can
+    /// carry a `pendingApproval`) still decode — synthesized Decodable fills a
+    /// missing key on an optional with nil, but throws for a non-optional.
+    var runID: String?
     var gateName: String
     var toolName: String
     var description: String
@@ -631,6 +637,7 @@ struct IronclawPendingGate: Codable, Hashable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case requestID = "request_id"
         case threadID = "thread_id"
+        case runID = "run_id"
         case gateName = "gate_name"
         case toolName = "tool_name"
         case description
@@ -673,6 +680,7 @@ struct IronclawPendingGate: Codable, Hashable, Identifiable {
     init(
         requestID: String,
         threadID: String,
+        runID: String? = nil,
         gateName: String,
         toolName: String,
         description: String,
@@ -688,6 +696,7 @@ struct IronclawPendingGate: Codable, Hashable, Identifiable {
     ) {
         self.requestID = requestID
         self.threadID = threadID
+        self.runID = runID
         self.gateName = gateName
         self.toolName = toolName
         self.description = description
@@ -706,6 +715,7 @@ struct IronclawPendingGate: Codable, Hashable, Identifiable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         requestID = try container.decode(String.self, forKey: .requestID)
         threadID = try container.decodeIfPresent(String.self, forKey: .threadID) ?? ""
+        runID = try container.decodeIfPresent(String.self, forKey: .runID)
         gateName = try container.decodeIfPresent(String.self, forKey: .gateName) ?? "approval"
         toolName = try container.decodeIfPresent(String.self, forKey: .toolName) ?? "tool"
         description = try container.decodeIfPresent(String.self, forKey: .description) ?? "Tool approval required."
@@ -752,6 +762,7 @@ struct IronclawPendingGate: Codable, Hashable, Identifiable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(requestID, forKey: .requestID)
         try container.encode(threadID, forKey: .threadID)
+        try container.encodeIfPresent(runID, forKey: .runID)
         try container.encode(gateName, forKey: .gateName)
         try container.encode(toolName, forKey: .toolName)
         try container.encode(description, forKey: .description)

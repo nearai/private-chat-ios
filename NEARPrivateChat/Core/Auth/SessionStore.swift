@@ -86,6 +86,48 @@ final class SessionStore: NSObject, ObservableObject {
         Task { await authenticate(with: provider) }
     }
 
+    /// The device public key the user must authorize on their NEAR account
+    /// (Full Access) before native sign-in can succeed.
+    var nearDevicePublicKey: String {
+        NearKeyStore.publicKeyString(for: NearKeyStore.loadOrCreateKey())
+    }
+
+    func signInWithNearAccount(_ accountID: String) {
+        Task { await authenticateWithNearAccount(accountID) }
+    }
+
+    /// Native NEAR sign-in: signs the standard challenge with the device key and
+    /// exchanges it at `/v1/auth/near`. Requires the device public key to be an
+    /// access key on `accountID` (see `nearDevicePublicKey`).
+    private func authenticateWithNearAccount(_ accountID: String) async {
+        let trimmed = accountID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !trimmed.isEmpty else {
+            showBanner("Enter your NEAR account ID, e.g. yourname.near.")
+            return
+        }
+        guard !isAuthenticating else { return }
+        isAuthenticating = true
+        defer { isAuthenticating = false }
+
+        let key = NearKeyStore.loadOrCreateKey()
+        // Mirror the production web flow: fixed challenge message, locally
+        // generated 32-byte nonce, recipient = the private.near.ai host.
+        let payload = NEP413Payload(
+            message: "Sign in to NEAR AI",
+            nonce: NEP413Signer.randomNonce(),
+            recipient: "private.near.ai",
+            callbackUrl: nil
+        )
+        let signed = NEP413Signer.sign(payload: payload, accountId: trimmed, privateKey: key)
+        do {
+            let session = try await api.signInWithNear(signedMessage: signed, payload: payload)
+            adoptSession(token: session.token, sessionID: session.sessionID, isNewUser: session.isNewUser)
+            showBanner(session.isNewUser ? "Account created." : "Signed in.")
+        } catch {
+            showBanner(Self.userFacingAuthenticationError(error))
+        }
+    }
+
     func signInWithToken(_ token: String) {
         let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
