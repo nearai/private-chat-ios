@@ -332,7 +332,7 @@ final class ChatImportService {
                 }
                 importedCount += 1
             } catch {
-                failures.append("\(importedConversation.title): \(Self.displayFailureMessage(error.localizedDescription))")
+                failures.append("\(importedConversation.title): \(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))")
             }
         }
 
@@ -355,14 +355,6 @@ final class ChatImportService {
         return prefix.trimmingCharacters(in: .whitespacesAndNewlines) + "..."
     }
 
-    private static func displayFailureMessage(_ message: String) -> String {
-        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.localizedCaseInsensitiveContains("missing authorization header") ||
-            trimmed.localizedCaseInsensitiveContains("invalid or expired authentication token") {
-            return "Authentication is missing or expired. Sign in again, then retry."
-        }
-        return trimmed.isEmpty ? "Request failed." : trimmed
-    }
 }
 
 enum ChatImportError: LocalizedError {

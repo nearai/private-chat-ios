@@ -34,10 +34,10 @@ struct MessageBubble: View {
                         if message.role == .assistant, let badge = statusBadge {
                             Text(badge)
                                 .font(.caption2.weight(.semibold))
-                                .foregroundStyle(badge == "Failed" ? .red : Color.brandBlue)
+                                .foregroundStyle(badge == "Failed" ? .red : Color.brandAccent)
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 3)
-                                .background((badge == "Failed" ? Color.red.opacity(0.08) : Color.brandBlue.opacity(0.08)), in: Capsule())
+                                .background((badge == "Failed" ? Color.red.opacity(0.08) : Color.brandAccent.opacity(0.08)), in: Capsule())
                         }
                     }
                 }

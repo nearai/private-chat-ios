@@ -8,6 +8,41 @@ import UIKit
 @testable import NEARPrivateChat
 
 extension PrivateChatCoreTests {
+    func testIronclawSettingsAcceptsRebornHTTPSAndRejectsLocalGateways() {
+        let reborn = IronclawSettings(
+            isEnabled: true,
+            baseURL: " https://dangwalvaidy.family/reborn ",
+            threadID: ""
+        )
+        XCTAssertNil(reborn.endpointValidationMessage)
+        XCTAssertEqual(reborn.standalonePhoneSanitized.baseURL, "https://dangwalvaidy.family/reborn")
+
+        let local = IronclawSettings(
+            isEnabled: true,
+            baseURL: "http://127.0.0.1:18789/ironclaw",
+            threadID: ""
+        )
+        XCTAssertNotNil(local.endpointValidationMessage)
+        XCTAssertFalse(local.standalonePhoneSanitized.isEnabled)
+        XCTAssertEqual(local.standalonePhoneSanitized.baseURL, "")
+    }
+
+    @MainActor
+    func testAgentStoreVerifiedRebornToolsExposeShellAndGit() {
+        let toolNames = AgentStore.verifiedRebornToolNames
+        XCTAssertEqual(toolNames, ["shell", "git"])
+    }
+
+    func testIronclawRetryClassifierSeparatesTransientAndAuthFailures() {
+        XCTAssertEqual(IronclawAPI.retryClassification(statusCode: 429), .retryable)
+        XCTAssertEqual(IronclawAPI.retryClassification(statusCode: 503), .retryable)
+        XCTAssertEqual(IronclawAPI.retryClassification(for: URLError(.timedOut)), .retryable)
+
+        XCTAssertEqual(IronclawAPI.retryClassification(statusCode: 401), .permanentAuthFailure)
+        XCTAssertEqual(IronclawAPI.retryClassification(statusCode: 403), .permanentAuthFailure)
+        XCTAssertEqual(IronclawAPI.retryClassification(statusCode: 400), .permanentFailure)
+    }
+
     func testAgentThreadPersistenceStoresTrimmedThreadMappingAndMigrationFlag() throws {
         let defaults = try makeIsolatedDefaults()
         let accountID = "agent-thread-\(UUID().uuidString)"

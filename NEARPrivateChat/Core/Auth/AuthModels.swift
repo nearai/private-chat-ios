@@ -180,15 +180,23 @@ enum LegalTerms {
     static let version = "2026-05-25"
     static let effectiveDate = "May 25, 2026"
     static let appTermsDocumentName = "TERMS_AND_CONDITIONS.md"
-    static let nearAIServicesTermsURL = URL(string: "https://near.ai/terms-of-service")!
-    static let nearAICloudTermsURL = URL(string: "https://near.ai/near-ai-cloud-terms-of-service")!
-    static let nearAIAcceptableUseURL = URL(string: "https://near.ai/acceptable-use-policy")!
-    static let nearAIPrivacyPolicyURL = URL(string: "https://near.ai/privacy-policy")!
-    static let ironclawRepositoryURL = URL(string: "https://github.com/nearai/ironclaw")!
+    static let nearAIServicesTermsURL = validatedURL("https://near.ai/terms-of-service")
+    static let nearAICloudTermsURL = validatedURL("https://near.ai/near-ai-cloud-terms-of-service")
+    static let nearAIAcceptableUseURL = validatedURL("https://near.ai/acceptable-use-policy")
+    static let nearAIPrivacyPolicyURL = validatedURL("https://near.ai/privacy-policy")
+    static let ironclawRepositoryURL = validatedURL("https://github.com/nearai/ironclaw")
 
     static let acceptanceText = "I am 18 or older. I agree to the NEAR Private Chat iOS Terms, NEAR AI Services Terms, NEAR AI Cloud Terms, Acceptable Use Policy, and applicable IronClaw or third-party terms. I understand that networked models, web search, files, and Agents can send selected content off this device."
     static let acceptancePrompt = "Review the terms, then accept to continue."
     static let acceptanceCheckboxText = "I reviewed version \(version) and accept the terms for this app and its connected NEAR AI routes."
+
+    private static func validatedURL(_ rawValue: String) -> URL {
+        guard let url = URL(string: rawValue) else {
+            assertionFailure("Invalid LegalTerms URL: \(rawValue)")
+            return URL(fileURLWithPath: "/")
+        }
+        return url
+    }
 
     static let signupSummary = [
         "Required before you get account access.",

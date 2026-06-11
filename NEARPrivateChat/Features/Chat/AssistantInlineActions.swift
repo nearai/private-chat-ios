@@ -126,11 +126,11 @@ struct AssistantInlineActions: View {
     }
 
     private var saveForeground: Color {
-        isSavedToProject || canSaveToProject ? Color.brandBlue : .secondary
+        isSavedToProject || canSaveToProject ? Color.brandAccent : .secondary
     }
 
     private var saveBackground: Color {
-        isSavedToProject || canSaveToProject ? Color.brandBlue.opacity(0.10) : Color.appSecondaryBackground
+        isSavedToProject || canSaveToProject ? Color.brandAccent.opacity(0.10) : Color.appSecondaryBackground
     }
 
     private var saveAccessibilityLabel: String {

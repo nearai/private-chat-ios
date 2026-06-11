@@ -2,23 +2,23 @@
 
 The iPhone app should not depend on a Mac or LAN gateway for normal NEAR Private Chat. Hosted IronClaw is different: it can work from an iPhone if the user's computer exposes a small authenticated HTTPS bridge.
 
-As of 2026-05-23, this app has been smoke-tested against the official IronClaw `0.28.2` release through:
+As of build 9, the iOS app uses the Hosted IronClaw **reborn** WebChat v2 API through:
 
 ```text
-https://dangwalvaidy.family/ironclaw
+https://dangwalvaidy.family/reborn
 ```
 
-The hosted bridge reports `version: 0.28.2`, `engine_v2_enabled: true`, and the public route accepted an `IronClaw Agent` chat and returned a completed assistant response (`IronClaw bridge live.`).
+The hosted route is `ironclaw-reborn serve` behind HTTPS. Caddy strips `/reborn` and forwards to the reborn web UI service.
 
 Current relay topology:
 
 ```text
 iPhone app
-  -> https://dangwalvaidy.family/ironclaw
+  -> https://dangwalvaidy.family/reborn
   -> Caddy on the public relay
   -> authenticated Chisel reverse tunnel over HTTPS /chisel/
-  -> baremetal3.agents.near.ai localhost:18789
-  -> IronClaw 0.28.2 gateway
+  -> baremetal3.agents.near.ai localhost:3000
+  -> IronClaw reborn WebChat v2
 ```
 
 The direct SSH paths between the public relay and the NEAR baremetal host are blocked by network policy, so the relay intentionally uses outbound HTTPS on port `443`.
@@ -43,23 +43,23 @@ flowchart LR
 
 ## Mobile Contract
 
-The iOS app already knows how to talk to these bridge endpoints:
+The iOS app talks to these reborn WebChat v2 endpoints under `/api/webchat/v2`:
 
-- `GET /api/health`, `GET /api/status`, or `GET /api/gateway/status`
-- `POST /api/chat/thread/new`
-- `POST /api/chat/send`
-- `GET /api/chat/events`
-- `GET /api/chat/history?thread_id=...&limit=5`
-- `POST /api/chat/gate/resolve`
+- `POST /threads`
+- `GET /threads/{thread_id}`
+- `POST /threads/{thread_id}/messages`
+- `GET /threads/{thread_id}/runs/{run_id}`
+- `GET /threads/{thread_id}/timeline?limit=N`
+- `POST /threads/{thread_id}/runs/{run_id}/gates/{gate_ref}/resolve`
 
-Every request should accept `Authorization: Bearer <token>`.
+Every request must accept `Authorization: Bearer <IRONCLAW_REBORN_WEBUI_TOKEN>`. Every mutation also requires a `client_action_id` idempotency key.
 
 ## Bridge Requirements
 
 1. The bridge must be reachable from the phone over public HTTPS.
 2. It must reject unauthenticated requests.
 3. It must return final answer text, not only transport status such as `accepted`, `queued`, or `running`.
-4. It should expose SSE events when possible and history polling as fallback.
+4. It may expose SSE events, but the iOS app currently uses run-state + timeline polling as the production path.
 5. It should preserve thread state by `thread_id`.
 6. It should support approval gates for destructive desktop tools.
 7. It must produce visible assistant text within the mobile timeout window; transport-only states are treated as failures by the app.
@@ -70,8 +70,8 @@ For a stable phone-ready endpoint, run IronClaw on a server and put Caddy or ano
 
 ```caddy
 example.com {
-  handle_path /ironclaw/* {
-    reverse_proxy 127.0.0.1:3100 {
+  handle_path /reborn/* {
+    reverse_proxy 127.0.0.1:3000 {
       flush_interval -1
       transport http {
         read_timeout 600s
@@ -85,10 +85,10 @@ example.com {
 Then configure the iOS app:
 
 - Model: `IronClaw Agent`
-- Bridge URL: `https://example.com/ironclaw`
-- Bearer token: `GATEWAY_AUTH_TOKEN` from the IronClaw host environment
+- Hosted URL: `https://example.com/reborn`
+- Agent token: `IRONCLAW_REBORN_WEBUI_TOKEN` from the reborn host environment
 
-Use Account -> IronClaw Bridge -> Test before sending a chat.
+Use Account -> Hosted IronClaw -> Test connection, then Check hosted tools before sending a serious chat.
 
 If the IronClaw host is not directly reachable from the proxy, run an authenticated reverse tunnel and point Caddy at the local tunnel listener instead:
 
@@ -98,8 +98,8 @@ example.com {
     reverse_proxy 127.0.0.1:32080
   }
 
-  handle_path /ironclaw/* {
-    reverse_proxy 127.0.0.1:31879 {
+  handle_path /reborn/* {
+    reverse_proxy 127.0.0.1:3000 {
       flush_interval -1
       transport http {
         read_timeout 600s
@@ -114,8 +114,8 @@ The current production relay uses:
 
 - Public relay service: `ironclaw-chisel-server.service`
 - Tunnel server: `127.0.0.1:32080`
-- Tunnel listener for IronClaw: `127.0.0.1:31879`
-- Baremetal gateway: `127.0.0.1:18789`
+- Tunnel listener for reborn: `127.0.0.1:3000`
+- Baremetal reborn web UI: `127.0.0.1:3000`
 
 ## Local Demo Setup
 

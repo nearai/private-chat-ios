@@ -47,6 +47,28 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(source.snippetPreview, "A short cited passage.")
     }
 
+    func testStreamingPreviewHelperPreservesFullLongText() {
+        let longText = String(repeating: "a", count: 6_000)
+
+        XCTAssertEqual(StreamingPreviewHelper.preview(from: longText), longText)
+    }
+
+    func testSnippetPreviewTracksStoredSnippetLength() throws {
+        let snippet = String(repeating: "s", count: 600)
+        let source = WebSearchSource(
+            type: "news_article",
+            url: "https://example.com/full-snippet",
+            title: "Full snippet",
+            publishedAt: nil,
+            snippet: snippet
+        )
+
+        let storedSnippet = try XCTUnwrap(source.snippet)
+        XCTAssertEqual(storedSnippet.count, 600)
+        XCTAssertEqual(source.snippetPreview, storedSnippet)
+        XCTAssertEqual(source.snippetPreview?.count, 600)
+    }
+
     func testComposerStateSendabilityTracksDraftAttachmentsAndStreaming() {
         let empty = ComposerState(
             draft: "  ",

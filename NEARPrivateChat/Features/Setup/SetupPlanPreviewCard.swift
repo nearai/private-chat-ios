@@ -8,7 +8,7 @@ struct SetupPlanPreviewCard: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: plan.modelRoute.symbolName)
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .frame(width: 36, height: 36)
                     .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -116,7 +116,7 @@ private struct SetupSeedRow: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: seed.symbolName)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(Color.brandBlue)
+                .foregroundStyle(Color.brandAccent)
                 .frame(width: 18, height: 18)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -141,7 +141,7 @@ private struct SetupSkillPreviewRow: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: skill.symbolName)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(Color.brandBlue)
+                .foregroundStyle(Color.brandAccent)
                 .frame(width: 18, height: 18)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -167,7 +167,7 @@ private struct SetupPromptPreviewRow: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: suggestion.symbolName)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(Color.brandBlue)
+                .foregroundStyle(Color.brandAccent)
                 .frame(width: 18, height: 18)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -194,7 +194,7 @@ private struct SetupAgentMissionPreviewRow: View {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "terminal")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .frame(width: 18, height: 18)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -228,7 +228,7 @@ struct SetupPlanLine: View {
         HStack(alignment: .top, spacing: 7) {
             Image(systemName: symbolName)
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(Color.brandBlue)
+                .foregroundStyle(Color.brandAccent)
                 .frame(width: 18, height: 18)
 
             Text(title.uppercased())

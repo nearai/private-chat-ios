@@ -12,7 +12,7 @@ struct DocumentContextIndicator: View {
             HStack(spacing: 6) {
                 Image(systemName: status.included ? "doc.text.magnifyingglass" : "doc")
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(status.included ? Color.brandBlue : Color.textTertiary)
+                    .foregroundStyle(status.included ? Color.brandAccent : Color.textTertiary)
                 Text(status.text)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)

@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 struct WebGroundingContext: Hashable {
     let query: String
@@ -77,10 +78,35 @@ struct WebGroundingResult: Hashable {
 }
 
 final class WebGroundingService {
+    func cancel() {
+        // Searches are structured awaits owned by the caller today. Keep this
+        // hook so ChatStore lifecycle cleanup has a stable owner boundary.
+    }
+
     private let session: URLSession
+#if DEBUG
+    private let logger = Logger(subsystem: "ai.near.privatechat", category: "web-grounding")
+#endif
 
     init(session: URLSession = .shared) {
         self.session = session
+    }
+
+    enum SearchMode: Equatable {
+        case automatic
+        case newsFirst
+        case webFirst
+
+        func prefersNews(researchModeEnabled: Bool, needsLiveWeb: Bool) -> Bool {
+            switch self {
+            case .automatic:
+                return researchModeEnabled || needsLiveWeb
+            case .newsFirst:
+                return true
+            case .webFirst:
+                return false
+            }
+        }
     }
 
     func search(for prompt: String, preferNews: Bool) async throws -> WebGroundingContext {
@@ -99,6 +125,11 @@ final class WebGroundingService {
         guard !ranked.isEmpty else {
             throw APIError.status(0, "No web results found.")
         }
+#if DEBUG
+        let newsCount = ranked.filter { $0.kind == "news" }.count
+        let webCount = ranked.filter { $0.kind == "web" }.count
+        logger.debug("web search query=\(query, privacy: .public) preferNews=\(preferNews) resultCount=\(ranked.count) news=\(newsCount) web=\(webCount)")
+#endif
         return WebGroundingContext(query: query, fetchedAt: Date(), results: Array(ranked))
     }
 
@@ -123,6 +154,10 @@ final class WebGroundingService {
 
         var query = normalizedPrompt
         let instructionPatterns = [
+            #"(?i)\b(from\s+)?(google\s+)?news\s+only\b"#,
+            #"(?i)\b(from\s+)?google\s+news\b"#,
+            #"(?i)\b(web|internet|general\s+web)\s+only\b"#,
+            #"(?i)\bnot\s+news\b"#,
             #"(?i)\b(use|using|with|run|do)\s+(the\s+)?(live\s+)?(web\s+search|web|search|internet|sources?)\b.*$"#,
             #"(?i)\b(and\s+)?cite\s+(your\s+)?sources?\b.*$"#,
             #"(?i)\b(with\s+)?sources?\b.*$"#,
@@ -154,6 +189,31 @@ final class WebGroundingService {
             return clippedQuery(query)
         }
         return query.isEmpty ? "current news" : query
+    }
+
+    static func searchMode(for prompt: String) -> SearchMode {
+        let normalized = normalizedQueryInput(prompt).lowercased()
+        guard !normalized.isEmpty else { return .automatic }
+
+        let webOnlyPatterns = [
+            #"\b(web|internet|general\s+web)\s+only\b"#,
+            #"\bnot\s+news\b"#,
+            #"\b(no|without)\s+news\b"#
+        ]
+        if webOnlyPatterns.contains(where: { normalized.range(of: $0, options: .regularExpression) != nil }) {
+            return .webFirst
+        }
+
+        let newsPatterns = [
+            #"\b(from\s+)?google\s+news\b"#,
+            #"\bnews\s+only\b"#,
+            #"\b(latest|recent|current)\s+news\b"#
+        ]
+        if newsPatterns.contains(where: { normalized.range(of: $0, options: .regularExpression) != nil }) {
+            return .newsFirst
+        }
+
+        return .automatic
     }
 
     static func searchPrompt(for text: String, priorUserTexts: [String]) -> String? {

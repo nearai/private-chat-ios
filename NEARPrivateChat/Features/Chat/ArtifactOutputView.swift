@@ -12,9 +12,9 @@ struct ArtifactOutputView: View {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: "doc.text.magnifyingglass")
                             .font(.headline.weight(.semibold))
-                            .foregroundStyle(Color.brandBlue)
+                            .foregroundStyle(Color.brandAccent)
                             .frame(width: 32, height: 32)
-                            .background(Color.brandBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .background(Color.brandAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(message.modelDisplayName)

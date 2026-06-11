@@ -12,9 +12,9 @@ struct IronclawBridgeReadinessCard: View {
             HStack(spacing: 10) {
                 Image(systemName: "terminal.fill")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .frame(width: 28, height: 28)
-                    .background(Color.brandBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(Color.brandAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Agent Readiness")
                         .font(.subheadline.weight(.semibold))
@@ -94,7 +94,7 @@ struct IronclawBridgeReadinessCard: View {
         HStack(spacing: 7) {
             Image(systemName: symbolName)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(active ? Color.brandBlue : .secondary)
+                .foregroundStyle(active ? Color.brandAccent : .secondary)
                 .frame(width: 14)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
@@ -110,7 +110,7 @@ struct IronclawBridgeReadinessCard: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 8)
-        .background(active ? Color.brandBlue.opacity(0.07) : Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(active ? Color.brandAccent.opacity(0.07) : Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -136,9 +136,9 @@ struct NearCloudConnectionCard: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: isConnected ? "cloud.fill" : "cloud")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(isConnected ? Color.brandBlue : Color.textSecondary)
+                    .foregroundStyle(isConnected ? Color.brandAccent : Color.textSecondary)
                     .frame(width: 34, height: 34)
-                    .background((isConnected ? Color.brandBlue : Color.secondary).opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background((isConnected ? Color.brandAccent : Color.secondary).opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("NEAR AI Cloud")

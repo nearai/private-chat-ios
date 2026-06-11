@@ -14,7 +14,7 @@ struct ProductWordmark: View {
                 .accessibilityHidden(true)
             Text("Private Chat")
                 .font(.title2.weight(.heavy))
-                .foregroundStyle(Color.brandBlue)
+                .foregroundStyle(Color.brandAccent)
                 .accessibilityHidden(true)
         }
         .scaleEffect(scale)
@@ -73,7 +73,7 @@ struct PrivacySeal: View {
                 .accessibilityHidden(true)
         }
         .frame(width: size, height: size)
-        .shadow(color: Color.brandBlue.opacity(0.22), radius: 22, y: 10)
+        .shadow(color: Color.brandAccent.opacity(0.22), radius: 22, y: 10)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("NEAR Private Chat")
     }

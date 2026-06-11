@@ -40,6 +40,13 @@ struct CouncilMessageRow: View {
                     }
                 }
                 .font(.body)
+
+                if !message.sources.isEmpty {
+                    CouncilMessageSourceStrip(
+                        query: message.searchQuery,
+                        sources: message.sources
+                    )
+                }
             }
             .padding(13)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -58,6 +65,59 @@ struct CouncilMessageRow: View {
 
     private var cardBorderColor: Color {
         message.participant.stance == .dissents ? Color.proofMismatch.opacity(0.22) : Color.appBorder
+    }
+}
+
+private struct CouncilMessageSourceStrip: View {
+    let query: String?
+    let sources: [WebSearchSource]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                if let query = query?.trimmingCharacters(in: .whitespacesAndNewlines), !query.isEmpty {
+                    Text(query)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .frame(minHeight: 28)
+                        .background(Color.appSecondaryBackground, in: Capsule())
+                }
+
+                ForEach(sources.prefix(4)) { source in
+                    HStack(spacing: 5) {
+                        SourceFaviconView(
+                            domain: source.host,
+                            size: 16,
+                            fallbackText: String(source.sourceInitials.prefix(1)),
+                            cornerRadius: 4,
+                            allowsNetworkFavicon: source.allowsNetworkFavicon
+                        )
+                        Text(source.host)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color.textSecondary)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 7)
+                    .frame(minHeight: 28)
+                    .background(Color.appSecondaryBackground, in: Capsule())
+                    .accessibilityLabel("Source, \(source.displayTitle), \(source.host)")
+                }
+
+                if sources.count > 4 {
+                    Text("+\(sources.count - 4)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color.textSecondary)
+                        .padding(.horizontal, 8)
+                        .frame(minHeight: 28)
+                        .background(Color.appSecondaryBackground, in: Capsule())
+                }
+            }
+            .padding(.trailing, 2)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(sources.count) source\(sources.count == 1 ? "" : "s") cited")
     }
 }
 

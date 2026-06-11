@@ -125,7 +125,7 @@ struct ShareGroupsView: View {
                     HStack(spacing: 12) {
                         Image(systemName: "person.3")
                             .font(.title3.weight(.semibold))
-                            .foregroundStyle(Color.brandBlue)
+                            .foregroundStyle(Color.brandAccent)
                             .frame(width: 42, height: 42)
                             .background(Color.appBlueTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -158,7 +158,7 @@ struct ShareGroupsView: View {
                             HStack(spacing: 10) {
                                 Image(systemName: "person.3")
                                     .font(.caption.weight(.bold))
-                                    .foregroundStyle(Color.brandBlue)
+                                    .foregroundStyle(Color.brandAccent)
                                     .frame(width: 30, height: 30)
                                     .background(Color.appBlueTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -202,7 +202,7 @@ struct ShareGroupsView: View {
                         HStack {
                             Label("Editing \(editingShareGroup.name)", systemImage: "pencil")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(Color.brandBlue)
+                                .foregroundStyle(Color.brandAccent)
                                 .lineLimit(1)
                             Spacer(minLength: 0)
                             Button("Cancel") {
@@ -233,7 +233,7 @@ struct ShareGroupsView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(.brandBlue)
+                    .tint(.actionPrimary)
                     .disabled(saveDisabled)
                 }
             }

@@ -282,7 +282,7 @@ struct BriefingIconChip: View {
     private static func palette(for id: UUID) -> Color {
         let colors: [Color] = [
             Color.actionPrimary,
-            Color.brandBlue,
+            Color.brandAccent,
             Color.proofVerified,
             Color.proofStale,
             Color.proofMismatch,

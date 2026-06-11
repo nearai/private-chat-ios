@@ -38,4 +38,22 @@ extension PrivateChatCoreTests {
         )
         XCTAssertTrue(webSearchView.allowsNetworkFavicon)
     }
+
+    func testWebSearchSourceProvenanceControlsNetworkFaviconsAndBadges() {
+        let web = WebSearchSource(type: "web", url: "https://example.com/a")
+        XCTAssertTrue(web.allowsNetworkFavicon)
+        XCTAssertEqual(web.sourceBadgeLabel, "Web")
+
+        let inferred = WebSearchSource(type: "inferred", url: "https://example.com/b")
+        XCTAssertTrue(inferred.allowsNetworkFavicon)
+        XCTAssertEqual(inferred.sourceBadgeLabel, "Web")
+
+        let news = WebSearchSource(type: "news_article", url: "https://example.com/c")
+        XCTAssertTrue(news.allowsNetworkFavicon)
+        XCTAssertEqual(news.sourceBadgeLabel, "News")
+
+        let project = WebSearchSource(type: "project_file", url: "https://example.com/project")
+        XCTAssertFalse(project.allowsNetworkFavicon)
+        XCTAssertNil(project.sourceBadgeLabel)
+    }
 }

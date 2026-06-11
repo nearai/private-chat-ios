@@ -223,6 +223,32 @@ enum EmptyChatStarterCoordinator {
             }
         }
 
+        if chatStore.selectedRouteKind.isIronclawRoute && !agentStarterAvailable(in: chatStore) {
+            defaults.removeAll { $0.action == .agent }
+            defaults.insert(
+                EmptyChatStarterSuggestion(
+                    title: "Connect Agent",
+                    symbolName: "point.3.connected.trianglepath.dotted",
+                    prompt: "Set up Hosted IronClaw before running Agent tasks: add a Hosted IronClaw URL, save an Agent token, then check hosted tools.",
+                    action: .agent
+                ),
+                at: 0
+            )
+        }
+
+        if chatStore.isCouncilModeEnabled && !councilStarterAvailable(in: chatStore) {
+            defaults.removeAll { $0.action == .council }
+            defaults.insert(
+                EmptyChatStarterSuggestion(
+                    title: "Set up Council",
+                    symbolName: "person.3",
+                    prompt: "Set up Council before comparing answers: choose at least two available models, then ask: ",
+                    action: .council
+                ),
+                at: 0
+            )
+        }
+
         if let starter = QuickIntentParser.personalizedStarter(fromMemory: chatStore.memoryStore.items.map(\.text)) {
             let suggestion = EmptyChatStarterSuggestion(
                 title: starter.title,
@@ -233,6 +259,16 @@ enum EmptyChatStarterCoordinator {
             defaults.insert(suggestion, at: 0)
         }
         return Array(defaults.prefix(4))
+    }
+
+    static func agentStarterAvailable(in chatStore: ChatStore) -> Bool {
+        chatStore.agentModels.contains(where: { $0.id == ModelOption.ironclawMobileModelID }) ||
+            chatStore.ironclawRemoteWorkstationAvailable
+    }
+
+    static func councilStarterAvailable(in chatStore: ChatStore) -> Bool {
+        chatStore.isCouncilModeEnabled && chatStore.activeCouncilModels.count >= 2 ||
+            chatStore.defaultCouncilModels.count >= 2
     }
 
     @discardableResult
@@ -259,6 +295,10 @@ enum EmptyChatStarterCoordinator {
             }
             return true
         case .council:
+            guard councilStarterAvailable(in: chatStore) else {
+                onOpenCouncil?()
+                return false
+            }
             chatStore.useDefaultCouncilLineup()
             if let onOpenCouncil {
                 onOpenCouncil()
@@ -266,6 +306,10 @@ enum EmptyChatStarterCoordinator {
             }
             return true
         case .agent:
+            guard agentStarterAvailable(in: chatStore) else {
+                chatStore.switchToPrivateFallbackModel()
+                return true
+            }
             if chatStore.agentModels.contains(where: { $0.id == ModelOption.ironclawMobileModelID }) {
                 chatStore.selectModel(ModelOption.ironclawMobileModelID)
             } else if chatStore.ironclawRemoteWorkstationAvailable {
@@ -396,9 +440,9 @@ struct EmptyChatView: View {
         case .project:
             return "Opens Project context and starts a draft."
         case .council:
-            return "Enables Council and starts a draft."
+            return EmptyChatStarterCoordinator.councilStarterAvailable(in: chatStore) ? "Enables Council and starts a draft." : "Opens Council setup before starting a draft."
         case .agent:
-            return "Selects the Agent route and starts a draft."
+            return EmptyChatStarterCoordinator.agentStarterAvailable(in: chatStore) ? "Selects the Agent route and starts a draft." : "Starts an Agent setup draft without selecting an unavailable route."
         case .trust:
             return "Starts a draft for checking sources and trust boundaries."
         }

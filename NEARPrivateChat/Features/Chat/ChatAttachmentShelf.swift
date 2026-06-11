@@ -9,10 +9,10 @@ struct ProjectContextStrip: View {
             HStack(spacing: 6) {
                 Label(contextLabel, systemImage: "folder")
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)
-                    .background(Color.brandBlue.opacity(0.10), in: Capsule())
+                    .background(Color.brandAccent.opacity(0.10), in: Capsule())
 
                 ForEach(attachments.prefix(4)) { attachment in
                     Label(attachment.name, systemImage: attachment.systemImageName)
@@ -55,9 +55,9 @@ struct AttachmentStrip: View {
                     HStack(spacing: 6) {
                         Image(systemName: attachment.systemImageName)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.brandBlue)
+                            .foregroundStyle(Color.brandAccent)
                             .frame(width: 28, height: 28)
-                            .background(Color.brandBlue.opacity(0.09), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .background(Color.brandAccent.opacity(0.09), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         VStack(alignment: .leading, spacing: 1) {
                             // Middle truncation keeps both the document name's start
                             // and its extension visible on narrow widths.

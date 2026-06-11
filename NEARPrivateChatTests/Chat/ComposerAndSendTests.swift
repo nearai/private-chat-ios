@@ -547,6 +547,58 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(host.lastStreamAttachmentIDs, ["file_123"])
     }
 
+    @MainActor
+    func testHostedRegenerateAndEditBlockLocalOnlyDocumentsBeforePreflight() {
+        let host = PreConversationFailureSendHost()
+        host.shouldFailCreateConversation = false
+        host.sendSelectedModel = ModelOption.ironclawModelID
+        host.councilModelIDsOverride = []
+        host.hostedPreflight = HostedIronclawHandoffPreflight(
+            fingerprint: "hosted-preflight",
+            destinationHost: "example.com",
+            promptPreview: "Summarize",
+            disclosedItems: ["Prompt files: local.pdf"]
+        )
+        host.localDocumentPayloadsOverride = [
+            DocumentTextExtractor.LocalDocumentContextPayload(text: "secret local sentinel", isTable: false)
+        ]
+        let localOnlyAttachment = ChatAttachment(
+            id: "local-doc-test",
+            name: "local.pdf",
+            kind: ChatAttachment.localDocumentKind,
+            bytes: 256
+        )
+        let userMessage = ChatMessage(
+            id: "user-local-doc",
+            role: .user,
+            text: "Summarize this local-only file.",
+            model: nil,
+            createdAt: Date(),
+            status: "completed",
+            isStreaming: false,
+            attachments: [localOnlyAttachment]
+        )
+        let assistantMessage = ChatMessage(
+            id: "assistant-local-doc",
+            role: .assistant,
+            text: "Previous answer",
+            model: ModelOption.ironclawModelID,
+            createdAt: Date(),
+            status: "completed",
+            isStreaming: false
+        )
+        host.sendMessages = [userMessage, assistantMessage]
+        let coordinator = ChatSendCoordinator(host: host)
+
+        coordinator.regenerateResponse(for: assistantMessage)
+        coordinator.editAndResend(userMessage, replacementText: "Try again with the local file.")
+
+        XCTAssertEqual(host.hostedPreflightRequestCount, 0)
+        XCTAssertNil(host.sendPendingHostedHandoffPreflight)
+        XCTAssertEqual(host.banners.count, 2)
+        XCTAssertTrue(host.banners.allSatisfy { $0.contains("Switch to a private model") })
+    }
+
     func testConversationItemsDecodeModelIDVariants() throws {
         let snakeCase = try Self.conversationItemsResponseJSON("""
         {
@@ -1799,6 +1851,9 @@ private final class PreConversationFailureSendHost: ChatSendCoordinatorHost {
     var shouldFailCreateConversation = true
     var sendProxyRetryOffer: ProxyRetryOffer?
     var privacyProxyModelIDStub: String?
+    var hostedPreflight: HostedIronclawHandoffPreflight?
+    var hostedPreflightRequestCount = 0
+    var localDocumentPayloadsOverride: [DocumentTextExtractor.LocalDocumentContextPayload] = []
 
     func privacyProxyModelIDForSend() -> String? { privacyProxyModelIDStub }
 
@@ -1861,7 +1916,8 @@ private final class PreConversationFailureSendHost: ChatSendCoordinatorHost {
         text: String,
         promptAttachments: [ChatAttachment]
     ) -> HostedIronclawHandoffPreflight? {
-        nil
+        hostedPreflightRequestCount += 1
+        return hostedPreflight
     }
 
     func currentRouteReadinessIssueForSend(
@@ -1912,7 +1968,7 @@ private final class PreConversationFailureSendHost: ChatSendCoordinatorHost {
     func localDocumentPayloadsForSend(
         attachments: [ChatAttachment]
     ) -> [DocumentTextExtractor.LocalDocumentContextPayload] {
-        []
+        attachments.isEmpty ? [] : localDocumentPayloadsOverride
     }
 
     func documentAugmentedPromptForSend(

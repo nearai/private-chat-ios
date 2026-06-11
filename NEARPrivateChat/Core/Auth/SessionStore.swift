@@ -102,7 +102,7 @@ final class SessionStore: NSObject, ObservableObject {
     private func authenticateWithNearAccount(_ accountID: String) async {
         let trimmed = accountID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !trimmed.isEmpty else {
-            showBanner("Enter your NEAR account ID, e.g. yourname.near.")
+            showBanner("Enter your NEAR account ID after adding this device key in your wallet.")
             return
         }
         guard !isAuthenticating else { return }
@@ -131,7 +131,7 @@ final class SessionStore: NSObject, ObservableObject {
     func signInWithToken(_ token: String) {
         let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            showBanner("Paste a session token first.")
+            showBanner("Paste a session token from private.near.ai first. It should be the token value, not a URL or account name.")
             return
         }
         adoptSession(token: trimmed, sessionID: "", isNewUser: false)
@@ -145,7 +145,7 @@ final class SessionStore: NSObject, ObservableObject {
     func adoptSession(token: String, sessionID: String, isNewUser: Bool) {
         let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedToken.isEmpty else {
-            showBanner("That sign-in didn't return a session token.")
+            showBanner("That sign-in did not return a session token. Try the web sign-in again, or use More ways to sign in > Session token if private.near.ai is already signed in.")
             return
         }
         let newSession = AuthSession(
@@ -344,7 +344,7 @@ final class SessionStore: NSObject, ObservableObject {
         persistence.saveCachedProfile(profile)
     }
 
-    private static func userFacingAuthenticationError(_ error: Error) -> String {
+    nonisolated static func userFacingAuthenticationError(_ error: Error) -> String {
         if let authenticationError = error as? ASWebAuthenticationSessionError,
            authenticationError.code == .canceledLogin {
             return "Sign-in canceled."
@@ -356,8 +356,37 @@ final class SessionStore: NSObject, ObservableObject {
             return "Sign-in canceled."
         }
 
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .invalidCallback:
+                return "Sign-in did not return the expected session. Try web sign-in again, or use More ways to sign in > Session token if private.near.ai is already signed in."
+            case let .status(code, rawMessage):
+                return Self.userFacingStatusAuthenticationError(code: code, rawMessage: rawMessage)
+            default:
+                break
+            }
+        }
+
         let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-        return message.isEmpty ? "Sign-in failed. Try again." : message
+        return message.isEmpty ? "Sign-in failed. Check your connection and try again." : message
+    }
+
+    nonisolated private static func userFacingStatusAuthenticationError(code: Int, rawMessage: String) -> String {
+        let normalized = rawMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowercased = normalized.lowercased()
+        if code == 401 || code == 403 {
+            if lowercased.contains("signature") ||
+                lowercased.contains("nep-413") ||
+                lowercased.contains("access key") ||
+                lowercased.contains("public key") {
+                return "NEAR account sign-in could not verify this device key. Confirm the Full Access key is added to that account, then try again."
+            }
+            return "Sign-in was rejected or expired. Try again, or use More ways to sign in > Session token if you are already signed in on private.near.ai."
+        }
+        if normalized.isEmpty {
+            return "Sign-in failed. Check your connection and try again."
+        }
+        return APIError.status(code, normalized).localizedDescription
     }
 
     private func startWebAuthentication(url: URL) async throws -> URL {

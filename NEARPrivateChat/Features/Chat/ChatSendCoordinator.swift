@@ -140,6 +140,15 @@ final class ChatSendCoordinator {
             override: promptSourceOverride
         )
         host.routeCurrentPromptIfNeededForSend(preflightText, attachments: attachments)
+        if blockLocalOnlyDocumentsIfNeeded(
+            text: text,
+            actionSurfaceText: preflightText,
+            attachments: attachments,
+            appendUserMessage: true,
+            modelOverride: nil
+        ) {
+            return
+        }
         if let preflight = host.hostedHandoffPreflightForSend(text: preflightText, promptAttachments: promptAttachments),
            approvedHostedHandoffFingerprint != preflight.fingerprint {
             pendingHostedHandoffContinuation = .draft
@@ -236,6 +245,15 @@ final class ChatSendCoordinator {
         let parentResponseID = message.previousResponseID ??
             host.sendMessages[..<assistantIndex].last(where: { $0.role == .assistant })?.responseID
         host.routeCurrentPromptIfNeededForSend(userMessage.text, attachments: attachments)
+        if blockLocalOnlyDocumentsIfNeeded(
+            text: userMessage.text,
+            actionSurfaceText: userMessage.text,
+            attachments: attachments,
+            appendUserMessage: false,
+            modelOverride: nil
+        ) {
+            return
+        }
         if let preflight = host.hostedHandoffPreflightForSend(text: userMessage.text, promptAttachments: promptAttachments),
            approvedHostedHandoffFingerprint != preflight.fingerprint {
             pendingHostedHandoffContinuation = .regenerate(message)
@@ -278,6 +296,15 @@ final class ChatSendCoordinator {
         let attachments = host.activeAttachmentsForSend(promptAttachments: promptAttachments)
         let parentResponseID = message.previousResponseID
         host.routeCurrentPromptIfNeededForSend(text, attachments: attachments)
+        if blockLocalOnlyDocumentsIfNeeded(
+            text: text,
+            actionSurfaceText: text,
+            attachments: attachments,
+            appendUserMessage: true,
+            modelOverride: nil
+        ) {
+            return
+        }
         if let preflight = host.hostedHandoffPreflightForSend(text: text, promptAttachments: promptAttachments),
            approvedHostedHandoffFingerprint != preflight.fingerprint {
             pendingHostedHandoffContinuation = .edit(message, replacementText)
@@ -408,6 +435,15 @@ final class ChatSendCoordinator {
             attachments: attachments,
             override: promptSourceOverride
         )
+        if blockLocalOnlyDocumentsIfNeeded(
+            text: text,
+            actionSurfaceText: actionSurfaceText,
+            attachments: attachments,
+            appendUserMessage: appendUserMessage,
+            modelOverride: modelOverride
+        ) {
+            return false
+        }
         if let preflight = host.hostedHandoffPreflightForSend(text: actionSurfaceText, promptAttachments: promptAttachments),
            approvedHostedHandoffFingerprint != preflight.fingerprint {
             pendingHostedHandoffContinuation = .directSend(
@@ -446,6 +482,15 @@ final class ChatSendCoordinator {
             }
             host.ensureSelectedModelIsAvailableForSend()
             host.routeCurrentPromptIfNeededForSend(text, attachments: attachments)
+            if blockLocalOnlyDocumentsIfNeeded(
+                text: text,
+                actionSurfaceText: actionSurfaceText,
+                attachments: attachments,
+                appendUserMessage: appendUserMessage,
+                modelOverride: modelOverride
+            ) {
+                return false
+            }
             if let preflight = host.hostedHandoffPreflightForSend(text: actionSurfaceText, promptAttachments: promptAttachments),
                approvedHostedHandoffFingerprint != preflight.fingerprint {
                 pendingHostedHandoffContinuation = .directSend(
@@ -484,16 +529,12 @@ final class ChatSendCoordinator {
                 : []
             let localDocPayloads = host.localDocumentPayloadsForSend(attachments: attachments.filter(\.isLocalOnly))
             if !localDocPayloads.isEmpty {
-                if DocumentTextExtractor.localDocsAllowedForRoute(councilModelIDs: councilModelIDs, singleModelID: requestModel) {
-                    let localDocQuery = DocumentTextExtractor.localDocumentQuery(
-                        userText: text,
-                        actionSurfaceText: actionSurfaceText
-                    )
-                    if let context = DocumentTextExtractor.localDocumentContextBlock(for: localDocQuery, payloads: localDocPayloads, topK: 4) {
-                        routedText = "\(context)\n\nUsing those excerpts (my attached on-device document) where relevant:\n\(routedText)"
-                    }
-                } else {
-                    host.showBannerForSend("Your on-device document stays private — its text isn’t sent to cloud or hosted models. Switch to the private model to use it here.")
+                let localDocQuery = DocumentTextExtractor.localDocumentQuery(
+                    userText: text,
+                    actionSurfaceText: actionSurfaceText
+                )
+                if let context = DocumentTextExtractor.localDocumentContextBlock(for: localDocQuery, payloads: localDocPayloads, topK: 4) {
+                    routedText = "\(context)\n\nUsing those excerpts (my attached on-device document) where relevant:\n\(routedText)"
                 }
             }
             if councilModelIDs.count > 1 {
@@ -635,6 +676,28 @@ final class ChatSendCoordinator {
             host.showBannerForSend(displayError)
             return true
         }
+    }
+
+    private func blockLocalOnlyDocumentsIfNeeded(
+        text: String,
+        actionSurfaceText: String,
+        attachments: [ChatAttachment],
+        appendUserMessage: Bool,
+        modelOverride: String?
+    ) -> Bool {
+        guard let host else { return true }
+        let localDocPayloads = host.localDocumentPayloadsForSend(attachments: attachments.filter(\.isLocalOnly))
+        guard !localDocPayloads.isEmpty else { return false }
+        let requestModel = modelOverride ?? host.sendSelectedModel
+        let councilModelIDs = (appendUserMessage && modelOverride == nil)
+            ? host.requestCouncilModelIDsForSend(for: requestModel)
+            : []
+        guard !DocumentTextExtractor.localDocsAllowedForRoute(councilModelIDs: councilModelIDs, singleModelID: requestModel) else {
+            return false
+        }
+        host.sendPendingHostedHandoffPreflight = nil
+        host.showBannerForSend("Switch to a private model to use this on-device document. Cloud, Council-with-cloud, and Hosted Agent routes cannot receive local-only document text.")
+        return true
     }
 
     /// A restricted PRIVATE-route failure gets a one-tap "answer via privacy

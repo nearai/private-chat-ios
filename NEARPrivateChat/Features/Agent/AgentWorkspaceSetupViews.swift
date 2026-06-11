@@ -8,9 +8,9 @@ struct AgentWorkspaceHeader: View {
             HStack(spacing: 12) {
                 Image(systemName: "terminal")
                     .font(.title3.weight(.bold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .frame(width: 42, height: 42)
-                    .background(Color.brandBlue.opacity(0.09), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(Color.brandAccent.opacity(0.09), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Connect Agent")
@@ -25,7 +25,7 @@ struct AgentWorkspaceHeader: View {
 
             ChipFlowLayout(spacing: 7, lineSpacing: 7) {
                 StatusChip(title: agentStore.ironclawRemoteWorkstationAvailable ? "Hosted on" : "Hosted off", symbolName: "server.rack", isPrimary: agentStore.ironclawRemoteWorkstationAvailable)
-                StatusChip(title: agentStore.ironclawToolNames.isEmpty ? "Shell + git" : "\(agentStore.ironclawToolNames.count) tools", symbolName: "terminal", isPrimary: agentStore.ironclawRemoteWorkstationAvailable)
+                StatusChip(title: agentStore.ironclawToolNames.isEmpty ? "Tools on run" : "\(agentStore.ironclawToolNames.count) tools", symbolName: "terminal", isPrimary: !agentStore.ironclawToolNames.isEmpty)
                 StatusChip(title: agentStore.ironclawTokenConfigured ? "Token saved" : "Token needed", symbolName: "key", isPrimary: false)
                 StatusChip(title: "Phone controlled", symbolName: "iphone", isPrimary: false)
             }
@@ -52,7 +52,7 @@ struct AgentWorkspaceSetupPanel: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.brandBlue)
+            .tint(.actionPrimary)
         }
         .padding(12)
         .frame(maxWidth: 460, alignment: .leading)

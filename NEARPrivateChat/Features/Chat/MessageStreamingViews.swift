@@ -10,9 +10,9 @@ struct AgentThinkingShimmer: View {
             HStack(spacing: 8) {
                 Image(systemName: "terminal")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .frame(width: 24, height: 24)
-                    .background(Color.brandBlue.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .background(Color.brandAccent.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
                 Text(statusText)
                     .font(.caption.weight(.semibold))
@@ -32,7 +32,7 @@ struct AgentThinkingShimmer: View {
         .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.brandBlue.opacity(0.14), lineWidth: 1)
+                .stroke(Color.brandAccent.opacity(0.14), lineWidth: 1)
         }
         .onAppear {
             guard !reduceMotion else { return }
@@ -87,28 +87,8 @@ struct StreamingMessageText: View {
                     .foregroundStyle(.secondary)
             }
 
-            StreamingMarkdownText(text: Self.streamingPreview(from: message.text))
+            StreamingMarkdownText(text: StreamingPreviewHelper.preview(from: message.text))
         }
-    }
-
-    private static func streamingPreview(from rawText: String) -> String {
-        let text = MessageWidget.strippedStreamingPreview(rawText)
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return " " }
-        let cappedText: String
-        let isCapped: Bool
-        if trimmed.utf8.count > 4_000 {
-            cappedText = String(trimmed.suffix(4_000))
-            isCapped = true
-        } else {
-            cappedText = trimmed
-            isCapped = false
-        }
-        let lines = cappedText
-            .components(separatedBy: .newlines)
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        let preview = lines.isEmpty ? cappedText : lines.suffix(12).joined(separator: "\n")
-        return isCapped ? "...\n\(preview)" : preview
     }
 
     private static func streamingLengthText(from text: String) -> String {

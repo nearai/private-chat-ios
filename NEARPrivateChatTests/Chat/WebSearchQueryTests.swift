@@ -42,4 +42,17 @@ extension PrivateChatCoreTests {
             "compare oil markets to 2008"
         )
     }
+
+    func testWebSearchModeExtractsExplicitNewsAndWebIntent() {
+        XCTAssertEqual(WebGroundingService.searchMode(for: "latest news on NEAR"), .newsFirst)
+        XCTAssertEqual(WebGroundingService.searchMode(for: "from Google News summarize NEAR"), .newsFirst)
+        XCTAssertEqual(WebGroundingService.searchMode(for: "web only NEAR protocol updates"), .webFirst)
+        XCTAssertEqual(WebGroundingService.searchMode(for: "not news, use general web for NEAR docs"), .webFirst)
+        XCTAssertEqual(WebGroundingService.searchMode(for: "summarize NEAR docs"), .automatic)
+    }
+
+    func testWebSearchQueryRemovesModeDirectives() {
+        XCTAssertEqual(WebGroundingService.query(from: "from Google News summarize NEAR"), "summarize NEAR")
+        XCTAssertEqual(WebGroundingService.query(from: "web only NEAR protocol updates"), "NEAR protocol updates")
+    }
 }

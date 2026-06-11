@@ -336,7 +336,7 @@ struct ChatToolbar: View {
             let status = currentAttestationStatus
             let copy = status.userFacingCopy()
             let isCloudTrust = modelCatalogStore.selectedRouteUsesNearCloud || (modelCatalogStore.isCouncilModeEnabled && modelCatalogStore.activeCouncilHasNearCloudRoutes)
-            let tint = isCloudTrust ? Color.brandBlue : status.tintColor
+            let tint = isCloudTrust ? Color.brandAccent : status.tintColor
             HStack(spacing: 5) {
                 Image(systemName: isCloudTrust ? "eye.slash" : status.symbolName)
                     .font(.caption.weight(.bold))

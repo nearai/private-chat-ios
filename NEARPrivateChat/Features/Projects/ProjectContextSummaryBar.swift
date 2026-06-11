@@ -15,9 +15,9 @@ struct ProjectContextSummaryBar: View {
             HStack(spacing: 8) {
                 Image(systemName: "eye")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .frame(width: 28, height: 28)
-                    .background(Color.brandBlue.opacity(0.09), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(Color.brandAccent.opacity(0.09), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Model sees")
                         .font(.caption.weight(.semibold))

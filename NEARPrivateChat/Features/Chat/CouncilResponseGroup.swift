@@ -16,7 +16,7 @@ struct CouncilResponseGroup: View {
             HStack(spacing: 8) {
                 Image(systemName: "square.grid.2x2")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .frame(width: 28, height: 28)
                     .background(Color.brandSky.opacity(0.34), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -43,10 +43,10 @@ struct CouncilResponseGroup: View {
                             .labelStyle(.titleAndIcon)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(canStopWaiting ? Color.brandBlue : .secondary)
+                    .foregroundStyle(canStopWaiting ? Color.brandAccent : .secondary)
                     .padding(.horizontal, 9)
                     .frame(height: 28)
-                    .background((canStopWaiting ? Color.brandBlue : Color.secondary).opacity(0.09), in: Capsule())
+                    .background((canStopWaiting ? Color.brandAccent : Color.secondary).opacity(0.09), in: Capsule())
                     .accessibilityHint(canStopWaiting ? "Synthesize from completed Council answers now" : "Cancel the Council run")
                 }
 
@@ -58,10 +58,10 @@ struct CouncilResponseGroup: View {
                             .labelStyle(.titleAndIcon)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .padding(.horizontal, 9)
                     .frame(height: 28)
-                    .background(Color.brandBlue.opacity(0.09), in: Capsule())
+                    .background(Color.brandAccent.opacity(0.09), in: Capsule())
                     .accessibilityHint("Open the Council room view")
                 }
             }
@@ -89,7 +89,7 @@ struct CouncilResponseGroup: View {
         .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.brandBlue.opacity(0.13), lineWidth: 1)
+                .stroke(Color.brandAccent.opacity(0.13), lineWidth: 1)
         }
         .onAppear {
             selectedMessageID = selectedMessageID ?? messages.first?.id
@@ -233,27 +233,14 @@ private struct CouncilAnswerPreview: View {
     }
 
     private var previewText: String {
-        let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "" }
-        let cappedText: String
-        let isCapped: Bool
-        if trimmed.utf8.count > 4_000 {
-            cappedText = String(trimmed.suffix(4_000))
-            isCapped = true
-        } else {
-            cappedText = trimmed
-            isCapped = false
-        }
-        let lines = cappedText
-            .components(separatedBy: .newlines)
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        let preview = lines.isEmpty ? cappedText : lines.suffix(12).joined(separator: "\n")
-        return isCapped ? "...\n\(preview)" : preview
+        StreamingPreviewHelper.preview(from: message.text, emptyPlaceholder: "")
     }
 
     private var statusText: String {
         if message.status == "failed" {
-            return "Failed"
+            return CouncilStreamService.statusText(
+                for: CouncilStreamService.errorKind(forFailureSummary: message.text)
+            )
         }
         return message.hasUsableCouncilAnswer ? "Ready" : "Pending"
     }
@@ -304,12 +291,12 @@ private struct CouncilModelProgressRow: View {
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(Color.brandBlue)
+                        .foregroundStyle(Color.brandAccent)
                 }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 7)
-            .background(isSelected ? Color.brandBlue.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(isSelected ? Color.brandAccent.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(message.modelDisplayName), \(progressText)")
@@ -336,7 +323,7 @@ private struct CouncilModelProgressRow: View {
             return .red
         }
         if message.isStreaming {
-            return Color.brandBlue
+            return Color.brandAccent
         }
         if message.hasUsableCouncilAnswer {
             return Color.verifiedGreen
@@ -346,7 +333,9 @@ private struct CouncilModelProgressRow: View {
 
     private var progressText: String {
         if message.status == "failed" {
-            return "Failed"
+            return CouncilStreamService.statusText(
+                for: CouncilStreamService.errorKind(forFailureSummary: message.text)
+            )
         }
         if message.isStreaming {
             if let latency = message.firstTokenLatency {

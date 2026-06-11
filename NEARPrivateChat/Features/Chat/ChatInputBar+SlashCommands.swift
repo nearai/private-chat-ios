@@ -75,9 +75,9 @@ extension InputBar {
                     HStack(spacing: 10) {
                         Image(systemName: suggestion.symbolName)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.brandBlue)
+                            .foregroundStyle(Color.brandAccent)
                             .frame(width: 24, height: 24)
-                            .background(Color.brandBlue.opacity(0.09), in: Circle())
+                            .background(Color.brandAccent.opacity(0.09), in: Circle())
                         VStack(alignment: .leading, spacing: 1) {
                             Text(suggestion.command)
                                 .font(.caption.weight(.semibold))

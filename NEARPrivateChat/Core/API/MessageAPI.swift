@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 protocol MessageAPI: AnyObject {
     func streamResponse(
@@ -29,6 +30,11 @@ private actor ResponseStreamVisibility {
 }
 
 final class PrivateChatMessageAPI: MessageAPI {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "NEARPrivateChat",
+        category: "MessageAPI"
+    )
+
     private let client: APIClient
 
     init(client: APIClient) {
@@ -212,7 +218,7 @@ final class PrivateChatMessageAPI: MessageAPI {
             // Live probe support: if the private route DOES run web search
             // under event names we don't parse, this is where they surface.
             if let type = object["type"] as? String, type.contains("search") || type.contains("tool") {
-                print("[MessageAPI] unrecognized SSE event type: \(type)")
+                Self.logger.debug("[MessageAPI] unrecognized SSE event type: \(type, privacy: .public)")
             }
             #endif
             return nil

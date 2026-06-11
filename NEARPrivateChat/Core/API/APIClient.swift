@@ -1,6 +1,12 @@
 import Foundation
+import OSLog
 
 final class APIClient {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "NEARPrivateChat",
+        category: "APIClient"
+    )
+
     let decoder: JSONDecoder
     let encoder: JSONEncoder
 
@@ -88,7 +94,8 @@ final class APIClient {
         if !(200..<300).contains(http.statusCode) {
             let rawBody = String(data: data.prefix(400), encoding: .utf8) ?? "<binary>"
             let path = request.url?.path ?? "<unknown>"
-            print("[NEAR API] \(request.httpMethod ?? "GET") \(path) -> HTTP \(http.statusCode)\n  body: \(rawBody)\n  headers: \(http.allHeaderFields)")
+            let headers = String(describing: http.allHeaderFields)
+            Self.logger.debug("[NEAR API] \(request.httpMethod ?? "GET", privacy: .public) \(path, privacy: .public) -> HTTP \(http.statusCode, privacy: .public)\n  body: \(rawBody, privacy: .private)\n  headers: \(headers, privacy: .private)")
         }
         #endif
         guard (200..<300).contains(http.statusCode) else {

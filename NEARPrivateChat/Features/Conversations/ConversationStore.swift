@@ -143,7 +143,7 @@ final class ConversationStore: ObservableObject {
             await refreshConversations(showErrors: false)
             showBanner("Conversation restored.")
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -156,7 +156,7 @@ final class ConversationStore: ObservableObject {
             await refreshConversations(showErrors: false)
             showBanner("Archived conversations restored.")
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -272,7 +272,7 @@ final class ConversationStore: ObservableObject {
                 selectedConversation = refreshed
             }
         } else if selectedConversation?.id == conversationID {
-            var refreshed = selectedConversation!
+            guard var refreshed = selectedConversation else { return }
             mutate(&refreshed)
             selectedConversation = refreshed
         }
@@ -328,7 +328,7 @@ final class ConversationActionCoordinator {
             }
             showBanner("Conversation deleted.")
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -349,7 +349,7 @@ final class ConversationActionCoordinator {
             await refreshConversations()
             showBanner("Conversation copied.")
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -368,7 +368,7 @@ final class ConversationActionCoordinator {
             }
             showBanner("Conversation archived.")
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -382,7 +382,7 @@ final class ConversationActionCoordinator {
             await refreshConversations()
             showBanner(shouldPin ? "Conversation pinned." : "Conversation unpinned.")
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
         }
     }
 }

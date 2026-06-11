@@ -187,8 +187,8 @@ func demoCouncilRoomModel() -> CouncilRoomModel {
     }
     let messages = [
         message("c-private", ChatStore.defaultModelID, "I concur. The architecture is sound and the streaming path is stable in main, so shipping is reasonable."),
-        message("c-independent-a", "near-cloud/anthropic/claude-opus-4-7", "Yes, with caveats. The latency budget on the streaming side is the one risk. If we cap concurrent models at 3 we hold the SLA at p95 < 1.4s."),
-        message("c-independent-b", "near-cloud/openai/gpt-5.5", "I disagree. Per-message proof for cross-model consensus is not landed in main; however, shipping without it means the verification footer is silently wrong on Council answers."),
+        message("c-independent-a", "near-cloud/anthropic/claude-sonnet-4-6", "Yes, with caveats. The latency budget on the streaming side is the one risk. If we cap concurrent models at 3 we hold the SLA at p95 < 1.4s."),
+        message("c-independent-b", "near-cloud/Qwen/Qwen3.6-35B-A3B-FP8", "I disagree. Per-message proof for cross-model consensus is not landed in main; however, shipping without it means the verification footer is silently wrong on Council answers."),
         message("c-syn", "llm-council/synthesis", "Synthesis: the council broadly supports shipping Council v2.\n\nAgreement: two of three models back shipping; the architecture and streaming path are considered stable.\n\nDisagreement: one model flags that per-message cross-model proof is not yet in main.\n\nRecommended next step: ship behind a flag, land the proof path, then enable by default.")
     ]
     return CouncilRoomModel.from(councilMessages: messages)

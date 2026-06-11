@@ -13,9 +13,9 @@ struct HostedHandoffPreflightSheet: View {
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: "arrow.up.right.square.fill")
                             .font(.title3.weight(.semibold))
-                            .foregroundStyle(Color.brandBlue)
+                            .foregroundStyle(Color.brandAccent)
                             .frame(width: 40, height: 40)
-                            .background(Color.brandBlue.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .background(Color.brandAccent.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Run on Hosted IronClaw?")
@@ -104,9 +104,9 @@ struct IronclawApprovalCard: View {
             HStack(spacing: 10) {
                 Image(systemName: "hand.raised.fill")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .frame(width: 28, height: 28)
-                    .background(Color.brandBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(Color.brandAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Approval required")
                         .font(.subheadline.weight(.semibold))
@@ -204,7 +204,7 @@ struct IronclawApprovalCard: View {
                 pendingGateURL = nil
             }
         } message: { url in
-            Text("IronClaw returned this HTTPS URL. Continue only if you recognize the host: \(url.host ?? "unknown").")
+            Text("IronClaw returned a third-party auth URL: \(url.host ?? "unknown"). Continue only if you recognize the host and expect to share credentials there.")
         }
     }
 
@@ -213,9 +213,9 @@ struct IronclawApprovalCard: View {
             HStack(spacing: 10) {
                 Image(systemName: "key.fill")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .frame(width: 28, height: 28)
-                    .background(Color.brandBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(Color.brandAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Tool sign-in required")
                         .font(.subheadline.weight(.semibold))
@@ -236,7 +236,7 @@ struct IronclawApprovalCard: View {
                 Label("Credential gated", systemImage: "lock.shield")
             }
             .font(.caption2.weight(.semibold))
-            .foregroundStyle(Color.brandBlue)
+            .foregroundStyle(Color.brandAccent)
 
             if let parameterPreview = approval.parameterPreview {
                 Text(parameterPreview)
@@ -331,7 +331,7 @@ struct IronclawApprovalCard: View {
                 pendingGateURL = nil
             }
         } message: { url in
-            Text("IronClaw returned this HTTPS URL. Continue only if you recognize the host: \(url.host ?? "unknown").")
+            Text("IronClaw returned a third-party auth URL: \(url.host ?? "unknown"). Continue only if you recognize the host and expect to share credentials there.")
         }
     }
 

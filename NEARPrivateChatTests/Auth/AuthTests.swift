@@ -385,6 +385,24 @@ extension PrivateChatCoreTests {
 
         XCTAssertThrowsError(try api.parseAuthCallback(url))
     }
+
+    func testAuthRecoveryCopyGivesActionableNextStep() {
+        let emptyWebHarvest = SessionStore.userFacingAuthenticationError(APIError.invalidCallback)
+        XCTAssertTrue(emptyWebHarvest.contains("Try web sign-in again"), emptyWebHarvest)
+        XCTAssertTrue(emptyWebHarvest.contains("Session token"), emptyWebHarvest)
+
+        let nep413Failure = SessionStore.userFacingAuthenticationError(
+            APIError.status(403, "NEP-413 signature failed: public key is not an access key")
+        )
+        XCTAssertTrue(nep413Failure.contains("device key"), nep413Failure)
+        XCTAssertTrue(nep413Failure.contains("Full Access key"), nep413Failure)
+
+        let rejectedToken = SessionStore.userFacingAuthenticationError(
+            APIError.status(401, "invalid or expired authentication token")
+        )
+        XCTAssertTrue(rejectedToken.contains("Try again"), rejectedToken)
+        XCTAssertTrue(rejectedToken.contains("Session token"), rejectedToken)
+    }
 }
 
 private func authCodeCallback(

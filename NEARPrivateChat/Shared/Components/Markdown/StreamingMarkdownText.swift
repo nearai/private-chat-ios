@@ -28,6 +28,14 @@ enum MarkdownStreamSanitizer {
     }
 }
 
+enum StreamingPreviewHelper {
+    static func preview(from rawText: String, emptyPlaceholder: String = " ") -> String {
+        let text = MessageWidget.strippedStreamingPreview(rawText)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? emptyPlaceholder : text
+    }
+}
+
 /// Streaming-safe markdown: completed blocks (up to the last blank line)
 /// render through the real markdown pipeline — its block cache makes repeated
 /// renders cheap — while the still-growing tail renders as sanitized plain

@@ -799,11 +799,18 @@ struct IronclawSettings: Codable, Hashable {
     var baseURL: String
     var threadID: String
 
-    static let `default` = IronclawSettings(
-        isEnabled: false,
-        baseURL: "",
-        threadID: ""
-    )
+    static var `default`: IronclawSettings {
+        #if DEBUG
+        let debugBaseURL = ProcessInfo.processInfo.environment["IRONCLAW_REBORN_BASE_URL"] ?? ""
+        #else
+        let debugBaseURL = ""
+        #endif
+        return IronclawSettings(
+            isEnabled: false,
+            baseURL: debugBaseURL,
+            threadID: ""
+        )
+    }
 
     var normalizedBaseURL: String {
         baseURL.trimmingCharacters(in: .whitespacesAndNewlines)

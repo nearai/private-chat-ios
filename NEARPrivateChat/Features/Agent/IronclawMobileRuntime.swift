@@ -63,6 +63,11 @@ final class IronclawMobileRuntime {
         self.api = api
     }
 
+    func cancel() {
+        // Reserved for future runtime-owned tasks; streaming is currently
+        // cancelled by ChatStore's streamTask.
+    }
+
     func streamTurn(
         prompt: String,
         attachments: [ChatAttachment],

@@ -60,10 +60,10 @@ extension HomeScreen {
             .foregroundStyle(Color.textSecondary)
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity)
-            .frame(height: 40)
-            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .frame(minHeight: 44)
+            .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.pill))
             .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle.app(AppRadius.pill)
                     .stroke(Color.appBorder, lineWidth: 1)
             }
         }

@@ -86,7 +86,7 @@ struct DemoCaptureScreenHost: View {
                 }
             }
         }
-        .tint(.brandBlue)
+        .tint(.actionPrimary)
     }
 }
 #endif

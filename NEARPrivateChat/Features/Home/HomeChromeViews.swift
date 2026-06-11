@@ -6,7 +6,7 @@ struct HomeSurfaceBackground: View {
             Color.appBackground
             LinearGradient(
                 colors: [
-                    Color.brandBlue.opacity(0.10),
+                    Color.brandAccent.opacity(0.10),
                     Color.brandSky.opacity(0.05),
                     Color.clear,
                     Color.clear
@@ -47,17 +47,17 @@ struct ConversationRow: View {
 
             if isSelected {
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(Color.brandBlue)
+                    .fill(Color.brandAccent)
                     .frame(width: 4, height: 28)
             }
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 10)
-        .background(isSelected ? Color.brandBlue.opacity(0.07) : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(isSelected ? Color.brandAccent.opacity(0.07) : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             if isSelected {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.brandBlue.opacity(0.10), lineWidth: 1)
+                    .stroke(Color.brandAccent.opacity(0.10), lineWidth: 1)
             }
         }
         .contentShape(Rectangle())
@@ -111,9 +111,9 @@ struct SidebarSearchField: View {
         .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.brandBlue.opacity(0.08), lineWidth: 1)
+                .stroke(Color.brandAccent.opacity(0.08), lineWidth: 1)
         }
-        .shadow(color: Color.brandBlue.opacity(0.05), radius: 12, y: 6)
+        .shadow(color: Color.brandAccent.opacity(0.05), radius: 12, y: 6)
     }
 }
 

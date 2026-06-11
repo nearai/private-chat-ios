@@ -338,10 +338,6 @@ struct ModelOption: Decodable, Identifiable, Hashable {
 
     var isEliteModel: Bool {
         let ids = [
-            "anthropic/claude-opus-4-7",
-            "openai/gpt-5.5",
-            "qwen/qwen3.7-max",
-            "moonshotai/kimi-k2.6",
             "anthropic/claude-sonnet-4-6",
             "openai/gpt-5.4",
             "google/gemini-3-pro",
@@ -455,8 +451,6 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             lowercased.contains("thinking") ||
             lowercased.contains("deepseek") ||
             lowercased.contains("gpt-5") ||
-            lowercased.contains("qwen3.7") ||
-            lowercased.contains("kimi-k2.6") ||
             lowercased.contains("gemini-3") ||
             lowercased.contains("gemini-2.5-pro") ||
             lowercased.contains("qwen3.5") ||

@@ -46,7 +46,7 @@ enum HomeOrchestrationTone: Equatable {
     var tintColor: Color {
         switch self {
         case .blue:
-            return Color.brandBlue
+            return Color.brandAccent
         case .green:
             return Color.proofVerified
         case .amber:

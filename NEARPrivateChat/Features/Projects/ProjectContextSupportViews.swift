@@ -252,7 +252,9 @@ struct ProjectFilePill: View {
                 Label("Remove", systemImage: "trash")
             }
         }
-        .accessibilityLabel("\(title), \(subtitle). Tap to stage an action prompt.")
+        .accessibilityLabel(title)
+        .accessibilityValue(subtitle)
+        .accessibilityHint("Stages an action prompt from this project item.")
         .accessibilityAction(named: "Remove", removeAction)
     }
 }
@@ -282,6 +284,7 @@ struct ProjectAddFilePill: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
+        .accessibilityHint("Adds a file to this project.")
     }
 }
 

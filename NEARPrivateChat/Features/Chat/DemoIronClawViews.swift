@@ -135,8 +135,8 @@ private struct DemoAgentTimelineStep: View {
 private struct DemoCouncilLineupView: View {
     private let models = [
         ("GLM 5.1", "Private model answer", "NEAR Private · proof", "checkmark.shield.fill"),
-        ("Claude Opus 4.7", "Cloud model answer", "NEAR AI Cloud · privacy proxy", "list.bullet.rectangle"),
-        ("GPT-5.5", "Cloud model answer", "NEAR AI Cloud · privacy proxy", "sparkles")
+        ("Claude Sonnet 4.6", "Cloud model answer", "NEAR AI Cloud · privacy proxy", "list.bullet.rectangle"),
+        ("Qwen 3.6", "Cloud model answer", "NEAR AI Cloud · privacy proxy", "sparkles")
     ]
 
     var body: some View {

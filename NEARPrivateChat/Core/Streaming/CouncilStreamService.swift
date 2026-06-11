@@ -3,11 +3,27 @@ import Foundation
 struct CouncilStreamService {
     static let defaultConcurrentStreamLimit = 2
 
+    enum ErrorKind: Equatable {
+        case rateLimit
+        case authFailure
+        case transportError
+        case timeout
+    }
+
+    struct NoTokenTimeoutError: LocalizedError {
+        let seconds: Int
+
+        var errorDescription: String? {
+            "This Council model produced no visible output for \(seconds)s."
+        }
+    }
+
     struct StreamResult {
         let modelID: String
         let messageID: String
         let didComplete: Bool
         let failureSummary: String?
+        var errorKind: ErrorKind? = nil
         var isStopSignal: Bool = false
 
         static func stopSignal(batchID: String) -> StreamResult {
@@ -16,6 +32,7 @@ struct CouncilStreamService {
                 messageID: batchID,
                 didComplete: false,
                 failureSummary: nil,
+                errorKind: nil,
                 isStopSignal: true
             )
         }
@@ -91,9 +108,108 @@ struct CouncilStreamService {
                     modelID: modelID,
                     messageID: message.id,
                     didComplete: true,
-                    failureSummary: nil
+                    failureSummary: nil,
+                    errorKind: nil
                 )
             }
+    }
+
+    static func errorKind(for error: Error) -> ErrorKind {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut:
+                return .timeout
+            case .networkConnectionLost,
+                 .cannotConnectToHost,
+                 .cannotFindHost,
+                 .dnsLookupFailed,
+                 .notConnectedToInternet,
+                 .secureConnectionFailed,
+                 .serverCertificateUntrusted:
+                return .transportError
+            default:
+                break
+            }
+        }
+
+        if case let APIError.status(code, message) = error {
+            if code == 401 || (code == 403 && isAuthFailureText(message)) {
+                return .authFailure
+            }
+            if code == 408 || code == 504 {
+                return .timeout
+            }
+            if code == 429 || isRateLimitText(message) {
+                return .rateLimit
+            }
+            return .transportError
+        }
+
+        let message = ((error as? LocalizedError)?.errorDescription ?? String(describing: error))
+        return errorKind(forFailureSummary: message) ?? .transportError
+    }
+
+    static func errorKind(forFailureSummary summary: String?) -> ErrorKind? {
+        guard let summary = summary?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !summary.isEmpty else {
+            return nil
+        }
+        if isAuthFailureText(summary) {
+            return .authFailure
+        }
+        if isTimeoutText(summary) {
+            return .timeout
+        }
+        if isRateLimitText(summary) {
+            return .rateLimit
+        }
+        return .transportError
+    }
+
+    static func statusText(for errorKind: ErrorKind?) -> String {
+        switch errorKind {
+        case .rateLimit:
+            return "Rate limited"
+        case .authFailure:
+            return "Auth failed"
+        case .transportError:
+            return "Connection failed"
+        case .timeout:
+            return "Timed out"
+        case nil:
+            return "Failed"
+        }
+    }
+
+    private static func isAuthFailureText(_ text: String) -> Bool {
+        let lowercased = text.lowercased()
+        return lowercased.contains("authorization header") ||
+            lowercased.contains("invalid or expired") ||
+            lowercased.contains("authentication token") ||
+            lowercased.contains("unauthenticated") ||
+            lowercased.contains("not authenticated") ||
+            lowercased.contains("invalid session") ||
+            lowercased.contains("expired session") ||
+            lowercased.contains("sign in") && lowercased.contains("session") ||
+            lowercased.contains("rejected your session token")
+    }
+
+    private static func isRateLimitText(_ text: String) -> Bool {
+        let lowercased = text.lowercased()
+        return lowercased.contains("temporarily restricted") ||
+            lowercased.contains("temporarily busy") ||
+            lowercased.contains("rate limit") ||
+            lowercased.contains("too many requests") ||
+            lowercased.contains("access temporarily restricted")
+    }
+
+    private static func isTimeoutText(_ text: String) -> Bool {
+        let lowercased = text.lowercased()
+        return lowercased.contains("timed out") ||
+            lowercased.contains("timeout") ||
+            lowercased.contains("took too long") ||
+            lowercased.contains("no visible output") ||
+            lowercased.contains("still reasoning without visible output")
     }
 
     static func latestCouncilResponseID(in messages: [ChatMessage]) -> String? {

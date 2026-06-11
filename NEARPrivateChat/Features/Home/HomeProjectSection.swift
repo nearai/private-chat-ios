@@ -124,7 +124,7 @@ struct WorkspaceCommandHeader: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(.white.opacity(0.11), lineWidth: 1)
         }
-        .shadow(color: Color.brandBlue.opacity(0.14), radius: 18, y: 8)
+        .shadow(color: Color.brandAccent.opacity(0.14), radius: 18, y: 8)
     }
 }
 
@@ -147,7 +147,7 @@ struct CommandCardBackground: View {
             .overlay(alignment: .topTrailing) {
                 LinearGradient(
                     colors: [
-                        Color.brandBlue.opacity(0.78),
+                        Color.brandAccent.opacity(0.78),
                         Color.brandSky.opacity(0.28),
                         Color.clear
                     ],
@@ -278,7 +278,7 @@ struct ProjectRow: View {
         .padding(.vertical, 10)
         .padding(.horizontal, 10)
         .background(
-            isSelected ? (tintBackground ?? Color.brandBlue.opacity(0.07)) : Color.clear,
+            isSelected ? (tintBackground ?? Color.brandAccent.opacity(0.07)) : Color.clear,
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
         .overlay {

@@ -269,6 +269,10 @@ final class ChatStore: ObservableObject {
         get { attachmentStagingStore.pendingLargePasteTexts }
         set { attachmentStagingStore.replacePendingLargePasteTexts(newValue) }
     }
+    private var pendingDocumentTexts: [String: String] {
+        get { attachmentStagingStore.pendingDocumentTexts }
+        set { attachmentStagingStore.replacePendingDocumentTexts(newValue) }
+    }
     private var pendingSharedFileURLs: [String: URL] {
         get { attachmentStagingStore.pendingSharedFileURLs }
         set { attachmentStagingStore.replacePendingSharedFileURLs(newValue) }
@@ -285,6 +289,7 @@ final class ChatStore: ObservableObject {
     nonisolated static let defaultModelID = ModelCatalogStore.defaultModelID
     private static let maxCouncilModels = ModelCatalogStore.maxCouncilModels
     private static let maxConcurrentCouncilStreams = CouncilStreamService.defaultConcurrentStreamLimit
+    private static let councilLegNoTokenTimeoutSeconds: TimeInterval = 120
     private static let maxPinnedModels = ModelCatalogStore.maxPinnedModels
     nonisolated private static let maxFileUploadBytes = APIClient.maxUploadBytes
     nonisolated static let maxAttachmentUploadBytes = maxFileUploadBytes
@@ -1032,6 +1037,10 @@ final class ChatStore: ObservableObject {
         }
     }
 
+    isolated deinit {
+        cancelBackgroundOwners()
+    }
+
     func bootstrap() async {
         #if DEBUG
         if DemoCapture.isEnabled {
@@ -1126,10 +1135,9 @@ final class ChatStore: ObservableObject {
     }
 
     func reset() {
+        cancelBackgroundOwners()
         sendCoordinator.reset()
         messageLoadCoordinator.reset()
-        accountBackgroundRefreshTask?.cancel()
-        accountBackgroundRefreshTask = nil
         bootstrapInFlightAccountID = nil
         lastBootstrappedAccountID = nil
         conversationStore.reset()
@@ -1149,6 +1157,17 @@ final class ChatStore: ObservableObject {
         draft = ""
         isStreaming = false
         isUploadingAttachment = false
+    }
+
+    private func cancelBackgroundOwners() {
+        streamTask?.cancel()
+        streamTask = nil
+        accountBackgroundRefreshTask?.cancel()
+        accountBackgroundRefreshTask = nil
+        messageLoadCoordinator.cancel()
+        agentActivity.end()
+        ironclawMobileRuntime.cancel()
+        webGroundingService.cancel()
     }
 
     func resetInteractionDefaults() {
@@ -1268,7 +1287,7 @@ final class ChatStore: ObservableObject {
     @discardableResult
     func consumePendingSharedItem(
         fileURL: URL? = PendingShareStore.defaultFileURL()
-    ) -> Bool {
+    ) async -> Bool {
         guard let item = PendingShareStore.read(from: fileURL) else { return false }
         guard !isStreaming else {
             // Leave the file in place; the next activation can retry once the
@@ -1276,7 +1295,6 @@ final class ChatStore: ObservableObject {
             showBanner("Finish or cancel the current response before starting a new chat.")
             return false
         }
-        PendingShareStore.clear(fileURL)
         let text = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
         let sharedFiles = item.attachments.compactMap { attachment -> (attachment: PendingSharedAttachment, url: URL)? in
             guard let url = PendingShareStore.fileURL(for: attachment, handoffFileURL: fileURL),
@@ -1292,14 +1310,65 @@ final class ChatStore: ObservableObject {
                 .prefix(AppDeepLinkAction.maxDraftCharacters)
         )
         for sharedFile in sharedFiles {
-            stageSharedFileAttachment(
+            guard let attachment = stageSharedFileAttachment(
                 sharedFile.url,
                 displayName: sharedFile.attachment.fileName,
                 byteCount: sharedFile.attachment.byteCount
+            ) else { continue }
+            await stageExtractedTextForSharedFileIfAvailable(
+                sharedFile.url,
+                attachment: attachment
             )
         }
+        persistCurrentDraftIfNeeded()
+        PendingShareStore.clear(fileURL)
         AppHaptics.selection()
         return true
+    }
+
+    private func stageExtractedTextForSharedFileIfAvailable(
+        _ url: URL,
+        attachment: ChatAttachment
+    ) async {
+        let hasAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if hasAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
+        let fileExtension = url.pathExtension.lowercased()
+        let extractedText: String?
+        if fileExtension == "csv" || fileExtension == "tsv" {
+            extractedText = DocumentTextExtractor.extractedDelimitedTableText(
+                from: url,
+                fileSize: fileSize
+            )?.text
+        } else if fileExtension == "xlsx" {
+            extractedText = DocumentTextExtractor.extractedSpreadsheetTableText(
+                from: url,
+                fileSize: fileSize
+            )?.text
+        } else if fileExtension == "pdf" {
+            extractedText = await DocumentTextExtractor.extractPDFText(from: url, fileSize: fileSize)?.text
+        } else {
+            extractedText = await VisionTextExtractor.extractedImageTextIfAvailable(
+                from: url,
+                fileExtension: fileExtension
+            )
+        }
+        guard let extractedText,
+              !extractedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+        attachmentStagingStore.stageDocumentText(
+            String(extractedText.prefix(AttachmentStagingStore.maxStagedDocumentChars)),
+            for: attachment.id
+        )
+    }
+
+    func stagedDocumentText(for attachmentID: String) -> String? {
+        attachmentStagingStore.documentText(for: attachmentID)
     }
 
     @discardableResult
@@ -1882,7 +1951,7 @@ final class ChatStore: ObservableObject {
         _ url: URL,
         displayName: String,
         byteCount: Int?
-    ) {
+    ) -> ChatAttachment? {
         switch FileStore.promptAttachmentLimit(
             pendingCount: pendingAttachments.count,
             projectContextCount: activeProjectContextAttachments.count,
@@ -1893,9 +1962,9 @@ final class ChatStore: ObservableObject {
             break
         case let .blocked(message):
             showBanner(message)
-            return
+            return nil
         }
-        _ = attachmentStagingStore.stageSharedFileAttachment(
+        return attachmentStagingStore.stageSharedFileAttachment(
             url,
             displayName: displayName,
             byteCount: byteCount
@@ -2435,7 +2504,8 @@ final class ChatStore: ObservableObject {
         model: String,
         prompt: String,
         conversationID: String,
-        webSearchEnabled: Bool
+        webSearchEnabled: Bool,
+        attachments: [ChatAttachment] = []
     ) async -> BriefingTextStreamResult {
         var currentModel = model
         var unavailableModels = Set<String>()
@@ -2459,7 +2529,8 @@ final class ChatStore: ObservableObject {
                     sink.text = try await cloudBriefingText(
                         modelID: currentModel,
                         prompt: prompt,
-                        webSearchEnabled: webSearchEnabled
+                        webSearchEnabled: webSearchEnabled,
+                        attachments: attachments
                     )
                 } else {
                     try await api.streamResponse(
@@ -2513,13 +2584,15 @@ final class ChatStore: ObservableObject {
         model: String,
         prompt: String,
         conversationID: String,
-        webSearchEnabled: Bool
+        webSearchEnabled: Bool,
+        attachments: [ChatAttachment] = []
     ) async -> String? {
         let result = await streamBriefingTextResult(
             model: model,
             prompt: prompt,
             conversationID: conversationID,
-            webSearchEnabled: webSearchEnabled
+            webSearchEnabled: webSearchEnabled,
+            attachments: attachments
         )
         return result.text
     }
@@ -2557,7 +2630,8 @@ final class ChatStore: ObservableObject {
             model: runModelID,
             prompt: briefing.prompt,
             conversationID: conversationID,
-            webSearchEnabled: true
+            webSearchEnabled: true,
+            attachments: activeProjectContextAttachments
         )
         guard let text = result.text else {
             return .failed(result.failureMessage)
@@ -2634,7 +2708,8 @@ final class ChatStore: ObservableObject {
             model: followUpModelID,
             prompt: prompt,
             conversationID: conversationID,
-            webSearchEnabled: true
+            webSearchEnabled: true,
+            attachments: activeProjectContextAttachments
         )
         if let text = result.text {
             return .success(text: text)
@@ -2676,7 +2751,8 @@ final class ChatStore: ObservableObject {
                 model: modelID,
                 prompt: briefing.prompt,
                 conversationID: conversation.id,
-                webSearchEnabled: true
+                webSearchEnabled: true,
+                attachments: activeProjectContextAttachments
             )
             if let text = result.text {
                 responses.append((displayName, text))
@@ -3242,6 +3318,67 @@ final class ChatStore: ObservableObject {
         )
     }
 
+    private enum CouncilLegWaitEvent {
+        case finished
+        case firstToken
+        case noTokenTimeout
+    }
+
+    private func streamCouncilLegWithNoTokenTimeout(
+        modelID: String,
+        text: String,
+        attachments: [ChatAttachment],
+        conversationID: String,
+        previousResponseID: String?,
+        initiator: String,
+        assistantMessageID: String
+    ) async throws {
+        let timeoutSeconds = Self.councilLegNoTokenTimeoutSeconds
+        try await withThrowingTaskGroup(of: CouncilLegWaitEvent.self) { group in
+            group.addTask { @MainActor [weak self] in
+                guard let self else { throw CancellationError() }
+                try await self.streamResponse(
+                    model: modelID,
+                    text: text,
+                    attachments: attachments,
+                    conversationID: conversationID,
+                    previousResponseID: previousResponseID,
+                    initiator: initiator,
+                    assistantMessageID: assistantMessageID
+                )
+                return .finished
+            }
+
+            group.addTask { @MainActor [weak self] in
+                guard let self else { throw CancellationError() }
+                let startedAt = Date()
+                while !Task.isCancelled {
+                    try await Task.sleep(nanoseconds: 500_000_000)
+                    if self.messages.first(where: { $0.id == assistantMessageID })?.firstTokenAt != nil {
+                        return .firstToken
+                    }
+                    if Date().timeIntervalSince(startedAt) >= timeoutSeconds {
+                        return .noTokenTimeout
+                    }
+                }
+                throw CancellationError()
+            }
+
+            while let event = try await group.next() {
+                switch event {
+                case .finished:
+                    group.cancelAll()
+                    return
+                case .firstToken:
+                    continue
+                case .noTokenTimeout:
+                    group.cancelAll()
+                    throw CouncilStreamService.NoTokenTimeoutError(seconds: Int(timeoutSeconds.rounded()))
+                }
+            }
+        }
+    }
+
     private func sendCouncilTurn(
         text: String,
         routedText: String,
@@ -3305,7 +3442,8 @@ final class ChatStore: ObservableObject {
                             modelID: modelID,
                             messageID: assistantID,
                             didComplete: false,
-                            failureSummary: "The app released the request before it completed."
+                            failureSummary: "The app released the request before it completed.",
+                            errorKind: .transportError
                         )
                     }
 
@@ -3322,14 +3460,15 @@ final class ChatStore: ObservableObject {
                             modelID: modelID,
                             messageID: assistantID,
                             didComplete: false,
-                            failureSummary: "route restricted"
+                            failureSummary: notice,
+                            errorKind: CouncilStreamService.errorKind(forFailureSummary: notice)
                         )
                     }
 
                     do {
                         try Task.checkCancellation()
-                        try await self.streamResponse(
-                            model: modelID,
+                        try await self.streamCouncilLegWithNoTokenTimeout(
+                            modelID: modelID,
                             text: routedText,
                             attachments: attachments,
                             conversationID: conversation.id,
@@ -3359,6 +3498,7 @@ final class ChatStore: ObservableObject {
                         )
                     } catch {
                         self.routeHealth.recordFailure(modelID: modelID, error: error)
+                        let errorKind = CouncilStreamService.errorKind(for: error)
                         let summary = Self.modelFailureSummary(error)
                         await self.apply(
                             streamEvent: .failed(summary),
@@ -3369,7 +3509,8 @@ final class ChatStore: ObservableObject {
                             modelID: modelID,
                             messageID: assistantID,
                             didComplete: false,
-                            failureSummary: summary
+                            failureSummary: summary,
+                            errorKind: errorKind
                         )
                     }
                 }
@@ -3529,8 +3670,8 @@ final class ChatStore: ObservableObject {
         showBanner("Asking \(modelName).")
 
         do {
-            try await streamResponse(
-                model: modelID,
+            try await streamCouncilLegWithNoTokenTimeout(
+                modelID: modelID,
                 text: Self.councilTargetedPrompt(
                     text: text,
                     modelDisplayName: modelName,
@@ -3595,6 +3736,7 @@ final class ChatStore: ObservableObject {
         })
         guard responses.count > 1 else { return }
 
+        removeFailedCouncilSynthesisMessages(batchID: batchID)
         let synthesisID = "local-council-synthesis-\(UUID().uuidString)"
         let synthesisCreatedAt = Date().addingTimeInterval(0.2)
         let synthesisMessage = ChatMessage(
@@ -3674,6 +3816,21 @@ final class ChatStore: ObservableObject {
                 return
             }
         }
+    }
+
+    private func removeFailedCouncilSynthesisMessages(batchID: String?) {
+        guard let batchID else { return }
+        let removableIDs = Set(messages.compactMap { message -> String? in
+            guard message.councilBatchID == batchID,
+                  Self.isCouncilSynthesisModelID(message.model),
+                  message.status.lowercased() == "failed" else {
+                return nil
+            }
+            return message.id
+        })
+        guard !removableIDs.isEmpty else { return }
+        messages.removeAll { removableIDs.contains($0.id) }
+        currentCouncilAssistantMessageIDs.removeAll { removableIDs.contains($0) }
     }
 
     /// Mutable for tests/harness: the pause before the single synthesis retry.
@@ -3816,6 +3973,8 @@ final class ChatStore: ObservableObject {
                 conversationID: conversationID,
                 assistantMessageID: assistantMessageID
             )
+            let documentAttachments = attachments.filter { !$0.isLocalOnly }
+            await attachmentStagingStore.ensureDocumentTextsAvailable(for: documentAttachments, using: fileService)
             try await ironclawAPI.streamPrompt(
                 prompt: ironclawPrompt(for: text, attachments: attachments, webContext: webContext),
                 attachments: attachments,
@@ -3850,7 +4009,12 @@ final class ChatStore: ObservableObject {
     /// follow-ups. Mirrors `streamNearCloudModel`'s routing but returns the text
     /// instead of applying stream events, so `streamBriefingTextResult` can use
     /// it for cloud/proxy model IDs that the private streamer can't serve.
-    private func cloudBriefingText(modelID: String, prompt: String, webSearchEnabled: Bool) async throws -> String {
+    private func cloudBriefingText(
+        modelID: String,
+        prompt: String,
+        webSearchEnabled: Bool,
+        attachments: [ChatAttachment] = []
+    ) async throws -> String {
         guard let apiKey = loadNearCloudAPIKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
               !apiKey.isEmpty else {
             throw APIError.status(401, "Connect NEAR AI Cloud in Account to use \(modelDisplayName(for: modelID)).")
@@ -3865,14 +4029,18 @@ final class ChatStore: ObservableObject {
         var webContext: WebGroundingContext?
         if webSearchEnabled,
            let groundingPrompt = WebGroundingService.searchPrompt(for: prompt, priorUserTexts: []) {
+            let searchMode = WebGroundingService.searchMode(for: groundingPrompt)
             webContext = try? await webGroundingService.search(
                 for: groundingPrompt,
-                preferNews: Self.promptNeedsLiveWeb(groundingPrompt)
+                preferNews: searchMode.prefersNews(
+                    researchModeEnabled: false,
+                    needsLiveWeb: Self.promptNeedsLiveWeb(groundingPrompt)
+                )
             )
         }
-        let finalPrompt: String
+        let webAugmentedPrompt: String
         if let webContext {
-            finalPrompt = """
+            webAugmentedPrompt = """
             \(prompt)
 
             Live web context supplied by the iOS app:
@@ -3881,8 +4049,15 @@ final class ChatStore: ObservableObject {
             Use this search context for current facts and cite sources by name. Do not say you cannot browse; the app has already fetched the web context.
             """
         } else {
-            finalPrompt = prompt
+            webAugmentedPrompt = prompt
         }
+        let documentAttachments = attachments.filter { !$0.isLocalOnly }
+        await attachmentStagingStore.ensureDocumentTextsAvailable(for: documentAttachments, using: fileService)
+        let finalPrompt = attachmentStagingStore.documentAugmentedPrompt(
+            webAugmentedPrompt,
+            question: prompt,
+            attachments: documentAttachments
+        )
         let response = try await api.fetchNearCloudChatCompletion(
             apiKey: apiKey,
             model: cloudModelID,
@@ -3914,10 +4089,17 @@ final class ChatStore: ObservableObject {
         }
 
         await apply(streamEvent: .reasoningStarted, conversationID: conversationID, assistantMessageID: assistantMessageID)
+        let documentAttachments = attachments.filter { !$0.isLocalOnly }
+        await attachmentStagingStore.ensureDocumentTextsAvailable(for: documentAttachments, using: fileService)
+        let prompt = attachmentStagingStore.documentAugmentedPrompt(
+            nearCloudPrompt(for: text, attachments: attachments, webContext: webContext),
+            question: text,
+            attachments: documentAttachments
+        )
         let response = try await api.fetchNearCloudChatCompletion(
             apiKey: apiKey,
             model: cloudModelID,
-            prompt: nearCloudPrompt(for: text, attachments: attachments, webContext: webContext),
+            prompt: prompt,
             systemPrompt: nearCloudSystemPrompt(modelID: modelID, modelDisplayName: modelDisplayName(for: modelID), hasWebContext: webContext != nil),
             advancedParams: advancedModelParams
         )
@@ -3987,6 +4169,13 @@ final class ChatStore: ObservableObject {
             conversationID: conversationID,
             assistantMessageID: assistantMessageID
         )
+        let documentAttachments = attachments.filter { !$0.isLocalOnly }
+        await attachmentStagingStore.ensureDocumentTextsAvailable(for: documentAttachments, using: fileService)
+        let mobileModelPrompt = attachmentStagingStore.documentAugmentedPrompt(
+            AgentStore.normalizedIronclawPrompt(text),
+            question: text,
+            attachments: documentAttachments
+        )
         var unavailableModels = Set<String>()
         var modelFailures: [String: String] = [:]
 
@@ -4000,7 +4189,7 @@ final class ChatStore: ObservableObject {
             }
             do {
                 try await ironclawMobileRuntime.streamTurn(
-                    prompt: AgentStore.normalizedIronclawPrompt(text),
+                    prompt: mobileModelPrompt,
                     attachments: attachments,
                     context: mobileProjectContext(promptAttachments: attachments),
                     baseModel: baseModel,
@@ -4068,9 +4257,13 @@ final class ChatStore: ObservableObject {
         let query = WebGroundingService.query(from: groundingPrompt)
         await apply(streamEvent: .webSearchStarted(query: query), conversationID: conversationID, assistantMessageID: assistantMessageID)
         do {
+            let searchMode = WebGroundingService.searchMode(for: groundingPrompt)
             let context = try await webGroundingService.search(
                 for: groundingPrompt,
-                preferNews: researchModeEnabled || Self.promptNeedsLiveWeb(groundingPrompt)
+                preferNews: searchMode.prefersNews(
+                    researchModeEnabled: researchModeEnabled,
+                    needsLiveWeb: Self.promptNeedsLiveWeb(groundingPrompt)
+                )
             )
             await apply(
                 streamEvent: .webSearchCompleted(query: context.query, sources: context.sources),
@@ -4127,6 +4320,10 @@ final class ChatStore: ObservableObject {
         let route = Self.routeKind(forModelID: model)
         let semantics = routingSemantics(for: route)
         guard semantics.appWebGroundingPolicy != .never else { return false }
+        if semantics.modelNativeWebToolPolicy == .always,
+           shouldEnableModelNativeWebTool(model: model, prompt: prompt) {
+            return false
+        }
         if model == ModelOption.ironclawModelID,
            Self.promptNeedsRemoteWorkstation(prompt),
            !Self.promptNeedsLiveWeb(prompt) {
@@ -4396,6 +4593,7 @@ final class ChatStore: ObservableObject {
         conversationID: String,
         assistantMessageID: String?
     ) async {
+        guard selectedConversation?.id == conversationID else { return }
         messageTimelineStore.apply(
             streamEvent: event,
             conversationID: conversationID,
@@ -4517,6 +4715,7 @@ final class ChatStore: ObservableObject {
                 await self?.apply(streamEvent: event, conversationID: conversationID)
             }
 
+            guard selectedConversation?.id == conversationID else { return }
             if let resolvedIndex = messages.firstIndex(where: { $0.id == messageID }) {
                 messages[resolvedIndex].isStreaming = false
                 if messages[resolvedIndex].status != "failed", messages[resolvedIndex].status != "approval" {
@@ -4577,6 +4776,7 @@ final class ChatStore: ObservableObject {
                 await self?.apply(streamEvent: event, conversationID: conversationID)
             }
 
+            guard selectedConversation?.id == conversationID else { return }
             if let resolvedIndex = messages.firstIndex(where: { $0.id == messageID }) {
                 messages[resolvedIndex].isStreaming = false
                 if messages[resolvedIndex].status != "failed", messages[resolvedIndex].status != "approval" {
@@ -4660,6 +4860,7 @@ final class ChatStore: ObservableObject {
             draft = persistedState.text
             pendingAttachments = persistedState.attachments
             pendingLargePasteTexts = persistedState.pendingLargePasteTexts
+            pendingDocumentTexts = persistedState.pendingDocumentTexts
         }
     }
 
@@ -4667,7 +4868,8 @@ final class ChatStore: ObservableObject {
         let state = DraftPersistence.DraftState(
             text: draft,
             attachments: pendingAttachments,
-            pendingLargePasteTexts: pendingLargePasteTexts
+            pendingLargePasteTexts: pendingLargePasteTexts,
+            pendingDocumentTexts: pendingDocumentTexts
         )
         draftScopeStore.persistIfNeeded(state, isResettingAccountScopedState: isResettingAccountScopedState) {
             showBanner("Draft state could not be saved securely.")
@@ -5836,9 +6038,7 @@ final class ChatStore: ObservableObject {
     #endif
 
     func prepareDemoCapture(screen: DemoCaptureScreen = .home) {
-        streamTask?.cancel()
-        streamTask = nil
-        messageLoadCoordinator.cancel()
+        cancelBackgroundOwners()
         isLoading = false
         isStreaming = false
         isUploadingAttachment = false
@@ -6153,10 +6353,6 @@ final class ChatStore: ObservableObject {
         let conversationID = "demo-conversation-iran-council"
         let glmConversationID = "demo-conversation-glm-private"
         let councilBatchID = "demo-council-iran-status"
-        let demoCloudClaudeOpus47 = ModelOption.nearCloudModelID(for: "anthropic/claude-opus-4-7")
-        let demoCloudGPT55 = ModelOption.nearCloudModelID(for: "openai/gpt-5.5")
-        let demoCloudQwen37 = ModelOption.nearCloudModelID(for: "qwen/qwen3.7-max")
-        let demoCloudKimi26 = ModelOption.nearCloudModelID(for: "moonshotai/kimi-k2.6")
         let demoCloudClaudeSonnet46 = ModelOption.nearCloudModelID(for: "anthropic/claude-sonnet-4-6")
         let demoCloudClaudeOpus46 = ModelOption.nearCloudModelID(for: "anthropic/claude-opus-4-6")
         let demoCloudQwen3635 = ModelOption.nearCloudModelID(for: "Qwen/Qwen3.6-35B-A3B-FP8")
@@ -6285,18 +6481,18 @@ final class ChatStore: ObservableObject {
             role: .assistant,
             text: """
             ## Direct answer
-            The best answer is: not over, but closer to an off-ramp. GLM 5.1 reads the AP/PBS overview as evidence that a deal is emerging [1][2]. Claude Opus 4.7 focuses on whether the reported framework and Strait of Hormuz terms actually get implemented [3][4]. GPT-5.5 keeps the caution high because fresh military activity and the Israel-Hezbollah front can still break the diplomatic track [5][6].
+            The best answer is: not over, but closer to an off-ramp. GLM 5.1 reads the AP/PBS overview as evidence that a deal is emerging [1][2]. Claude Sonnet 4.6 focuses on whether the reported framework and Strait of Hormuz terms actually get implemented [3][4]. Qwen 3.6 keeps the caution high because fresh military activity and the Israel-Hezbollah front can still break the diplomatic track [5][6].
 
             ## What the council agrees on
             Nobody should say the war is already over. The supported statement is narrower: talks appear close to an agreement, but the outcome still depends on a signed/finalized deal, implementation of the Hormuz reopening, and containment of related military fronts [1][3][5][6].
 
             ## How the models vary
             - GLM 5.1: weighs the broad AP/PBS explainer coverage and calls this a possible endgame, not a settled peace [1][2].
-            - Claude Opus 4.7: reads the deal-specific reporting as an implementation checklist: final text, Hormuz reopening, and follow-on negotiations [3][4].
-            - GPT-5.5: reads the security reporting as a warning that diplomacy is still exposed to military and regional shocks [5][6].
+            - Claude Sonnet 4.6: reads the deal-specific reporting as an implementation checklist: final text, Hormuz reopening, and follow-on negotiations [3][4].
+            - Qwen 3.6: reads the security reporting as a warning that diplomacy is still exposed to military and regional shocks [5][6].
 
             ## Disagreements or uncertainty
-            The disagreement is about confidence. GLM 5.1 is the most optimistic because the overview reporting points to a possible deal. Claude Opus 4.7 is conditional because a framework is not the same as implementation. GPT-5.5 is the least willing to call it ending while strike reports and spillover risks remain live.
+            The disagreement is about confidence. GLM 5.1 is the most optimistic because the overview reporting points to a possible deal. Claude Sonnet 4.6 is conditional because a framework is not the same as implementation. Qwen 3.6 is the least willing to call it ending while strike reports and spillover risks remain live.
             """,
             model: ModelOption.llmCouncilSynthesisModelID,
             createdAt: created.addingTimeInterval(18),
@@ -6329,10 +6525,10 @@ final class ChatStore: ObservableObject {
             id: "demo-assistant-qwen-large",
             role: .assistant,
             text: """
-            ## Claude Opus 4.7
+            ## Claude Sonnet 4.6
             The deal-specific reporting makes this an implementation question [1][2]. If the framework is finalized and the Strait of Hormuz reopening actually starts, then "ending" becomes plausible. If those milestones slip, the headline is only diplomatic momentum.
             """,
-            model: demoCloudClaudeOpus47,
+            model: demoCloudClaudeSonnet46,
             createdAt: created.addingTimeInterval(20),
             firstTokenAt: created.addingTimeInterval(21.7),
             status: "completed",
@@ -6346,10 +6542,10 @@ final class ChatStore: ObservableObject {
             id: "demo-assistant-opus",
             role: .assistant,
             text: """
-            ## GPT-5.5
+            ## Qwen 3.6
             I would be careful with the word "ending." Diplomatic signals can coexist with active coercion. Fresh strike reporting and the Israel-Hezbollah front mean the safer answer is: negotiations may be near an off-ramp, but the conflict is not reliably settled yet [1][2].
             """,
-            model: demoCloudGPT55,
+            model: demoCloudQwen3635,
             createdAt: created.addingTimeInterval(21),
             firstTokenAt: created.addingTimeInterval(22.4),
             status: "completed",
@@ -6412,10 +6608,6 @@ final class ChatStore: ObservableObject {
 
         let models = [
             demoModel(Self.defaultModelID, displayName: "GLM 5.1", description: "Default NEAR Private model with proof support.", verifiable: true),
-            demoModel(demoCloudClaudeOpus47, displayName: "Claude Opus 4.7", description: "Frontier Anthropic model through the NEAR AI Cloud privacy proxy.", verifiable: false),
-            demoModel(demoCloudGPT55, displayName: "GPT-5.5", description: "Frontier OpenAI model through the NEAR AI Cloud privacy proxy.", verifiable: false),
-            demoModel(demoCloudQwen37, displayName: "Qwen3.7 Max", description: "Current Qwen frontier model through the NEAR AI Cloud privacy proxy.", verifiable: false),
-            demoModel(demoCloudKimi26, displayName: "Kimi K2.6", description: "Current Moonshot model through the NEAR AI Cloud privacy proxy.", verifiable: false),
             demoModel(demoCloudClaudeSonnet46, displayName: "Claude Sonnet 4.6", description: "Anthropic long-context model through the NEAR AI Cloud privacy proxy.", verifiable: false),
             demoModel(demoCloudClaudeOpus46, displayName: "Claude Opus 4.6", description: "Anthropic coding and agent model through the NEAR AI Cloud privacy proxy.", verifiable: false),
             demoModel(demoCloudQwen3635, displayName: "Qwen 3.6 35B A3B FP8", description: "Qwen reasoning model through the NEAR AI Cloud privacy proxy.", verifiable: false),

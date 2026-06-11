@@ -21,6 +21,8 @@ struct WebSignInView: View {
 
     @State private var isLoading = true
     @State private var didHarvest = false
+    @State private var showsHarvestHelp = false
+    @State private var reloadID = UUID()
 
     var body: some View {
         NavigationStack {
@@ -34,11 +36,44 @@ struct WebSignInView: View {
                     },
                     onLoadingChanged: { isLoading = $0 }
                 )
+                .id(reloadID)
                 .ignoresSafeArea(edges: .bottom)
 
                 if isLoading {
                     ProgressView()
                         .controlSize(.large)
+                        .accessibilityLabel("Loading sign-in")
+                }
+
+                if showsHarvestHelp && !didHarvest {
+                    VStack {
+                        Spacer()
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Sign-in page didn’t return a session. Try again, or use More ways to sign in > Session token if private.near.ai already shows you signed in.")
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(Color.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Button {
+                                showsHarvestHelp = false
+                                isLoading = true
+                                reloadID = UUID()
+                            } label: {
+                                Label("Retry web sign-in", systemImage: "arrow.clockwise")
+                                    .font(.footnote.weight(.semibold))
+                                    .frame(minHeight: 44)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Color.actionPrimary)
+                            .accessibilityIdentifier("auth.retryWebSignIn")
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 14)
+                        .accessibilityIdentifier("auth.webHarvestHelp")
+                    }
+                    .transition(.opacity)
                 }
             }
             .navigationTitle("Sign in")
@@ -46,12 +81,29 @@ struct WebSignInView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { onCancel() }
+                        .accessibilityHint("Closes web sign-in and returns to other sign-in methods.")
+                        .accessibilityIdentifier("auth.cancelWebSignIn")
+                }
+            }
+            .task {
+                try? await Task.sleep(nanoseconds: 12_000_000_000)
+                guard !Task.isCancelled, !didHarvest else { return }
+                withAnimation(.easeOut(duration: 0.2)) {
+                    showsHarvestHelp = true
                 }
             }
         }
     }
 
-    private static let loginURL = URL(string: "https://private.near.ai/")!
+    private static let loginURL = validatedURL("https://private.near.ai/")
+
+    private static func validatedURL(_ rawValue: String) -> URL {
+        guard let url = URL(string: rawValue) else {
+            assertionFailure("Invalid web sign-in URL: \(rawValue)")
+            return URL(fileURLWithPath: "/")
+        }
+        return url
+    }
 }
 
 /// UIKit bridge hosting the WKWebView. A repeating poll reads the auth token

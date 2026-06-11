@@ -17,7 +17,7 @@ struct NearAccountSignInView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("Sign in by authorizing this device's key on your NEAR account, then signing the request locally. Nothing leaves the device except the signature.")
+                    Text("Use this when you do not want the web sign-in flow. You will add this device key to your NEAR wallet once, then this app signs a local NEP-413 request. The account ID and signature are sent to private.near.ai; your private key stays on this device.")
                         .font(.subheadline)
                         .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -32,6 +32,9 @@ struct NearAccountSignInView: View {
                             .autocorrectionDisabled()
                             .padding(12)
                             .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .accessibilityLabel("NEAR account ID")
+                            .accessibilityHint("Enter the account that has authorized this device key.")
+                            .accessibilityIdentifier("auth.nearAccountID")
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
@@ -43,6 +46,10 @@ struct NearAccountSignInView: View {
                             .font(.footnote)
                             .foregroundStyle(Color.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
+                        Text("Only continue if you understand that a Full Access key can act for the account until you remove it in the wallet.")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Color.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                         Text(devicePublicKey)
                             .font(.footnote.monospaced())
                             .foregroundStyle(.primary)
@@ -50,6 +57,8 @@ struct NearAccountSignInView: View {
                             .padding(12)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .accessibilityLabel("Device public key")
+                            .accessibilityIdentifier("auth.nearDevicePublicKey")
                         Button {
                             UIPasteboard.general.string = devicePublicKey
                             didCopyKey = true
@@ -62,6 +71,16 @@ struct NearAccountSignInView: View {
                                 .background(Color.actionTint, in: Capsule())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityHint("Copies the device public key so you can add it in your NEAR wallet.")
+                        .accessibilityIdentifier("auth.copyNearDeviceKey")
+                    }
+
+                    if accountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("Enter your account ID after the wallet shows this key is authorized.")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("auth.nearAccountRequiredHint")
                     }
 
                     Button {
@@ -82,6 +101,8 @@ struct NearAccountSignInView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(accountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sessionStore.isAuthenticating)
+                    .accessibilityHint(accountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Enter your NEAR account ID before signing in." : "Signs a local NEP-413 request with this device key.")
+                    .accessibilityIdentifier("auth.confirmNearAccountSignIn")
                 }
                 .padding(18)
                 .frame(maxWidth: 640, alignment: .leading)

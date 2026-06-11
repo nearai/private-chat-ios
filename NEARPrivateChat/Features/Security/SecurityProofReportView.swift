@@ -14,7 +14,6 @@ extension SecurityView {
 
             if let snapshot = attestationSnapshot {
                 InfoRow(title: "Fetched", value: snapshot.fetchedAt.formatted(date: .abbreviated, time: .standard))
-                InfoRow(title: "Nonce", value: snapshot.nonce, monospaced: true)
                 InfoRow(title: "Coverage", value: attestationCoveragePhrase(snapshot))
 
                 DisclosureGroup {
@@ -37,6 +36,7 @@ extension SecurityView {
                 } label: {
                     Label("Copy report", systemImage: "doc.on.doc")
                         .font(.subheadline.weight(.semibold))
+                        .frame(minHeight: 44)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.actionPrimary)
@@ -48,16 +48,16 @@ extension SecurityView {
                         .foregroundStyle(.secondary)
                 }
             } else {
-                Text("No proof report on this device")
+                Text("Fetch proof to view this report.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.control))
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle.app(AppRadius.control)
                 .stroke(Color.appBorder, lineWidth: 1)
         }
     }

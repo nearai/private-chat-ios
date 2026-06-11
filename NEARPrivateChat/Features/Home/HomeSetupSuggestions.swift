@@ -75,7 +75,7 @@ private struct SetupWorkspaceSeedRow: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: seed.symbolName)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(Color.brandBlue)
+                .foregroundStyle(Color.brandAccent)
                 .frame(width: 18, height: 18)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -141,7 +141,7 @@ private struct SetupSkillSuggestionRow: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: skill.symbolName)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(Color.brandBlue)
+                .foregroundStyle(Color.brandAccent)
                 .frame(width: 18, height: 18)
 
             VStack(alignment: .leading, spacing: 2) {

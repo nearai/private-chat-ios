@@ -38,11 +38,9 @@ struct AuthView: View {
     @State private var showingTokenLogin = false
     @State private var showingWebSignIn = false
     @State private var showingNearAccountSignIn = false
-    @State private var token = ""
-
-    #if DEBUG
     @State private var showingMoreSignInOptions = false
-    #endif
+    @State private var token = ""
+    @State private var tokenErrorMessage: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -55,7 +53,7 @@ struct AuthView: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 52, height: 52)
                     .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                    .shadow(color: Color.brandBlue.opacity(0.16), radius: 14, y: 6)
+                    .shadow(color: Color.brandAccent.opacity(0.16), radius: 14, y: 6)
                     .accessibilityHidden(true)
 
                 ProductWordmark(alignment: .center, scale: 0.9)
@@ -95,6 +93,7 @@ struct AuthView: View {
                     // every button routes through the web harvest instead.
                     AuthProviderButton(
                         provider: .near,
+                        subtitle: "Sign in in-app at private.near.ai",
                         isLoading: false,
                         isEnabled: canStartSignIn
                     ) {
@@ -102,6 +101,7 @@ struct AuthView: View {
                     }
                     AuthProviderButton(
                         provider: .google,
+                        subtitle: "Sign in in-app at private.near.ai",
                         isLoading: false,
                         isEnabled: canStartSignIn
                     ) {
@@ -109,11 +109,21 @@ struct AuthView: View {
                     }
                     AuthProviderButton(
                         provider: .github,
+                        subtitle: "Sign in in-app at private.near.ai",
                         isLoading: false,
                         isEnabled: canStartSignIn
                     ) {
                         showingWebSignIn = true
                     }
+                }
+                .accessibilityIdentifier("auth.primaryProviders")
+
+                if !hasAcceptedLegalTerms {
+                    Text("Accept the terms above to continue.")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("auth.termsRequiredHint")
                 }
 
                 Button {
@@ -123,59 +133,23 @@ struct AuthView: View {
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(Color.textSecondary)
                         .labelStyle(.titleAndIcon)
-                        .frame(height: 42)
+                        .frame(minHeight: 44)
                         .frame(maxWidth: .infinity)
-                        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.pill))
                         .overlay {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            RoundedRectangle.app(AppRadius.pill)
                                 .stroke(Color.appBorder, lineWidth: 1)
                         }
-                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .contentShape(RoundedRectangle.app(AppRadius.pill))
                 }
                 .buttonStyle(.plain)
 
-                if hasAcceptedLegalTerms {
-                    Button {
-                        showingTokenLogin = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "key.fill")
-                                .font(.footnote.weight(.semibold))
-                            Text("Sign in with a session token")
-                                .font(.footnote.weight(.semibold))
-                        }
-                        .foregroundStyle(Color.actionPrimary)
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 16)
-                        .frame(maxWidth: .infinity)
-                        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(Color.actionPrimary.opacity(0.18), lineWidth: 1)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("auth.tokenSignIn")
-
-                    Button {
-                        showingNearAccountSignIn = true
-                    } label: {
-                        Text("Sign in with a NEAR account key")
-                            .font(.footnote.weight(.medium))
-                            .foregroundStyle(Color.textSecondary)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("auth.nearAccountSignIn")
-
-                    #if DEBUG
-                    DebugMoreSignInOptions(
-                        isOpen: $showingMoreSignInOptions,
-                        isEnabled: true,
-                        onSelectToken: { showingTokenLogin = true }
-                    )
-                    #endif
-                }
+                MoreSignInOptions(
+                    isOpen: $showingMoreSignInOptions,
+                    isEnabled: hasAcceptedLegalTerms,
+                    onSelectToken: { showingTokenLogin = true },
+                    onSelectNearAccount: { showingNearAccountSignIn = true }
+                )
 
                 Text("https://private.near.ai")
                     .font(.footnote)
@@ -227,6 +201,24 @@ struct AuthView: View {
                         .tokenInputTraits()
                         .padding(12)
                         .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(tokenErrorMessage == nil ? Color.clear : Color.proofMismatch, lineWidth: 1)
+                        }
+                        .accessibilityLabel("Session token")
+                        .accessibilityHint("Paste the session token value from private.near.ai, not a URL or account name.")
+                        .accessibilityIdentifier("auth.tokenField")
+                        .onChange(of: token) { _, _ in
+                            tokenErrorMessage = nil
+                        }
+
+                    if let tokenErrorMessage {
+                        Text(tokenErrorMessage)
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(Color.proofMismatch)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("auth.tokenFieldError")
+                    }
 
                     Button {
                         if let pasted = UIPasteboard.general.string {
@@ -241,6 +233,8 @@ struct AuthView: View {
                             .background(Color.actionTint, in: Capsule())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityHint("Copies text from the system clipboard into the session token field.")
+                    .accessibilityIdentifier("auth.pasteTokenFromClipboard")
 
                     Spacer()
                 }
@@ -253,10 +247,17 @@ struct AuthView: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Sign In") {
-                            sessionStore.signInWithToken(token)
+                            let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if let error = authTokenValidationMessage(trimmed) {
+                                tokenErrorMessage = error
+                                return
+                            }
+                            sessionStore.signInWithToken(trimmed)
                             showingTokenLogin = false
                         }
                         .disabled(!hasAcceptedLegalTerms || token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityHint(token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Paste a session token before signing in." : "Signs in with the pasted session token.")
+                        .accessibilityIdentifier("auth.confirmTokenSignIn")
                     }
                 }
             }
@@ -293,7 +294,7 @@ struct AuthHeroCard: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 52, height: 52)
                 .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                .shadow(color: Color.brandBlue.opacity(0.16), radius: 14, y: 6)
+                .shadow(color: Color.brandAccent.opacity(0.16), radius: 14, y: 6)
                 .accessibilityHidden(true)
 
             ProductWordmark(alignment: .center, scale: 0.9)
@@ -330,6 +331,8 @@ private struct TermsRowCard: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Read terms")
+                .accessibilityHint("Opens the legal terms before you accept.")
+                .accessibilityIdentifier("auth.readTerms")
             }
             .padding(.vertical, 12)
             .padding(.horizontal, 14)
@@ -344,7 +347,9 @@ private struct TermsRowCard: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(isAccepted ? "Terms accepted" : "Agree to terms and privacy")
+        .accessibilityHint(isAccepted ? "Double tap to clear terms acceptance." : "Double tap to accept before signing in.")
         .accessibilityAddTraits(isAccepted ? [.isSelected, .isButton] : [.isButton])
+        .accessibilityIdentifier("auth.acceptTerms")
     }
 }
 
@@ -374,6 +379,7 @@ private struct CheckBox: View {
 
 private struct AuthProviderButton: View {
     let provider: OAuthProvider
+    let subtitle: String
     let isLoading: Bool
     let isEnabled: Bool
     let action: () -> Void
@@ -386,8 +392,15 @@ private struct AuthProviderButton: View {
                 ProviderGlyph(provider: provider, tint: isEnabled ? .white : Color.textSecondary)
                     .frame(width: 20, height: 20)
 
-                Text(provider.title)
-                    .font(.system(.callout, design: .rounded).weight(.semibold))
+                VStack(spacing: 2) {
+                    Text(provider.title)
+                        .font(.system(.callout, design: .rounded).weight(.semibold))
+                    Text(subtitle)
+                        .font(.system(.caption2, design: .rounded).weight(.medium))
+                        .opacity(0.82)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.86)
+                }
                     .frame(maxWidth: .infinity)
 
                 // Right-side spacer matches glyph width + leading gap so the
@@ -417,6 +430,8 @@ private struct AuthProviderButton: View {
         .buttonStyle(.plain)
         .disabled(!isEnabled || isLoading)
         .accessibilityLabel(provider.title)
+        .accessibilityHint(isEnabled ? subtitle : "Accept the terms above to continue.")
+        .accessibilityIdentifier("auth.provider.\(provider.rawValue)")
     }
 }
 
@@ -446,6 +461,23 @@ private struct ProviderGlyph: View {
                 .fill(tint)
         }
     }
+
+}
+
+private func authTokenValidationMessage(_ token: String) -> String? {
+    guard !token.isEmpty else {
+        return "Paste the token value from private.near.ai."
+    }
+    if token.contains("://") || token.hasPrefix("private.near.ai") {
+        return "Paste the session token value, not the private.near.ai URL."
+    }
+    if token.contains(where: { $0.isWhitespace }) {
+        return "Paste one token value without spaces or extra copied text."
+    }
+    if token.hasSuffix(".near") || token.hasSuffix(".testnet") {
+        return "This looks like an account ID. Use Continue with NEAR for wallet sign-in."
+    }
+    return nil
 }
 
 /// Google "G" letterform — single-fill monochrome rendering of the canonical
@@ -582,13 +614,13 @@ private struct GitHubOctocatGlyph: Shape {
     }
 }
 
-// MARK: - Debug disclosure
+// MARK: - Fallback sign-in disclosure
 
-#if DEBUG
-private struct DebugMoreSignInOptions: View {
+private struct MoreSignInOptions: View {
     @Binding var isOpen: Bool
     let isEnabled: Bool
     let onSelectToken: () -> Void
+    let onSelectNearAccount: () -> Void
 
     var body: some View {
         VStack(spacing: 4) {
@@ -596,7 +628,7 @@ private struct DebugMoreSignInOptions: View {
                 withAnimation(.easeOut(duration: 0.22)) { isOpen.toggle() }
             } label: {
                 HStack(spacing: 6) {
-                    Text("More sign-in options")
+                    Text("More ways to sign in")
                         .font(.subheadline)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 10, weight: .semibold))
@@ -609,48 +641,81 @@ private struct DebugMoreSignInOptions: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(!isEnabled)
+            .opacity(isEnabled ? 1 : 0.58)
+            .accessibilityLabel("More ways to sign in")
+            .accessibilityHint(isEnabled ? "Shows token and local NEAR account sign-in options." : "Accept the terms above before using fallback sign-in methods.")
+            .accessibilityIdentifier("auth.moreSignInOptions")
 
             if isOpen {
-                Button(action: onSelectToken) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "key")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color.actionPrimary)
-                            .frame(width: 28, height: 28)
-                            .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Developer session token")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundStyle(.primary)
-                            Text("DEBUG · paste a session JWT")
-                                .font(.system(.caption2, design: .monospaced))
-                                .foregroundStyle(Color.textTertiary)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color.textTertiary)
-                    }
-                    .padding(.vertical, 14)
-                    .padding(.horizontal, 16)
-                    .frame(maxWidth: .infinity)
-                    .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-                            .foregroundStyle(Color.appBorder)
-                    }
+                VStack(spacing: 8) {
+                    fallbackButton(
+                        title: "Session token",
+                        subtitle: "Paste a token from private.near.ai",
+                        symbolName: "key",
+                        identifier: "auth.tokenSignIn",
+                        action: onSelectToken
+                    )
+
+                    fallbackButton(
+                        title: "NEAR account key",
+                        subtitle: "Sign in locally with your NEAR wallet — no web",
+                        symbolName: "lock.rotation",
+                        identifier: "auth.nearAccountSignIn",
+                        action: onSelectNearAccount
+                    )
                 }
-                .buttonStyle(.plain)
-                .disabled(!isEnabled)
-                .opacity(isEnabled ? 1 : 0.6)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
+
+    private func fallbackButton(
+        title: String,
+        subtitle: String,
+        symbolName: String,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: symbolName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.actionPrimary)
+                    .frame(width: 28, height: 28)
+                    .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                    Text(subtitle)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Color.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color.textTertiary)
+            }
+            .padding(.vertical, 14)
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity)
+            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.appBorder, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.6)
+        .accessibilityLabel(title)
+        .accessibilityHint(subtitle)
+        .accessibilityIdentifier(identifier)
+    }
 }
-#endif
 
 // MARK: - Legal terms sheet (unchanged, integrated here as before)
 
@@ -702,7 +767,7 @@ struct LegalTermsSheet: View {
                         Link("IronClaw repository and licenses", destination: LegalTerms.ironclawRepositoryURL)
                     }
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                 }
                 .padding()
             }

@@ -126,7 +126,7 @@ struct UserSetupView: View {
                     Text("Tune defaults for new chats")
                         .font(.title2.weight(.bold))
                         .foregroundStyle(.white)
-                    Text("Set source behavior, model route, and optional capabilities. Home stays ready.")
+                    Text("Choose what new chats use by default. Private chat stays first; web, Agent, and Council add reach with more setup and off-device requests.")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.68))
                         .fixedSize(horizontal: false, vertical: true)
@@ -146,7 +146,7 @@ struct UserSetupView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(.white.opacity(0.11), lineWidth: 1)
         }
-        .shadow(color: Color.brandBlue.opacity(0.14), radius: 18, y: 8)
+        .shadow(color: Color.brandAccent.opacity(0.14), radius: 18, y: 8)
     }
 
     private func setupSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -218,7 +218,7 @@ struct UserSetupView: View {
 
                     setupAdvancedRoutesContent
 
-                    Text("Change these defaults later from Account without resetting chats.")
+                    Text("You can change these defaults later from Account. Existing chats keep their history.")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -293,12 +293,12 @@ struct UserSetupView: View {
 
     private var capabilityDisclosureDetail: String {
         if profile.experienceMode == .power {
-            return "Choose source behavior, live web, Council, and Agent defaults."
+            return "Turn on web, Council, and Agent defaults only when you want the extra reach."
         }
         if profile.useCases.contains(.research) && profile.wantsWeb {
-            return "Research starts with current-source search on. Web requests can leave the private route."
+            return "Research starts with web search on. Queries and selected context can leave the private route."
         }
-        return "Expand only if you want to tune sources, web behavior, or advanced routes."
+        return "Expand to decide what can use Project context, live web, or advanced routes."
     }
 
     @ViewBuilder
@@ -336,17 +336,17 @@ struct UserSetupView: View {
 
     private var ironclawToggleSubtitle: String {
         if readiness.ironclawMobileAvailable {
-            return "Phone-safe agent tasks and project actions stay one tap away."
+            return "Agent tasks can use hosted tools and Project context. Use it when actions matter more than staying private-only."
         }
-        return "Private chat stays ready first while IronClaw Mobile finishes loading."
+        return "Private chat stays ready first while Agent setup finishes."
     }
 
     private var councilToggleSubtitle: String {
         if !readiness.modelCatalogLoaded {
-            return "The lineup is still loading. Private chat stays ready first."
+            return "The model lineup is still loading. Private chat stays ready first."
         }
         if readiness.councilReady {
-            return "Compare multiple models from the same prompt when you need a sharper answer."
+            return "Ask several models at once for comparison. It can cost more and may use non-private routes."
         }
         return "Needs at least two available models. Private chat stays ready first."
     }

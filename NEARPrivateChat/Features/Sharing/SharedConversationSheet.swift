@@ -33,7 +33,7 @@ struct SharedConversationSheet: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(.brandBlue)
+                        .tint(.actionPrimary)
                         .disabled(linkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || shareStore.isLoadingSharedPreview)
 
                         Button {
@@ -106,7 +106,7 @@ private struct SharedConversationPreview: View {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: "doc.text.magnifyingglass")
                         .font(.title3.weight(.semibold))
-                        .foregroundStyle(Color.brandBlue)
+                        .foregroundStyle(Color.brandAccent)
                         .frame(width: 34, height: 34)
                         .background(Color.appBlueTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -483,7 +483,7 @@ struct SharedAccessSummaryCard: View {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "person.2")
                     .font(.title3.weight(.semibold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .frame(width: 34, height: 34)
                     .background(Color.appBlueTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 

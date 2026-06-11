@@ -19,6 +19,18 @@ final class AgentActivityController {
 
     init() {}
 
+    deinit {
+        #if canImport(ActivityKit)
+        if #available(iOS 16.1, *),
+           let activity = activity as? Activity<AgentActivityAttributes> {
+            let finalState = activity.content.state
+            Task {
+                await activity.end(.init(state: finalState, staleDate: nil), dismissalPolicy: .immediate)
+            }
+        }
+        #endif
+    }
+
     /// Starts a Live Activity for a run with `total` steps. Returns an opaque
     /// identifier on success, or `nil` if Live Activities are off/unavailable or
     /// the start failed. Safe to call unconditionally.

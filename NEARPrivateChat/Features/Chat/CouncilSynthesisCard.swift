@@ -2,6 +2,8 @@ import SwiftUI
 
 struct CouncilSynthesisCard: View {
     let synthesis: CouncilSynthesisVM
+    var retryTitle: String? = nil
+    var onRetry: (() -> Void)? = nil
     @State private var expandedChip: SynthesisChip?
 
     var body: some View {
@@ -12,6 +14,19 @@ struct CouncilSynthesisCard: View {
                 Text("Synthesis")
                     .font(.headline.weight(.semibold))
                 Spacer(minLength: 0)
+                if synthesis.isFailed, let retryTitle, let onRetry {
+                    Button(action: onRetry) {
+                        Label(retryTitle, systemImage: "arrow.clockwise")
+                            .font(.caption.weight(.semibold))
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.actionPrimary)
+                    .padding(.horizontal, 10)
+                    .frame(minHeight: 34)
+                    .background(Color.actionPrimary.opacity(0.10), in: Capsule())
+                    .accessibilityHint("Retry synthesis from the completed Council answers")
+                }
             }
 
             Text(synthesis.fullText)
@@ -124,7 +139,7 @@ private enum SynthesisChip: String, CaseIterable, Identifiable {
         case .disagreement:
             return .proofMismatch
         case .nextStep:
-            return .brandBlue
+            return .actionPrimary
         }
     }
 }

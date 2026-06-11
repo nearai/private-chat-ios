@@ -20,6 +20,8 @@ final class IronclawAPI {
     private let encoder = JSONEncoder()
 
     private static let threadsPath = "api/webchat/v2/threads"
+    private static let defaultTimelineLimit = 100
+    private static let fallbackTimelineLimit = 250
 
     func testConnection(settings: IronclawSettings, authToken: String?) async throws -> String {
         let baseURL = try validatedBaseURL(settings.baseURL)
@@ -28,7 +30,8 @@ final class IronclawAPI {
             return thread.isEmpty
                 ? "IronClaw responded without a thread id."
                 : "IronClaw agent route is ready."
-        } catch let APIError.status(code, _) where [401, 403].contains(code) {
+        } catch let error where Self.retryClassification(for: error) == .permanentAuthFailure {
+            let code = (error as? IronclawHTTPStatusError)?.statusCode ?? 401
             throw APIError.status(code, "Hosted IronClaw is reachable. The agent route needs a valid Agent token.")
         }
     }
@@ -118,7 +121,7 @@ final class IronclawAPI {
         )
         request.httpBody = try encoder.encode(payload)
 
-        let response: IronclawSubmitResponse = try await perform(request)
+        let response: IronclawSubmitResponse = try await performWithBoundedRetry(request)
         return IronclawSendResult(
             runID: response.resolvedRunID,
             status: response.status ?? "",
@@ -246,7 +249,7 @@ final class IronclawAPI {
             timeout: 15
         )
         request.httpBody = try encoder.encode(IronclawCreateThreadPayload(clientActionID: UUID().uuidString))
-        let response: IronclawCreateThreadResponse = try await perform(request)
+        let response: IronclawCreateThreadResponse = try await performWithBoundedRetry(request)
         return response.thread.threadID
     }
 
@@ -285,7 +288,7 @@ final class IronclawAPI {
             always: always,
             credentialRef: credentialRef
         ))
-        let _: IronclawResolveGateResponse = try await perform(request)
+        let _: IronclawResolveGateResponse = try await performWithBoundedRetry(request)
     }
 
     private func fetchRunState(
@@ -300,13 +303,14 @@ final class IronclawAPI {
             authToken: authToken,
             timeout: 12
         )
-        return try await perform(request)
+        return try await performWithBoundedRetry(request)
     }
 
     private func fetchTimeline(
         baseURL: URL,
         authToken: String?,
-        threadID: String
+        threadID: String,
+        limit: Int = IronclawAPI.defaultTimelineLimit
     ) async throws -> IronclawTimelineResponse {
         guard var components = URLComponents(
             url: baseURL.appending(path: "\(Self.threadsPath)/\(threadID)/timeline"),
@@ -314,10 +318,28 @@ final class IronclawAPI {
         ) else {
             throw APIError.invalidURL
         }
-        components.queryItems = [URLQueryItem(name: "limit", value: "20")]
+        components.queryItems = [URLQueryItem(name: "limit", value: "\(limit)")]
         guard let url = components.url else { throw APIError.invalidURL }
         let request = jsonRequest(url: url, method: "GET", authToken: authToken, timeout: 12)
-        return try await perform(request)
+        return try await performWithBoundedRetry(request)
+    }
+
+    private func fetchTimelineEnsuringAssistant(
+        baseURL: URL,
+        authToken: String?,
+        threadID: String,
+        runID: String
+    ) async throws -> IronclawTimelineResponse {
+        let timeline = try await fetchTimeline(baseURL: baseURL, authToken: authToken, threadID: threadID)
+        if Self.latestAssistantText(in: timeline, runID: runID) != nil || timeline.messages.count < Self.defaultTimelineLimit {
+            return timeline
+        }
+        return try await fetchTimeline(
+            baseURL: baseURL,
+            authToken: authToken,
+            threadID: threadID,
+            limit: Self.fallbackTimelineLimit
+        )
     }
 
     private func pollRunUntilFinished(
@@ -337,19 +359,34 @@ final class IronclawAPI {
             try? await Task.sleep(nanoseconds: attempt == 0 ? 800_000_000 : 2_000_000_000)
             if Task.isCancelled { return .failed }
 
-            guard let state = try? await fetchRunState(
-                baseURL: baseURL,
-                authToken: authToken,
-                threadID: threadID,
-                runID: runID
-            ) else {
-                continue
+            let state: IronclawRunState
+            do {
+                state = try await fetchRunState(
+                    baseURL: baseURL,
+                    authToken: authToken,
+                    threadID: threadID,
+                    runID: runID
+                )
+            } catch {
+                await onEvent(.failed(Self.pollFailureMessage(for: error)))
+                return .failed
             }
 
             switch state.status {
             case "Completed":
-                let text = (try? await fetchTimeline(baseURL: baseURL, authToken: authToken, threadID: threadID))
-                    .flatMap { Self.latestAssistantText(in: $0, runID: runID) } ?? ""
+                let text: String
+                do {
+                    let timeline = try await fetchTimelineEnsuringAssistant(
+                        baseURL: baseURL,
+                        authToken: authToken,
+                        threadID: threadID,
+                        runID: runID
+                    )
+                    text = Self.latestAssistantText(in: timeline, runID: runID) ?? ""
+                } catch {
+                    await onEvent(.failed(Self.pollFailureMessage(for: error)))
+                    return .failed
+                }
                 let presented = Self.presentationText(from: text)
                 if presented.isEmpty {
                     await onEvent(.failed("IronClaw finished but returned no answer text. Check the Agent connection logs, then retry."))
@@ -384,26 +421,46 @@ final class IronclawAPI {
     }
 
     private static func makeGate(state: IronclawRunState, threadID: String, runID: String) -> IronclawPendingGate {
-        let isAuth = state.status == "BlockedAuth"
+        let detail = state.gate
+        let isAuth = state.status == "BlockedAuth" || detail?.gateKind == .authentication
         return IronclawPendingGate(
-            requestID: state.gateRef ?? "gate",
+            requestID: firstNonEmpty(state.gateRef, detail?.requestID) ?? "gate",
             threadID: threadID,
             runID: runID,
-            gateName: isAuth ? "authentication" : "approval",
-            toolName: isAuth ? "an account connection" : "a tool",
-            description: isAuth
-                ? "IronClaw needs you to connect an account to continue."
-                : "IronClaw is requesting approval to run a tool.",
-            parameters: nil,
-            allowsAlways: !isAuth,
+            gateName: firstNonEmpty(detail?.gateName, isAuth ? "authentication" : "approval") ?? "approval",
+            toolName: firstNonEmpty(detail?.toolName, detail?.displayName, detail?.extensionName) ??
+                (isAuth ? "an account connection" : "a tool"),
+            description: gateDescription(detail: detail, isAuth: isAuth),
+            parameters: detail?.parameters,
+            allowsAlways: detail?.allowsAlways ?? !isAuth,
             gateKind: isAuth ? .authentication : .approval,
-            credentialName: nil,
-            authURL: nil,
-            setupURL: nil,
-            instructions: nil,
-            displayName: nil,
-            extensionName: nil
+            credentialName: detail?.credentialName,
+            authURL: detail?.authURL,
+            setupURL: detail?.setupURL,
+            instructions: detail?.instructions,
+            displayName: detail?.displayName,
+            extensionName: detail?.extensionName
         )
+    }
+
+    private static func gateDescription(detail: IronclawRunState.GateDetail?, isAuth: Bool) -> String {
+        if let headline = firstNonEmpty(detail?.headline),
+           let body = firstNonEmpty(detail?.body, detail?.reason, detail?.description) {
+            return headline == body ? headline : "\(headline)\n\n\(body)"
+        }
+        if let body = firstNonEmpty(detail?.body, detail?.reason, detail?.description) {
+            return body
+        }
+        return isAuth
+            ? "IronClaw needs you to connect an account to continue."
+            : "IronClaw is requesting approval to run a tool."
+    }
+
+    private static func firstNonEmpty(_ values: String?...) -> String? {
+        values.compactMap {
+            let trimmed = $0?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed?.isEmpty == false ? trimmed : nil
+        }.first
     }
 
     private static func latestAssistantText(in timeline: IronclawTimelineResponse, runID: String?) -> String? {
@@ -457,6 +514,48 @@ final class IronclawAPI {
         return url
     }
 
+    private func performWithBoundedRetry<T: Decodable>(
+        _ request: URLRequest,
+        maxAttempts: Int = 4
+    ) async throws -> T {
+        var nextBackoff: TimeInterval = 2
+        var lastRetryableError: Error?
+
+        for attempt in 0..<maxAttempts {
+            if Task.isCancelled { throw CancellationError() }
+            let result: IronclawRequestResult<T> = await requestResult {
+                try await perform(request)
+            }
+            switch result {
+            case let .success(value):
+                return value
+            case let .permanentFailure(error):
+                throw error
+            case let .retryable(error, retryAfter):
+                lastRetryableError = error
+                guard attempt + 1 < maxAttempts else { throw error }
+                let delay = retryAfter ?? nextBackoff
+                try await Task.sleep(nanoseconds: Self.retryDelayNanoseconds(for: delay))
+                nextBackoff = min(nextBackoff * 2, 30)
+            }
+        }
+
+        throw lastRetryableError ?? APIError.emptyResponse
+    }
+
+    private func requestResult<T>(_ operation: () async throws -> T) async -> IronclawRequestResult<T> {
+        do {
+            return .success(try await operation())
+        } catch {
+            switch Self.retryClassification(for: error) {
+            case .retryable:
+                return .retryable(error, retryAfter: Self.retryAfter(for: error))
+            case .permanentAuthFailure, .permanentFailure:
+                return .permanentFailure(error)
+            }
+        }
+    }
+
     private func perform<T: Decodable>(_ request: URLRequest) async throws -> T {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -464,12 +563,78 @@ final class IronclawAPI {
         }
         guard (200..<300).contains(http.statusCode) else {
             let message = String(data: data, encoding: .utf8) ?? ""
-            throw APIError.status(http.statusCode, message)
+            throw IronclawHTTPStatusError(
+                statusCode: http.statusCode,
+                message: message,
+                retryAfter: Self.retryAfter(from: http)
+            )
         }
         guard !data.isEmpty else {
             throw APIError.emptyResponse
         }
         return try decoder.decode(T.self, from: data)
+    }
+
+    static func retryClassification(for error: Error) -> IronclawRetryClassification {
+        if let error = error as? IronclawHTTPStatusError {
+            return retryClassification(statusCode: error.statusCode)
+        }
+        if case let APIError.status(code, _) = error {
+            return retryClassification(statusCode: code)
+        }
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut {
+            return .retryable
+        }
+        if error is CancellationError {
+            return .permanentFailure
+        }
+        return .permanentFailure
+    }
+
+    static func retryClassification(statusCode: Int) -> IronclawRetryClassification {
+        switch statusCode {
+        case 429, 503:
+            return .retryable
+        case 401, 403:
+            return .permanentAuthFailure
+        default:
+            return .permanentFailure
+        }
+    }
+
+    private static func retryAfter(for error: Error) -> TimeInterval? {
+        (error as? IronclawHTTPStatusError)?.retryAfter
+    }
+
+    private static func retryAfter(from response: HTTPURLResponse) -> TimeInterval? {
+        let rawValue = response.value(forHTTPHeaderField: "Retry-After")?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let rawValue, !rawValue.isEmpty else { return nil }
+        if let seconds = TimeInterval(rawValue) {
+            return max(0, seconds)
+        }
+        if let date = HTTPDateFormatter.date(from: rawValue) {
+            return max(0, date.timeIntervalSinceNow)
+        }
+        return nil
+    }
+
+    private static func retryDelayNanoseconds(for seconds: TimeInterval) -> UInt64 {
+        let clamped = min(max(seconds, 0), 30)
+        return UInt64(clamped * 1_000_000_000)
+    }
+
+    private static func pollFailureMessage(for error: Error) -> String {
+        switch retryClassification(for: error) {
+        case .permanentAuthFailure:
+            return "Hosted IronClaw authentication failed. Check the Agent token in Account, then retry."
+        case .retryable:
+            return "Hosted IronClaw stayed temporarily busy after retries. Wait a moment, then retry."
+        case .permanentFailure:
+            let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+            return message.isEmpty ? "Hosted IronClaw request failed." : message
+        }
     }
 
     private static func shortDiagnostic(_ text: String) -> String {
@@ -561,6 +726,38 @@ private enum IronclawPollOutcome {
     case failed
 }
 
+enum IronclawRetryClassification: Equatable {
+    case retryable
+    case permanentAuthFailure
+    case permanentFailure
+}
+
+private enum IronclawRequestResult<T> {
+    case success(T)
+    case retryable(Error, retryAfter: TimeInterval?)
+    case permanentFailure(Error)
+}
+
+private struct IronclawHTTPStatusError: LocalizedError {
+    let statusCode: Int
+    let message: String
+    let retryAfter: TimeInterval?
+
+    var errorDescription: String? {
+        APIError.status(statusCode, message).errorDescription
+    }
+}
+
+private enum HTTPDateFormatter {
+    static func date(from value: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE',' dd MMM yyyy HH':'mm':'ss z"
+        return formatter.date(from: value)
+    }
+}
+
 struct IronclawSendResult: Hashable {
     let runID: String?
     let status: String
@@ -615,14 +812,178 @@ private struct IronclawRunState: Decodable {
     struct Failure: Decodable {
         let category: String?
     }
+
+    struct GateDetail: Decodable {
+        let requestID: String?
+        let gateName: String?
+        let toolName: String?
+        let description: String?
+        let headline: String?
+        let body: String?
+        let reason: String?
+        let parameters: String?
+        let allowsAlways: Bool?
+        let gateKind: IronclawGateKind?
+        let credentialName: String?
+        let authURL: String?
+        let setupURL: String?
+        let instructions: String?
+        let displayName: String?
+        let extensionName: String?
+
+        enum CodingKeys: String, CodingKey {
+            case requestID = "request_id"
+            case ref
+            case gateRef = "gate_ref"
+            case gateName = "gate_name"
+            case name
+            case toolName = "tool_name"
+            case tool
+            case description
+            case message
+            case headline
+            case title
+            case body
+            case reason
+            case parameters
+            case allowsAlways = "allows_always"
+            case allowAlways = "allow_always"
+            case gateKind = "gate_kind"
+            case kind
+            case credentialName = "credential_name"
+            case authURL = "auth_url"
+            case setupURL = "setup_url"
+            case instructions
+            case displayName = "display_name"
+            case extensionName = "extension_name"
+            case `extension`
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            requestID = Self.firstDecodedString(in: container, keys: [.requestID, .gateRef, .ref])
+            gateName = Self.firstDecodedString(in: container, keys: [.gateName, .name, .kind])
+            toolName = Self.firstDecodedString(in: container, keys: [.toolName, .tool, .displayName, .extensionName, .`extension`])
+            description = Self.firstDecodedString(in: container, keys: [.description, .message])
+            headline = Self.firstDecodedString(in: container, keys: [.headline, .title])
+            body = Self.firstDecodedString(in: container, keys: [.body])
+            reason = Self.firstDecodedString(in: container, keys: [.reason])
+            parameters = Self.decodedParameters(in: container)
+            allowsAlways = Self.firstDecodedBool(in: container, keys: [.allowsAlways, .allowAlways])
+            gateKind = Self.firstDecodedGateKind(in: container, keys: [.gateKind, .kind])
+            credentialName = Self.firstDecodedString(in: container, keys: [.credentialName])
+            authURL = Self.firstDecodedString(in: container, keys: [.authURL])
+            setupURL = Self.firstDecodedString(in: container, keys: [.setupURL])
+            instructions = Self.firstDecodedString(in: container, keys: [.instructions])
+            displayName = Self.firstDecodedString(in: container, keys: [.displayName])
+            extensionName = Self.firstDecodedString(in: container, keys: [.extensionName, .`extension`])
+        }
+
+        private static func firstDecodedString(
+            in container: KeyedDecodingContainer<CodingKeys>,
+            keys: [CodingKeys]
+        ) -> String? {
+            for key in keys {
+                if let value = try? container.decode(String.self, forKey: key),
+                   !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return value
+                }
+            }
+            return nil
+        }
+
+        private static func firstDecodedBool(
+            in container: KeyedDecodingContainer<CodingKeys>,
+            keys: [CodingKeys]
+        ) -> Bool? {
+            for key in keys {
+                if let value = try? container.decode(Bool.self, forKey: key) {
+                    return value
+                }
+            }
+            return nil
+        }
+
+        private static func firstDecodedGateKind(
+            in container: KeyedDecodingContainer<CodingKeys>,
+            keys: [CodingKeys]
+        ) -> IronclawGateKind? {
+            for key in keys {
+                if let value = try? container.decode(IronclawGateKind.self, forKey: key) {
+                    return value
+                }
+                if let rawValue = try? container.decode(String.self, forKey: key) {
+                    let normalized = rawValue.lowercased()
+                    if normalized.contains("auth") { return .authentication }
+                    if normalized.contains("external") { return .external }
+                    if normalized.contains("approval") { return .approval }
+                }
+            }
+            return nil
+        }
+
+        private static func decodedParameters(in container: KeyedDecodingContainer<CodingKeys>) -> String? {
+            if let value = try? container.decode(String.self, forKey: .parameters) {
+                return value
+            }
+            if let object = try? container.decode([String: LossyJSONValue].self, forKey: .parameters) {
+                let plain = object.mapValues(\.value)
+                if JSONSerialization.isValidJSONObject(plain),
+                   let data = try? JSONSerialization.data(withJSONObject: plain, options: [.prettyPrinted]) {
+                    return String(data: data, encoding: .utf8)
+                }
+            }
+            return nil
+        }
+    }
+
     let status: String
     let gateRef: String?
     let failure: Failure?
+    let gate: GateDetail?
 
     enum CodingKeys: String, CodingKey {
         case status
         case gateRef = "gate_ref"
         case failure
+        case gate
+        case pendingGate = "pending_gate"
+        case pendingApproval = "pending_approval"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        status = try container.decode(String.self, forKey: .status)
+        gateRef = try container.decodeIfPresent(String.self, forKey: .gateRef)
+        failure = try container.decodeIfPresent(Failure.self, forKey: .failure)
+        gate = (try? container.decode(GateDetail.self, forKey: .gate)) ??
+            (try? container.decode(GateDetail.self, forKey: .pendingGate)) ??
+            (try? container.decode(GateDetail.self, forKey: .pendingApproval))
+    }
+}
+
+private struct LossyJSONValue: Decodable {
+    let value: Any
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            value = NSNull()
+        } else if let bool = try? container.decode(Bool.self) {
+            value = bool
+        } else if let int = try? container.decode(Int.self) {
+            value = int
+        } else if let double = try? container.decode(Double.self) {
+            value = double
+        } else if let string = try? container.decode(String.self) {
+            value = string
+        } else if let array = try? container.decode([LossyJSONValue].self) {
+            value = array.map(\.value)
+        } else if let object = try? container.decode([String: LossyJSONValue].self) {
+            value = object.mapValues(\.value)
+        } else {
+            value = ""
+        }
     }
 }
 

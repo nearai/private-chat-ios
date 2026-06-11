@@ -102,7 +102,7 @@ struct AppLifecycleModifier: ViewModifier {
     @MainActor
     private func consumeSiriCommands() async {
         if !chatStore.consumePendingSiriPrompt() {
-            chatStore.consumePendingSharedItem()
+            await chatStore.consumePendingSharedItem()
         }
         if UserDefaults.standard.bool(forKey: ChatStore.pendingRunBriefingsKey) {
             UserDefaults.standard.removeObject(forKey: ChatStore.pendingRunBriefingsKey)

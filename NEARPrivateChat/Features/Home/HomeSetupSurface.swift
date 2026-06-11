@@ -13,7 +13,7 @@ struct FirstRunSetupHomeCard: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "slider.horizontal.3")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .frame(width: 38, height: 38)
                     .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -85,9 +85,9 @@ struct FirstRunSetupHomeCard: View {
         .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.brandBlue.opacity(0.10), lineWidth: 1)
+                .stroke(Color.brandAccent.opacity(0.10), lineWidth: 1)
         }
-        .shadow(color: Color.brandBlue.opacity(0.05), radius: 12, y: 6)
+        .shadow(color: Color.brandAccent.opacity(0.05), radius: 12, y: 6)
     }
 
     @ViewBuilder
@@ -149,7 +149,7 @@ private struct FirstRunQuickStartButton: View {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: preset.symbolName)
                             .font(.subheadline.weight(.bold))
-                            .foregroundStyle(Color.brandBlue)
+                            .foregroundStyle(Color.brandAccent)
                             .frame(width: 34, height: 34)
                             .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -211,7 +211,7 @@ private struct FirstRunQuickStartRouteLine: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: detail.symbolName)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(Color.brandBlue)
+                .foregroundStyle(Color.brandAccent)
                 .frame(width: 18, height: 18)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -245,7 +245,7 @@ struct SavedSetupHomeCard: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "bubble.left.and.bubble.right.fill")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .frame(width: 38, height: 38)
                     .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -365,9 +365,9 @@ struct SavedSetupHomeCard: View {
         .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.brandBlue.opacity(0.10), lineWidth: 1)
+                .stroke(Color.brandAccent.opacity(0.10), lineWidth: 1)
         }
-        .shadow(color: Color.brandBlue.opacity(0.05), radius: 12, y: 6)
+        .shadow(color: Color.brandAccent.opacity(0.05), radius: 12, y: 6)
     }
 
     private var primaryActionTitle: String {

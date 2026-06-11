@@ -78,7 +78,7 @@ struct RouteReadinessRecoveryCard: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: symbolName)
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .frame(width: 28, height: 28)
                     .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -134,7 +134,7 @@ struct RouteReadinessRecoveryCard: View {
         .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.brandBlue.opacity(0.16), lineWidth: 1)
+                .stroke(Color.brandAccent.opacity(0.16), lineWidth: 1)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(issue.title). \(issue.message)")
@@ -173,7 +173,7 @@ struct ProxyRetryCard: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "eye.slash")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .frame(width: 28, height: 28)
                     .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -221,7 +221,7 @@ struct ProxyRetryCard: View {
         .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.brandBlue.opacity(0.16), lineWidth: 1)
+                .stroke(Color.brandAccent.opacity(0.16), lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Private route is busy. \(message)")

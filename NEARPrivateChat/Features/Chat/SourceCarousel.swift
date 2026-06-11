@@ -40,17 +40,29 @@ private struct SourceCard: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundStyle(.primary)
-                    .lineLimit(2)
                     .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 2)
                 Spacer(minLength: 0)
-                Text(source.displaySubtitle)
-                    .font(.footnote)
-                    .fontWeight(.regular)
-                    .foregroundStyle(Color.textSecondary)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(source.displaySubtitle)
+                        .font(.footnote)
+                        .fontWeight(.regular)
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let badge = source.sourceBadgeLabel {
+                        Text(badge)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color.actionPrimary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.actionPrimary.opacity(0.10), in: Capsule())
+                    }
+                }
             }
-            .frame(width: 260, height: 88, alignment: .topLeading)
+            .frame(width: 260, alignment: .topLeading)
+            .frame(minHeight: 88)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
             .padding(12)
             .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
@@ -67,7 +79,7 @@ private struct SourceCard: View {
                 .background(Color.actionPrimary, in: Circle())
                 .padding(12)
         }
-        .frame(width: 284, height: 112, alignment: .topLeading)
+        .frame(width: 284, alignment: .topLeading)
         .contentShape(Rectangle())
         .accessibilityLabel("Source \(index), \(source.displayTitle), \(source.host)")
     }
@@ -82,7 +94,7 @@ struct FaviconBadge: View {
             size: 20,
             fallbackText: String(source.sourceInitials.prefix(1)),
             cornerRadius: 5,
-            allowsNetworkFavicon: true
+            allowsNetworkFavicon: source.allowsNetworkFavicon
         )
     }
 }

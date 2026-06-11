@@ -19,7 +19,11 @@ struct CouncilRoomView: View {
                     }
 
                     if let synthesis = model.synthesis {
-                        CouncilSynthesisCard(synthesis: synthesis)
+                        CouncilSynthesisCard(
+                            synthesis: synthesis,
+                            retryTitle: synthesis.isFailed ? "Retry synthesis" : nil,
+                            onRetry: synthesis.isFailed ? onSynthesize : nil
+                        )
                             .padding(.top, 2)
                     }
                 }

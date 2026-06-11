@@ -65,7 +65,7 @@ struct HomeTrustReadinessCard: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(viewModel.tintColor.opacity(0.12), lineWidth: 1)
         }
-        .shadow(color: Color.brandBlue.opacity(0.04), radius: 12, y: 6)
+        .shadow(color: Color.brandAccent.opacity(0.04), radius: 12, y: 6)
     }
 }
 

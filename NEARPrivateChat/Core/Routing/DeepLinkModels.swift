@@ -8,11 +8,19 @@ struct AppConfiguration {
     var deepLinkScheme: String
 
     static let production = AppConfiguration(
-        baseURL: URL(string: "https://private.near.ai")!,
+        baseURL: validatedURL("https://private.near.ai"),
         callbackScheme: "nearai",
-        callbackURL: URL(string: "nearai://auth")!,
+        callbackURL: validatedURL("nearai://auth"),
         deepLinkScheme: "nearprivatechat"
     )
+
+    private static func validatedURL(_ rawValue: String) -> URL {
+        guard let url = URL(string: rawValue) else {
+            assertionFailure("Invalid static app URL: \(rawValue)")
+            return URL(fileURLWithPath: "/")
+        }
+        return url
+    }
 
     func isAuthCallback(_ url: URL) -> Bool {
         let scheme = url.scheme?.lowercased()

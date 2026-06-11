@@ -186,15 +186,37 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(catalog.selectedModelDisplayName, "GLM 5.1")
     }
 
+    func testModelPickerPreservesPrivateAndCloudRoutesForSameUnderlyingModel() {
+        let privateQwen = ModelOption(modelID: "Qwen/Qwen3.6-35B-A3B-FP8", publicModel: true, metadata: nil)
+        let cloudQwen = ModelOption(
+            modelID: ModelOption.nearCloudModelID(for: privateQwen.id),
+            publicModel: true,
+            metadata: ModelOption.Metadata(
+                verifiable: false,
+                contextLength: 128_000,
+                modelDisplayName: "Qwen 3.6 35B A3B FP8",
+                modelDescription: "Current Cloud catalog model.",
+                modelIcon: nil,
+                aliases: []
+            )
+        )
+
+        let routeDistinctIDs = ModelPickerView
+            .routeDistinctPickerModels([privateQwen, cloudQwen])
+            .map(\.id)
+
+        XCTAssertEqual(routeDistinctIDs, [privateQwen.id, cloudQwen.id])
+    }
+
     func testCurrentCloudCatalogModelsRemainIndividuallySelectable() {
         let currentCloudModels = [
             ModelOption(
-                modelID: "anthropic/claude-opus-4-7",
+                modelID: "anthropic/claude-opus-4-6",
                 publicModel: true,
                 metadata: ModelOption.Metadata(
                     verifiable: false,
                     contextLength: 1_000_000,
-                    modelDisplayName: "Claude Opus 4.7",
+                    modelDisplayName: "Claude Opus 4.6",
                     modelDescription: "Current Cloud catalog model.",
                     modelIcon: nil,
                     aliases: ["opus-4-7"]
@@ -226,6 +248,67 @@ extension PrivateChatCoreTests {
             XCTAssertEqual(catalog.selectedModel, route.id)
             XCTAssertEqual(catalog.selectedRouteKind, .nearCloud)
         }
+    }
+
+    func testModelPickerCaseInsensitiveSelectionUsesCanonicalModelID() {
+        let catalog = ModelCatalogStore()
+        XCTAssertTrue(catalog.selectModel("zai-org/glm-5.1-fp8"))
+        XCTAssertEqual(catalog.selectedModel, ModelOption.nearPrivateDefaultModelID)
+        XCTAssertEqual(catalog.selectedRouteKind, .nearPrivate)
+    }
+
+    func testCanUseInCouncilAcceptsCaseVariants() {
+        let catalog = ModelCatalogStore(
+            models: [
+                ModelOption(modelID: "zai-org/GLM-5.1-FP8", publicModel: true, metadata: nil)
+            ],
+            selectedModel: "Qwen/Qwen3.6-35B-A3B-FP8"
+        )
+
+        XCTAssertTrue(catalog.canUseInCouncil("zai-org/glm-5.1-fp8"))
+    }
+
+    func testPinnedModelLookupAcceptsCanonicalAliases() {
+        let catalog = ModelCatalogStore(
+            models: [
+                ModelOption(modelID: "zai-org/GLM-5.1-FP8", publicModel: true, metadata: nil),
+                ModelOption(modelID: "Qwen/Qwen3.6-35B-A3B-FP8", publicModel: true, metadata: nil)
+            ],
+            selectedModel: "zai-org/GLM-5.1-FP8"
+        )
+
+        catalog.togglePinnedModel("zai-org/glm-latest")
+        XCTAssertEqual(catalog.pinnedModelIDs, [ModelOption.nearPrivateDefaultModelID])
+        catalog.togglePinnedModel("zai-org/GLM-5.1-FP8")
+        XCTAssertEqual(catalog.pinnedModelIDs, [])
+    }
+
+    func testCouncilModelLookupAcceptsCanonicalAlias() {
+        let catalog = ModelCatalogStore(
+            models: [
+                ModelOption(modelID: "zai-org/GLM-5.1-FP8", publicModel: true, metadata: nil),
+                ModelOption(modelID: "Qwen/Qwen3.6-35B-A3B-FP8", publicModel: true, metadata: nil)
+            ],
+            selectedModel: "Qwen/Qwen3.6-35B-A3B-FP8"
+        )
+
+        catalog.toggleCouncilModel("zai-org/glm-latest")
+        XCTAssertEqual(catalog.councilModelIDs.count, 2)
+        XCTAssertTrue(catalog.councilModelIDs.contains(ModelOption.nearPrivateDefaultModelID))
+    }
+
+    func testPreferredDefaultModelSwitchesUsingCanonicalMatch() {
+        let catalog = ModelCatalogStore(
+            models: [
+                ModelOption(modelID: "zai-org/GLM-5.1-FP8", publicModel: true, metadata: nil),
+                ModelOption(modelID: "Qwen/Qwen3.6-35B-A3B-FP8", publicModel: true, metadata: nil)
+            ],
+            preferredModelIDs: ["zai-org/GLM-5.1-FP8", "Qwen/Qwen3.6-35B-A3B-FP8"],
+            selectedModel: "Qwen/Qwen3.6-35B-A3B-FP8"
+        )
+
+        catalog.setPreferredDefaultModel("zai-org/glm-5.1-fp8", shouldSwitchCurrentEmptyChat: true)
+        XCTAssertEqual(catalog.selectedModel, ModelOption.nearPrivateDefaultModelID)
     }
 
     func testProjectIdentityCatalogSupportsSearchablePhoneChoices() {

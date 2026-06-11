@@ -236,10 +236,13 @@ struct PowerToolIronclawView: View {
             }
 
             Section("Agent connection") {
-                TextField("Hosted IronClaw URL", text: $ironclawEndpoint)
+                TextField("Hosted IronClaw URL", text: $ironclawEndpoint, prompt: Text("e.g. https://your-host/reborn"))
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
+                Text("Use your reborn WebChat v2 base URL, for example https://dangwalvaidy.family/reborn. Phone runs require a public HTTPS host.")
+                    .font(.caption)
+                    .foregroundStyle(Color.textSecondary)
                 SecureField(agentStore.ironclawTokenConfigured ? "Token saved" : "Bearer token", text: $ironclawToken)
                 TextField("Optional thread ID", text: $ironclawThreadID)
                     .textInputAutocapitalization(.never)

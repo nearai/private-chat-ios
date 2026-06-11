@@ -10,9 +10,9 @@ struct CapabilitiesEntryRow: View {
         HStack(spacing: 12) {
             Image(systemName: "square.grid.2x2")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.brandBlue)
+                .foregroundStyle(Color.brandAccent)
                 .frame(width: 34, height: 34)
-                .background(Color.brandBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .background(Color.brandAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
                     Text("Capabilities")
@@ -20,7 +20,7 @@ struct CapabilitiesEntryRow: View {
                     .foregroundStyle(.primary)
                 Text(statusLine)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .lineLimit(2)
                 Text(detail)
                     .font(.caption)
@@ -320,7 +320,7 @@ struct CapabilitiesView: View {
     }
 
     private var privateStatusColor: Color {
-        guard let snapshot = securityStore.attestationSnapshot else { return Color.brandBlue }
+        guard let snapshot = securityStore.attestationSnapshot else { return Color.brandAccent }
         switch AttestationFreshness.classify(attestedAt: snapshot.fetchedAt) {
         case .underTwoMinutes, .underOneHour:
             return Color.proofVerified
@@ -345,7 +345,7 @@ struct CapabilitiesView: View {
     }
 
     private var cloudStatusColor: Color {
-        accountStore.nearCloudKeyConfigured ? Color.brandBlue : Color.proofStale
+        accountStore.nearCloudKeyConfigured ? Color.brandAccent : Color.proofStale
     }
 
     private var cloudDetail: String {
@@ -372,7 +372,7 @@ struct CapabilitiesView: View {
         if agentStore.ironclawRemoteWorkstationAvailable {
             return Color.proofVerified
         }
-        return modelCatalogStore.agentModels.contains(where: { $0.id == ModelOption.ironclawMobileModelID }) ? Color.brandBlue : Color.proofStale
+        return modelCatalogStore.agentModels.contains(where: { $0.id == ModelOption.ironclawMobileModelID }) ? Color.brandAccent : Color.proofStale
     }
 
     private var agentDetail: String {
@@ -394,7 +394,7 @@ struct CapabilitiesView: View {
     }
 
     private var councilStatusColor: Color {
-        (modelCatalogStore.councilModelIDs.count >= 2 || modelCatalogStore.defaultCouncilModels.count >= 2) ? Color.brandBlue : Color.proofStale
+        (modelCatalogStore.councilModelIDs.count >= 2 || modelCatalogStore.defaultCouncilModels.count >= 2) ? Color.brandAccent : Color.proofStale
     }
 
     private var councilDetail: String {

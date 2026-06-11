@@ -15,7 +15,7 @@ final class AttachmentStagingStore: ObservableObject {
 
     private(set) var pendingLargePasteTexts: [String: String] = [:]
     private(set) var pendingSharedFileURLs: [String: URL] = [:]
-    private var pendingDocumentTexts: [String: String] = [:]
+    private(set) var pendingDocumentTexts: [String: String] = [:]
     private var pendingDocumentTextIDs: [String] = []
 
     var onDurableStateChange: (() -> Void)?
@@ -33,6 +33,8 @@ final class AttachmentStagingStore: ObservableObject {
     func removePromptAttachment(_ attachment: ChatAttachment) {
         pendingAttachments.removeAll { $0.id == attachment.id }
         pendingLargePasteTexts.removeValue(forKey: attachment.id)
+        pendingDocumentTexts.removeValue(forKey: attachment.id)
+        pendingDocumentTextIDs.removeAll { $0 == attachment.id }
         if let fileURL = pendingSharedFileURLs.removeValue(forKey: attachment.id) {
             try? FileManager.default.removeItem(at: fileURL)
         }
@@ -42,6 +44,8 @@ final class AttachmentStagingStore: ObservableObject {
     func removePromptAttachment(id: String) {
         pendingAttachments.removeAll { $0.id == id }
         pendingLargePasteTexts.removeValue(forKey: id)
+        pendingDocumentTexts.removeValue(forKey: id)
+        pendingDocumentTextIDs.removeAll { $0 == id }
         if let fileURL = pendingSharedFileURLs.removeValue(forKey: id) {
             try? FileManager.default.removeItem(at: fileURL)
         }
@@ -59,6 +63,12 @@ final class AttachmentStagingStore: ObservableObject {
 
     func replacePendingLargePasteTexts(_ texts: [String: String]) {
         pendingLargePasteTexts = texts
+        notifyDurableStateChanged()
+    }
+
+    func replacePendingDocumentTexts(_ texts: [String: String]) {
+        pendingDocumentTexts = texts
+        pendingDocumentTextIDs = Array(texts.keys.suffix(Self.maxStagedDocuments))
         notifyDurableStateChanged()
     }
 
@@ -128,6 +138,7 @@ final class AttachmentStagingStore: ObservableObject {
             let evicted = pendingDocumentTextIDs.removeFirst()
             pendingDocumentTexts.removeValue(forKey: evicted)
         }
+        notifyDurableStateChanged()
     }
 
     func documentText(for id: String) -> String? {
@@ -177,6 +188,10 @@ final class AttachmentStagingStore: ObservableObject {
     }
 
     func documentAugmentedPrompt(_ prompt: String, question: String, attachments: [ChatAttachment]) -> String {
+        guard !prompt.contains("Relevant excerpts from the attached document(s):"),
+              !prompt.contains("Relevant excerpts from the attached table(s):") else {
+            return prompt
+        }
         let documents = attachments.compactMap { pendingDocumentTexts[$0.id] }
         guard !documents.isEmpty,
               !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -212,9 +227,30 @@ final class AttachmentStagingStore: ObservableObject {
                 var uploaded = result.attachment
                 if let staged = result.stagedDocumentText {
                     stageDocumentText(staged.text, for: staged.attachmentID)
+                    pendingDocumentTexts.removeValue(forKey: attachment.id)
+                    pendingDocumentTextIDs.removeAll { $0 == attachment.id }
+                } else if let preExtractedText = pendingDocumentTexts[attachment.id] {
+                    stageDocumentText(preExtractedText, for: uploaded.id)
+                    pendingDocumentTexts.removeValue(forKey: attachment.id)
+                    pendingDocumentTextIDs.removeAll { $0 == attachment.id }
                 } else {
                     uploaded.name = attachment.name
                 }
+                resolved.append(uploaded)
+                uploadedAttachments.append(uploaded)
+                uploadedSharedFileIDs.append(attachment.id)
+            } else if attachment.isLocalPendingSharedFile,
+                      let text = pendingDocumentTexts[attachment.id] {
+                isUploadingAttachment = true
+                defer { isUploadingAttachment = false }
+                var uploaded = try await fileService.uploadTextFile(
+                    filename: Self.extractedSharedTextFilename(for: attachment),
+                    text: text
+                )
+                uploaded.kind = Self.extractedSharedTextKind(for: attachment)
+                pendingDocumentTexts.removeValue(forKey: attachment.id)
+                pendingDocumentTextIDs.removeAll { $0 == attachment.id }
+                stageDocumentText(text, for: uploaded.id)
                 resolved.append(uploaded)
                 uploadedAttachments.append(uploaded)
                 uploadedSharedFileIDs.append(attachment.id)
@@ -247,5 +283,30 @@ final class AttachmentStagingStore: ObservableObject {
             .replacingOccurrences(of: ":", with: "-")
             .replacingOccurrences(of: ".", with: "-")
         return "large-paste-\(stamp).txt"
+    }
+
+    private static func extractedSharedTextFilename(for attachment: ChatAttachment) -> String {
+        let lowercasedName = attachment.name.lowercased()
+        if lowercasedName.hasSuffix(".csv") ||
+            lowercasedName.hasSuffix(".tsv") ||
+            lowercasedName.hasSuffix(".xlsx") ||
+            lowercasedName.hasSuffix(".xls") {
+            return DocumentTextExtractor.extractedTableFilename(for: URL(fileURLWithPath: attachment.name))
+        }
+        if lowercasedName.hasSuffix(".pdf") {
+            return DocumentTextExtractor.extractedPDFFilename(for: URL(fileURLWithPath: attachment.name))
+        }
+        return "\(attachment.name)-extracted-text.txt"
+    }
+
+    private static func extractedSharedTextKind(for attachment: ChatAttachment) -> String {
+        let lowercasedName = attachment.name.lowercased()
+        if lowercasedName.hasSuffix(".csv") ||
+            lowercasedName.hasSuffix(".tsv") ||
+            lowercasedName.hasSuffix(".xlsx") ||
+            lowercasedName.hasSuffix(".xls") {
+            return "table_text"
+        }
+        return "pdf_text"
     }
 }

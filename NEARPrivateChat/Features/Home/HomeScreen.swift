@@ -290,7 +290,12 @@ struct HomeScreen: View {
         .sheet(isPresented: $homeStore.showingHomeCouncilPicker, onDismiss: {
             resumePendingHomeLaunchIfPossible(after: .council)
         }) {
-            ModelPickerView(openingCouncil: true)
+            ModelPickerView(
+                openingCouncil: true,
+                onOpenNearCloudKeys: {
+                    openAccountSettings(deepLink: .nearCloudKeys)
+                }
+            )
                 .environmentObject(chatStore)
         }
         .sheet(item: $homeStore.editingProject) { project in

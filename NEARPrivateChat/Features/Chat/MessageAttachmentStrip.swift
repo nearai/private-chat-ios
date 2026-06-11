@@ -4,10 +4,10 @@ struct AssistantAvatar: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.brandBlue.opacity(0.10))
+                .fill(Color.brandAccent.opacity(0.10))
             Image(systemName: "lock.shield.fill")
                 .font(.caption.weight(.bold))
-                .foregroundStyle(Color.brandBlue)
+                .foregroundStyle(Color.brandAccent)
         }
         .frame(width: 30, height: 30)
     }

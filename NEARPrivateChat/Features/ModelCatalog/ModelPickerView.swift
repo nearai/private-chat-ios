@@ -6,6 +6,7 @@ struct ModelPickerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var selectedTab: ModelPickerTab = .models
+    private let onOpenNearCloudKeys: (() -> Void)?
 
     private enum ModelPickerTab: String, CaseIterable, Identifiable {
         case models = "Models"
@@ -14,14 +15,26 @@ struct ModelPickerView: View {
         var id: String { rawValue }
     }
 
-    init(openingCouncil: Bool = false) {
+    init(openingCouncil: Bool = false, onOpenNearCloudKeys: (() -> Void)? = nil) {
         _selectedTab = State(initialValue: openingCouncil ? .council : .models)
+        self.onOpenNearCloudKeys = onOpenNearCloudKeys
     }
 
     // MARK: - Computed pickers
 
     private var allPickerModels: [ModelOption] {
-        ModelCatalogStore.uniqueModels(modelCatalogStore.pickerModels)
+        Self.routeDistinctPickerModels(modelCatalogStore.pickerModels)
+    }
+
+    static func routeDistinctPickerModels(_ models: [ModelOption]) -> [ModelOption] {
+        var seenIDs = Set<String>()
+        var output: [ModelOption] = []
+        for model in models {
+            let key = model.id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !key.isEmpty, seenIDs.insert(key).inserted else { continue }
+            output.append(model)
+        }
+        return output
     }
 
     private var defaultPrivateModel: ModelOption? {
@@ -94,7 +107,8 @@ struct ModelPickerView: View {
     }
 
     private func isSelectedSingleModel(_ model: ModelOption) -> Bool {
-        selectedSingleModelID == model.id
+        guard let selectedSingleModelID else { return false }
+        return ModelCatalogStore.model(model, matchesCandidateID: selectedSingleModelID)
     }
 
     private func modelRowTrailing(for model: ModelOption) -> ModelSpecTrailing {
@@ -125,6 +139,9 @@ struct ModelPickerView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    .accessibilityLabel("Model picker section")
+                    .accessibilityHint("Switches between single model routes and Council lineups.")
+                    .accessibilityIdentifier("modelPicker.modeTabs")
                     .padding(.horizontal, 16)
                     .padding(.top, 4)
                     .padding(.bottom, 16)
@@ -212,7 +229,7 @@ struct ModelPickerView: View {
                 "\(max(count, 2)) models answer independently. The app synthesizes one result.",
                 ["Multiple models", proof],
                 "person.3.fill",
-                Color.brandBlue
+                Color.routeCouncil
             )
         }
 
@@ -231,7 +248,7 @@ struct ModelPickerView: View {
                 "External model. Routed through NEAR AI Cloud over the privacy proxy.",
                 ["Privacy proxy", "External model"],
                 "cloud.fill",
-                Color.brandBlue
+                Color.routeCloud
             )
         case .ironclawMobile:
             return (
@@ -239,7 +256,7 @@ struct ModelPickerView: View {
                 "On-device Agent for small local tasks. Outside NEAR Private proof.",
                 ["IronClaw Mobile", "Outside proof"],
                 "iphone",
-                Color.brandBlue
+                Color.routeAgent
             )
         case .ironclawHosted:
             return (
@@ -256,7 +273,10 @@ struct ModelPickerView: View {
     private var modelsTab: some View {
         VStack(alignment: .leading, spacing: 22) {
             // SINGLE ROUTE
-            ModelSpecSection(title: "Single Model Route") {
+            ModelSpecSection(
+                title: "Single Model Route",
+                subtitle: "Private is always available. Cloud routes need a NEAR AI Cloud key."
+            ) {
                 ForEach(Array(primaryPrivateModels.enumerated()), id: \.element.id) { index, model in
                     ModelSpecRow(
                         symbolName: "cpu",
@@ -277,7 +297,7 @@ struct ModelPickerView: View {
                     ForEach(Array(primaryCloudModels.enumerated()), id: \.element.id) { index, model in
                         ModelSpecRow(
                             symbolName: "cloud.fill",
-                            symbolColor: Color.brandBlue,
+                            symbolColor: Color.routeCloud,
                             title: modelRowTitle(for: model),
                             subtitle: "NEAR AI Cloud model · one external answer through the privacy proxy.",
                             badges: model.routeDisclosureBadges,
@@ -322,7 +342,10 @@ struct ModelPickerView: View {
             }
 
             if !privateModelChoices.isEmpty {
-                ModelSpecSection(title: "Private Models") {
+                ModelSpecSection(
+                    title: "Private Models",
+                    subtitle: "Available without Cloud keys or Agent setup."
+                ) {
                     ForEach(Array(privateModelChoices.enumerated()), id: \.element.id) { index, model in
                         ModelSpecRow(
                             symbolName: model.isOpenWeightCandidate ? "shippingbox" : "cpu",
@@ -340,7 +363,10 @@ struct ModelPickerView: View {
             }
 
             if !agentChoices.isEmpty {
-                ModelSpecSection(title: "Agents") {
+                ModelSpecSection(
+                    title: "Agents",
+                    subtitle: "Phone-safe Agent can run locally; hosted repo, shell, and code tasks require Hosted IronClaw setup."
+                ) {
                     ForEach(Array(agentChoices.enumerated()), id: \.element.id) { index, model in
                         ModelSpecRow(
                             symbolName: model.isIronclawMobileRuntime ? "iphone" : "terminal",
@@ -358,14 +384,19 @@ struct ModelPickerView: View {
             }
 
             // NEAR CLOUD
-            ModelSpecSection(title: "NEAR AI Cloud") {
+            ModelSpecSection(
+                title: "NEAR AI Cloud",
+                subtitle: chatStore.nearCloudKeyConfigured
+                    ? "Cloud routes are connected through the privacy proxy."
+                    : "Requires a Cloud key before external models can answer."
+            ) {
                 ModelSpecRow(
                     symbolName: chatStore.nearCloudKeyConfigured ? "cloud.fill" : "cloud",
                     symbolColor: Color.textSecondary,
-                    title: chatStore.nearCloudKeyConfigured ? "Connected" : "Connect NEAR AI Cloud",
+                    title: chatStore.nearCloudKeyConfigured ? "Connected" : "Add Cloud key in Account",
                     subtitle: chatStore.nearCloudKeyConfigured
                         ? "Refresh catalog or open account"
-                        : "Add your key to use external models",
+                        : "Use the in-app key panel to unlock external models",
                     badges: ["Privacy proxy", "External models"],
                     trailing: .chevron,
                     isSelected: false,
@@ -376,7 +407,10 @@ struct ModelPickerView: View {
 
             // CLOUD MODELS
             if chatStore.nearCloudKeyConfigured && !cloudModelChoices.isEmpty {
-                ModelSpecSection(title: "Cloud Models") {
+                ModelSpecSection(
+                    title: "Cloud Models",
+                    subtitle: "External model answers use NEAR AI Cloud through the privacy proxy."
+                ) {
                     ForEach(Array(cloudModelChoices.enumerated()), id: \.element.id) { index, model in
                         ModelSpecRow(
                             symbolName: "cpu",
@@ -424,7 +458,10 @@ struct ModelPickerView: View {
         return VStack(alignment: .leading, spacing: 22) {
             councilCandidatesSection
 
-            ModelSpecSection(title: isActive ? "Active Council" : "Recommended Council") {
+            ModelSpecSection(
+                title: isActive ? "Active Council" : "Recommended Council",
+                subtitle: "Needs at least two available models. Cloud members require a Cloud key; hosted Agent members require setup."
+            ) {
                 if lineup.isEmpty {
                     ModelSpecRow(
                         symbolName: "person.3",
@@ -516,7 +553,7 @@ struct ModelPickerView: View {
     }
 
     private func isDefaultPrivateModel(_ model: ModelOption) -> Bool {
-        model.id == ModelOption.nearPrivateDefaultModelID ||
+        model.id.localizedCaseInsensitiveCompare(ModelOption.nearPrivateDefaultModelID) == .orderedSame ||
             model.displayName.localizedCaseInsensitiveContains("NEAR Private")
     }
 
@@ -538,6 +575,15 @@ struct ModelPickerView: View {
     }
 
     private func agentSubtitle(for model: ModelOption) -> String {
+        if model.isIronclawHostedModel, !chatStore.ironclawRemoteWorkstationAvailable {
+            if !chatStore.ironclawSettings.hasUsableHostedEndpoint {
+                return chatStore.ironclawSettings.endpointValidationMessage ?? "Add a Hosted IronClaw URL before sending."
+            }
+            if !chatStore.ironclawTokenConfigured {
+                return "Hosted URL saved. Add an Agent token before sending hosted tasks."
+            }
+            return "Turn on Hosted IronClaw in Account before sending hosted tasks."
+        }
         if let description = compactCatalogDescription(for: model) {
             return description
         }
@@ -555,7 +601,10 @@ struct ModelPickerView: View {
 
     @ViewBuilder
     private var councilCandidatesSection: some View {
-        ModelSpecSection(title: "Choose Council Models") {
+        ModelSpecSection(
+            title: "Choose Council Models",
+            subtitle: "Private candidates are available now; Cloud and Agent candidates depend on their setup state."
+        ) {
             Text(councilSelectionStatusText)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.textSecondary)
@@ -578,7 +627,12 @@ struct ModelPickerView: View {
                 candidates: Array(councilCloudCandidates.prefix(8))
             )
         } else {
-            ModelSpecSection(title: "NEAR AI Cloud Council Models") {
+            ModelSpecSection(
+                title: "NEAR AI Cloud Council Models",
+                subtitle: chatStore.nearCloudKeyConfigured
+                    ? "Cloud Council members can answer through the privacy proxy."
+                    : "Add a Cloud key before Cloud Council members can answer."
+            ) {
                 ModelSpecRow(
                     symbolName: chatStore.nearCloudKeyConfigured ? "cloud.fill" : "cloud",
                     symbolColor: Color.textSecondary,
@@ -620,7 +674,7 @@ struct ModelPickerView: View {
         let isEnabled = isSelected || snapshot.ids.count < modelCatalogStore.maxCouncilModelCount
         return ModelSpecRow(
             symbolName: isSelected ? "checkmark.circle.fill" : "plus.circle",
-            symbolColor: isSelected ? Color.actionPrimary : (model.isNearCloudModel ? Color.brandBlue : Color.textSecondary),
+            symbolColor: isSelected ? Color.actionPrimary : (model.isNearCloudModel ? Color.routeCloud : Color.textSecondary),
             title: modelRowTitle(for: model),
             subtitle: manualCouncilSubtitle(for: model),
             badges: model.routeDisclosureBadges,
@@ -670,216 +724,24 @@ struct ModelPickerView: View {
     }
 
     private func connectOrOpenNearCloud() {
-        // Always open the NEAR AI Cloud web page. Previously the
-        // unconnected path called `connectNearCloudAccount()` (an
-        // authenticated API request) which silently failed when the
-        // session token couldn't reach the server — leaving the user
-        // tapping with no visible result. Opening the web flow gives
-        // them a concrete path to manage their cloud key in every
-        // state.
-        openNearCloudSignup()
         if chatStore.nearCloudKeyConfigured {
+            openNearCloudSignup()
             Task { _ = await chatStore.connectNearCloudAccount() }
+            return
+        }
+
+        if let onOpenNearCloudKeys {
+            dismiss()
+            DispatchQueue.main.async {
+                onOpenNearCloudKeys()
+            }
+        } else {
+            openNearCloudSignup()
         }
     }
 
     private func openNearCloudSignup() {
         guard let url = URL(string: "https://cloud.near.ai") else { return }
         openURL(url)
-    }
-}
-
-// MARK: - Components
-
-private struct ModelSpecSection<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title.uppercased())
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.textSecondary)
-                .padding(.horizontal, 16)
-
-            VStack(spacing: 0) {
-                content
-            }
-            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.appBorder, lineWidth: 0.5)
-            }
-            .padding(.horizontal, 16)
-        }
-    }
-}
-
-private enum ModelSpecTrailing {
-    case none
-    case checkmark
-    case chevron
-}
-
-private struct ModelSpecRow: View {
-    let symbolName: String
-    let symbolColor: Color
-    let title: String
-    let subtitle: String
-    var badges: [String] = []
-    let trailing: ModelSpecTrailing
-    let isSelected: Bool
-    let showsDivider: Bool
-    var isEnabled: Bool = true
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 0) {
-                HStack(alignment: .top, spacing: 14) {
-                    Image(systemName: symbolName)
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(isEnabled ? symbolColor : Color.textTertiary)
-                        .frame(width: 22, height: 22)
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(title)
-                            .font(.body)
-                            .foregroundStyle(isEnabled ? Color.primary : Color.textSecondary)
-                            .lineLimit(1)
-
-                        Text(subtitle)
-                            .font(.subheadline)
-                            .foregroundStyle(Color.textSecondary)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        if !badges.isEmpty {
-                            HStack(spacing: 6) {
-                                ForEach(Array(badges.prefix(3)), id: \.self) { badge in
-                                    Text(badge)
-                                        .font(.caption2.weight(.semibold))
-                                        .foregroundStyle(Color.textSecondary)
-                                        .lineLimit(1)
-                                        .padding(.horizontal, 7)
-                                        .frame(height: 20)
-                                        .background(Color.appSecondaryBackground, in: Capsule())
-                                }
-                            }
-                            .padding(.top, 3)
-                        }
-                    }
-
-                    Spacer(minLength: 0)
-
-                    trailingView
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .frame(minHeight: 60)
-                .background(isSelected ? Color.actionPrimary.opacity(0.10) : Color.clear)
-                .contentShape(Rectangle())
-
-                if showsDivider {
-                    HStack(spacing: 0) {
-                        Color.clear.frame(width: 52)
-                        Rectangle()
-                            .fill(Color.appHairline)
-                            .frame(height: 0.5)
-                    }
-                    .frame(height: 0.5)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.48)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(title)
-        .accessibilityValue(rowAccessibilityValue)
-        .accessibilityHint(isEnabled ? "Selects this model route." : subtitle)
-    }
-
-    private var rowAccessibilityValue: String {
-        ([subtitle] + badges).joined(separator: ", ")
-    }
-
-    @ViewBuilder
-    private var trailingView: some View {
-        switch trailing {
-        case .none:
-            EmptyView()
-        case .checkmark:
-            Image(systemName: "checkmark")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Color.actionPrimary)
-        case .chevron:
-            Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color.textTertiary)
-        }
-    }
-}
-
-private struct CouncilNumberedRow: View {
-    let number: Int
-    let title: String
-    let subtitle: String
-    let showsDivider: Bool
-
-    var body: some View {
-        ZStack(alignment: .bottom) {
-            HStack(alignment: .center, spacing: 14) {
-                Text("\(number)")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(Color.actionPrimary)
-                    .frame(width: 22, height: 22)
-                    .background(Color.actionPrimary.opacity(0.12), in: Circle())
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .font(.body)
-                        .foregroundStyle(Color.primary)
-                        .lineLimit(1)
-                    Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(Color.textSecondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .frame(minHeight: 60)
-
-            if showsDivider {
-                HStack(spacing: 0) {
-                    Color.clear.frame(width: 52)
-                    Rectangle()
-                        .fill(Color.appHairline)
-                        .frame(height: 0.5)
-                }
-            }
-        }
-    }
-}
-
-private extension ModelOption {
-    var routeDisclosureBadges: [String] {
-        if isNearCloudModel {
-            return ["NEAR AI Cloud", "Privacy proxy"]
-        }
-        if isIronclawHostedModel {
-            return ["Hosted IronClaw", "File names only"]
-        }
-        if isIronclawMobileRuntime {
-            return ["IronClaw Mobile", "Outside proof"]
-        }
-        if isPrivateVerifiableChatModel {
-            return ["NEAR Private", "Proof when fetched"]
-        }
-        return Array((["NEAR Private"] + capabilityBadges).prefix(3))
     }
 }

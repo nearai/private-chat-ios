@@ -130,10 +130,12 @@ extension PrivateChatCoreTests {
     func testTransportFailureMessageNeverEmitsNSErrorDump() {
         let mapped = MessageRepository.transportFailureMessage(URLError(.networkConnectionLost))
         XCTAssertEqual(mapped, "Connection dropped mid-answer — retry. Your prompt is kept.")
+        XCTAssertEqual(ErrorMessageMapper.transportFailureMessage(URLError(.networkConnectionLost)), mapped)
         let raw = "Error Domain=NSURLErrorDomain Code=-1005 \"The network connection was lost.\" UserInfo={_kCFStreamErrorCodeKey=53}"
-        let display = MessageRepository.displayFailureMessage(raw)
+        let display = ErrorMessageMapper.displayFailureMessage(raw)
         XCTAssertFalse(display.contains("Error Domain"))
         XCTAssertFalse(display.contains("kCFStream"))
+        XCTAssertEqual(MessageRepository.displayFailureMessage(raw), display)
     }
 
     func testMergePreservesCouncilBatchWithoutExternalTurn() {

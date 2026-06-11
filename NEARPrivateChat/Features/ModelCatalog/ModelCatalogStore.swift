@@ -8,10 +8,6 @@ final class ModelCatalogStore: ObservableObject {
 
     static let preferredModelIDs = [
         ModelOption.nearPrivateDefaultModelID,
-        "anthropic/claude-opus-4-7",
-        "openai/gpt-5.5",
-        "qwen/qwen3.7-max",
-        "moonshotai/kimi-k2.6",
         "anthropic/claude-sonnet-4-6",
         "anthropic/claude-opus-4-6",
         "deepseek-ai/DeepSeek-V4-Flash",
@@ -29,10 +25,6 @@ final class ModelCatalogStore: ObservableObject {
         "deepseek-ai/DeepSeek-R1"
     ]
     static let nearCloudPreferredModelIDs: [String] = [
-        "anthropic/claude-opus-4-7",
-        "openai/gpt-5.5",
-        "qwen/qwen3.7-max",
-        "moonshotai/kimi-k2.6",
         "anthropic/claude-sonnet-4-6",
         "anthropic/claude-opus-4-6",
         "Qwen/Qwen3.6-35B-A3B-FP8",
@@ -135,8 +127,9 @@ final class ModelCatalogStore: ObservableObject {
         let storedModel = settingsPersistence?.loadSelectedModelID()
         let initialModel = repairedInitialModel(storedModel, resolvedDefault: resolvedDefault)
         selectedModel = RoutePlanner.routeKind(forModelID: initialModel).isIronclawRoute ? resolvedDefault : initialModel
-        let storedCouncilModelIDs = normalizedCouncilModelIDs(settingsPersistence?.loadCouncilModelIDs() ?? [])
+        let storedCouncilModelIDs = Array(Self.uniqueStrings(settingsPersistence?.loadCouncilModelIDs() ?? []).prefix(Self.maxCouncilModels))
         councilModelIDs = storedCouncilModelIDs.isEmpty ? [selectedModel] : storedCouncilModelIDs
+        normalizeCouncilSelection(shouldShowBanner: true)
         pinnedModelIDs = settingsPersistence?.loadPinnedModelIDs(maxCount: Self.maxPinnedModels) ?? []
         webSearchEnabled = settingsPersistence?.loadWebSearchEnabled(default: false) ?? false
         sourceMode = settingsPersistence?.loadSourceMode(default: .auto) ?? .auto
@@ -181,7 +174,7 @@ final class ModelCatalogStore: ObservableObject {
     }
 
     func updatePlan(allowedModelIDs: Set<String>?, planName: String) {
-        self.allowedModelIDs = allowedModelIDs
+        self.allowedModelIDs = Self.normalizeAllowedModelIDs(allowedModelIDs)
         currentBillingPlanName = planName
     }
 
@@ -200,11 +193,11 @@ final class ModelCatalogStore: ObservableObject {
                 replaceNearCloudModels(Self.nearCloudRouteModels(from: fetchedCloud))
             }
             ensureSelectedModelIsAvailable(shouldShowBanner: false)
-            normalizeCouncilSelection()
+            normalizeCouncilSelection(shouldShowBanner: false)
         } catch {
             if models.isEmpty {
                 replaceModels(Self.fallbackPrivateModels())
-                normalizeCouncilSelection()
+                normalizeCouncilSelection(shouldShowBanner: false)
             }
             throw error
         }
@@ -239,7 +232,7 @@ final class ModelCatalogStore: ObservableObject {
     }
 
     var selectedModelOption: ModelOption? {
-        chatModels.first(where: { $0.id == selectedModel })
+        return chatModels.first(where: { Self.model($0, matchesCandidateID: selectedModel) })
     }
 
     var selectedModelDisplayName: String {
@@ -275,8 +268,10 @@ final class ModelCatalogStore: ObservableObject {
         preferredDefaultModelID = modelID
         if shouldSwitchCurrentEmptyChat,
            let resolved = modelID,
-           pickerModels.contains(where: { $0.id == resolved }) {
-            selectedModel = resolved
+           let model = pickerModels.first(where: {
+               Self.model($0, matchesCandidateID: resolved)
+           }) {
+            selectedModel = model.id
             routeDidChangeHandler?()
         }
     }
@@ -426,7 +421,7 @@ final class ModelCatalogStore: ObservableObject {
     func pinnedPickerModels(from pinnedModelIDs: [String]) -> [ModelOption] {
         let available = pickerModels
         return pinnedModelIDs.compactMap { id in
-            available.first { $0.id == id }
+            available.first { Self.model($0, matchesCandidateID: id) }
         }
     }
 
@@ -466,7 +461,7 @@ final class ModelCatalogStore: ObservableObject {
     }
 
     func modelDisplayName(for modelID: String) -> String {
-        chatModels.first(where: { $0.id == modelID })?.displayName ??
+        return chatModels.first(where: { Self.model($0, matchesCandidateID: modelID) })?.displayName ??
             modelID.split(separator: "/").last.map(String.init) ??
             modelID
     }
@@ -474,28 +469,30 @@ final class ModelCatalogStore: ObservableObject {
     func canUseInCouncil(_ modelID: String) -> Bool {
         let trimmed = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
-        guard let model = chatModels.first(where: { $0.id == trimmed }) else {
+        guard let model = chatModels.first(where: { Self.model($0, matchesCandidateID: trimmed) }) else {
             return canPreserveCouncilModelID(trimmed)
         }
         return isCouncilEligible(model)
     }
 
     func councilIndex(for modelID: String) -> Int? {
-        activeCouncilModels.firstIndex(where: { $0.id == modelID }).map { $0 + 1 }
+        return activeCouncilModels.firstIndex(where: {
+            Self.model($0, matchesCandidateID: modelID)
+        }).map { $0 + 1 }
     }
 
     func isPinnedModel(_ modelID: String) -> Bool {
-        pinnedModelIDs.contains(modelID)
+        return pinnedModelIDs.contains { Self.modelIDsEquivalent($0, modelID) }
     }
 
     func togglePinnedModel(_ modelID: String) {
-        guard let model = pickerModels.first(where: { $0.id == modelID }) else {
+        guard let model = pickerModels.first(where: { Self.model($0, matchesCandidateID: modelID) }) else {
             showBanner("That model is not available on this account.")
             return
         }
 
         var ids = Self.uniqueStrings(pinnedModelIDs)
-        if let index = ids.firstIndex(of: modelID) {
+        if let index = ids.firstIndex(where: { Self.modelIDsEquivalent($0, modelID) }) {
             ids.remove(at: index)
             pinnedModelIDs = ids
             showBanner("Removed \(model.displayName) from pinned models.")
@@ -506,19 +503,21 @@ final class ModelCatalogStore: ObservableObject {
             showBanner("You can pin up to \(Self.maxPinnedModels) models.")
             return
         }
-        ids.insert(modelID, at: 0)
+        ids.insert(model.id, at: 0)
         pinnedModelIDs = ids
         showBanner("Pinned \(model.displayName).")
     }
 
     func toggleCouncilModel(_ modelID: String) {
-        guard let model = chatModels.first(where: { $0.id == modelID }), isCouncilEligible(model) else {
+        guard let model = chatModels.first(where: {
+            Self.model($0, matchesCandidateID: modelID)
+        }), isCouncilEligible(model) else {
             showBanner("Council mode supports available NEAR Private and NEAR AI Cloud chat models.")
             return
         }
 
         var ids = normalizedCouncilModelIDs(councilModelIDs)
-        if let index = ids.firstIndex(of: modelID) {
+        if let index = ids.firstIndex(where: { Self.modelIDsEquivalent($0, modelID) }) {
             ids.remove(at: index)
             if ids.count == 1, selectedModel != ids[0] {
                 selectedModel = ids[0]
@@ -539,7 +538,7 @@ final class ModelCatalogStore: ObservableObject {
             showBanner("Council mode supports up to \(Self.maxCouncilModels) models at once.")
             return
         }
-        ids.append(modelID)
+        ids.append(model.id)
         councilModelIDs = normalizedCouncilModelIDs(ids)
         if selectedModelOption?.isIronclawModel == true {
             selectedModel = councilModelIDs.first ?? modelID
@@ -597,12 +596,14 @@ final class ModelCatalogStore: ObservableObject {
     }
 
     func selectModel(_ modelID: String) -> Bool {
-        guard let model = pickerModels.first(where: { $0.id == modelID }) else {
+        guard let model = pickerModels.first(where: {
+            Self.model($0, matchesCandidateID: modelID)
+        }) else {
             showBanner("That model is not available on this account.")
             return false
         }
-        selectedModel = modelID
-        councilModelIDs = isCouncilEligible(model) ? [modelID] : []
+        selectedModel = model.id
+        councilModelIDs = isCouncilEligible(model) ? [model.id] : []
         routeDidChangeHandler?()
         return true
     }
@@ -632,28 +633,38 @@ final class ModelCatalogStore: ObservableObject {
         guard !models.isEmpty else {
             return
         }
-        guard pickerModels.contains(where: { $0.id == selectedModel }) else {
+        let selectedModelCandidate = selectedModel
+        guard pickerModels.contains(where: { Self.model($0, matchesCandidateID: selectedModelCandidate) }) else {
             guard let replacement = preferredAvailableModel() ?? pickerModels.first?.id else {
                 return
             }
-            let previousModel = selectedModel
+            let previousModel = selectedModelCandidate
             selectedModel = replacement
-            normalizeCouncilSelection()
+            normalizeCouncilSelection(shouldShowBanner: shouldShowBanner)
             routeDidChangeHandler?()
             if shouldShowBanner {
                 showBanner("\(modelDisplayName(for: previousModel)) is not available on the \(currentBillingPlanName) plan. Switched to \(modelDisplayName(for: replacement)).")
             }
             return
         }
-        normalizeCouncilSelection()
+        normalizeCouncilSelection(shouldShowBanner: shouldShowBanner)
     }
 
-    func normalizeCouncilSelection() {
+    func normalizeCouncilSelection(shouldShowBanner: Bool = false) {
+        let originalIDs = councilModelIDs
         let normalized = normalizedCouncilModelIDs(councilModelIDs)
+        let nextIDs: [String]
         if normalized.isEmpty, canUseInCouncil(selectedModel) {
-            councilModelIDs = [selectedModel]
-        } else if normalized != councilModelIDs {
-            councilModelIDs = normalized
+            nextIDs = [selectedModel]
+        } else {
+            nextIDs = normalized
+        }
+        guard nextIDs != originalIDs else { return }
+        councilModelIDs = nextIDs
+        let removedCount = originalIDs.filter { !nextIDs.contains($0) }.count
+        if shouldShowBanner, removedCount > 0 {
+            let suffix = removedCount == 1 ? "model is" : "models are"
+            showBanner("Council lineup updated: \(removedCount) \(suffix) no longer available.")
         }
     }
 
@@ -663,13 +674,13 @@ final class ModelCatalogStore: ObservableObject {
         guard !catalogBackedModels.isEmpty else {
             return []
         }
-        let eligibleIDs = Set(chatModels.filter(isCouncilEligible).map(\.id))
+        let eligibleIDs = Set(chatModels.filter(isCouncilEligible).map { Self.normalizedModelID($0.id) })
         guard !eligibleIDs.isEmpty else {
             return []
         }
         var ids: [String] = []
         for group in Self.defaultCouncilCandidateGroups {
-            if let modelID = group.first(where: { eligibleIDs.contains($0) }),
+            if let modelID = group.first(where: { eligibleIDs.contains(Self.normalizedModelID($0)) }),
                !ids.contains(modelID) {
                 ids.append(modelID)
             }
@@ -687,7 +698,8 @@ final class ModelCatalogStore: ObservableObject {
     }
 
     func requestCouncilModelIDs(for requestModel: String) -> [String] {
-        guard requestModel == selectedModel, selectedModelOption?.isIronclawModel != true else {
+        guard Self.normalizedModelID(requestModel) == Self.normalizedModelID(selectedModel),
+              selectedModelOption?.isIronclawModel != true else {
             return []
         }
         var ids = normalizedCouncilModelIDs(councilModelIDs)
@@ -767,13 +779,17 @@ final class ModelCatalogStore: ObservableObject {
 
     func preferredAvailableModel(excluding unavailableModels: Set<String>) -> String? {
         let availableModels = pickerModels.filter { !$0.isExternalModel }
-        let availableIDs = Set(availableModels.map(\.id))
+        let availableIDs = Set(availableModels.map { Self.normalizedModelID($0.id) })
+        let excludedIDs = Set(unavailableModels.map { Self.normalizedModelID($0) })
         let prioritizedIDs = preferredModelIDs + rankedModels(from: availableModels).map(\.id)
 
         return prioritizedIDs.first { modelID in
-            availableIDs.contains(modelID) &&
-                !unavailableModels.contains(modelID)
-        } ?? rankedModels(from: availableModels).first(where: { !unavailableModels.contains($0.id) })?.id
+            let normalizedModelID = Self.normalizedModelID(modelID)
+            return availableIDs.contains(normalizedModelID) &&
+                !excludedIDs.contains(normalizedModelID)
+        } ?? rankedModels(from: availableModels).first(where: {
+            !excludedIDs.contains(Self.normalizedModelID($0.id))
+        })?.id
     }
 
     func rankedModels(from source: [ModelOption]) -> [ModelOption] {
@@ -790,13 +806,14 @@ final class ModelCatalogStore: ObservableObject {
     func normalizedCouncilModelIDs(_ ids: [String]) -> [String] {
         var seen = Set<String>()
         var normalized: [String] = []
-        let eligibleIDs = Set(chatModels.filter(isCouncilEligible).map(\.id))
+        let eligibleIDs = Set(chatModels.filter(isCouncilEligible).map { Self.normalizedModelID($0.id) })
         for modelID in ids {
             let trimmed = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, seen.insert(trimmed.lowercased()).inserted else {
+            let normalizedTrimmed = Self.normalizedModelID(trimmed)
+            guard !trimmed.isEmpty, seen.insert(normalizedTrimmed).inserted else {
                 continue
             }
-            if eligibleIDs.isEmpty || eligibleIDs.contains(trimmed) || canPreserveCouncilModelID(trimmed) {
+            if eligibleIDs.isEmpty || eligibleIDs.contains(normalizedTrimmed) || canPreserveCouncilModelID(trimmed) {
                 normalized.append(trimmed)
             }
             if normalized.count == Self.maxCouncilModels {
@@ -809,7 +826,9 @@ final class ModelCatalogStore: ObservableObject {
     func normalizedCouncilModels(from ids: [String]) -> [ModelOption] {
         let normalizedIDs = normalizedCouncilModelIDs(ids)
         return normalizedIDs.compactMap { modelID in
-            if let model = chatModels.first(where: { $0.id == modelID && isCouncilEligible($0) }) {
+            if let model = chatModels.first(where: {
+                Self.normalizedModelID($0.id) == Self.normalizedModelID(modelID) && isCouncilEligible($0)
+            }) {
                 return model
             }
             guard canPreserveCouncilModelID(modelID) else { return nil }
@@ -875,13 +894,59 @@ final class ModelCatalogStore: ObservableObject {
         if model.isExternalModel {
             return true
         }
-        if model.id == ModelOption.nearPrivateDefaultModelID {
+        if Self.normalizedModelID(model.id) == Self.normalizedModelID(ModelOption.nearPrivateDefaultModelID) {
             return true
         }
         guard let allowedModelIDs else {
             return true
         }
-        return allowedModelIDs.contains(model.id.lowercased())
+        return Self.allowedModelCandidates(for: model.id).contains {
+            allowedModelIDs.contains($0)
+        }
+    }
+
+    private static func normalizeAllowedModelIDs(_ allowedModelIDs: Set<String>?) -> Set<String> {
+        guard let allowedModelIDs else { return Set<String>() }
+        var normalized: Set<String> = []
+        for rawID in allowedModelIDs {
+            let normalizedID = normalizedModelID(rawID)
+            guard !normalizedID.isEmpty else { continue }
+            normalized.insert(normalizedID)
+
+            if normalizedID == normalizedModelID(ModelOption.nearPrivateDefaultModelID) {
+                for alias in canonicalModelAliases(for: ModelOption.nearPrivateDefaultModelID) {
+                    normalized.insert(normalizedModelID(alias))
+                }
+            }
+        }
+        return normalized
+    }
+
+    private static func allowedModelCandidates(for modelID: String) -> Set<String> {
+        var output: Set<String> = [normalizedModelID(modelID)]
+
+        if let underlying = ModelOption(
+            modelID: modelID,
+            publicModel: true,
+            metadata: nil
+        ).nearCloudUnderlyingModelID {
+            output.insert(normalizedModelID(underlying))
+        }
+
+        for alias in canonicalModelAliases(for: modelID) {
+            output.insert(normalizedModelID(alias))
+        }
+
+        let defaultCanonical = canonicalModelID(for: modelID)
+        if !defaultCanonical.isEmpty {
+            output.insert(normalizedModelID(defaultCanonical))
+        }
+
+        return output
+    }
+
+    private static func normalizedModelID(_ raw: String) -> String {
+        raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     private func modelRank(_ model: ModelOption) -> Int {
@@ -1140,10 +1205,22 @@ final class ModelCatalogStore: ObservableObject {
 
     private static func canonicalModelID(for modelID: String) -> String {
         let trimmed = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedModelID(trimmed) == normalizedModelID(Self.defaultModelID) {
+            return Self.defaultModelID
+        }
         if canonicalModelAliases(for: Self.defaultModelID).contains(where: { $0.localizedCaseInsensitiveCompare(trimmed) == .orderedSame }) {
             return Self.defaultModelID
         }
         return trimmed
+    }
+
+    private static func modelIDsEquivalent(_ lhs: String, _ rhs: String) -> Bool {
+        guard !lhs.isEmpty, !rhs.isEmpty else {
+            return false
+        }
+        return Self.model(ModelOption(modelID: lhs, publicModel: true, metadata: nil), matchesCandidateID: rhs) ||
+            Self.model(ModelOption(modelID: rhs, publicModel: true, metadata: nil), matchesCandidateID: lhs) ||
+            Self.normalizedModelID(lhs) == Self.normalizedModelID(rhs)
     }
 
     private static func canonicalModelAliases(for modelID: String) -> [String] {

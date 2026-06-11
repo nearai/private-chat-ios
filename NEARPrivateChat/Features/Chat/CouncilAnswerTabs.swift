@@ -78,6 +78,7 @@ struct CouncilAnswerTabModel {
     let tabs: [CouncilAnswerTab]
     let defaultTabID: String?
     let sources: [WebSearchSource]
+    let sourceAttributions: [String: [String]]
 
     static func build(from messages: [ChatMessage]) -> CouncilAnswerTabModel {
         let synthesis = messages
@@ -99,7 +100,8 @@ struct CouncilAnswerTabModel {
         return CouncilAnswerTabModel(
             tabs: tabs,
             defaultTabID: tabs.first?.id,
-            sources: sources
+            sources: sources,
+            sourceAttributions: sourceAttributions(in: memberMessages)
         )
     }
 
@@ -113,6 +115,23 @@ struct CouncilAnswerTabModel {
             unique.append(source)
         }
         return unique
+    }
+
+    static func sourceAttributions(in messages: [ChatMessage]) -> [String: [String]] {
+        var attributions = [String: [String]]()
+        var seen = [String: Set<String>]()
+        for message in messages {
+            let modelName = message.modelDisplayName
+            for source in message.sources {
+                let key = source.safeURL?.absoluteString ?? source.url
+                if seen[key, default: []].contains(modelName) {
+                    continue
+                }
+                seen[key, default: []].insert(modelName)
+                attributions[key, default: []].append(modelName)
+            }
+        }
+        return attributions
     }
 }
 
@@ -213,7 +232,10 @@ struct CouncilAnswerTabs: View {
                 MessageBubble(message: message, chatStore: chatStore)
             }
         case .sources:
-            CouncilSourcesTabContent(sources: tabModel.sources) { index in
+            CouncilSourcesTabContent(
+                sources: tabModel.sources,
+                sourceAttributions: tabModel.sourceAttributions
+            ) { index in
                 tappedSource = SourceSheetPresentation(index: index, source: tabModel.sources[index])
             }
         }
@@ -235,13 +257,13 @@ private struct CouncilAnswerTabButton: View {
             Text(title)
                 .font(.caption.weight(.semibold))
                 .lineLimit(1)
-                .foregroundStyle(isSelected ? Color.white : Color.brandBlue)
+                .foregroundStyle(isSelected ? Color.white : Color.routeCouncil)
                 .padding(.horizontal, 13)
                 .frame(minHeight: 44)
-                .background(isSelected ? Color.brandBlue : Color.clear, in: Capsule())
+                .background(isSelected ? Color.actionPrimary : Color.clear, in: Capsule())
                 .overlay {
                     Capsule()
-                        .stroke(Color.brandBlue.opacity(isSelected ? 0 : 0.45), lineWidth: 1)
+                        .stroke(Color.routeCouncil.opacity(isSelected ? 0 : 0.45), lineWidth: 1)
                 }
         }
         .buttonStyle(.plain)
@@ -337,13 +359,13 @@ private struct CouncilSynthesisChip: View {
             Text(title)
                 .font(.caption.weight(.semibold))
                 .lineLimit(1)
-                .foregroundStyle(isSelected ? Color.white : Color.brandBlue)
+                .foregroundStyle(isSelected ? Color.white : Color.routeCouncil)
                 .padding(.horizontal, 12)
                 .frame(minHeight: 36)
-                .background(isSelected ? Color.brandBlue : Color.clear, in: Capsule())
+                .background(isSelected ? Color.actionPrimary : Color.clear, in: Capsule())
                 .overlay {
                     Capsule()
-                        .stroke(Color.brandBlue.opacity(isSelected ? 0 : 0.35), lineWidth: 1)
+                        .stroke(Color.routeCouncil.opacity(isSelected ? 0 : 0.35), lineWidth: 1)
                 }
         }
         .buttonStyle(.plain)
@@ -352,15 +374,35 @@ private struct CouncilSynthesisChip: View {
 
 private struct CouncilSourcesTabContent: View {
     let sources: [WebSearchSource]
+    let sourceAttributions: [String: [String]]
     let onSelect: (Int) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             SourceCarousel(sources: sources, onSelect: onSelect)
+            if !attributionLines.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(attributionLines, id: \.source.id) { line in
+                        Text(line.text)
+                            .font(.caption)
+                            .foregroundStyle(Color.textSecondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.appBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var attributionLines: [(source: WebSearchSource, text: String)] {
+        sources.compactMap { source in
+            let key = source.safeURL?.absoluteString ?? source.url
+            guard let models = sourceAttributions[key], !models.isEmpty else { return nil }
+            return (source, "\(source.host) · cited by \(models.joined(separator: ", "))")
+        }
     }
 }
 

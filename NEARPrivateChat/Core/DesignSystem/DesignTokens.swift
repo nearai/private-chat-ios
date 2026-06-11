@@ -80,6 +80,7 @@ extension Color {
     static let googleRed = Color(red: 0.918, green: 0.263, blue: 0.208)
     static let googleYellow = Color(red: 0.984, green: 0.737, blue: 0.024)
     static let googleGreen = Color(red: 0.204, green: 0.659, blue: 0.325)
+    static let brandAccent = Color.brandBlue
     static let actionPrimary = Color.brandBlue
     static let primaryAction = Color.actionPrimary
     static let actionTint = Color.actionPrimary.opacity(0.12)
@@ -101,6 +102,14 @@ extension Color {
     static let failedColor = Color.proofMismatch
     static let routeCloud = Color.textSecondary
     static let routePrivate = Color.proofVerified
+    static let routeExternal = Color.textTertiary
+    static let routeAgent = Color.actionPrimaryText
+    static let routeCouncil = Color.actionPrimaryText
+    static let metadataAccent = Color.textSecondary
+    static let decorativeAccent = Color.brandAccent
+    static let controlAccent = Color.actionPrimary
+    static let sourceAccent = Color.actionPrimaryText
+    static let statusAvailable = Color.proofVerified
     static let selectionSubtle = Color.appSelection
     static let intensitySurfaceBase = Color.appBackground
     static let intensityRowPlain = Color.clear

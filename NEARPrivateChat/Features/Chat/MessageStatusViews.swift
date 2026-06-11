@@ -62,7 +62,7 @@ struct ResponseVariantPicker: View {
             Image(systemName: symbolName)
                 .font(.caption.weight(.bold))
                 .frame(width: 24, height: 24)
-                .foregroundStyle(responseID == nil ? Color.secondary.opacity(0.45) : Color.brandBlue)
+                .foregroundStyle(responseID == nil ? Color.secondary.opacity(0.45) : Color.brandAccent)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)

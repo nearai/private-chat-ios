@@ -468,6 +468,85 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(results.map(\.messageID), ["complete"])
     }
 
+    func testCouncilStreamServiceClassifiesFailureKinds() {
+        XCTAssertEqual(
+            CouncilStreamService.errorKind(for: APIError.status(429, "HTTP 429 - too many requests")),
+            .rateLimit
+        )
+        XCTAssertEqual(
+            CouncilStreamService.errorKind(for: APIError.status(401, "HTTP 401 - missing authorization header")),
+            .authFailure
+        )
+        XCTAssertEqual(
+            CouncilStreamService.errorKind(for: URLError(.timedOut)),
+            .timeout
+        )
+        XCTAssertEqual(
+            CouncilStreamService.statusText(for: .authFailure),
+            "Auth failed"
+        )
+    }
+
+    @MainActor
+    func testCouncilLineupPrunesUnavailableModelsWithNotice() {
+        let available = ModelOption(modelID: "model-a", publicModel: true, metadata: nil)
+        let catalog = ModelCatalogStore(
+            models: [available],
+            preferredModelIDs: [available.id],
+            selectedModel: available.id,
+            councilModelIDs: [available.id, "retired/NoLongerAvailable"]
+        )
+        var banners: [String] = []
+        catalog.bannerHandler = { banners.append($0) }
+
+        catalog.normalizeCouncilSelection(shouldShowBanner: true)
+
+        XCTAssertEqual(catalog.councilModelIDs, [available.id])
+        XCTAssertEqual(banners, ["Council lineup updated: 1 model is no longer available."])
+    }
+
+    func testCouncilRoomMarksFailedSynthesisForInlineRetry() {
+        let batchID = "batch-retry"
+        let answerA = ChatMessage(
+            id: "answer-a",
+            role: .assistant,
+            text: "Ship it.",
+            model: "model-a",
+            createdAt: Date(timeIntervalSince1970: 1_000),
+            status: "completed",
+            responseID: nil,
+            councilBatchID: batchID,
+            isStreaming: false
+        )
+        let answerB = ChatMessage(
+            id: "answer-b",
+            role: .assistant,
+            text: "Wait for proof.",
+            model: "model-b",
+            createdAt: Date(timeIntervalSince1970: 1_001),
+            status: "completed",
+            responseID: nil,
+            councilBatchID: batchID,
+            isStreaming: false
+        )
+        let failedSynthesis = ChatMessage(
+            id: "synthesis-failed",
+            role: .assistant,
+            text: "The model took too long to respond. Tap “Synthesize again” to retry.",
+            model: ModelOption.llmCouncilSynthesisModelID,
+            createdAt: Date(timeIntervalSince1970: 1_002),
+            status: "failed",
+            responseID: nil,
+            councilBatchID: batchID,
+            isStreaming: false
+        )
+
+        let room = CouncilRoomModel.from(councilMessages: [answerA, answerB, failedSynthesis])
+
+        XCTAssertEqual(room.synthesis?.fullText, failedSynthesis.text)
+        XCTAssertEqual(room.synthesis?.isFailed, true)
+    }
+
     func testCouncilRoomUsesLatestSynthesisAndHidesSynthesisRows() {
         let batchID = "batch"
         let now = Date()
@@ -521,6 +600,35 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(room.messages.map(\.id), ["a"])
         XCTAssertTrue(room.synthesis?.fullText.contains("New synthesis") == true)
         XCTAssertFalse(room.synthesis?.fullText.contains("Old synthesis") == true)
+    }
+
+    func testCouncilRoomPreservesPerMemberSources() {
+        let batchID = "batch-sources"
+        let source = WebSearchSource(
+            type: "web",
+            url: "https://example.com/report",
+            title: "Report",
+            publishedAt: nil,
+            snippet: nil
+        )
+        let answer = ChatMessage(
+            id: "answer",
+            role: .assistant,
+            text: "The report supports the launch.",
+            model: "model-a",
+            createdAt: Date(timeIntervalSince1970: 1_000),
+            status: "completed",
+            responseID: "response",
+            councilBatchID: batchID,
+            isStreaming: false,
+            searchQuery: "launch report",
+            sources: [source]
+        )
+
+        let room = CouncilRoomModel.from(councilMessages: [answer])
+
+        XCTAssertEqual(room.messages.first?.searchQuery, "launch report")
+        XCTAssertEqual(room.messages.first?.sources, [source])
     }
 
     func testStarterPresetPreviewPlanUsesCurrentCouncilDefaults() {

@@ -16,6 +16,8 @@ final class AgentStore: ObservableObject {
     @Published var isTestingIronclawWorkstation = false
     @Published var pendingHostedHandoffPreflight: HostedIronclawHandoffPreflight?
 
+    static let verifiedRebornToolNames = ["shell", "git"]
+
     var bannerHandler: ((String) -> Void)?
     var routeInvalidatedHandler: (() -> Void)?
     var hostedRouteDisabledHandler: (() -> Void)?
@@ -161,6 +163,9 @@ final class AgentStore: ObservableObject {
             ironclawStatusText = message
             ironclawLastVerifiedAt = Date()
             await refreshIronclawTools()
+            if ironclawToolNames.isEmpty {
+                ironclawToolNames = Self.verifiedRebornToolNames
+            }
             showBanner("Hosted IronClaw tools checked.")
         } catch {
             let message = Self.displayFailureMessage(error.localizedDescription)
@@ -179,8 +184,11 @@ final class AgentStore: ObservableObject {
                 settings: ironclawSettings,
                 authToken: loadIronclawAuthToken()
             )
+            if ironclawToolNames.isEmpty, ironclawLastVerifiedAt != nil {
+                ironclawToolNames = Self.verifiedRebornToolNames
+            }
         } catch {
-            ironclawToolNames = []
+            ironclawToolNames = ironclawLastVerifiedAt == nil ? [] : Self.verifiedRebornToolNames
         }
     }
 

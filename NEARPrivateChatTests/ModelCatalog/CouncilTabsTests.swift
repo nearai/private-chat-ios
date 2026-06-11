@@ -95,6 +95,34 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(model.tabs.map(\.label), ["Synthesis", "ModelA", "ModelB", "Sources"])
         XCTAssertEqual(model.defaultTabID, "synthesis")
         XCTAssertEqual(model.sources.map(\.url), ["https://example.com/a", "https://example.com/b"])
+        XCTAssertEqual(model.sourceAttributions["https://example.com/a"], ["ModelA"])
+        XCTAssertEqual(model.sourceAttributions["https://example.com/b"], ["ModelB"])
+    }
+
+    func testCouncilAnswerTabModelDedupesSourceAttributionsPerModel() {
+        let createdAt = Date(timeIntervalSince1970: 1_000)
+        let source = WebSearchSource(type: "web", url: "https://example.com/a", title: "Source A", publishedAt: nil, snippet: nil)
+        let messages = [
+            councilMessage(
+                id: "model-a",
+                text: "A",
+                model: "ModelA",
+                createdAt: createdAt,
+                sources: [source, source]
+            ),
+            councilMessage(
+                id: "model-b",
+                text: "B",
+                model: "ModelB",
+                createdAt: createdAt.addingTimeInterval(1),
+                sources: [source]
+            )
+        ]
+
+        let model = CouncilAnswerTabModel.build(from: messages)
+
+        XCTAssertEqual(model.sources.map(\.url), ["https://example.com/a"])
+        XCTAssertEqual(model.sourceAttributions["https://example.com/a"], ["ModelA", "ModelB"])
     }
 
     func testCouncilAnswerTabModelDefaultsToFirstMemberWithoutSynthesis() {

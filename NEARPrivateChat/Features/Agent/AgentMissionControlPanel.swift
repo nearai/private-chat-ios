@@ -39,7 +39,7 @@ struct AgentMissionControlPanel: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(.white.opacity(0.11), lineWidth: 1)
             }
-            .shadow(color: Color.brandBlue.opacity(0.14), radius: 18, y: 8)
+            .shadow(color: Color.brandAccent.opacity(0.14), radius: 18, y: 8)
 
         }
         .frame(maxWidth: 520, alignment: .leading)
@@ -160,9 +160,9 @@ struct AgentMissionControlPanel: View {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: "sparkles.rectangle.stack")
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(Color.brandBlue)
+                            .foregroundStyle(Color.brandAccent)
                             .frame(width: 28, height: 28)
-                            .background(Color.brandBlue.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .background(Color.brandAccent.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                         VStack(alignment: .leading, spacing: 3) {
                             Text(setupMissionSuggestion.title)
@@ -390,9 +390,8 @@ struct AgentMissionControlPanel: View {
 
     private var toolbeltCapabilities: [ToolbeltCapability] {
         let tools = Set(agentStore.ironclawToolNames.map { $0.lowercased() })
-        let workstationFallback = agentStore.ironclawRemoteWorkstationAvailable && tools.isEmpty
         func has(_ names: String...) -> Bool {
-            workstationFallback || names.contains { tools.contains($0) }
+            names.contains { tools.contains($0) }
         }
         return [
             ToolbeltCapability(title: "Shell", symbolName: "terminal", isAvailable: has("shell")),

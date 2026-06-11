@@ -43,6 +43,54 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(AppSpacing.xxxl, CGFloat(32))
     }
 
+    func testActionPrimarySupportsWhiteButtonTextContrast() {
+        let ratio = Color.brandBlueToken.contrastRatioAgainstWhite()
+        XCTAssertGreaterThanOrEqual(
+            ratio,
+            4.5,
+            "actionPrimary/brandBlue must keep white CTA text at WCAG AA contrast."
+        )
+    }
+
+    func testProductCodeUsesSemanticColorAliasesInsteadOfRawBrandBlue() throws {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let appRoot = repoRoot.appendingPathComponent("NEARPrivateChat")
+        let allowedFile = appRoot
+            .appendingPathComponent("Core")
+            .appendingPathComponent("DesignSystem")
+            .appendingPathComponent("DesignTokens.swift")
+            .standardizedFileURL
+        var leaks: [String] = []
+
+        guard let enumerator = FileManager.default.enumerator(
+            at: appRoot,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            XCTFail("Unable to enumerate app sources.")
+            return
+        }
+
+        for case let fileURL as URL in enumerator {
+            guard fileURL.pathExtension == "swift",
+                  fileURL.standardizedFileURL != allowedFile else {
+                continue
+            }
+            let text = (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
+            if text.contains("Color.brandBlue") || text.contains(".brandBlue") {
+                leaks.append(fileURL.path)
+            }
+        }
+
+        XCTAssertTrue(
+            leaks.isEmpty,
+            "Use semantic aliases such as Color.brandAccent, Color.controlAccent, Color.routeCloud, or Color.sourceAccent outside DesignTokens.swift:\n\(leaks.joined(separator: "\n"))"
+        )
+    }
+
     #if canImport(UIKit)
     private func resolvedRGBA(from color: Color) throws -> (red: Double, green: Double, blue: Double) {
         let traits = UITraitCollection(userInterfaceStyle: .light)

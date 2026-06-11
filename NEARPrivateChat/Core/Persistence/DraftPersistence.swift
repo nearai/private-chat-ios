@@ -5,6 +5,34 @@ struct DraftPersistence {
         var text: String
         var attachments: [ChatAttachment]
         var pendingLargePasteTexts: [String: String]
+        var pendingDocumentTexts: [String: String]
+
+        init(
+            text: String,
+            attachments: [ChatAttachment],
+            pendingLargePasteTexts: [String: String],
+            pendingDocumentTexts: [String: String] = [:]
+        ) {
+            self.text = text
+            self.attachments = attachments
+            self.pendingLargePasteTexts = pendingLargePasteTexts
+            self.pendingDocumentTexts = pendingDocumentTexts
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case text
+            case attachments
+            case pendingLargePasteTexts
+            case pendingDocumentTexts
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            text = try container.decode(String.self, forKey: .text)
+            attachments = try container.decode([ChatAttachment].self, forKey: .attachments)
+            pendingLargePasteTexts = try container.decodeIfPresent([String: String].self, forKey: .pendingLargePasteTexts) ?? [:]
+            pendingDocumentTexts = try container.decodeIfPresent([String: String].self, forKey: .pendingDocumentTexts) ?? [:]
+        }
 
         var isEmpty: Bool {
             text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.isEmpty
@@ -13,14 +41,18 @@ struct DraftPersistence {
         var sanitized: DraftState {
             let attachmentIDs = Set(attachments.map(\.id))
             let filteredLargePastes = pendingLargePasteTexts.filter { attachmentIDs.contains($0.key) }
+            let filteredDocumentTexts = pendingDocumentTexts.filter { attachmentIDs.contains($0.key) }
             let filteredAttachments = attachments.filter { attachment in
-                guard !attachment.isLocalPendingSharedFile else { return false }
+                if attachment.isLocalPendingSharedFile {
+                    return filteredDocumentTexts[attachment.id] != nil
+                }
                 return !attachment.isLocalPendingText || filteredLargePastes[attachment.id] != nil
             }
             return DraftState(
                 text: text,
                 attachments: filteredAttachments,
-                pendingLargePasteTexts: filteredLargePastes
+                pendingLargePasteTexts: filteredLargePastes,
+                pendingDocumentTexts: filteredDocumentTexts
             )
         }
     }
@@ -55,7 +87,8 @@ struct DraftPersistence {
                 legacyDefaultsKey: draftDefaultsKey(for: scopeID)
             ),
             attachments: [],
-            pendingLargePasteTexts: [:]
+            pendingLargePasteTexts: [:],
+            pendingDocumentTexts: [:]
         )
     }
 

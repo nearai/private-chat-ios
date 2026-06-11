@@ -42,6 +42,8 @@ struct CouncilMessageVM: Identifiable {
     let participant: CouncilParticipant
     let text: String
     let isStreaming: Bool
+    let searchQuery: String?
+    let sources: [WebSearchSource]
 }
 
 struct CouncilSynthesisVM {
@@ -49,6 +51,7 @@ struct CouncilSynthesisVM {
     let disagreement: String?
     let nextStep: String?
     let fullText: String
+    let isFailed: Bool
 }
 
 enum CouncilTarget: Hashable {
@@ -107,13 +110,20 @@ struct CouncilRoomModel {
                     id: message.id,
                     participant: participant,
                     text: message.text.trimmingCharacters(in: .whitespacesAndNewlines),
-                    isStreaming: message.isStreaming
+                    isStreaming: message.isStreaming,
+                    searchQuery: message.searchQuery,
+                    sources: message.sources
                 )
             )
         }
 
         let subtitle = subtitle(for: participants, messages: rows)
-        let synthesis = synthesisMessage.flatMap { synthesisModel(from: $0.text) }
+        let synthesis = synthesisMessage.flatMap { message in
+            synthesisModel(
+                from: message.text,
+                isFailed: message.status.lowercased() == "failed"
+            )
+        }
 
         return CouncilRoomModel(
             title: "Council",
@@ -142,7 +152,7 @@ struct CouncilRoomModel {
 
     private static func stableColor(for modelID: String) -> Color {
         let palette: [Color] = [
-            .brandBlue,
+            .actionPrimary,
             .proofVerified,
             .proofStale,
             .proofMismatch,
@@ -208,7 +218,7 @@ struct CouncilRoomModel {
         return parts.isEmpty ? "No council answers yet" : parts.joined(separator: " · ")
     }
 
-    private static func synthesisModel(from text: String) -> CouncilSynthesisVM? {
+    private static func synthesisModel(from text: String, isFailed: Bool = false) -> CouncilSynthesisVM? {
         let fullText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !fullText.isEmpty else { return nil }
 
@@ -225,7 +235,8 @@ struct CouncilRoomModel {
                 in: fullText,
                 labels: ["recommended next step", "next step", "recommendation"]
             ),
-            fullText: fullText
+            fullText: fullText,
+            isFailed: isFailed
         )
     }
 

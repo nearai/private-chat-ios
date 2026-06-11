@@ -25,7 +25,7 @@ struct AppShellView: View {
                     .platformInlineNavigationTitle()
             }
         }
-        .tint(.brandBlue)
+        .tint(.actionPrimary)
         .onChange(of: conversationStore.openSelectedConversationToken) { _, token in
             if token != nil {
                 showingCompactChat = true

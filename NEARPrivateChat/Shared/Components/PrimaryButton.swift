@@ -34,14 +34,18 @@ struct PrimaryButton<Label: View>: View {
         Button(action: action) {
             label()
                 .font(.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(isEnabled ? Color.white : Color.white.opacity(0.62))
                 .frame(maxWidth: .infinity)
                 .frame(height: size.height)
-                .background(Color.actionPrimary, in: RoundedRectangle.app(AppRadius.control))
+                .background(buttonBackground, in: RoundedRectangle.app(AppRadius.control))
         }
         .buttonStyle(.plain)
-        .opacity(isEnabled ? 1 : 0.5)
+        .allowsHitTesting(isEnabled)
         .accessibilityAddTraits(.isButton)
+    }
+
+    private var buttonBackground: Color {
+        isEnabled ? .actionPrimary : .actionPrimary.opacity(0.42)
     }
 }
 
@@ -66,7 +70,7 @@ struct PrimaryButtonTitleLabel: View {
         HStack(spacing: AppSpacing.sm) {
             if let systemImage {
                 Image(systemName: systemImage)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.body.weight(.semibold))
             }
             Text(title)
         }

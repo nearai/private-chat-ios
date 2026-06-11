@@ -9,7 +9,7 @@ struct SetupInfoCard: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: symbolName)
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(Color.brandBlue)
+                .foregroundStyle(Color.brandAccent)
                 .frame(width: 36, height: 36)
                 .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -48,7 +48,7 @@ struct SetupCapabilityDisclosureLabel: View {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: experienceMode == .power ? "bolt.circle.fill" : "slider.horizontal.3")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(Color.brandBlue)
+                    .foregroundStyle(Color.brandAccent)
                     .frame(width: 36, height: 36)
                     .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -141,7 +141,7 @@ struct SetupGoalField: View {
                 .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.appBorder : Color.brandBlue.opacity(0.14), lineWidth: 1)
+                        .stroke(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.appBorder : Color.brandAccent.opacity(0.14), lineWidth: 1)
                 }
                 .onChange(of: text) { _, value in
                     if value.count > 280 {
@@ -247,7 +247,7 @@ struct SetupChoiceRow: View {
             HStack(spacing: 12) {
                 Image(systemName: symbolName)
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(isSelected ? Color.brandBlue : .secondary)
+                    .foregroundStyle(isSelected ? Color.brandAccent : .secondary)
                     .frame(width: 40, height: 40)
                     .background(isSelected ? Color.appSymbolBlueBackground : Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 VStack(alignment: .leading, spacing: 3) {
@@ -262,13 +262,13 @@ struct SetupChoiceRow: View {
                 Spacer(minLength: 0)
                 Image(systemName: selectionSymbolName)
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(isSelected ? Color.brandBlue : Color.secondary.opacity(0.35))
+                    .foregroundStyle(isSelected ? Color.brandAccent : Color.secondary.opacity(0.35))
             }
             .padding(12)
             .background(isSelected ? Color.appSelection : Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(isSelected ? Color.brandBlue.opacity(0.14) : Color.appBorder, lineWidth: 1)
+                    .stroke(isSelected ? Color.brandAccent.opacity(0.14) : Color.appBorder, lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
@@ -322,7 +322,7 @@ struct SetupToggleRow: View {
             HStack(spacing: 12) {
                 Image(systemName: symbolName)
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(isOn ? Color.brandBlue : .secondary)
+                    .foregroundStyle(isOn ? Color.brandAccent : .secondary)
                     .frame(width: 40, height: 40)
                     .background(isOn ? Color.appSymbolBlueBackground : Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 VStack(alignment: .leading, spacing: 3) {
@@ -337,7 +337,7 @@ struct SetupToggleRow: View {
             }
         }
         .toggleStyle(.switch)
-        .tint(.brandBlue)
+        .tint(.actionPrimary)
         .padding(12)
         .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {

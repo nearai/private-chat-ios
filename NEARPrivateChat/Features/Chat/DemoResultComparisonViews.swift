@@ -30,7 +30,7 @@ struct DemoCouncilComparisonView: View {
                                 title: "Synthesis",
                                 subtitle: "Combined answer with visible disagreement",
                                 symbolName: "sparkles",
-                                tint: .brandBlue,
+                                tint: .actionPrimary,
                                 text: synthesis.text,
                                 sources: synthesis.sources,
                                 searchQuery: synthesis.searchQuery
@@ -103,9 +103,9 @@ struct DemoCouncilComparisonView: View {
         switch message.model {
         case ChatStore.defaultModelID:
             return "Private model answer"
-        case "near-cloud/anthropic/claude-opus-4-7":
+        case "near-cloud/anthropic/claude-sonnet-4-6":
             return "NEAR AI Cloud answer"
-        case "near-cloud/openai/gpt-5.5":
+        case "near-cloud/Qwen/Qwen3.6-35B-A3B-FP8":
             return "NEAR AI Cloud answer"
         default:
             return "Raw model view"
@@ -153,7 +153,7 @@ struct DemoIronClawResultView: View {
                                 title: "Hosted IronClaw",
                                 subtitle: "Completed agent output returned to chat",
                                 symbolName: "terminal",
-                                tint: .brandBlue,
+                                tint: .actionPrimary,
                                 text: resultMessage.text,
                                 sources: resultMessage.sources,
                                 searchQuery: resultMessage.searchQuery

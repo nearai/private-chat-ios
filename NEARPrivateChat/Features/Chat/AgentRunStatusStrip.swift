@@ -52,10 +52,10 @@ struct AgentRunStatusStrip: View {
                     Button(action: onRetry) {
                         Label("Retry", systemImage: "arrow.clockwise")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.brandBlue)
+                            .foregroundStyle(Color.brandAccent)
                             .padding(.horizontal, 9)
                             .frame(height: 28)
-                            .background(Color.brandBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .background(Color.brandAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Retry IronClaw run")
@@ -118,7 +118,7 @@ struct AgentRunStatusStrip: View {
     private func tintColor(isStale: Bool) -> Color {
         if message.status == "failed" { return .red }
         if isStale { return .orange }
-        return Color.brandBlue
+        return Color.brandAccent
     }
 
     private func elapsedText(now: Date) -> String {

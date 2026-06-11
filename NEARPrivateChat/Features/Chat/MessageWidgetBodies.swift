@@ -19,9 +19,8 @@ struct WidgetShell<Content: View>: View {
                         Text(title)
                             .font(.caption.weight(.medium))
                             .foregroundStyle(Color.textSecondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .minimumScaleFactor(0.8)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 0)
                     if let time {
@@ -48,7 +47,8 @@ struct WidgetShell<Content: View>: View {
                         Text(followUpPlaceholder ?? "Ask about this…")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 0)
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 17))
@@ -56,7 +56,7 @@ struct WidgetShell<Content: View>: View {
                     }
                     .padding(.leading, 14)
                     .padding(.trailing, 8)
-                    .frame(height: 38)
+                    .frame(minHeight: 38)
                     .background(Color.appSecondaryBackground, in: Capsule())
                 }
                 .buttonStyle(.plain)
@@ -92,8 +92,7 @@ struct WidgetChartBody: View {
                         Text(value)
                             .font(.system(.title2, design: .monospaced).weight(.bold))
                             .foregroundStyle(.primary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Spacer(minLength: 0)
@@ -102,8 +101,7 @@ struct WidgetChartBody: View {
                         Text(delta)
                             .font(.system(.subheadline, design: .monospaced).weight(.medium))
                             .foregroundStyle(widgetTrendColor(chart.trend))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     if let timeframe = chart.timeframe {
                         Text(timeframe)
@@ -158,14 +156,12 @@ struct WidgetMetricBody: View {
             Text(metric.value)
                 .font(.system(.title, design: .monospaced).weight(.bold))
                 .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
+                .fixedSize(horizontal: false, vertical: true)
             if let delta = metric.delta {
                 Text(delta)
                     .font(.system(.subheadline, design: .monospaced).weight(.medium))
                     .foregroundStyle(widgetTrendColor(metric.trend))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.7)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let caption = metric.caption {
                 Text(caption)
@@ -324,4 +320,3 @@ struct WidgetActionPlanBody: View {
         }
     }
 }
-

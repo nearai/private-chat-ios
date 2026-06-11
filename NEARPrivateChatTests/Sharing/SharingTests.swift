@@ -292,7 +292,7 @@ extension PrivateChatCoreTests {
     }
 
     @MainActor
-    func testConsumePendingSharedItemStagesDraftOnce() throws {
+    func testConsumePendingSharedItemStagesDraftOnce() async throws {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("pending-share-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: fileURL) }
@@ -303,16 +303,18 @@ extension PrivateChatCoreTests {
         )
 
         let store = ChatStore(api: PrivateChatAPI(configuration: .production))
-        XCTAssertTrue(store.consumePendingSharedItem(fileURL: fileURL))
+        let consumed = await store.consumePendingSharedItem(fileURL: fileURL)
+        XCTAssertTrue(consumed)
         XCTAssertEqual(store.draft, "https://near.org")
 
         // Consumed: the file is gone and a second call is a no-op.
         XCTAssertNil(PendingShareStore.read(from: fileURL))
-        XCTAssertFalse(store.consumePendingSharedItem(fileURL: fileURL))
+        let secondConsume = await store.consumePendingSharedItem(fileURL: fileURL)
+        XCTAssertFalse(secondConsume)
     }
 
     @MainActor
-    func testConsumePendingSharedItemIgnoresEmptyText() throws {
+    func testConsumePendingSharedItemIgnoresEmptyText() async throws {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("pending-share-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: fileURL) }
@@ -321,7 +323,8 @@ extension PrivateChatCoreTests {
         XCTAssertNil(PendingShareStore.read(from: fileURL))
 
         let store = ChatStore(api: PrivateChatAPI(configuration: .production))
-        XCTAssertFalse(store.consumePendingSharedItem(fileURL: fileURL))
+        let consumed = await store.consumePendingSharedItem(fileURL: fileURL)
+        XCTAssertFalse(consumed)
         XCTAssertEqual(store.draft, "")
     }
 }

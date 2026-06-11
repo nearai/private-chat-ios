@@ -129,7 +129,7 @@ final class AccountStore: ObservableObject {
             apply(remoteSettings: response.settings)
         } catch {
             if showErrors {
-                showBanner(error.localizedDescription)
+                showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
             }
         }
     }
@@ -156,7 +156,7 @@ final class AccountStore: ObservableObject {
             self.advancedModelParams = sanitizedParams
             showBanner("Account preferences saved.")
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -176,7 +176,7 @@ final class AccountStore: ObservableObject {
             modelCatalogStore.ensureSelectedModelIsAvailable(shouldShowBanner: false)
         } catch {
             if showErrors {
-                showBanner("Billing unavailable: \(error.localizedDescription)")
+                showBanner("Billing unavailable: \(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))")
             }
         }
     }
@@ -191,7 +191,7 @@ final class AccountStore: ObservableObject {
             await conversationsRefreshHandler?()
             showBanner(summary.bannerMessage)
         } catch {
-            showBanner(Self.displayFailureMessage(error.localizedDescription))
+            showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -208,7 +208,7 @@ final class AccountStore: ObservableObject {
             routeInvalidatedHandler?()
             showBanner("NEAR AI Cloud key saved.")
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -239,7 +239,7 @@ final class AccountStore: ObservableObject {
             showBanner("Cloud auto-connect is not available yet. Open Cloud, create a key, then paste it here.")
             return false
         } catch {
-            showBanner("Cloud auto-connect failed: \(Self.displayFailureMessage(error.localizedDescription))")
+            showBanner("Cloud auto-connect failed: \(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))")
             return false
         }
     }
@@ -264,7 +264,7 @@ final class AccountStore: ObservableObject {
             showBanner(routeModels.isEmpty ? "NEAR AI Cloud connected, but no models were returned." : "NEAR AI Cloud connected. \(routeModels.count) models ready.")
             return true
         } catch {
-            showBanner("NEAR AI Cloud key was not saved: \(Self.displayFailureMessage(error.localizedDescription))")
+            showBanner("NEAR AI Cloud key was not saved: \(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))")
             return false
         }
     }
@@ -311,7 +311,7 @@ final class AccountStore: ObservableObject {
         } catch {
             updateDiagnostic(
                 title: "Model catalog",
-                detail: "Private API model fetch failed: \(Self.displayFailureMessage(error.localizedDescription))",
+                detail: "Private API model fetch failed: \(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))",
                 state: .failed
             )
         }
@@ -326,7 +326,7 @@ final class AccountStore: ObservableObject {
         } catch {
             updateDiagnostic(
                 title: "Web grounding",
-                detail: "Search failed: \(Self.displayFailureMessage(error.localizedDescription))",
+                detail: "Search failed: \(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))",
                 state: .failed
             )
         }
@@ -355,7 +355,7 @@ final class AccountStore: ObservableObject {
             updateDiagnostic(title: "Agent connection", detail: message, state: .passed)
             bridgePassed = true
         } catch {
-            let message = Self.displayFailureMessage(error.localizedDescription)
+            let message = ErrorMessageMapper.displayFailureMessage(error.localizedDescription)
             agentStore.applyConnectionDiagnosticStatus(message)
             updateDiagnostic(title: "Agent connection", detail: message, state: .failed)
         }
@@ -376,7 +376,7 @@ final class AccountStore: ObservableObject {
             agentStore.applyWorkstationDiagnosticSuccess(message)
             updateDiagnostic(title: "Hosted tools", detail: message, state: message.contains("checked") ? .passed : .warning)
         } catch {
-            let message = Self.displayFailureMessage(error.localizedDescription)
+            let message = ErrorMessageMapper.displayFailureMessage(error.localizedDescription)
             agentStore.applyConnectionDiagnosticStatus(message)
             updateDiagnostic(title: "Hosted tools", detail: message, state: .failed)
         }
@@ -435,12 +435,4 @@ final class AccountStore: ObservableObject {
         bannerHandler?(message)
     }
 
-    private static func displayFailureMessage(_ message: String) -> String {
-        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.localizedCaseInsensitiveContains("missing authorization header") ||
-            trimmed.localizedCaseInsensitiveContains("invalid or expired authentication token") {
-            return "Authentication is missing or expired. Sign in again, then retry."
-        }
-        return trimmed.isEmpty ? "Request failed." : trimmed
-    }
 }

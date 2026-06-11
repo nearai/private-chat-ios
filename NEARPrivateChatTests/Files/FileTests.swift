@@ -149,6 +149,97 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(loaded.pendingLargePasteTexts, [largePasteAttachment.id: "large text"])
     }
 
+    func testDraftPersistenceRoundTripsPendingDocumentTexts() {
+        let accountID = "draft-doc-text-\(UUID().uuidString)"
+        let persistence = DraftPersistence(accountID: accountID)
+        let scopeID = "project:documents"
+        defer { persistence.remove(scopeID: scopeID) }
+
+        let remoteAttachment = ChatAttachment(
+            id: "file-doc-text",
+            name: "supplements-table-text.txt",
+            kind: "table_text",
+            bytes: 42
+        )
+        let saved = persistence.save(
+            DraftPersistence.DraftState(
+                text: "Summarize this",
+                attachments: [remoteAttachment],
+                pendingLargePasteTexts: [:],
+                pendingDocumentTexts: [
+                    remoteAttachment.id: "Extracted table rows from supplements.csv:\nRow 1: Magnesium | 200mg",
+                    "orphaned-doc-text": "Should be dropped"
+                ]
+            ),
+            scopeID: scopeID
+        )
+
+        XCTAssertTrue(saved)
+        let loaded = persistence.load(scopeID: scopeID)
+        XCTAssertEqual(loaded.attachments.map(\.id), [remoteAttachment.id])
+        XCTAssertEqual(
+            loaded.pendingDocumentTexts,
+            [remoteAttachment.id: "Extracted table rows from supplements.csv:\nRow 1: Magnesium | 200mg"]
+        )
+    }
+
+    func testDraftPersistenceKeepsPendingSharedFileWhenExtractedTextExists() {
+        let accountID = "draft-shared-doc-\(UUID().uuidString)"
+        let persistence = DraftPersistence(accountID: accountID)
+        let scopeID = "home"
+        defer { persistence.remove(scopeID: scopeID) }
+
+        let sharedAttachment = ChatAttachment(
+            id: "shared-file-doc",
+            name: "brief.pdf",
+            kind: ChatAttachment.pendingSharedFileKind,
+            bytes: 128
+        )
+        XCTAssertTrue(persistence.save(
+            DraftPersistence.DraftState(
+                text: "Summarize this",
+                attachments: [sharedAttachment],
+                pendingLargePasteTexts: [:],
+                pendingDocumentTexts: [sharedAttachment.id: "Extracted PDF text"]
+            ),
+            scopeID: scopeID
+        ))
+
+        let loaded = persistence.load(scopeID: scopeID)
+        XCTAssertEqual(loaded.attachments.map(\.id), [sharedAttachment.id])
+        XCTAssertEqual(loaded.pendingDocumentTexts[sharedAttachment.id], "Extracted PDF text")
+    }
+
+    @MainActor
+    func testPendingSharedExtractedTextUploadsAfterRelaunch() async throws {
+        let store = AttachmentStagingStore()
+        let attachment = ChatAttachment(
+            id: "shared-file-table",
+            name: "supplements.csv",
+            kind: ChatAttachment.pendingSharedFileKind,
+            bytes: 128
+        )
+        store.replacePendingAttachments([attachment])
+        store.stageDocumentText(
+            "Extracted table rows from supplements.csv:\nRow 1: Magnesium | 200mg",
+            for: attachment.id
+        )
+
+        let result = try await store.resolvePromptAttachmentsForSend(
+            [attachment],
+            fileService: FileService(fileAPI: FileAPIFake())
+        )
+
+        XCTAssertEqual(result.attachments.count, 1)
+        XCTAssertEqual(result.attachments[0].id, "uploaded-text")
+        XCTAssertEqual(result.attachments[0].name, "supplements-table-text.txt")
+        XCTAssertEqual(result.attachments[0].kind, "table_text")
+        XCTAssertEqual(
+            store.documentText(for: "uploaded-text"),
+            "Extracted table rows from supplements.csv:\nRow 1: Magnesium | 200mg"
+        )
+    }
+
     func testFileStoreAttachmentLimitsAreExplicitAndReusable() {
         XCTAssertEqual(
             FileStore.promptAttachmentLimit(
@@ -764,7 +855,7 @@ extension PrivateChatCoreTests {
     }
 
     @MainActor
-    func testConsumePendingSharedItemStagesSharedFilesAsAttachments() throws {
+    func testConsumePendingSharedItemStagesSharedFilesAsAttachments() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("pending-share-\(UUID().uuidString)", isDirectory: true)
         let fileURL = directory.appendingPathComponent(BriefingSharedStore.pendingShareFileName)
@@ -790,11 +881,17 @@ extension PrivateChatCoreTests {
         XCTAssertNotNil(PendingShareStore.read(from: fileURL))
 
         let store = ChatStore(api: PrivateChatAPI(configuration: .production))
-        XCTAssertTrue(store.consumePendingSharedItem(fileURL: fileURL))
+        let consumed = await store.consumePendingSharedItem(fileURL: fileURL)
+        XCTAssertTrue(consumed)
         XCTAssertEqual(store.draft, "Turn these shared files into useful actions I can approve.")
         XCTAssertEqual(store.pendingAttachments.count, 1)
         XCTAssertEqual(store.pendingAttachments.first?.name, "supplements.csv")
         XCTAssertEqual(store.pendingAttachments.first?.kind, ChatAttachment.pendingSharedFileKind)
+        let stagedAttachment = try XCTUnwrap(store.pendingAttachments.first)
+        XCTAssertTrue(
+            store.stagedDocumentText(for: stagedAttachment.id)?.contains("Magnesium") == true,
+            "Shared CSV text should be extracted and persisted before the pending handoff file is cleared."
+        )
         XCTAssertNil(PendingShareStore.read(from: fileURL))
     }
 

@@ -36,52 +36,7 @@ struct ShareConversationView: View {
         _transcriptStore = ObservedObject(wrappedValue: transcriptStore)
     }
 
-    private enum ShareGrantMode: String, CaseIterable, Identifiable {
-        case people = "People"
-        case group = "Group"
-        case organization = "Organization"
-
-        var id: String { rawValue }
-
-        var symbolName: String {
-            switch self {
-            case .people: "person.badge.plus"
-            case .group: "person.3"
-            case .organization: "building.2"
-            }
-        }
-    }
-
-    private enum ShareGrantPermission: String, CaseIterable, Identifiable {
-        case read = "Read-only"
-        case write = "Can reply"
-
-        var id: String { rawValue }
-        var apiValue: String {
-            switch self {
-            case .read:
-                return "read"
-            case .write:
-                return "write"
-            }
-        }
-    }
-
-    private enum SensitiveShareGrant {
-        case people
-        case group
-        case organization
-
-        var label: String {
-            switch self {
-            case .people: "people"
-            case .group: "this group"
-            case .organization: "the organization"
-            }
-        }
-    }
-
-    private var publicURL: URL? {
+private var publicURL: URL? {
         shareStore.publicURL(for: conversation)
     }
 
@@ -225,7 +180,7 @@ struct ShareConversationView: View {
         HStack(spacing: 12) {
             Image(systemName: "link")
                 .font(.title3.weight(.semibold))
-                .foregroundStyle(Color.brandBlue)
+                .foregroundStyle(Color.brandAccent)
                 .frame(width: 44, height: 44)
                 .background(Color.appBlueTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -255,7 +210,7 @@ struct ShareConversationView: View {
                 Spacer()
                 Text(publicShareEnabled ? "On" : "Off")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(publicShareEnabled ? Color.brandBlue : .secondary)
+                    .foregroundStyle(publicShareEnabled ? Color.brandAccent : .secondary)
             }
 
             Text("Read-only. Anyone with the URL can read this Conversation until you disable the link.")
@@ -281,7 +236,7 @@ struct ShareConversationView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(.brandBlue)
+                    .tint(.actionPrimary)
 
                     Button(role: .destructive) {
                         showingDisablePublicLinkConfirmation = true
@@ -299,7 +254,7 @@ struct ShareConversationView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.brandBlue)
+                .tint(.actionPrimary)
                 .controlSize(.large)
                 .disabled(shareStore.shareInfo?.canShare == false || isWorking)
             }
@@ -422,7 +377,7 @@ struct ShareConversationView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.brandBlue)
+                .tint(.actionPrimary)
                 .disabled(inviteTarget.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isWorking || shareStore.shareInfo?.canShare == false)
             case .group:
                 groupAccessControls
@@ -442,7 +397,7 @@ struct ShareConversationView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.brandBlue)
+                .tint(.actionPrimary)
                 .disabled(organizationPattern.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isWorking || shareStore.shareInfo?.canShare == false)
             }
         }
@@ -520,7 +475,7 @@ struct ShareConversationView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.brandBlue)
+                .tint(.actionPrimary)
                 .disabled(selectedGroupID.isEmpty || isWorking || shareStore.shareInfo?.canShare == false)
 
                 VStack(spacing: 0) {
@@ -528,7 +483,7 @@ struct ShareConversationView: View {
                         HStack(spacing: 10) {
                             Image(systemName: "person.3")
                                 .font(.caption.weight(.bold))
-                                .foregroundStyle(Color.brandBlue)
+                                .foregroundStyle(Color.brandAccent)
                                 .frame(width: 28, height: 28)
                                 .background(Color.appBlueTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                             VStack(alignment: .leading, spacing: 2) {
@@ -575,7 +530,7 @@ struct ShareConversationView: View {
                 HStack(spacing: 8) {
                     Label("Editing \(editingShareGroup.name)", systemImage: "pencil")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.brandBlue)
+                        .foregroundStyle(Color.brandAccent)
                         .lineLimit(1)
                     Spacer(minLength: 0)
                     Button("Cancel") {
@@ -621,7 +576,7 @@ struct ShareConversationView: View {
         HStack(spacing: 10) {
             Image(systemName: shareSymbol(share))
                 .font(.caption.weight(.bold))
-                .foregroundStyle(Color.brandBlue)
+                .foregroundStyle(Color.brandAccent)
                 .frame(width: 30, height: 30)
                 .background(Color.appBlueTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
