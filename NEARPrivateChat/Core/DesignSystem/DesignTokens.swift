@@ -27,6 +27,21 @@ extension RoundedRectangle {
     }
 }
 
+extension View {
+    func minimumTouchTarget(_ size: CGFloat = 44) -> some View {
+        frame(minWidth: size, minHeight: size)
+            .contentShape(Rectangle())
+    }
+
+    func featureCardBackground(radius: CGFloat = AppRadius.card) -> some View {
+        background(Color.appPanelBackground, in: RoundedRectangle.app(radius))
+            .overlay {
+                RoundedRectangle.app(radius)
+                    .stroke(Color.appBorder, lineWidth: 1)
+            }
+    }
+}
+
 extension Color {
     struct AccessibleRGB: Equatable {
         let red: Double

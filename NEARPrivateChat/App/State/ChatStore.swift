@@ -151,7 +151,7 @@ final class ChatStore: ObservableObject {
     let transcriptStore: ChatTranscriptStore
     let attachmentStagingStore: AttachmentStagingStore
     let composerStore: ChatComposerStore
-    private let chatSessionCoordinator: ChatSessionCoordinator
+    let chatSessionCoordinator: ChatSessionCoordinator
     let modelCatalogStore: ModelCatalogStore
     let fileStore: FileStore
     let projectStore: ProjectStore
@@ -180,17 +180,17 @@ final class ChatStore: ObservableObject {
         fileStore.isLoadingRemoteFilePreview
     }
 
-    private(set) var messages: [ChatMessage] {
+    var messages: [ChatMessage] {
         get { transcriptStore.messages }
         set { transcriptStore.messages = newValue }
     }
 
-    private(set) var isStreaming: Bool {
+    var isStreaming: Bool {
         get { transcriptStore.isStreaming }
         set { transcriptStore.isStreaming = newValue }
     }
 
-    private(set) var pendingAttachments: [ChatAttachment] {
+    var pendingAttachments: [ChatAttachment] {
         get { composerStore.pendingAttachments }
         set {
             composerStore.pendingAttachments = newValue
@@ -213,7 +213,7 @@ final class ChatStore: ObservableObject {
         set { composerStore.isUploadingAttachment = newValue }
     }
 
-    private(set) var routeReadinessIssue: RouteReadinessIssue? {
+    var routeReadinessIssue: RouteReadinessIssue? {
         get { composerStore.routeReadinessIssue }
         set { composerStore.routeReadinessIssue = newValue }
     }
@@ -230,7 +230,7 @@ final class ChatStore: ObservableObject {
     @Published private(set) var isProbingSession = false
     private var messageRepository: MessageRepository
     private let messageLoadCoordinator: ChatMessageLoadCoordinator
-    private let fileService: FileService
+    let fileService: FileService
     private let ironclawAPI = IronclawAPI()
     /// Best-effort Live Activity for in-progress council briefings and compound
     /// multi-lookup runs. Purely a side-effect surface: every call no-ops when
@@ -265,20 +265,20 @@ final class ChatStore: ObservableObject {
     private let webGroundingService = WebGroundingService()
     private let ironclawMobileRuntime: IronclawMobileRuntime
     private lazy var sendCoordinator = ChatSendCoordinator(host: self)
-    private var pendingLargePasteTexts: [String: String] {
+    var pendingLargePasteTexts: [String: String] {
         get { attachmentStagingStore.pendingLargePasteTexts }
         set { attachmentStagingStore.replacePendingLargePasteTexts(newValue) }
     }
-    private var pendingDocumentTexts: [String: String] {
+    var pendingDocumentTexts: [String: String] {
         get { attachmentStagingStore.pendingDocumentTexts }
         set { attachmentStagingStore.replacePendingDocumentTexts(newValue) }
     }
-    private var pendingSharedFileURLs: [String: URL] {
+    var pendingSharedFileURLs: [String: URL] {
         get { attachmentStagingStore.pendingSharedFileURLs }
         set { attachmentStagingStore.replacePendingSharedFileURLs(newValue) }
     }
-    private var pendingNearAccountTrackerSchedule: BriefingSchedule?
-    private var currentUserMessageMetadata: MessageMetadata?
+    var pendingNearAccountTrackerSchedule: BriefingSchedule?
+    var currentUserMessageMetadata: MessageMetadata?
     private var storageAccountID = "signed-out"
     private let draftScopeStore = ChatDraftScopeStore()
     private var bootstrapInFlightAccountID: String?
@@ -318,13 +318,13 @@ final class ChatStore: ObservableObject {
         "DeepSeek/DeepSeek-V3.2",
         "DeepSeek/DeepSeek-V3.1"
     ]
-    private var streamTask: Task<Void, Never>?
-    private var currentAssistantMessageID: String?
-    private var currentCouncilAssistantMessageIDs: [String] = []
+    var streamTask: Task<Void, Never>?
+    var currentAssistantMessageID: String?
+    var currentCouncilAssistantMessageIDs: [String] = []
     #if DEBUG
     private var didStartLiveCouncilDemo = false
     #endif
-    private var councilStopRequestedBatchID: String?
+    var councilStopRequestedBatchID: String?
     private var isNormalizingDraft = false
     private var isResettingAccountScopedState = false
     private var attachmentUploadNotice: String?
@@ -616,7 +616,7 @@ final class ChatStore: ObservableObject {
         )
     }
 
-    private func assistantTrustMetadata(
+    func assistantTrustMetadata(
         for modelID: String?,
         webSearchUsed: Bool? = nil,
         capturedAt: Date = Date()
@@ -1082,7 +1082,7 @@ final class ChatStore: ObservableObject {
         scheduleAccountBackgroundRefresh(for: accountID)
     }
 
-    private func scheduleAccountBackgroundRefresh(for accountID: String? = nil) {
+    func scheduleAccountBackgroundRefresh(for accountID: String? = nil) {
         let resolvedAccountID = accountID ?? storageAccountID
         accountBackgroundRefreshTask?.cancel()
         accountBackgroundRefreshTask = Task { @MainActor [weak self] in
@@ -1095,7 +1095,7 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    private func scheduleConversationListRefresh() {
+    func scheduleConversationListRefresh() {
         Task { @MainActor [weak self] in
             await self?.refreshConversations()
         }
@@ -2142,7 +2142,7 @@ final class ChatStore: ObservableObject {
         showBanner("Text staged. It uploads only when you send.")
     }
 
-    private func applyPromptSourcePrivacyOverride(_ override: PromptSourcePrivacyOverride) {
+    func applyPromptSourcePrivacyOverride(_ override: PromptSourcePrivacyOverride) {
         guard !override.isEmpty else { return }
         if override.blocksWeb {
             webSearchEnabled = false
@@ -2163,7 +2163,7 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    private func resolvePromptAttachmentsForSend(_ promptAttachments: [ChatAttachment]) async throws -> [ChatAttachment] {
+    func resolvePromptAttachmentsForSend(_ promptAttachments: [ChatAttachment]) async throws -> [ChatAttachment] {
         let resolution = try await attachmentStagingStore.resolvePromptAttachmentsForSend(
             promptAttachments,
             fileService: fileService
@@ -2257,7 +2257,7 @@ final class ChatStore: ObservableObject {
         )
     }
 
-    private func scheduleMessageLoad(for conversation: ConversationSummary, preferCached: Bool = true) {
+    func scheduleMessageLoad(for conversation: ConversationSummary, preferCached: Bool = true) {
         messageLoadCoordinator.scheduleMessagesLoad(
             for: conversation,
             preferCached: preferCached,
@@ -2818,7 +2818,7 @@ final class ChatStore: ObservableObject {
 
     /// Handles explicit app-control prompts locally, such as creating trackers,
     /// saving memory, or showing the user's current tracker digest.
-    private func handleQuickIntent(_ intent: QuickIntent, prompt: String) {
+    func handleQuickIntent(_ intent: QuickIntent, prompt: String) {
         let model = selectedModel
         messages.append(ChatLocalIntentTranscriptWriter.userMessage(text: prompt, model: model))
 
@@ -2880,7 +2880,7 @@ final class ChatStore: ObservableObject {
 
     /// Handles a compound local prompt if the dispatcher allows one. Data
     /// lookup compounds route through the model instead of this path.
-    private func handleCompoundIntent(_ intents: [QuickIntent], prompt: String) {
+    func handleCompoundIntent(_ intents: [QuickIntent], prompt: String) {
         let model = selectedModel
         messages.append(ChatLocalIntentTranscriptWriter.userMessage(text: prompt, model: model))
         let pendingID = ChatLocalIntentTranscriptWriter.appendAssistant(
@@ -2932,7 +2932,7 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    private func completePendingNearAccountTracker(account: String, schedule: BriefingSchedule, prompt: String) {
+    func completePendingNearAccountTracker(account: String, schedule: BriefingSchedule, prompt: String) {
         pendingNearAccountTrackerSchedule = nil
         let model = selectedModel
         messages.append(ChatLocalIntentTranscriptWriter.userMessage(text: prompt, model: model))
@@ -2955,7 +2955,7 @@ final class ChatStore: ObservableObject {
     /// chat reply) but logged to the activity log so the user can audit what was
     /// auto-learned, and stored as `.inferred` so recall labels it. Only genuinely
     /// new facts are logged; re-stating a known fact is a no-op.
-    private func captureInferredMemory(from text: String) {
+    func captureInferredMemory(from text: String) {
         ChatLocalIntentExecutor.captureInferredMemory(
             from: text,
             memoryStore: memoryStore,
@@ -2976,7 +2976,7 @@ final class ChatStore: ObservableObject {
         sendCoordinator.cancelHostedHandoff()
     }
 
-    private func hostedHandoffPreflightIfNeeded(
+    func hostedHandoffPreflightIfNeeded(
         text: String,
         promptAttachments: [ChatAttachment]
     ) -> HostedIronclawHandoffPreflight? {
@@ -2989,7 +2989,7 @@ final class ChatStore: ObservableObject {
         )
     }
 
-    private func currentRouteReadinessIssue(
+    func currentRouteReadinessIssue(
         for text: String,
         appendUserMessage: Bool = true
     ) -> RouteReadinessIssue? {
@@ -3024,7 +3024,7 @@ final class ChatStore: ObservableObject {
         return ironclawSettings.endpointValidationMessage
     }
 
-    private func blockSendForRouteReadiness(_ issue: RouteReadinessIssue) {
+    func blockSendForRouteReadiness(_ issue: RouteReadinessIssue) {
         routeReadinessIssue = issue
         showBanner(issue.title)
     }
@@ -3379,7 +3379,7 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    private func sendCouncilTurn(
+    func sendCouncilTurn(
         text: String,
         routedText: String,
         attachments: [ChatAttachment],
@@ -3866,7 +3866,7 @@ final class ChatStore: ObservableObject {
         return diagnostics.lastPrivateOutcome
     }
 
-    private func streamResponseWithFallback(
+    func streamResponseWithFallback(
         initialModel: String,
         text: String,
         attachments: [ChatAttachment],
@@ -4460,7 +4460,7 @@ final class ChatStore: ObservableObject {
 
     
 
-    private func ensureConversation(for firstMessage: String, attachments: [ChatAttachment]) async throws -> ConversationSummary {
+    func ensureConversation(for firstMessage: String, attachments: [ChatAttachment]) async throws -> ConversationSummary {
         if let selectedConversation {
             return selectedConversation
         }
@@ -4818,7 +4818,7 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    private func showBanner(_ message: String) {
+    func showBanner(_ message: String) {
         bannerMessage = message
         Task {
             try? await Task.sleep(nanoseconds: 3_000_000_000)
@@ -4855,7 +4855,7 @@ final class ChatStore: ObservableObject {
         )
     }
 
-    private func transitionDraftScopeToCurrentSelection(loadDraft: Bool) {
+    func transitionDraftScopeToCurrentSelection(loadDraft: Bool) {
         draftScopeStore.transition(to: currentDraftScopeID, loadDraft: loadDraft) { persistedState in
             draft = persistedState.text
             pendingAttachments = persistedState.attachments
@@ -4876,7 +4876,7 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    private func discardActiveDraft() {
+    func discardActiveDraft() {
         draftScopeStore.removeCurrentScope()
     }
 
@@ -4908,7 +4908,7 @@ final class ChatStore: ObservableObject {
         projectStore.persistProjects()
     }
 
-    private func saveLocalMessages(for conversationID: String) {
+    func saveLocalMessages(for conversationID: String) {
         if !messageRepository.saveLocalMessages(messages, for: conversationID) {
             showBanner("Local message cache could not be saved securely.")
         }
@@ -4921,7 +4921,7 @@ final class ChatStore: ObservableObject {
         agentStore.removeIronclawThreadID(for: conversationID)
     }
 
-    nonisolated private static func isExternalModel(_ modelID: String) -> Bool {
+    nonisolated static func isExternalModel(_ modelID: String) -> Bool {
         MessageRepository.isExternalModel(modelID)
     }
 
@@ -4962,7 +4962,7 @@ final class ChatStore: ObservableObject {
         )
     }
 
-    private func phoneAgentMissionPromptIfNeeded(for text: String) -> String? {
+    func phoneAgentMissionPromptIfNeeded(for text: String) -> String? {
         guard selectedModel == ModelOption.ironclawModelID || selectedModel == ModelOption.ironclawMobileModelID else {
             return nil
         }
@@ -4972,7 +4972,7 @@ final class ChatStore: ObservableObject {
         return AgentStore.phoneAgentMissionPrompt(for: text)
     }
 
-    private func organizePhoneAgentConversationIfNeeded(
+    func organizePhoneAgentConversationIfNeeded(
         conversation: ConversationSummary,
         originalText: String,
         routedText: String
@@ -5041,7 +5041,7 @@ final class ChatStore: ObservableObject {
         preferredAvailableModel(excluding: unavailableModel.map { Set([$0]) } ?? Set<String>())
     }
 
-    private func routeCurrentPromptIfNeeded(_ text: String, attachments: [ChatAttachment]) {
+    func routeCurrentPromptIfNeeded(_ text: String, attachments: [ChatAttachment]) {
         let sourceOverride = Self.promptSourcePrivacyOverride(for: text, hasAttachments: !attachments.isEmpty)
         applyPromptSourcePrivacyOverride(sourceOverride)
         if !sourceOverride.requiresPrivateRoute {
@@ -5064,7 +5064,7 @@ final class ChatStore: ObservableObject {
         )
     }
 
-    private func ensureSelectedModelIsAvailable(shouldShowBanner: Bool) {
+    func ensureSelectedModelIsAvailable(shouldShowBanner: Bool) {
         modelCatalogStore.ensureSelectedModelIsAvailable(shouldShowBanner: shouldShowBanner)
     }
 
@@ -5096,7 +5096,7 @@ final class ChatStore: ObservableObject {
         ModelCatalogStore.model(model, matchesCandidateID: candidateID)
     }
 
-    private func requestCouncilModelIDs(for requestModel: String) -> [String] {
+    func requestCouncilModelIDs(for requestModel: String) -> [String] {
         modelCatalogStore.requestCouncilModelIDs(for: requestModel)
     }
 
@@ -5483,7 +5483,7 @@ final class ChatStore: ObservableObject {
         )
     }
 
-    private func promptOnlyAttachments(from attachments: [ChatAttachment]) -> [ChatAttachment] {
+    func promptOnlyAttachments(from attachments: [ChatAttachment]) -> [ChatAttachment] {
         let projectAttachmentIDs = Set(selectedProjectAttachments.map(\.id))
         return attachments.filter { !projectAttachmentIDs.contains($0.id) }
     }
@@ -5547,7 +5547,7 @@ final class ChatStore: ObservableObject {
         )
     }
 
-    private func activeAttachments(promptAttachments: [ChatAttachment]) -> [ChatAttachment] {
+    func activeAttachments(promptAttachments: [ChatAttachment]) -> [ChatAttachment] {
         let baseAttachments = sourceRoutingSemantics.attachesProjectFileSourcePack
             ? selectedProjectAttachments + promptAttachments
             : promptAttachments
@@ -5634,7 +5634,7 @@ final class ChatStore: ObservableObject {
             lowercased.contains("network connection was lost")
     }
 
-    private static func localFailureMessage(from text: String) -> String? {
+    static func localFailureMessage(from text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let rawMessage: String?
         if trimmed.hasPrefix("{"),
@@ -5674,7 +5674,7 @@ final class ChatStore: ObservableObject {
 
     // Single source of failure copy: MessageRepository owns the raw-error →
     // user-facing mapping; this forwards so banner and timeline copy can't drift.
-    private static func displayFailureMessage(_ rawValue: String) -> String {
+    static func displayFailureMessage(_ rawValue: String) -> String {
         MessageRepository.displayFailureMessage(rawValue)
     }
 
@@ -5686,7 +5686,7 @@ final class ChatStore: ObservableObject {
             lowercased.contains("tool \"")
     }
 
-    private static func normalizedDraftInput(_ text: String) -> String {
+    static func normalizedDraftInput(_ text: String) -> String {
         text
             .replacingOccurrences(of: "“", with: "\"")
             .replacingOccurrences(of: "”", with: "\"")
@@ -6673,329 +6673,4 @@ final class ChatStore: ObservableObject {
         )
     }
     #endif
-}
-
-extension ChatStore: ChatSendCoordinatorHost {
-    var sendDraftText: String {
-        get { draft }
-        set { draft = newValue }
-    }
-
-    var sendPendingAttachments: [ChatAttachment] {
-        get { pendingAttachments }
-        set { pendingAttachments = newValue }
-    }
-
-    var sendPendingLargePasteTexts: [String: String] {
-        get { pendingLargePasteTexts }
-        set { pendingLargePasteTexts = newValue }
-    }
-
-    var sendPendingSharedFileURLs: [String: URL] {
-        get { pendingSharedFileURLs }
-        set { pendingSharedFileURLs = newValue }
-    }
-
-    var sendIsStreaming: Bool {
-        get { isStreaming }
-        set { isStreaming = newValue }
-    }
-
-    var sendRouteReadinessIssue: ChatRouteReadinessIssue? {
-        get { routeReadinessIssue }
-        set { routeReadinessIssue = newValue }
-    }
-
-    var sendProxyRetryOffer: ProxyRetryOffer? {
-        get { composerStore.proxyRetryOffer }
-        set { composerStore.proxyRetryOffer = newValue }
-    }
-
-    var sendPendingHostedHandoffPreflight: HostedIronclawHandoffPreflight? {
-        get { pendingHostedHandoffPreflight }
-        set { pendingHostedHandoffPreflight = newValue }
-    }
-
-    var sendSelectedModel: String {
-        get { selectedModel }
-        set { selectedModel = newValue }
-    }
-
-    var sendSelectedConversation: ConversationSummary? {
-        selectedConversation
-    }
-
-    var sendSelectedProjectID: String? { selectedProjectID }
-
-    var sendMessages: [ChatMessage] {
-        get { messages }
-        set { messages = newValue }
-    }
-
-    var sendCurrentAssistantMessageID: String? {
-        get { currentAssistantMessageID }
-        set { currentAssistantMessageID = newValue }
-    }
-
-    var sendCurrentCouncilAssistantMessageIDs: [String] {
-        get { currentCouncilAssistantMessageIDs }
-        set { currentCouncilAssistantMessageIDs = newValue }
-    }
-
-    var sendCouncilStopRequestedBatchID: String? {
-        get { councilStopRequestedBatchID }
-        set { councilStopRequestedBatchID = newValue }
-    }
-
-    var sendStreamTask: Task<Void, Never>? {
-        get { streamTask }
-        set { streamTask = newValue }
-    }
-
-    var sendMessageTimelineStore: MessageTimelineStore { messageTimelineStore }
-    var sendCurrentUserMessageMetadata: MessageMetadata? { currentUserMessageMetadata }
-    var sendModelsAreEmpty: Bool { models.isEmpty }
-    var sendBillingSnapshotIsMissing: Bool { billingSnapshot == nil }
-
-    func normalizedSendDraftInput(_ draft: String) -> String {
-        Self.normalizedDraftInput(draft)
-    }
-
-    func promptSourcePrivacyOverrideForSend(for prompt: String, hasAttachments: Bool) -> PromptSourcePrivacyOverride {
-        Self.promptSourcePrivacyOverride(for: prompt, hasAttachments: hasAttachments)
-    }
-
-    func applyPromptSourcePrivacyOverrideForSend(_ override: PromptSourcePrivacyOverride) {
-        applyPromptSourcePrivacyOverride(override)
-    }
-
-    func activeAttachmentsForSend(promptAttachments: [ChatAttachment]) -> [ChatAttachment] {
-        activeAttachments(promptAttachments: promptAttachments)
-    }
-
-    func promptOnlyAttachmentsForSend(from attachments: [ChatAttachment]) -> [ChatAttachment] {
-        promptOnlyAttachments(from: attachments)
-    }
-
-    func consumeLocalSendFastPathIfNeeded(
-        text: String,
-        promptAttachments: [ChatAttachment],
-        activeAttachments: [ChatAttachment]
-    ) -> Bool {
-        // Phase 8 bridge: quick intents / trackers still live in the local tools
-        // bucket. The send coordinator owns when this branch is tried.
-        guard activeAttachments.isEmpty else { return false }
-        guard let dispatch = ChatLocalIntentDispatcher.dispatch(
-            text: text,
-            pendingNearAccountTrackerSchedule: pendingNearAccountTrackerSchedule
-        ) else {
-            return false
-        }
-        if dispatch.clearsPendingNearAccountTracker {
-            pendingNearAccountTrackerSchedule = nil
-        }
-
-        guard let action = dispatch.action else {
-            return false
-        }
-        discardActiveDraft()
-        draft = ""
-        routeReadinessIssue = nil
-
-        switch action {
-        case let .completePendingNearAccountTracker(account, schedule):
-            completePendingNearAccountTracker(account: account, schedule: schedule, prompt: text)
-        case let .compound(intents):
-            handleCompoundIntent(intents, prompt: text)
-        case let .single(intent):
-            handleQuickIntent(intent, prompt: text)
-        }
-        return true
-    }
-
-    func actionSurfaceTextForSend(
-        text: String,
-        attachments: [ChatAttachment],
-        override: PromptSourcePrivacyOverride
-    ) -> String {
-        ActionSurfacePlanner.augmentedPrompt(
-            text: text,
-            attachmentNames: attachments.map(\.name),
-            sourceInstruction: override.sourceInstruction(attachmentNames: attachments.map(\.name))
-        )
-    }
-
-    func routeCurrentPromptIfNeededForSend(_ text: String, attachments: [ChatAttachment]) {
-        routeCurrentPromptIfNeeded(text, attachments: attachments)
-    }
-
-    func hostedHandoffPreflightForSend(
-        text: String,
-        promptAttachments: [ChatAttachment]
-    ) -> HostedIronclawHandoffPreflight? {
-        hostedHandoffPreflightIfNeeded(text: text, promptAttachments: promptAttachments)
-    }
-
-    func currentRouteReadinessIssueForSend(
-        for text: String,
-        appendUserMessage: Bool
-    ) -> ChatRouteReadinessIssue? {
-        currentRouteReadinessIssue(for: text, appendUserMessage: appendUserMessage)
-    }
-
-    func blockSendForRouteReadinessForSend(_ issue: ChatRouteReadinessIssue) {
-        blockSendForRouteReadiness(issue)
-    }
-
-    func captureInferredMemoryForSend(from text: String) {
-        captureInferredMemory(from: text)
-    }
-
-    func discardActiveDraftForSend() {
-        discardActiveDraft()
-    }
-
-    func resolvePromptAttachmentsForSendBridge(_ promptAttachments: [ChatAttachment]) async throws -> [ChatAttachment] {
-        try await resolvePromptAttachmentsForSend(promptAttachments)
-    }
-
-    func ensureDocumentTextsForSend(attachments: [ChatAttachment]) async {
-        await attachmentStagingStore.ensureDocumentTextsAvailable(for: attachments, using: fileService)
-    }
-
-    func displayFailureMessageForSend(_ rawValue: String) -> String {
-        Self.displayFailureMessage(rawValue)
-    }
-
-    func localFailureMessageForSend(from text: String) -> String? {
-        Self.localFailureMessage(from: text)
-    }
-
-    func privacyProxyModelIDForSend() -> String? {
-        modelCatalogStore.preferredPrivacyProxyModel(nearCloudKeyConfigured: nearCloudKeyConfigured)
-    }
-
-    func isRestrictedRouteErrorForSend(_ error: Error) -> Bool {
-        RouteHealthMonitor.isRestrictedClassError(error)
-    }
-
-    func isExternalModelForSend(_ modelID: String) -> Bool {
-        Self.isExternalModel(modelID)
-    }
-
-    func refreshModelsForSend() async {
-        await refreshModels()
-    }
-
-    func scheduleAccountBackgroundRefreshForSend() {
-        scheduleAccountBackgroundRefresh()
-    }
-
-    func ensureSelectedModelIsAvailableForSend() {
-        ensureSelectedModelIsAvailable(shouldShowBanner: true)
-    }
-
-    func phoneAgentMissionPromptIfNeededForSend(for text: String) -> String? {
-        phoneAgentMissionPromptIfNeeded(for: text)
-    }
-
-    func requestCouncilModelIDsForSend(for modelID: String) -> [String] {
-        requestCouncilModelIDs(for: modelID)
-    }
-
-    func localDocumentPayloadsForSend(attachments: [ChatAttachment]) -> [DocumentTextExtractor.LocalDocumentContextPayload] {
-        attachmentStagingStore.documentPayloads(for: attachments)
-    }
-
-    func documentAugmentedPromptForSend(
-        _ prompt: String,
-        question: String,
-        attachments: [ChatAttachment]
-    ) -> String {
-        attachmentStagingStore.documentAugmentedPrompt(prompt, question: question, attachments: attachments)
-    }
-
-    func ensureConversationForSend(firstMessage: String, attachments: [ChatAttachment]) async throws -> ConversationSummary {
-        try await ensureConversation(for: firstMessage, attachments: attachments)
-    }
-
-    func activateConversationForSend(_ conversation: ConversationSummary) {
-        chatSessionCoordinator.activateConversationForSend(conversation) {
-            transitionDraftScopeToCurrentSelection(loadDraft: false)
-        }
-    }
-
-    func organizePhoneAgentConversationIfNeededForSend(
-        conversation: ConversationSummary,
-        originalText: String,
-        routedText: String
-    ) {
-        organizePhoneAgentConversationIfNeeded(
-            conversation: conversation,
-            originalText: originalText,
-            routedText: routedText
-        )
-    }
-
-    func sendCouncilTurnBridge(
-        text: String,
-        routedText: String,
-        attachments: [ChatAttachment],
-        conversation: ConversationSummary,
-        modelIDs: [String],
-        previousResponseID: String?,
-        initiator: String
-    ) async throws {
-        try await sendCouncilTurn(
-            text: text,
-            routedText: routedText,
-            attachments: attachments,
-            conversation: conversation,
-            modelIDs: modelIDs,
-            previousResponseID: previousResponseID,
-            initiator: initiator
-        )
-    }
-
-    func assistantTrustMetadataForSend(
-        for model: String?,
-        webSearchUsed: Bool?,
-        capturedAt: Date
-    ) -> MessageTrustMetadata? {
-        assistantTrustMetadata(for: model, webSearchUsed: webSearchUsed, capturedAt: capturedAt)
-    }
-
-    func streamResponseWithFallbackForSend(
-        initialModel: String,
-        text: String,
-        attachments: [ChatAttachment],
-        conversationID: String,
-        previousResponseID: String?,
-        initiator: String
-    ) async throws -> String {
-        try await streamResponseWithFallback(
-            initialModel: initialModel,
-            text: text,
-            attachments: attachments,
-            conversationID: conversationID,
-            previousResponseID: previousResponseID,
-            initiator: initiator
-        )
-    }
-
-    func saveLocalMessagesForSend(conversationID: String) {
-        saveLocalMessages(for: conversationID)
-    }
-
-    func scheduleMessageLoadForSend(conversation: ConversationSummary, preferCached: Bool) {
-        scheduleMessageLoad(for: conversation, preferCached: preferCached)
-    }
-
-    func scheduleConversationListRefreshForSend() {
-        scheduleConversationListRefresh()
-    }
-
-    func showBannerForSend(_ message: String) {
-        showBanner(message)
-    }
 }

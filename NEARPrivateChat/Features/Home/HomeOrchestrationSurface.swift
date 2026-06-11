@@ -53,6 +53,7 @@ struct HomeOrchestrationSurface: View {
                     .background(Color.actionPrimary, in: Circle())
             }
             .buttonStyle(.plain)
+            .minimumTouchTarget()
             .accessibilityLabel("New workflow")
         }
     }
@@ -78,6 +79,7 @@ struct HomeOrchestrationSurface: View {
                             }
                     }
                     .buttonStyle(.plain)
+                    .minimumTouchTarget()
                 }
             }
             .padding(.horizontal, 1)
@@ -99,10 +101,10 @@ struct HomeOrchestrationSurface: View {
                         .foregroundStyle(selectedFilter == filter ? Color.actionPrimary : Color.textSecondary)
                         .lineLimit(1)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 30)
+                        .frame(minHeight: 44)
                         .background(
                             selectedFilter == filter ? Color.actionTint : Color.appPanelBackground,
-                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            in: RoundedRectangle.app(AppRadius.pill)
                         )
                 }
                 .buttonStyle(.plain)
@@ -140,10 +142,10 @@ struct HomeOrchestrationSurface: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.textSecondary)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 34)
-                        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .frame(minHeight: 44)
+                        .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.pill))
                         .overlay {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            RoundedRectangle.app(AppRadius.pill)
                                 .stroke(Color.appBorder, lineWidth: 1)
                         }
                 }

@@ -32,6 +32,7 @@
 		A10000000000000000000004 /* PrivateChatAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* PrivateChatAPI.swift */; };
 		A10000000000000000000005 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* SessionStore.swift */; };
 		A10000000000000000000006 /* ChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* ChatStore.swift */; };
+		BA07A0E5A83CFD0FDDDE5249 /* ChatStore+SendHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0E88838AA4E9A8A27B79EC /* ChatStore+SendHost.swift */; };
 		A10000000000000000000007 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* AuthView.swift */; };
 		BA532039BDCA7F292B599FF3 /* NearAccountSignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA519A96BBEFBEF929214563 /* NearAccountSignInView.swift */; };
 		BA7F4FFEA5CF2796C78BE80E /* WebSignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA7848FACAEFEAD2D57DB02A /* WebSignInView.swift */; };
@@ -176,6 +177,7 @@
 		BA100000000000000000000A /* ExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000A /* ExportTests.swift */; };
 		BA867DD5B9F1DCA2AD33683D /* ExportFidelityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE131E302D7DBE9FE873E83 /* ExportFidelityTests.swift */; };
 		BA100000000000000000000B /* FileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000B /* FileTests.swift */; };
+		BAC52B9B92A822DBEFB45CED /* FileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA1ED5AA3E71E669B3B91E76 /* FileStoreTests.swift */; };
 		BA100000000000000000000C /* HomeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000C /* HomeTests.swift */; };
 		BA100000000000000000000D /* CouncilTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000D /* CouncilTests.swift */; };
 		BA3535C2ECF1539C6512B391 /* CouncilTabsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA9DBCB8B3E032F6EA6E69A9 /* CouncilTabsTests.swift */; };
@@ -191,7 +193,9 @@
 		BA1000000000000000000014 /* SetupPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000014 /* SetupPlanTests.swift */; };
 		BA1000000000000000000015 /* SetupRestoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000015 /* SetupRestoreTests.swift */; };
 		BA1000000000000000000016 /* SharingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000016 /* SharingTests.swift */; };
+		BA4C8936CD131B284730AE69 /* ShareStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2D76C0E096F44FFF70F9B9 /* ShareStoreTests.swift */; };
 		BA1000000000000000000017 /* StreamingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000017 /* StreamingTests.swift */; };
+		BA1000000000000000000018 /* ConversationStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000018 /* ConversationStoreTests.swift */; };
 		C10000000000000000000001 /* AppHaptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000001 /* AppHaptics.swift */; };
 		C10000000000000000000002 /* HomeSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000002 /* HomeSearchIndex.swift */; };
 		C10000000000000000000003 /* HomeSupportingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000003 /* HomeSupportingViews.swift */; };
@@ -399,6 +403,7 @@
 		A20000000000000000000004 /* PrivateChatAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateChatAPI.swift; sourceTree = "<group>"; };
 		A20000000000000000000005 /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
 		A20000000000000000000006 /* ChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStore.swift; sourceTree = "<group>"; };
+		BA0E88838AA4E9A8A27B79EC /* ChatStore+SendHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatStore+SendHost.swift"; sourceTree = "<group>"; };
 		A20000000000000000000007 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		BA519A96BBEFBEF929214563 /* NearAccountSignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearAccountSignInView.swift; sourceTree = "<group>"; };
 		BA7848FACAEFEAD2D57DB02A /* WebSignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSignInView.swift; sourceTree = "<group>"; };
@@ -546,6 +551,7 @@
 		BA200000000000000000000A /* ExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportTests.swift; sourceTree = "<group>"; };
 		BAE131E302D7DBE9FE873E83 /* ExportFidelityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportFidelityTests.swift; sourceTree = "<group>"; };
 		BA200000000000000000000B /* FileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTests.swift; sourceTree = "<group>"; };
+		BA1ED5AA3E71E669B3B91E76 /* FileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileStoreTests.swift; sourceTree = "<group>"; };
 		BA200000000000000000000C /* HomeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeTests.swift; sourceTree = "<group>"; };
 		BA200000000000000000000D /* CouncilTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilTests.swift; sourceTree = "<group>"; };
 		BA9DBCB8B3E032F6EA6E69A9 /* CouncilTabsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CouncilTabsTests.swift; sourceTree = "<group>"; };
@@ -561,7 +567,9 @@
 		BA2000000000000000000014 /* SetupPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupPlanTests.swift; sourceTree = "<group>"; };
 		BA2000000000000000000015 /* SetupRestoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupRestoreTests.swift; sourceTree = "<group>"; };
 		BA2000000000000000000016 /* SharingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharingTests.swift; sourceTree = "<group>"; };
+		BA2D76C0E096F44FFF70F9B9 /* ShareStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareStoreTests.swift; sourceTree = "<group>"; };
 		BA2000000000000000000017 /* StreamingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingTests.swift; sourceTree = "<group>"; };
+		BA2000000000000000000018 /* ConversationStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStoreTests.swift; sourceTree = "<group>"; };
 		C20000000000000000000001 /* AppHaptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppHaptics.swift; sourceTree = "<group>"; };
 		C20000000000000000000002 /* HomeSearchIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSearchIndex.swift; sourceTree = "<group>"; };
 		C20000000000000000000003 /* HomeSupportingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSupportingViews.swift; sourceTree = "<group>"; };
@@ -817,6 +825,7 @@
 				BA4000000000000000000003 /* Agent */,
 				BA4000000000000000000004 /* Auth */,
 				BA4000000000000000000005 /* Chat */,
+				BA4000000000000000000018 /* Conversations */,
 				BA4000000000000000000006 /* Export */,
 				BA4000000000000000000007 /* Files */,
 				BA4000000000000000000008 /* Home */,
@@ -876,6 +885,14 @@
 			path = Chat;
 			sourceTree = "<group>";
 		};
+		BA4000000000000000000018 /* Conversations */ = {
+			isa = PBXGroup;
+			children = (
+				BA2000000000000000000018 /* ConversationStoreTests.swift */,
+			);
+			path = Conversations;
+			sourceTree = "<group>";
+		};
 		BA4000000000000000000006 /* Export */ = {
 			isa = PBXGroup;
 			children = (
@@ -889,6 +906,7 @@
 			isa = PBXGroup;
 			children = (
 				BA200000000000000000000B /* FileTests.swift */,
+				BA1ED5AA3E71E669B3B91E76 /* FileStoreTests.swift */,
 			);
 			path = Files;
 			sourceTree = "<group>";
@@ -953,6 +971,7 @@
 			isa = PBXGroup;
 			children = (
 				BA2000000000000000000016 /* SharingTests.swift */,
+				BA2D76C0E096F44FFF70F9B9 /* ShareStoreTests.swift */,
 			);
 			path = Sharing;
 			sourceTree = "<group>";
@@ -1442,6 +1461,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000006 /* ChatStore.swift */,
+				BA0E88838AA4E9A8A27B79EC /* ChatStore+SendHost.swift */,
 				A2000000000000000000001B /* AgentActivityController.swift */,
 			);
 			path = State;
@@ -1721,6 +1741,7 @@
 				A10000000000000000000021 /* ConversationTranscriptClipboard.swift in Sources */,
 				A10000000000000000000005 /* SessionStore.swift in Sources */,
 				A10000000000000000000006 /* ChatStore.swift in Sources */,
+				BA07A0E5A83CFD0FDDDE5249 /* ChatStore+SendHost.swift in Sources */,
 				A10000000000000000000007 /* AuthView.swift in Sources */,
 				BA532039BDCA7F292B599FF3 /* NearAccountSignInView.swift in Sources */,
 				BA7F4FFEA5CF2796C78BE80E /* WebSignInView.swift in Sources */,
@@ -1975,6 +1996,7 @@
 				BA100000000000000000000A /* ExportTests.swift in Sources */,
 				BA867DD5B9F1DCA2AD33683D /* ExportFidelityTests.swift in Sources */,
 				BA100000000000000000000B /* FileTests.swift in Sources */,
+				BAC52B9B92A822DBEFB45CED /* FileStoreTests.swift in Sources */,
 				BA100000000000000000000C /* HomeTests.swift in Sources */,
 				BA100000000000000000000D /* CouncilTests.swift in Sources */,
 				BA3535C2ECF1539C6512B391 /* CouncilTabsTests.swift in Sources */,
@@ -1990,7 +2012,9 @@
 				BA1000000000000000000014 /* SetupPlanTests.swift in Sources */,
 				BA1000000000000000000015 /* SetupRestoreTests.swift in Sources */,
 				BA1000000000000000000016 /* SharingTests.swift in Sources */,
+				BA4C8936CD131B284730AE69 /* ShareStoreTests.swift in Sources */,
 				BA1000000000000000000017 /* StreamingTests.swift in Sources */,
+				BA1000000000000000000018 /* ConversationStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

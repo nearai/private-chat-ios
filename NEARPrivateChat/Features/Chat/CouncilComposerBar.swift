@@ -36,6 +36,7 @@ struct CouncilComposerBar: View {
                         .frame(width: 36, height: 36)
                 }
                 .buttonStyle(.plain)
+                .minimumTouchTarget()
                 .foregroundStyle(canSend ? Color.appPanelBackground : Color.textSecondary)
                 .background(canSend ? Color.actionPrimary : Color.appSecondaryBackground, in: Circle())
                 .disabled(!canSend)
@@ -61,7 +62,7 @@ struct CouncilComposerBar: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.actionPrimary)
                     .padding(.horizontal, 10)
-                    .frame(height: 30)
+                    .frame(minHeight: 44)
                     .background(Color.actionPrimary.opacity(0.10), in: Capsule())
                     .accessibilityHint("Use the completed Council answers that are ready now.")
                 }
@@ -103,7 +104,7 @@ struct CouncilComposerBar: View {
             }
             .foregroundStyle(Color.actionPrimary)
             .padding(.horizontal, 10)
-            .frame(height: 36)
+            .frame(minHeight: 44)
             .background(Color.actionPrimary.opacity(0.10), in: Capsule())
         }
         .buttonStyle(.plain)

@@ -42,9 +42,9 @@ struct HomePromptCaptureCard: View {
             .padding(.vertical, 11)
             .frame(minHeight: 72, alignment: .topLeading)
             .focused($isPromptFocused)
-            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.control))
             .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle.app(AppRadius.control)
                     .stroke(isPromptFocused ? Color.actionPrimary.opacity(0.34) : Color.appBorder, lineWidth: 1)
             }
 
@@ -59,13 +59,13 @@ struct HomePromptCaptureCard: View {
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(actionEnabled ? Color.appPanelBackground : Color.textSecondary)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 42)
+                    .frame(minHeight: 44)
                     .background(
                         actionEnabled ? Color.actionPrimary : Color.appSecondaryBackground,
-                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        in: RoundedRectangle.app(AppRadius.control)
                     )
                     .overlay {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        RoundedRectangle.app(AppRadius.control)
                             .stroke(actionEnabled ? Color.clear : Color.appBorder, lineWidth: 1)
                     }
             }
@@ -74,11 +74,7 @@ struct HomePromptCaptureCard: View {
             .accessibilityHint("Stages the draft in chat for review.")
         }
         .padding(12)
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.appBorder, lineWidth: 1)
-        }
+        .featureCardBackground(radius: AppRadius.control)
     }
 
     @ViewBuilder
@@ -92,7 +88,7 @@ struct HomePromptCaptureCard: View {
                 .padding(.horizontal, 9)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(height: 26)
-                .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(Color.actionTint, in: RoundedRectangle.app(AppRadius.pill))
                 .accessibilityLabel("\(selectedProjectName) context active")
         }
     }
@@ -142,14 +138,15 @@ private struct HomePromptIntentChip: View {
             .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
             .background(
                 isSelected ? Color.actionTint : Color.appSecondaryBackground,
-                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                in: RoundedRectangle.app(AppRadius.control)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle.app(AppRadius.control)
                     .stroke(isSelected ? Color.actionPrimary.opacity(0.24) : Color.appBorder, lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
+        .minimumTouchTarget()
         .accessibilityElement(children: .combine)
     }
 }

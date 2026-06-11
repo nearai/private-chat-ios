@@ -25,7 +25,7 @@ struct ComposerRouteChip: View {
         .foregroundStyle(isActive ? Color.actionPress : Color.textPrimary)
         .padding(.leading, 9)
         .padding(.trailing, 10)
-        .frame(height: 30)
+        .frame(minHeight: 44)
         .background(background, in: Capsule())
         .overlay {
             Capsule()
@@ -56,6 +56,7 @@ struct ComposerRouteIconChip: View {
                 Capsule()
                     .stroke(border, lineWidth: 1)
             }
+            .minimumTouchTarget()
     }
 
     private var background: Color {
@@ -101,8 +102,8 @@ struct RouteReadinessRecoveryCard: View {
                         .minimumScaleFactor(0.82)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 32)
-                        .background(Color.primaryAction, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .frame(minHeight: 44)
+                        .background(Color.primaryAction, in: RoundedRectangle.app(AppRadius.pill))
                 }
                 .buttonStyle(.plain)
 
@@ -112,10 +113,10 @@ struct RouteReadinessRecoveryCard: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Color.primaryAction)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 32)
-                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .frame(minHeight: 44)
+                            .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.pill))
                             .overlay {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                RoundedRectangle.app(AppRadius.pill)
                                     .stroke(Color.appBorder, lineWidth: 1)
                             }
                     }
