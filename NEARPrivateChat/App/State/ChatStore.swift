@@ -4195,7 +4195,11 @@ final class ChatStore: ObservableObject {
                     baseModel: baseModel,
                     conversationID: conversationID,
                     previousResponseID: previousResponseID,
-                    webSearchEnabled: webContext == nil && shouldEnableModelNativeWebTool(model: ModelOption.ironclawMobileModelID, prompt: text),
+                    webSearchEnabled: shouldEnableModelNativeWebTool(
+                        model: ModelOption.ironclawMobileModelID,
+                        prompt: text,
+                        appWebContext: webContext
+                    ),
                     systemPrompt: activeSystemPrompt(memoryForModel: ModelOption.ironclawMobileModelID),
                     toolResults: toolResults,
                     webContext: webContext
@@ -4302,36 +4306,32 @@ final class ChatStore: ObservableObject {
         return AgentStore.strippedAgentLaunchPrefix(from: text)
     }
 
-    private func shouldEnableModelNativeWebTool(model: String, prompt: String) -> Bool {
-        guard !Self.promptSourcePrivacyOverride(for: prompt).blocksWeb else {
-            return false
-        }
+    private func shouldEnableModelNativeWebTool(
+        model: String,
+        prompt: String,
+        appWebContext: WebGroundingContext? = nil
+    ) -> Bool {
+        let privacyBlocksWeb = Self.promptSourcePrivacyOverride(for: prompt).blocksWeb
         let semantics = routingSemantics(for: Self.routeKind(forModelID: model))
-        return semantics.modelNativeWebToolPolicy.resolves(
+        return ChatWebGroundingDecision.shouldEnableNativeWebTool(
+            semantics: semantics,
             benefitsFromSearch: Self.promptBenefitsFromAppSearch(prompt),
-            needsFreshFacts: Self.promptNeedsLiveWeb(prompt)
+            needsFreshFacts: Self.promptNeedsLiveWeb(prompt),
+            privacyBlocksWeb: privacyBlocksWeb,
+            appWebContextPresent: appWebContext != nil
         )
     }
 
     private func shouldUseAppWebGrounding(model: String, prompt: String) -> Bool {
-        guard !Self.promptSourcePrivacyOverride(for: prompt).blocksWeb else {
-            return false
-        }
         let route = Self.routeKind(forModelID: model)
         let semantics = routingSemantics(for: route)
-        guard semantics.appWebGroundingPolicy != .never else { return false }
-        if semantics.modelNativeWebToolPolicy == .always,
-           shouldEnableModelNativeWebTool(model: model, prompt: prompt) {
-            return false
-        }
-        if model == ModelOption.ironclawModelID,
-           Self.promptNeedsRemoteWorkstation(prompt),
-           !Self.promptNeedsLiveWeb(prompt) {
-            return false
-        }
-        return semantics.appWebGroundingPolicy.resolves(
+        return ChatWebGroundingDecision.shouldUseAppGrounding(
+            route: route,
+            semantics: semantics,
             benefitsFromSearch: Self.promptBenefitsFromAppSearch(prompt),
-            needsFreshFacts: Self.promptNeedsLiveWeb(prompt)
+            needsFreshFacts: Self.promptNeedsLiveWeb(prompt),
+            privacyBlocksWeb: Self.promptSourcePrivacyOverride(for: prompt).blocksWeb,
+            promptNeedsRemoteWorkstation: model == ModelOption.ironclawModelID && Self.promptNeedsRemoteWorkstation(prompt)
         )
     }
 
@@ -4550,7 +4550,10 @@ final class ChatStore: ObservableObject {
         conversationID: String,
         assistantMessageID: String?
     ) async {
-        guard selectedConversation?.id == conversationID else { return }
+        guard ChatStreamEventGate.canApply(
+            selectedConversationID: selectedConversation?.id,
+            eventConversationID: conversationID
+        ) else { return }
         messageTimelineStore.apply(
             streamEvent: event,
             conversationID: conversationID,

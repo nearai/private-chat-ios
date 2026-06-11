@@ -43,6 +43,18 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(IronclawAPI.retryClassification(statusCode: 400), .permanentFailure)
     }
 
+    func testIronclawSubmitResponseUsesActiveRunIDForDeferredBusy() throws {
+        let data = Data("""
+        {
+          "outcome": "deferred_busy",
+          "status": "queued",
+          "active_run_id": "run_active_123"
+        }
+        """.utf8)
+
+        XCTAssertEqual(try IronclawAPI.resolvedSubmitRunIDForTesting(from: data), "run_active_123")
+    }
+
     func testAgentThreadPersistenceStoresTrimmedThreadMappingAndMigrationFlag() throws {
         let defaults = try makeIsolatedDefaults()
         let accountID = "agent-thread-\(UUID().uuidString)"

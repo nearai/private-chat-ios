@@ -458,6 +458,58 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(hostedResearch.attachesSavedLinkSourcePack)
     }
 
+    func testWebGroundingDecisionDoesNotDoubleRunAppAndNativeWebSearch() {
+        let mobileResearch = RoutePlanner.sourceRoutingSemantics(
+            sourceMode: .auto,
+            researchModeEnabled: true,
+            webSearchEnabled: false,
+            route: .ironclawMobile
+        )
+
+        XCTAssertFalse(ChatWebGroundingDecision.shouldUseAppGrounding(
+            route: .ironclawMobile,
+            semantics: mobileResearch,
+            benefitsFromSearch: true,
+            needsFreshFacts: true,
+            privacyBlocksWeb: false,
+            promptNeedsRemoteWorkstation: false
+        ))
+        XCTAssertTrue(ChatWebGroundingDecision.shouldEnableNativeWebTool(
+            semantics: mobileResearch,
+            benefitsFromSearch: true,
+            needsFreshFacts: true,
+            privacyBlocksWeb: false
+        ))
+        XCTAssertFalse(ChatWebGroundingDecision.shouldEnableNativeWebTool(
+            semantics: mobileResearch,
+            benefitsFromSearch: true,
+            needsFreshFacts: true,
+            privacyBlocksWeb: false,
+            appWebContextPresent: true
+        ))
+
+        let cloudWeb = RoutePlanner.sourceRoutingSemantics(
+            sourceMode: .web,
+            researchModeEnabled: false,
+            webSearchEnabled: true,
+            route: .nearCloud
+        )
+        XCTAssertTrue(ChatWebGroundingDecision.shouldUseAppGrounding(
+            route: .nearCloud,
+            semantics: cloudWeb,
+            benefitsFromSearch: true,
+            needsFreshFacts: true,
+            privacyBlocksWeb: false,
+            promptNeedsRemoteWorkstation: false
+        ))
+        XCTAssertFalse(ChatWebGroundingDecision.shouldEnableNativeWebTool(
+            semantics: cloudWeb,
+            benefitsFromSearch: true,
+            needsFreshFacts: true,
+            privacyBlocksWeb: false
+        ))
+    }
+
     func testLiveWebRoutingCoversDeepResearchPrompts() {
         XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("Deep research the latest Claude Code changes with citations."))
         XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("Look up source-backed pricing for Rolex GMT Master II as of today."))

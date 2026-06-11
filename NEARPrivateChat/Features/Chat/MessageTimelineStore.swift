@@ -19,6 +19,17 @@ enum ChatDisplayItem: Identifiable, Hashable {
     }
 }
 
+enum ChatStreamEventGate {
+    static func canApply(selectedConversationID: String?, eventConversationID: String) -> Bool {
+        guard let selectedConversationID,
+              !selectedConversationID.isEmpty,
+              !eventConversationID.isEmpty else {
+            return false
+        }
+        return selectedConversationID == eventConversationID
+    }
+}
+
 @MainActor
 final class MessageTimelineStore: ObservableObject {
     @Published private(set) var state = ChatTranscriptState()

@@ -258,3 +258,47 @@ struct ChatSourceRoutingSemantics: Hashable {
         }
     }
 }
+
+enum ChatWebGroundingDecision {
+    static func shouldEnableNativeWebTool(
+        semantics: ChatSourceRoutingSemantics,
+        benefitsFromSearch: Bool,
+        needsFreshFacts: Bool,
+        privacyBlocksWeb: Bool,
+        appWebContextPresent: Bool = false
+    ) -> Bool {
+        guard !privacyBlocksWeb, !appWebContextPresent else { return false }
+        return semantics.modelNativeWebToolPolicy.resolves(
+            benefitsFromSearch: benefitsFromSearch,
+            needsFreshFacts: needsFreshFacts
+        )
+    }
+
+    static func shouldUseAppGrounding(
+        route: ChatRouteKind,
+        semantics: ChatSourceRoutingSemantics,
+        benefitsFromSearch: Bool,
+        needsFreshFacts: Bool,
+        privacyBlocksWeb: Bool,
+        promptNeedsRemoteWorkstation: Bool
+    ) -> Bool {
+        guard !privacyBlocksWeb else { return false }
+        guard semantics.appWebGroundingPolicy != .never else { return false }
+        if semantics.modelNativeWebToolPolicy == .always,
+           shouldEnableNativeWebTool(
+                semantics: semantics,
+                benefitsFromSearch: benefitsFromSearch,
+                needsFreshFacts: needsFreshFacts,
+                privacyBlocksWeb: privacyBlocksWeb
+           ) {
+            return false
+        }
+        if route == .ironclawHosted, promptNeedsRemoteWorkstation, !needsFreshFacts {
+            return false
+        }
+        return semantics.appWebGroundingPolicy.resolves(
+            benefitsFromSearch: benefitsFromSearch,
+            needsFreshFacts: needsFreshFacts
+        )
+    }
+}

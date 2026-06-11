@@ -23,6 +23,12 @@ final class IronclawAPI {
     private static let defaultTimelineLimit = 100
     private static let fallbackTimelineLimit = 250
 
+    #if DEBUG
+    static func resolvedSubmitRunIDForTesting(from data: Data) throws -> String? {
+        try JSONDecoder().decode(IronclawSubmitResponse.self, from: data).resolvedRunID
+    }
+    #endif
+
     func testConnection(settings: IronclawSettings, authToken: String?) async throws -> String {
         let baseURL = try validatedBaseURL(settings.baseURL)
         do {

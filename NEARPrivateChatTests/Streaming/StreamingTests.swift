@@ -185,6 +185,21 @@ extension PrivateChatCoreTests {
         )
     }
 
+    func testChatStreamEventGateRejectsStaleConversationEvents() {
+        XCTAssertTrue(ChatStreamEventGate.canApply(
+            selectedConversationID: "conv-live",
+            eventConversationID: "conv-live"
+        ))
+        XCTAssertFalse(ChatStreamEventGate.canApply(
+            selectedConversationID: "conv-live",
+            eventConversationID: "conv-stale"
+        ))
+        XCTAssertFalse(ChatStreamEventGate.canApply(
+            selectedConversationID: nil,
+            eventConversationID: "conv-live"
+        ))
+    }
+
     func testWidgetStrippedStreamingPreviewHidesUnclosedFence() {
         let text = "Partial answer text.\n\n```near-widget\n{\"kind\":\"chart\","
         let preview = MessageWidget.strippedStreamingPreview(text)
