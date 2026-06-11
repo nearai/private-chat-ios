@@ -92,7 +92,26 @@ final class SessionStore: NSObject, ObservableObject {
             showBanner("Paste a session token first.")
             return
         }
-        let newSession = AuthSession(token: trimmed, sessionID: "", expiresAt: nil, isNewUser: false)
+        adoptSession(token: trimmed, sessionID: "", isNewUser: false)
+    }
+
+    /// Adopts a session obtained outside the OAuth redirect flow — the in-app
+    /// web-login harvest (WebSignInView) and native NEAR wallet signing both
+    /// land here with the real `{token, session_id}` the backend issued. Unlike
+    /// `signInWithToken`, this keeps the session_id so sign-out can revoke it
+    /// server-side.
+    func adoptSession(token: String, sessionID: String, isNewUser: Bool) {
+        let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedToken.isEmpty else {
+            showBanner("That sign-in didn't return a session token.")
+            return
+        }
+        let newSession = AuthSession(
+            token: trimmedToken,
+            sessionID: sessionID.trimmingCharacters(in: .whitespacesAndNewlines),
+            expiresAt: nil,
+            isNewUser: isNewUser
+        )
         save(newSession)
         Task { await refreshProfile(force: true) }
     }

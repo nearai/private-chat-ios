@@ -31,10 +31,16 @@ struct AuthView: View {
     @State private var showingSharedLink = false
     @State private var hasAcceptedLegalTerms = LegalTermsAcceptanceStore.hasPendingCurrentVersion()
 
+    // Token sign-in is available in Release as a fallback: the hosted OAuth and
+    // wallet flows can't complete on device until the backend allowlists the
+    // app's callback, so a session token captured from a working web sign-in is
+    // the dependable path. See WebSignInView for the in-app web-login harvest.
+    @State private var showingTokenLogin = false
+    @State private var showingWebSignIn = false
+    @State private var token = ""
+
     #if DEBUG
     @State private var showingMoreSignInOptions = false
-    @State private var showingTokenLogin = false
-    @State private var token = ""
     #endif
 
     var body: some View {
@@ -80,26 +86,32 @@ struct AuthView: View {
                 )
 
                 VStack(spacing: 8) {
+                    // All three providers open the real private.near.ai login in
+                    // an in-app web view (WebSignInView), where the chosen method
+                    // actually completes and the app adopts the resulting
+                    // session. The native OAuth redirect can't finish on device
+                    // (the backend doesn't allowlist the app's callback), so
+                    // every button routes through the web harvest instead.
                     AuthProviderButton(
                         provider: .near,
-                        isLoading: sessionStore.isAuthenticating,
+                        isLoading: false,
                         isEnabled: canStartSignIn
                     ) {
-                        sessionStore.signIn(with: .near)
+                        showingWebSignIn = true
                     }
                     AuthProviderButton(
                         provider: .google,
-                        isLoading: sessionStore.isAuthenticating,
+                        isLoading: false,
                         isEnabled: canStartSignIn
                     ) {
-                        sessionStore.signIn(with: .google)
+                        showingWebSignIn = true
                     }
                     AuthProviderButton(
                         provider: .github,
-                        isLoading: sessionStore.isAuthenticating,
+                        isLoading: false,
                         isEnabled: canStartSignIn
                     ) {
-                        sessionStore.signIn(with: .github)
+                        showingWebSignIn = true
                     }
                 }
 
@@ -122,15 +134,13 @@ struct AuthView: View {
                 .buttonStyle(.plain)
 
                 if hasAcceptedLegalTerms {
-                    #if DEBUG
-                    // One-tap session-token paste for debug builds after legal acceptance.
                     Button {
                         showingTokenLogin = true
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "key.fill")
                                 .font(.footnote.weight(.semibold))
-                            Text("Paste session token (DEBUG)")
+                            Text("Sign in with a session token")
                                 .font(.footnote.weight(.semibold))
                         }
                         .foregroundStyle(Color.actionPrimary)
@@ -144,7 +154,9 @@ struct AuthView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("auth.tokenSignIn")
 
+                    #if DEBUG
                     DebugMoreSignInOptions(
                         isOpen: $showingMoreSignInOptions,
                         isEnabled: true,
@@ -179,16 +191,24 @@ struct AuthView: View {
                 }
             )
         }
-        #if DEBUG
+        .sheet(isPresented: $showingWebSignIn) {
+            WebSignInView(
+                onHarvest: { token, sessionID in
+                    showingWebSignIn = false
+                    sessionStore.adoptSession(token: token, sessionID: sessionID, isNewUser: false)
+                },
+                onCancel: { showingWebSignIn = false }
+            )
+        }
         .sheet(isPresented: $showingTokenLogin) {
             NavigationStack {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Paste a session JWT from a working production sign-in (browser DevTools → Application → Cookies / Local Storage).")
+                    Text("Paste a session token from a signed-in private.near.ai session. On a Mac: sign in at private.near.ai, open DevTools → Application → Local Storage / Cookies and copy the session token. The token authenticates the private route directly.")
                         .font(.subheadline)
                         .foregroundStyle(Color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    SecureField("session JWT", text: $token)
+                    SecureField("session token", text: $token)
                         .tokenInputTraits()
                         .padding(12)
                         .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -227,7 +247,6 @@ struct AuthView: View {
             }
             .platformMediumDetent()
         }
-        #endif
     }
 
     private var canStartSignIn: Bool {
