@@ -81,7 +81,7 @@ struct RouteReadinessRecoveryCard: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(Color.brandAccent)
                     .frame(width: 28, height: 28)
-                    .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(Color.appSymbolBlueBackground, in: RoundedRectangle.app(AppRadius.pill))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(issue.title)
@@ -130,11 +130,12 @@ struct RouteReadinessRecoveryCard: View {
                     .foregroundStyle(Color.primaryAction)
             }
             .buttonStyle(.plain)
+            .minimumTouchTarget()
         }
         .padding(10)
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.pill))
         .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle.app(AppRadius.pill)
                 .stroke(Color.brandAccent.opacity(0.16), lineWidth: 1)
         }
         .accessibilityElement(children: .combine)
@@ -176,7 +177,7 @@ struct ProxyRetryCard: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(Color.brandAccent)
                     .frame(width: 28, height: 28)
-                    .background(Color.appSymbolBlueBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(Color.appSymbolBlueBackground, in: RoundedRectangle.app(AppRadius.pill))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Private route is busy")
@@ -197,8 +198,8 @@ struct ProxyRetryCard: View {
                         .minimumScaleFactor(0.82)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 32)
-                        .background(Color.primaryAction, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .frame(minHeight: 44)
+                        .background(Color.primaryAction, in: RoundedRectangle.app(AppRadius.pill))
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("message.recovery.proxy")
@@ -208,10 +209,10 @@ struct ProxyRetryCard: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.primaryAction)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 32)
-                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .frame(minHeight: 44)
+                        .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.pill))
                         .overlay {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            RoundedRectangle.app(AppRadius.pill)
                                 .stroke(Color.appBorder, lineWidth: 1)
                         }
                 }
@@ -219,9 +220,9 @@ struct ProxyRetryCard: View {
             }
         }
         .padding(10)
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.pill))
         .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle.app(AppRadius.pill)
                 .stroke(Color.brandAccent.opacity(0.16), lineWidth: 1)
         }
         .accessibilityElement(children: .contain)

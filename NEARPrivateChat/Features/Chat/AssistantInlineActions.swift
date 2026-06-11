@@ -46,6 +46,7 @@ struct AssistantInlineActions: View {
                         .background(Color.clear, in: Capsule())
                     }
                     .buttonStyle(.plain)
+                    .minimumTouchTarget()
                     .accessibilityLabel(sourceCount == 1 ? "Open source" : "Open \(sourceCount) sources")
                 }
             }
@@ -79,6 +80,7 @@ struct AssistantInlineActions: View {
                 .background(Color.clear, in: Circle())
         }
         .buttonStyle(.plain)
+        .minimumTouchTarget()
         .accessibilityLabel("Export Answer")
     }
 
@@ -92,6 +94,7 @@ struct AssistantInlineActions: View {
         }
         .buttonStyle(.plain)
         .disabled(isSavedToProject)
+        .minimumTouchTarget()
         .accessibilityLabel(saveAccessibilityLabel)
     }
 
@@ -108,6 +111,7 @@ struct AssistantInlineActions: View {
                 .background(Color.clear, in: Circle())
         }
         .buttonStyle(.plain)
+        .minimumTouchTarget()
         .accessibilityLabel(label)
     }
 

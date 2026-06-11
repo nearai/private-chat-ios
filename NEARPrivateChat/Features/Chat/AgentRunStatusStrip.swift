@@ -14,7 +14,7 @@ struct AgentRunStatusStrip: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(tintColor(isStale: isStale))
                     .frame(width: 24, height: 24)
-                    .background(tintColor(isStale: isStale).opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .background(tintColor(isStale: isStale).opacity(0.10), in: RoundedRectangle.app(AppRadius.pill))
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
@@ -43,8 +43,8 @@ struct AgentRunStatusStrip: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.red)
                             .padding(.horizontal, 9)
-                            .frame(height: 28)
-                            .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .frame(minHeight: 44)
+                            .background(Color.red.opacity(0.08), in: RoundedRectangle.app(AppRadius.pill))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Stop stalled IronClaw run")
@@ -54,8 +54,8 @@ struct AgentRunStatusStrip: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Color.brandAccent)
                             .padding(.horizontal, 9)
-                            .frame(height: 28)
-                            .background(Color.brandAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .frame(minHeight: 44)
+                            .background(Color.brandAccent.opacity(0.08), in: RoundedRectangle.app(AppRadius.pill))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Retry IronClaw run")
@@ -63,9 +63,9 @@ struct AgentRunStatusStrip: View {
             }
             .padding(9)
             .frame(maxWidth: 520, alignment: .leading)
-            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.pill))
             .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle.app(AppRadius.pill)
                     .stroke(tintColor(isStale: isStale).opacity(message.status == "failed" || isStale ? 0.24 : 0.16), lineWidth: 1)
             }
         }
