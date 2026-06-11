@@ -114,7 +114,7 @@ final class SessionStore: NSObject, ObservableObject {
         // generated 32-byte nonce, recipient = the private.near.ai host.
         let payload = NEP413Payload(
             message: "Sign in to NEAR AI",
-            nonce: NEP413Signer.randomNonce(),
+            nonce: NEP413Signer.timestampNonce(),
             recipient: "private.near.ai",
             callbackUrl: nil
         )

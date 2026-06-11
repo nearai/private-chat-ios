@@ -81,6 +81,25 @@ enum NEP413Signer {
         return nonce
     }
 
+    /// The nonce `/v1/auth/near` requires: `Date.now()` milliseconds as a
+    /// big-endian UInt64 in bytes 0–7, then 24 random bytes (mirrors the web
+    /// `UY()` builder). The server rejects a fully-random nonce with
+    /// "Invalid signature timestamp: timestamp out of range".
+    static func timestampNonce(now: Date = Date()) -> Data {
+        var nonce = Data(count: 32)
+        let millis = UInt64(now.timeIntervalSince1970 * 1000)
+        let bigEndian = withUnsafeBytes(of: millis.bigEndian) { Data($0) }
+        nonce.replaceSubrange(0..<8, with: bigEndian)
+        var random = Data(count: 24)
+        random.withUnsafeMutableBytes { raw in
+            if let base = raw.baseAddress {
+                _ = SecRandomCopyBytes(kSecRandomDefault, 24, base)
+            }
+        }
+        nonce.replaceSubrange(8..<32, with: random)
+        return nonce
+    }
+
     /// Borsh string: u32 little-endian byte length followed by UTF-8 bytes.
     private static func borshString(_ value: String) -> Data {
         let utf8 = Data(value.utf8)

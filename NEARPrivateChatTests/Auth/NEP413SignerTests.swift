@@ -161,4 +161,19 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(object["publicKey"], "ed25519:abc")
         XCTAssertEqual(object["signature"], "c2ln")
     }
+
+    // MARK: - Timestamp nonce (server requires it)
+
+    func testTimestampNonceEncodesBigEndianMillisInFirstEightBytes() {
+        // The server rejects a random nonce with "timestamp out of range"; the
+        // first 8 bytes must be Date.now() ms as a big-endian UInt64.
+        let fixed = Date(timeIntervalSince1970: 1_781_000_000.5)
+        let nonce = NEP413Signer.timestampNonce(now: fixed)
+        XCTAssertEqual(nonce.count, 32)
+        let expectedMillis = UInt64(fixed.timeIntervalSince1970 * 1000)
+        let decoded = nonce.prefix(8).reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
+        XCTAssertEqual(decoded, expectedMillis)
+        // Tail is random — two draws differ.
+        XCTAssertNotEqual(NEP413Signer.timestampNonce(now: fixed), NEP413Signer.timestampNonce(now: fixed))
+    }
 }
