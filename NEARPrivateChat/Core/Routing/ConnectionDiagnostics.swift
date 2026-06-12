@@ -108,4 +108,25 @@ final class ConnectionDiagnostics: ObservableObject {
         // it's the private session specifically.
         return lastCloudOutcome?.succeeded == true || lastCloudOutcome == nil
     }
+
+    /// The private route accepted the session for profile/conversation work but
+    /// rejected inference with rate-limit-class wording. Retry remains the
+    /// first recovery; if it persists, a fresh private session is the next
+    /// honest action before sending the turn through Cloud.
+    var privateLooksSessionRateLimited: Bool {
+        guard let lastPrivateOutcome,
+              !lastPrivateOutcome.succeeded,
+              lastPrivateOutcome.route == .nearPrivate,
+              !lastPrivateOutcome.wasAuthFailure else {
+            return false
+        }
+        let message = lastPrivateOutcome.message.lowercased()
+        return lastPrivateOutcome.statusCode == 403 &&
+            (
+                message.contains("temporarily restricted") ||
+                message.contains("access temporarily restricted") ||
+                message.contains("private route is rate-limited") ||
+                message.contains("rate-limited for this session")
+            )
+    }
 }

@@ -32,9 +32,75 @@ extension PrivateChatCoreTests {
     func testPlanTimeoutAndTransportErrorsDoNotTripBreaker() {
         let monitor = RouteHealthMonitor()
         monitor.recordFailure(modelID: "zai-org/GLM-5.1-FP8", error: APIError.status(402, "not available in your plan"))
+        monitor.recordFailure(modelID: "zai-org/GLM-5.1-FP8", error: APIError.status(403, "Access denied"))
+        monitor.recordFailure(modelID: "zai-org/GLM-5.1-FP8", error: APIError.status(403, "Model is not available in your plan"))
         monitor.recordFailure(modelID: "zai-org/GLM-5.1-FP8", error: URLError(.timedOut))
         monitor.recordFailure(modelID: "zai-org/GLM-5.1-FP8", error: URLError(.networkConnectionLost))
         XCTAssertFalse(monitor.isTripped(.nearPrivate))
+    }
+
+    func testOnlyAuthAndRateLimitForbiddenErrorsTripRouteBreaker() {
+        XCTAssertFalse(RouteHealthMonitor.isRestrictedClassError(APIError.status(403, "Access denied")))
+        XCTAssertFalse(RouteHealthMonitor.isRestrictedClassError(APIError.status(403, "Model is not available in your plan")))
+        XCTAssertTrue(RouteHealthMonitor.isRestrictedClassError(APIError.status(403, "Access temporarily restricted. Please try again later.")))
+        XCTAssertTrue(RouteHealthMonitor.isRestrictedClassError(APIError.status(403, "Missing authorization header")))
+        XCTAssertTrue(RouteHealthMonitor.isRestrictedClassError(APIError.status(429, "Too many requests")))
+    }
+
+    func testExplicitRateLimitFailureDetectsQuotaSignals() {
+        XCTAssertTrue(RouteHealthMonitor.isExplicitRateLimitFailure(APIError.status(403, "Access temporarily restricted. Please try again later.")))
+        XCTAssertTrue(RouteHealthMonitor.isExplicitRateLimitFailure(APIError.status(429, "")))
+        XCTAssertTrue(RouteHealthMonitor.isExplicitRateLimitFailure(APIError.status(403, "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn.")))
+        XCTAssertFalse(RouteHealthMonitor.isExplicitRateLimitFailure(APIError.status(403, "The private route is busy right now. Retry private, or use the privacy proxy for this turn.")))
+        XCTAssertFalse(RouteHealthMonitor.isExplicitRateLimitFailure(APIError.status(403, "Missing authorization header")))
+    }
+
+    func testTransientBusyFailureExcludesAuthAccessAndExplicitRateLimits() {
+        XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(403, "Access temporarily restricted. Please try again later.")))
+        XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(429, "Too many requests")))
+        XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(403, "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn.")))
+        XCTAssertTrue(RouteHealthMonitor.isTransientBusyFailure(APIError.status(403, "The private route is busy right now. Retry private, or use the privacy proxy for this turn.")))
+
+        XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(401, "Missing authorization header")))
+        XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(403, "Missing authorization header")))
+        XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(403, "Access denied")))
+    }
+
+    func testDisplayFailureMessageDistinguishesPrivateBusyFromRateLimit() {
+        let busy = ErrorMessageMapper.displayFailureMessage("The private route is busy right now. Retry private, or use the privacy proxy for this turn.")
+        XCTAssertTrue(busy.localizedCaseInsensitiveContains("busy"))
+        XCTAssertFalse(busy.localizedCaseInsensitiveContains("rate-limited"))
+        XCTAssertFalse(busy.localizedCaseInsensitiveContains("sign out"))
+
+        let limited = ErrorMessageMapper.displayFailureMessage("Access temporarily restricted. Please try again later.")
+        XCTAssertTrue(limited.localizedCaseInsensitiveContains("rate-limited"))
+        XCTAssertTrue(limited.localizedCaseInsensitiveContains("sign out"))
+    }
+
+    func testPrivateProxyRecoveryPolicyRequiresRouteFailureSignal() {
+        let privateModelID = ModelOption.nearPrivateDefaultModelID
+        let cloudModelID = ModelOption.nearCloudModelID(for: "openai/gpt-5.2")
+
+        XCTAssertFalse(PrivateRouteRecoveryPolicy.shouldOfferPrivacyProxyRetry(
+            modelID: privateModelID,
+            failureMessage: "Access denied by the NEAR Private API. Sign in again or choose another available model.",
+            routeIsTripped: false
+        ))
+        XCTAssertFalse(PrivateRouteRecoveryPolicy.shouldOfferPrivacyProxyRetry(
+            modelID: cloudModelID,
+            failureMessage: "The private route is busy right now. Retry private, or use the privacy proxy for this turn.",
+            routeIsTripped: true
+        ))
+        XCTAssertTrue(PrivateRouteRecoveryPolicy.shouldOfferPrivacyProxyRetry(
+            modelID: privateModelID,
+            failureMessage: "The private route is busy right now. Retry private, or use the privacy proxy for this turn.",
+            routeIsTripped: false
+        ))
+        XCTAssertTrue(PrivateRouteRecoveryPolicy.shouldOfferPrivacyProxyRetry(
+            modelID: privateModelID,
+            failureMessage: "Access denied",
+            routeIsTripped: true
+        ))
     }
 
     @MainActor
@@ -59,6 +125,9 @@ extension PrivateChatCoreTests {
         monitor.recordFailure(modelID: "zai-org/GLM-5.1-FP8", error: Self.restrictedError)
         let notice = try XCTUnwrap(monitor.restrictionNotice(for: .nearPrivate))
         XCTAssertTrue(notice.localizedCaseInsensitiveContains("privacy proxy"))
+        XCTAssertTrue(notice.localizedCaseInsensitiveContains("retry private"))
+        XCTAssertTrue(notice.localizedCaseInsensitiveContains("sign out"))
+        XCTAssertFalse(notice.localizedCaseInsensitiveContains("retrying automatically"))
         XCTAssertNil(monitor.restrictionNotice(for: .nearCloud))
     }
 
@@ -109,7 +178,21 @@ extension PrivateChatCoreTests {
         let monitor = RouteHealthMonitor()
         monitor.recordFailure(modelID: "zai-org/GLM-5.1-FP8", error: Self.restrictedError)
         let notice = try XCTUnwrap(monitor.restrictionNotice(for: .nearPrivate))
+        XCTAssertTrue(notice.localizedCaseInsensitiveContains("rate-limited"))
+        XCTAssertFalse(notice.localizedCaseInsensitiveContains("isn't authenticated"))
+    }
+
+    @MainActor
+    func testBusyNoticeDoesNotCallBusyRouteRateLimited() throws {
+        let monitor = RouteHealthMonitor()
+        monitor.recordFailure(
+            modelID: "zai-org/GLM-5.1-FP8",
+            error: APIError.status(403, "The private route is busy right now. Retry private, or use the privacy proxy for this turn.")
+        )
+        let notice = try XCTUnwrap(monitor.restrictionNotice(for: .nearPrivate))
         XCTAssertTrue(notice.localizedCaseInsensitiveContains("busy"))
+        XCTAssertTrue(notice.localizedCaseInsensitiveContains("privacy proxy"))
+        XCTAssertFalse(notice.localizedCaseInsensitiveContains("rate-limited"))
     }
 
     @MainActor

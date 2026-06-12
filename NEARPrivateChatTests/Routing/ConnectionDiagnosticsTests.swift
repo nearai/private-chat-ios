@@ -45,6 +45,11 @@ extension PrivateChatCoreTests {
         diagnostics.recordSuccess(route: .nearCloud, modelID: "gpt")
         XCTAssertEqual(diagnostics.lastPrivateOutcome?.wasAuthFailure, false)
         XCTAssertFalse(diagnostics.privateLooksUnauthenticated)
+        XCTAssertTrue(diagnostics.privateLooksSessionRateLimited)
+
+        diagnostics.reset()
+        diagnostics.record(route: .nearPrivate, modelID: "glm", error: APIError.status(403, "Access denied"))
+        XCTAssertFalse(diagnostics.privateLooksSessionRateLimited)
     }
 
     @MainActor
@@ -66,6 +71,38 @@ extension PrivateChatCoreTests {
         XCTAssertNil(diagnostics.lastPrivateOutcome)
         diagnostics.record(route: .nearPrivate, modelID: "glm", error: URLError(.cancelled))
         XCTAssertNil(diagnostics.lastPrivateOutcome)
+    }
+
+    @MainActor
+    func testCredentialRefreshClearsPrivateRouteBreakerAndDiagnostics() {
+        let routeHealth = RouteHealthMonitor()
+        let diagnostics = ConnectionDiagnostics()
+        let store = ChatStore(
+            api: PrivateChatAPI(configuration: .production),
+            routeHealth: routeHealth,
+            diagnostics: diagnostics,
+            initialAccountID: "user:test"
+        )
+
+        routeHealth.recordFailure(
+            modelID: ModelOption.nearPrivateDefaultModelID,
+            error: APIError.status(403, "Access temporarily restricted. Please try again later.")
+        )
+        diagnostics.record(
+            route: .nearPrivate,
+            modelID: ModelOption.nearPrivateDefaultModelID,
+            error: APIError.status(403, "Access temporarily restricted. Please try again later.")
+        )
+
+        XCTAssertTrue(routeHealth.isTripped(.nearPrivate))
+        XCTAssertTrue(diagnostics.privateLooksSessionRateLimited)
+
+        store.resetConnectionStateForCredentialChange()
+
+        XCTAssertFalse(routeHealth.isTripped(.nearPrivate))
+        XCTAssertNil(routeHealth.restrictionNotice(for: .nearPrivate))
+        XCTAssertNil(diagnostics.lastPrivateOutcome)
+        XCTAssertFalse(diagnostics.privateLooksSessionRateLimited)
     }
 
     func testContextBlockFallsBackToOpeningChunksForGenericQuestion() throws {

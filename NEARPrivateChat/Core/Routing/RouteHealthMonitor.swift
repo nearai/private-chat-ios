@@ -41,6 +41,9 @@ final class RouteHealthMonitor: ObservableObject {
         /// NOT recover by waiting, so the notice must say "sign in" instead of
         /// "temporarily busy."
         var lastWasAuthFailure: Bool = false
+        /// True when the most recent trip was an explicit quota/rate-limit
+        /// signal rather than a merely busy route.
+        var lastWasExplicitRateLimitFailure: Bool = false
     }
 
     @Published private(set) var statusByRoute: [ChatRouteKind: RouteStatus] = [:]
@@ -88,6 +91,7 @@ final class RouteHealthMonitor: ObservableObject {
         status.phase = .restricted(until: now().addingTimeInterval(cooldown))
         status.lastFailureSummary = (error as? LocalizedError)?.errorDescription
         status.lastWasAuthFailure = Self.isAuthFailure(error)
+        status.lastWasExplicitRateLimitFailure = Self.isExplicitRateLimitFailure(error)
         statusByRoute[route] = status
     }
 
@@ -103,13 +107,9 @@ final class RouteHealthMonitor: ObservableObject {
         !isTripped(RoutePlanner.routeKind(forModelID: modelID))
     }
 
-    /// User copy for a tripped route, with remaining cooldown.
+    /// User copy for a tripped route.
     func restrictionNotice(for route: ChatRouteKind) -> String? {
         guard isTripped(route) else { return nil }
-        var remaining = 0
-        if case let .restricted(until) = statusByRoute[route]?.phase {
-            remaining = max(0, Int(until.timeIntervalSince(now()).rounded(.up)))
-        }
         // An auth failure won't recover by waiting — say so honestly instead of
         // implying a rate limit that clears on its own.
         if statusByRoute[route]?.lastWasAuthFailure == true {
@@ -122,10 +122,10 @@ final class RouteHealthMonitor: ObservableObject {
         }
         switch route {
         case .nearPrivate:
-            if remaining > 0 {
-                return "The private route is temporarily busy — retrying automatically in about \(remaining)s. Use the privacy proxy for this turn, or try private again from the route chip."
+            if statusByRoute[route]?.lastWasExplicitRateLimitFailure == true {
+                return "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn."
             }
-            return "The private route is temporarily busy. Use the privacy proxy for this turn, or retry private in a moment."
+            return "Private route is busy right now. Retry private in a moment, or use the privacy proxy only for this turn."
         default:
             return "This route is temporarily busy. Try again in a moment."
         }
@@ -144,15 +144,55 @@ final class RouteHealthMonitor: ObservableObject {
     /// that indicate the ROUTE (not one model or one request) is rejecting the
     /// account should open the breaker.
     nonisolated static func isRestrictedClassError(_ error: Error) -> Bool {
-        if case APIError.status(403, _) = error { return true }
         // A 401 means the session token was rejected. Trip the breaker so the
         // app stops hammering an unauthenticated route on every send/foreground;
         // the notice copy distinguishes this from a rate limit.
         if case APIError.status(401, _) = error { return true }
+        if case APIError.status(429, _) = error { return true }
+        if case let APIError.status(403, message) = error {
+            return isAuthFailure(error) || isRestrictedFailureMessage(message)
+        }
         let message = ((error as? LocalizedError)?.errorDescription ?? String(describing: error)).lowercased()
-        return message.contains("temporarily restricted") ||
-            message.contains("temporarily busy") ||
-            message.contains("access denied")
+        return isRestrictedFailureMessage(message)
+    }
+
+    /// A genuinely busy route can be worth one same-route retry before the
+    /// breaker opens. Explicit rate limits should not retry automatically:
+    /// another immediate request can extend or amplify the same limit bucket.
+    nonisolated static func isTransientBusyFailure(_ error: Error) -> Bool {
+        !isAuthFailure(error) && !isExplicitRateLimitFailure(error) && isBusyFailureMessage(errorMessage(error))
+    }
+
+    nonisolated static func isExplicitRateLimitFailure(_ error: Error) -> Bool {
+        if case APIError.status(429, _) = error { return true }
+        return isExplicitRateLimitMessage(errorMessage(error))
+    }
+
+    private nonisolated static func isRestrictedFailureMessage(_ message: String) -> Bool {
+        isExplicitRateLimitMessage(message) || isBusyFailureMessage(message)
+    }
+
+    private nonisolated static func isExplicitRateLimitMessage(_ message: String) -> Bool {
+        let lowercased = message.lowercased()
+        return lowercased.contains("temporarily restricted") ||
+            lowercased.contains("access temporarily restricted") ||
+            lowercased.contains("rate-limited") ||
+            lowercased.contains("rate limit") ||
+            lowercased.contains("too many requests")
+    }
+
+    private nonisolated static func isBusyFailureMessage(_ message: String) -> Bool {
+        let lowercased = message.lowercased()
+        return lowercased.contains("temporarily busy") ||
+            lowercased.contains("private route is busy") ||
+            lowercased.contains("route is busy")
+    }
+
+    private nonisolated static func errorMessage(_ error: Error) -> String {
+        if case let APIError.status(_, body) = error {
+            return body
+        }
+        return (error as? LocalizedError)?.errorDescription ?? String(describing: error)
     }
 
     /// Distinguishes an authentication failure (bad/expired session token) from
@@ -167,12 +207,19 @@ final class RouteHealthMonitor: ObservableObject {
             message = ((error as? LocalizedError)?.errorDescription ?? String(describing: error)).lowercased()
         }
         return message.contains("authorization header")
+            || message.contains("missing bearer")
+            || message.contains("missing token")
             || message.contains("invalid or expired")
             || message.contains("authentication token")
             || message.contains("unauthenticated")
             || message.contains("not authenticated")
+            || message.contains("no authorization")
+            || message.contains("invalid token")
+            || message.contains("expired token")
             || message.contains("invalid session")
             || message.contains("expired session")
+            || message.contains("session token missing")
+            || message.contains("token rejected")
             // The private auth restrictionNotice gets re-wrapped as a 403 by
             // the agent pipeline's fail-fast path; match its copy so the
             // re-wrapped error still classifies as auth.

@@ -27,8 +27,18 @@ enum ErrorMessageMapper {
         if lowercased == "access denied" || lowercased.contains("\"access denied\"") {
             return "Access denied by the NEAR Private API. Sign in again or choose another available model."
         }
-        if lowercased.contains("temporarily restricted") {
-            return "The private route is temporarily busy. Use the privacy proxy for this turn, or retry private in a moment."
+        if lowercased.contains("temporarily restricted") ||
+            lowercased.contains("access temporarily restricted") ||
+            lowercased.contains("rate-limited") ||
+            lowercased.contains("rate limit") ||
+            lowercased.contains("too many requests") ||
+            lowercased.contains("retrying automatically") {
+            return "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn."
+        }
+        if lowercased.contains("the private route is temporarily busy") ||
+            lowercased.contains("the private route is busy") ||
+            lowercased.contains("private route is busy") {
+            return "Private route is busy right now. Retry private in a moment, or use the privacy proxy only for this turn."
         }
         if lowercased.contains("-1005") || lowercased.contains("network connection was lost") {
             return "Connection dropped mid-answer — retry. Your prompt is kept."
@@ -53,9 +63,16 @@ enum ErrorMessageMapper {
             return "Hosted IronClaw is reachable. The Agent token is missing or invalid. Open Account and test the Agent connection."
         }
         if lowercased.contains("missing authorization header") ||
+            lowercased.contains("missing bearer") ||
+            lowercased.contains("missing token") ||
+            lowercased.contains("no authorization") ||
             lowercased.contains("invalid or expired authentication token") ||
+            lowercased.contains("invalid token") ||
+            lowercased.contains("expired token") ||
             lowercased.contains("invalid session token") ||
-            lowercased.contains("expired session token") {
+            lowercased.contains("expired session token") ||
+            lowercased.contains("session token missing") ||
+            lowercased.contains("token rejected") {
             return "Authentication is missing or expired. Sign in again, then retry."
         }
         if lowercased.contains("failed to check rate limit") {
