@@ -16,9 +16,8 @@ extension Notification.Name {
 /// Single-column iPhone layout (390x844):
 ///   - Top: NEAR mark + wordmark + concise product promise.
 ///   - Spacer pushes the rest to the bottom (`margin-top: auto` in CSS).
-///   - Bottom: terms row card, three provider buttons, "Open shared link"
-///     quiet button, debug-only "More sign-in options" disclosure (DEBUG
-///     builds only), monospaced footer URL.
+///   - Bottom: terms row card, hosted session-login button, "Open shared
+///     link" quiet button, fallback sign-in disclosure, monospaced footer URL.
 ///
 /// Terms acceptance is integrated here. RootView routes a signed-in user
 /// whose terms have not been accepted back to this screen (with a pending
@@ -31,12 +30,11 @@ struct AuthView: View {
     @State private var showingSharedLink = false
     @State private var hasAcceptedLegalTerms = LegalTermsAcceptanceStore.hasPendingCurrentVersion()
 
-    // Token sign-in is available in Release as a fallback: the hosted OAuth and
-    // wallet flows can't complete on device until the backend allowlists the
-    // app's callback, so a session token captured from a working web sign-in is
-    // the dependable path. See WebSignInView for the in-app web-login harvest.
+    // The primary path opens the hosted session-login page in-app so mobile
+    // mirrors the web session flow. Provider-specific web routes, token paste,
+    // and local NEAR account signing stay available as fallback routes.
     @State private var showingTokenLogin = false
-    @State private var showingWebSignIn = false
+    @State private var webSignInRoute: WebSignInRoute?
     @State private var showingNearAccountSignIn = false
     @State private var showingMoreSignInOptions = false
     @State private var token = ""
@@ -52,7 +50,7 @@ struct AuthView: View {
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 52, height: 52)
-                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .clipShape(RoundedRectangle.app(AppRadius.control))
                     .shadow(color: Color.brandAccent.opacity(0.16), radius: 14, y: 6)
                     .accessibilityHidden(true)
 
@@ -84,39 +82,13 @@ struct AuthView: View {
                     onReadTerms: { showingLegalTerms = true }
                 )
 
-                VStack(spacing: 8) {
-                    // All three providers open the real private.near.ai login in
-                    // an in-app web view (WebSignInView), where the chosen method
-                    // actually completes and the app adopts the resulting
-                    // session. The native OAuth redirect can't finish on device
-                    // (the backend doesn't allowlist the app's callback), so
-                    // every button routes through the web harvest instead.
-                    AuthProviderButton(
-                        provider: .near,
-                        subtitle: "Sign in in-app at private.near.ai",
-                        isLoading: false,
-                        isEnabled: canStartSignIn
-                    ) {
-                        showingWebSignIn = true
-                    }
-                    AuthProviderButton(
-                        provider: .google,
-                        subtitle: "Sign in in-app at private.near.ai",
-                        isLoading: false,
-                        isEnabled: canStartSignIn
-                    ) {
-                        showingWebSignIn = true
-                    }
-                    AuthProviderButton(
-                        provider: .github,
-                        subtitle: "Sign in in-app at private.near.ai",
-                        isLoading: false,
-                        isEnabled: canStartSignIn
-                    ) {
-                        showingWebSignIn = true
-                    }
+                HostedSessionSignInButton(
+                    isLoading: sessionStore.isAuthenticating,
+                    isEnabled: canStartSignIn
+                ) {
+                    openWebSignIn()
                 }
-                .accessibilityIdentifier("auth.primaryProviders")
+                .accessibilityIdentifier("auth.primaryWebSession")
 
                 if !hasAcceptedLegalTerms {
                     Text("Accept the terms above to continue.")
@@ -147,6 +119,9 @@ struct AuthView: View {
                 MoreSignInOptions(
                     isOpen: $showingMoreSignInOptions,
                     isEnabled: hasAcceptedLegalTerms,
+                    onSelectProvider: { provider in
+                        openWebSignIn(WebSignInView.hostedSignInURL(for: provider))
+                    },
                     onSelectToken: { showingTokenLogin = true },
                     onSelectNearAccount: { showingNearAccountSignIn = true }
                 )
@@ -177,13 +152,14 @@ struct AuthView: View {
                 }
             )
         }
-        .sheet(isPresented: $showingWebSignIn) {
+        .sheet(item: $webSignInRoute) { route in
             WebSignInView(
-                onHarvest: { token, sessionID in
-                    showingWebSignIn = false
-                    sessionStore.adoptSession(token: token, sessionID: sessionID, isNewUser: false)
+                url: route.url,
+                onHarvest: { session in
+                    webSignInRoute = nil
+                    sessionStore.adoptSession(session)
                 },
-                onCancel: { showingWebSignIn = false }
+                onCancel: { webSignInRoute = nil }
             )
         }
         .sheet(isPresented: $showingNearAccountSignIn) {
@@ -200,9 +176,9 @@ struct AuthView: View {
                     SecureField("session token", text: $token)
                         .tokenInputTraits()
                         .padding(12)
-                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.pill))
                         .overlay {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            RoundedRectangle.app(AppRadius.pill)
                                 .stroke(tokenErrorMessage == nil ? Color.clear : Color.proofMismatch, lineWidth: 1)
                         }
                         .accessibilityLabel("Session token")
@@ -269,6 +245,10 @@ struct AuthView: View {
         hasAcceptedLegalTerms && !sessionStore.isAuthenticating
     }
 
+    private func openWebSignIn(_ url: URL = WebSignInView.loginURL) {
+        webSignInRoute = WebSignInRoute(url: url)
+    }
+
     private func updateLegalTermsAcceptance(_ accepted: Bool) {
         hasAcceptedLegalTerms = accepted
         if accepted {
@@ -282,6 +262,11 @@ struct AuthView: View {
     }
 }
 
+private struct WebSignInRoute: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
 // MARK: - Hero card (compatibility shim for non-Auth surfaces)
 
 /// Mark + headline block used by auth-adjacent surfaces.
@@ -293,7 +278,7 @@ struct AuthHeroCard: View {
                 .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 52, height: 52)
-                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .clipShape(RoundedRectangle.app(AppRadius.control))
                 .shadow(color: Color.brandAccent.opacity(0.16), radius: 14, y: 6)
                 .accessibilityHidden(true)
 
@@ -337,12 +322,12 @@ private struct TermsRowCard: View {
             .padding(.vertical, 12)
             .padding(.horizontal, 14)
             .frame(maxWidth: .infinity)
-            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.pill))
             .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle.app(AppRadius.pill)
                     .stroke(isAccepted ? Color.actionPrimary.opacity(0.22) : Color.appBorder, lineWidth: 1)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(RoundedRectangle.app(AppRadius.pill))
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
@@ -357,17 +342,17 @@ private struct CheckBox: View {
     let isOn: Bool
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 6, style: .continuous)
+        RoundedRectangle.app(AppRadius.pill)
             .fill(isOn ? Color.actionPrimary : .clear)
             .frame(width: 22, height: 22)
             .overlay {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                RoundedRectangle.app(AppRadius.pill)
                     .strokeBorder(isOn ? Color.actionPrimary : Color.textTertiary, lineWidth: 1.5)
             }
             .overlay {
                 if isOn {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.caption2.weight(.bold))
                         .foregroundStyle(.white)
                 }
             }
@@ -375,48 +360,49 @@ private struct CheckBox: View {
     }
 }
 
-// MARK: - Provider button
+// MARK: - Primary hosted session button
 
-private struct AuthProviderButton: View {
-    let provider: OAuthProvider
-    let subtitle: String
+private struct HostedSessionSignInButton: View {
     let isLoading: Bool
     let isEnabled: Bool
     let action: () -> Void
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        let shape = RoundedRectangle.app(AppRadius.pill)
 
         Button(action: action) {
             HStack(spacing: 12) {
-                ProviderGlyph(provider: provider, tint: isEnabled ? .white : Color.textSecondary)
-                    .frame(width: 20, height: 20)
+                Image(systemName: "person.crop.circle.badge.checkmark")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(isEnabled ? .white : Color.textSecondary)
+                    .frame(width: 24, height: 24)
 
                 VStack(spacing: 2) {
-                    Text(provider.title)
+                    Text("Sign in")
                         .font(.system(.callout, design: .rounded).weight(.semibold))
-                    Text(subtitle)
+                    Text("Open private.near.ai session login")
                         .font(.system(.caption2, design: .rounded).weight(.medium))
                         .opacity(0.82)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.86)
+                        .minimumScaleFactor(0.82)
                 }
-                    .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity)
 
-                // Right-side spacer matches glyph width + leading gap so the
-                // label sits optically centered.
                 if isLoading {
                     ProgressView()
                         .controlSize(.small)
                         .tint(isEnabled ? .white : Color.textSecondary)
-                        .frame(width: 20, height: 20)
+                        .frame(width: 24, height: 24)
                 } else {
-                    Color.clear.frame(width: 20, height: 20)
+                    Image(systemName: "arrow.up.forward")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(isEnabled ? .white.opacity(0.9) : Color.textTertiary)
+                        .frame(width: 24, height: 24)
                 }
             }
             .foregroundStyle(isEnabled ? .white : Color.textSecondary)
             .padding(.horizontal, 18)
-            .frame(height: 50)
+            .frame(height: 54)
             .frame(maxWidth: .infinity)
             .background(
                 (isEnabled ? Color.actionPrimary : Color.appPanelBackground),
@@ -429,39 +415,10 @@ private struct AuthProviderButton: View {
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled || isLoading)
-        .accessibilityLabel(provider.title)
-        .accessibilityHint(isEnabled ? subtitle : "Accept the terms above to continue.")
-        .accessibilityIdentifier("auth.provider.\(provider.rawValue)")
+        .accessibilityLabel("Sign in")
+        .accessibilityHint(isEnabled ? "Opens the private.near.ai session login page inside the app." : "Accept the terms above to continue.")
+        .accessibilityIdentifier("auth.openHostedSessionSignIn")
     }
-}
-
-/// Real brand glyphs for each provider, rendered monochrome white on the
-/// brand-blue button per the auth screen's house style. The shapes themselves
-/// are the canonical brand marks (NEAR letterform, Google "G", GitHub
-/// Octocat), not generic SF Symbol placeholders.
-private struct ProviderGlyph: View {
-    let provider: OAuthProvider
-    let tint: Color
-
-    var body: some View {
-        switch provider {
-        case .near:
-            // The official NEAR mark from brand guidelines, rendered as a
-            // tintable template.
-            Image("NearGlyph")
-                .resizable()
-                .interpolation(.high)
-                .aspectRatio(contentMode: .fit)
-                .foregroundStyle(tint)
-        case .google:
-            GoogleGGlyph()
-                .fill(tint)
-        case .github:
-            GitHubOctocatGlyph()
-                .fill(tint)
-        }
-    }
-
 }
 
 private func authTokenValidationMessage(_ token: String) -> String? {
@@ -480,145 +437,12 @@ private func authTokenValidationMessage(_ token: String) -> String? {
     return nil
 }
 
-/// Google "G" letterform — single-fill monochrome rendering of the canonical
-/// Google G shape.
-private struct GoogleGGlyph: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let s = min(rect.width, rect.height)
-        let ox = rect.minX + (rect.width - s) / 2
-        let oy = rect.minY + (rect.height - s) / 2
-        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-            CGPoint(x: ox + (x / 24) * s, y: oy + (y / 24) * s)
-        }
-        // Adapted from Material Icons "google" (24x24 viewBox).
-        path.move(to: pt(21.35, 11.1))
-        path.addLine(to: pt(12.18, 11.1))
-        path.addLine(to: pt(12.18, 13.83))
-        path.addLine(to: pt(18.69, 13.83))
-        path.addCurve(to: pt(12.18, 19.5),
-                      control1: pt(18.36, 17.64),
-                      control2: pt(15.19, 19.5))
-        path.addCurve(to: pt(5.34, 12.66),
-                      control1: pt(8.4, 19.5),
-                      control2: pt(5.34, 16.44))
-        path.addCurve(to: pt(12.18, 5.82),
-                      control1: pt(5.34, 8.88),
-                      control2: pt(8.4, 5.82))
-        path.addCurve(to: pt(16.62, 7.4),
-                      control1: pt(13.91, 5.82),
-                      control2: pt(15.4, 6.41))
-        path.addLine(to: pt(18.71, 5.31))
-        path.addCurve(to: pt(12.18, 2.74),
-                      control1: pt(16.91, 3.71),
-                      control2: pt(14.65, 2.74))
-        path.addCurve(to: pt(2.27, 12.66),
-                      control1: pt(6.7, 2.74),
-                      control2: pt(2.27, 7.17))
-        path.addCurve(to: pt(12.18, 22.58),
-                      control1: pt(2.27, 18.15),
-                      control2: pt(6.7, 22.58))
-        path.addCurve(to: pt(21.95, 12.66),
-                      control1: pt(17.81, 22.58),
-                      control2: pt(21.95, 18.6))
-        path.addCurve(to: pt(21.84, 11.34),
-                      control1: pt(21.95, 12.21),
-                      control2: pt(21.91, 11.78))
-        path.closeSubpath()
-        return path
-    }
-}
-
-/// GitHub Octocat silhouette — single-fill canonical brand mark.
-/// Path adapted from the public GitHub mark (24x24 viewBox).
-private struct GitHubOctocatGlyph: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let s = min(rect.width, rect.height)
-        let ox = rect.minX + (rect.width - s) / 2
-        let oy = rect.minY + (rect.height - s) / 2
-        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-            CGPoint(x: ox + (x / 24) * s, y: oy + (y / 24) * s)
-        }
-        path.move(to: pt(12, 1.5))
-        path.addCurve(to: pt(1.5, 12),
-                      control1: pt(6.2, 1.5),
-                      control2: pt(1.5, 6.2))
-        path.addCurve(to: pt(8.7, 21.95),
-                      control1: pt(1.5, 16.7),
-                      control2: pt(4.55, 20.62))
-        path.addCurve(to: pt(9.4, 21.45),
-                      control1: pt(9.2, 22.05),
-                      control2: pt(9.4, 21.75))
-        path.addLine(to: pt(9.4, 19.65))
-        path.addCurve(to: pt(5.9, 18.25),
-                      control1: pt(6.5, 20.25),
-                      control2: pt(5.9, 18.25))
-        path.addCurve(to: pt(4.7, 16.75),
-                      control1: pt(5.4, 17.05),
-                      control2: pt(4.7, 16.75))
-        path.addCurve(to: pt(4.8, 16.15),
-                      control1: pt(3.8, 16.05),
-                      control2: pt(4.8, 16.15))
-        path.addCurve(to: pt(6.4, 17.25),
-                      control1: pt(5.8, 16.25),
-                      control2: pt(6.4, 17.25))
-        path.addCurve(to: pt(9.5, 18.15),
-                      control1: pt(7.3, 18.85),
-                      control2: pt(8.9, 18.35))
-        path.addCurve(to: pt(10.2, 16.75),
-                      control1: pt(9.6, 17.45),
-                      control2: pt(9.9, 16.95))
-        path.addCurve(to: pt(5.4, 11.55),
-                      control1: pt(7.9, 16.45),
-                      control2: pt(5.4, 15.55))
-        path.addCurve(to: pt(6.5, 8.75),
-                      control1: pt(5.4, 10.35),
-                      control2: pt(5.8, 9.45))
-        path.addCurve(to: pt(6.6, 5.85),
-                      control1: pt(6.4, 8.45),
-                      control2: pt(6, 7.35))
-        path.addCurve(to: pt(9.6, 6.85),
-                      control1: pt(6.6, 5.85),
-                      control2: pt(7.5, 5.55))
-        path.addCurve(to: pt(15.1, 6.85),
-                      control1: pt(11.7, 6.25),
-                      control2: pt(13.4, 6.25))
-        path.addCurve(to: pt(18.1, 5.85),
-                      control1: pt(17.2, 5.45),
-                      control2: pt(18.1, 5.85))
-        path.addCurve(to: pt(18.2, 8.75),
-                      control1: pt(18.7, 7.35),
-                      control2: pt(18.3, 8.45))
-        path.addCurve(to: pt(19.3, 11.55),
-                      control1: pt(18.9, 9.45),
-                      control2: pt(19.3, 10.35))
-        path.addCurve(to: pt(14.5, 16.75),
-                      control1: pt(19.3, 15.55),
-                      control2: pt(16.9, 16.45))
-        path.addCurve(to: pt(15.2, 18.75),
-                      control1: pt(14.9, 17.05),
-                      control2: pt(15.2, 17.65))
-        path.addLine(to: pt(15.2, 21.75))
-        path.addCurve(to: pt(15.9, 21.95),
-                      control1: pt(15.2, 22.05),
-                      control2: pt(15.4, 22.15))
-        path.addCurve(to: pt(22.5, 12),
-                      control1: pt(20.05, 20.6),
-                      control2: pt(22.5, 16.7))
-        path.addCurve(to: pt(12, 1.5),
-                      control1: pt(22.5, 6.2),
-                      control2: pt(17.8, 1.5))
-        path.closeSubpath()
-        return path
-    }
-}
-
 // MARK: - Fallback sign-in disclosure
 
 private struct MoreSignInOptions: View {
     @Binding var isOpen: Bool
     let isEnabled: Bool
+    let onSelectProvider: (OAuthProvider) -> Void
     let onSelectToken: () -> Void
     let onSelectNearAccount: () -> Void
 
@@ -631,24 +455,49 @@ private struct MoreSignInOptions: View {
                     Text("More ways to sign in")
                         .font(.subheadline)
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.caption2.weight(.semibold))
                         .rotationEffect(.degrees(isOpen ? 180 : 0))
                 }
                 .foregroundStyle(Color.textTertiary)
                 .padding(.vertical, 10)
                 .padding(.horizontal, 12)
                 .frame(maxWidth: .infinity)
+                .minimumTouchTarget()
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(!isEnabled)
             .opacity(isEnabled ? 1 : 0.58)
             .accessibilityLabel("More ways to sign in")
-            .accessibilityHint(isEnabled ? "Shows token and local NEAR account sign-in options." : "Accept the terms above before using fallback sign-in methods.")
+            .accessibilityHint(isEnabled ? "Shows provider, token, and local NEAR account sign-in options." : "Accept the terms above before using fallback sign-in methods.")
             .accessibilityIdentifier("auth.moreSignInOptions")
 
             if isOpen {
                 VStack(spacing: 8) {
+                    fallbackButton(
+                        title: "NEAR wallet",
+                        subtitle: "Open NEAR wallet sign-in",
+                        symbolName: "hexagon",
+                        identifier: "auth.provider.near",
+                        action: { onSelectProvider(.near) }
+                    )
+
+                    fallbackButton(
+                        title: "Google",
+                        subtitle: "Sign in through private.near.ai",
+                        symbolName: "g.circle",
+                        identifier: "auth.provider.google",
+                        action: { onSelectProvider(.google) }
+                    )
+
+                    fallbackButton(
+                        title: "GitHub",
+                        subtitle: "Sign in through private.near.ai",
+                        symbolName: "chevron.left.forwardslash.chevron.right",
+                        identifier: "auth.provider.github",
+                        action: { onSelectProvider(.github) }
+                    )
+
                     fallbackButton(
                         title: "Session token",
                         subtitle: "Paste a token from private.near.ai",
@@ -680,10 +529,10 @@ private struct MoreSignInOptions: View {
         Button(action: action) {
             HStack(spacing: 12) {
                 Image(systemName: symbolName)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(Color.actionPrimary)
                     .frame(width: 28, height: 28)
-                    .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(Color.actionTint, in: RoundedRectangle.app(AppRadius.pill))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.subheadline)
@@ -696,15 +545,16 @@ private struct MoreSignInOptions: View {
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.caption2.weight(.bold))
                     .foregroundStyle(Color.textTertiary)
             }
             .padding(.vertical, 14)
             .padding(.horizontal, 16)
             .frame(maxWidth: .infinity)
-            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .minimumTouchTarget()
+            .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.pill))
             .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle.app(AppRadius.pill)
                     .stroke(Color.appBorder, lineWidth: 1)
             }
         }

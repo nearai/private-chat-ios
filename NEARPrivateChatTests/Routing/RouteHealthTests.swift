@@ -137,7 +137,19 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(RouteHealthMonitor.isAuthFailure(APIError.status(401, "")))
         XCTAssertFalse(RouteHealthMonitor.isAuthFailure(APIError.status(403, "Access temporarily restricted")))
         XCTAssertTrue(RouteHealthMonitor.isAuthFailure(APIError.status(403, "Missing authorization header")))
+        XCTAssertTrue(RouteHealthMonitor.isAuthFailure(APIError.status(403, "Missing bearer token")))
+        XCTAssertTrue(RouteHealthMonitor.isAuthFailure(APIError.status(403, "Token rejected for private route")))
         XCTAssertTrue(RouteHealthMonitor.isAuthFailure(APIError.status(401, "invalid or expired authentication token")))
+    }
+
+    func testDisplayFailureMessageMapsRejectedSessionToAuthRecovery() {
+        let missingBearer = ErrorMessageMapper.displayFailureMessage("Missing bearer token")
+        XCTAssertTrue(missingBearer.localizedCaseInsensitiveContains("Authentication is missing or expired"))
+        XCTAssertFalse(missingBearer.localizedCaseInsensitiveContains("rate-limited"))
+
+        let rejected = ErrorMessageMapper.displayFailureMessage("Token rejected for private route")
+        XCTAssertTrue(rejected.localizedCaseInsensitiveContains("Sign in again"))
+        XCTAssertFalse(rejected.localizedCaseInsensitiveContains("busy"))
     }
 
     @MainActor

@@ -20,7 +20,9 @@ final class SessionStore: NSObject, ObservableObject {
     private var webSession: ASWebAuthenticationSession?
     private var isRefreshingProfile = false
 
-    var isSignedIn: Bool { session?.token.isEmpty == false }
+    var isSignedIn: Bool {
+        session?.token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
     var displayName: String { profile?.user.name ?? profile?.user.email ?? "NEAR AI" }
     var setupAccountID: String? {
         UserSetupStorage.accountID(
@@ -47,10 +49,18 @@ final class SessionStore: NSObject, ObservableObject {
             return
         }
         #endif
-        session = persistence.loadStoredSession()
-        api.authToken = session?.token
-        if session != nil {
+        let storedSession = persistence.loadStoredSession()
+        if let usableSession = Self.normalizedUsableSession(storedSession) {
+            session = usableSession
+            api.authToken = usableSession.token
             profile = persistence.loadCachedProfile()
+        } else {
+            api.authToken = nil
+            if storedSession != nil {
+                persistence.deleteStoredSession()
+                persistence.deleteCachedProfile()
+                persistence.deleteSimulatorFallbackSession()
+            }
         }
     }
 
@@ -121,7 +131,7 @@ final class SessionStore: NSObject, ObservableObject {
         let signed = NEP413Signer.sign(payload: payload, accountId: trimmed, privateKey: key)
         do {
             let session = try await api.signInWithNear(signedMessage: signed, payload: payload)
-            adoptSession(token: session.token, sessionID: session.sessionID, isNewUser: session.isNewUser)
+            adoptSession(session)
             showBanner(session.isNewUser ? "Account created." : "Signed in.")
         } catch {
             showBanner(Self.userFacingAuthenticationError(error))
@@ -143,16 +153,27 @@ final class SessionStore: NSObject, ObservableObject {
     /// `signInWithToken`, this keeps the session_id so sign-out can revoke it
     /// server-side.
     func adoptSession(token: String, sessionID: String, isNewUser: Bool) {
-        let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        adoptSession(
+            AuthSession(
+                token: token,
+                sessionID: sessionID,
+                expiresAt: nil,
+                isNewUser: isNewUser
+            )
+        )
+    }
+
+    func adoptSession(_ incomingSession: AuthSession) {
+        let trimmedToken = incomingSession.token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedToken.isEmpty else {
             showBanner("That sign-in did not return a session token. Try the web sign-in again, or use More ways to sign in > Session token if private.near.ai is already signed in.")
             return
         }
         let newSession = AuthSession(
             token: trimmedToken,
-            sessionID: sessionID.trimmingCharacters(in: .whitespacesAndNewlines),
-            expiresAt: nil,
-            isNewUser: isNewUser
+            sessionID: incomingSession.sessionID.trimmingCharacters(in: .whitespacesAndNewlines),
+            expiresAt: incomingSession.expiresAt?.trimmingCharacters(in: .whitespacesAndNewlines),
+            isNewUser: incomingSession.isNewUser
         )
         save(newSession)
         Task { await refreshProfile(force: true) }
@@ -202,7 +223,7 @@ final class SessionStore: NSObject, ObservableObject {
             profile = fetchedProfile
             saveCachedProfile(fetchedProfile)
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(Self.userFacingAuthenticationError(error))
         }
     }
 
@@ -219,7 +240,7 @@ final class SessionStore: NSObject, ObservableObject {
                     do {
                         try await api.signOut(sessionID: session.sessionID)
                     } catch {
-                        showBanner(error.localizedDescription)
+                        showBanner(Self.userFacingAuthenticationError(error))
                     }
                 }
             }
@@ -322,15 +343,26 @@ final class SessionStore: NSObject, ObservableObject {
     }
 
     private func save(_ newSession: AuthSession) {
-        let sessionChanged = session?.token != newSession.token || session?.sessionID != newSession.sessionID
-        session = newSession
-        api.authToken = newSession.token
+        guard let usableSession = Self.normalizedUsableSession(newSession) else {
+            api.authToken = nil
+            session = nil
+            profile = nil
+            persistence.deleteStoredSession()
+            persistence.deleteCachedProfile()
+            persistence.deleteSimulatorFallbackSession()
+            showBanner("That session is expired or invalid. Sign in again.")
+            return
+        }
+
+        let sessionChanged = session?.token != usableSession.token || session?.sessionID != usableSession.sessionID
+        session = usableSession
+        api.authToken = usableSession.token
         if sessionChanged {
             profile = nil
             persistence.deleteCachedProfile()
         }
 
-        switch persistence.saveSession(newSession) {
+        switch persistence.saveSession(usableSession) {
         case .persisted:
             break
         case .simulatorFallbackOnly:
@@ -342,6 +374,34 @@ final class SessionStore: NSObject, ObservableObject {
 
     private func saveCachedProfile(_ profile: UserProfile) {
         persistence.saveCachedProfile(profile)
+    }
+
+    nonisolated static func normalizedUsableSession(_ session: AuthSession?, now: Date = Date()) -> AuthSession? {
+        guard let session else { return nil }
+        let token = session.token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { return nil }
+        let sessionID = session.sessionID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let expiresAt = session.expiresAt?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let expiresAt, !expiresAt.isEmpty, Self.sessionExpirationDate(from: expiresAt).map({ $0 <= now }) == true {
+            return nil
+        }
+        return AuthSession(
+            token: token,
+            sessionID: sessionID,
+            expiresAt: expiresAt?.isEmpty == true ? nil : expiresAt,
+            isNewUser: session.isNewUser
+        )
+    }
+
+    nonisolated private static func sessionExpirationDate(from rawValue: String) -> Date? {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractionalFormatter.date(from: trimmed) {
+            return date
+        }
+        return ISO8601DateFormatter().date(from: trimmed)
     }
 
     nonisolated static func userFacingAuthenticationError(_ error: Error) -> String {

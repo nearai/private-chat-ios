@@ -55,6 +55,16 @@ extension PrivateChatCoreTests {
         }
     }
 
+    func testAuthCallbackAcceptsLegacyPrivateChatSchemeAfterStateValidation() throws {
+        let api = PrivateChatAPI(configuration: AppConfiguration.production)
+        let url = URL(string: "nearprivatechat://auth?token=session-token&session_id=session-id-1&state=nonce-1")!
+
+        let session = try authSession(from: api.parseAuthCallback(url, expectedState: "nonce-1"))
+
+        XCTAssertEqual(session.token, "session-token")
+        XCTAssertEqual(session.sessionID, "session-id-1")
+    }
+
     func testAuthenticatedRequestsRejectWhitespaceSessionTokenBeforeNetwork() async {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
         api.authToken = "   \n\t"
@@ -99,6 +109,87 @@ extension PrivateChatCoreTests {
         let url = try api.authURL(for: OAuthProvider.near, state: "nonce-1")
 
         XCTAssertTrue(url.absoluteString.contains("state=nonce-1"))
+    }
+
+    func testInAppWebSignInStartsOnHostedAuthProviderChooser() throws {
+        let components = try XCTUnwrap(URLComponents(url: WebSignInView.loginURL, resolvingAgainstBaseURL: false))
+        let values = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+
+        XCTAssertEqual(components.scheme, "https")
+        XCTAssertEqual(components.host, "private.near.ai")
+        XCTAssertEqual(components.path, "/auth")
+        XCTAssertNil(values["redirect"])
+        XCTAssertNotEqual(values["redirect"], "/")
+        XCTAssertNotEqual(values["redirect"], "/auth/mobile")
+    }
+
+    func testInAppWebSignInProviderRoutesUseHostedCallbackAcceptedByProduction() throws {
+        for (provider, path) in [(OAuthProvider.google, "/v1/auth/google"), (.github, "/v1/auth/github"), (.near, "/near-login")] {
+            let url = WebSignInView.hostedSignInURL(for: provider)
+            let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+            let values = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+
+            XCTAssertEqual(components.scheme, "https", provider.rawValue)
+            XCTAssertEqual(components.host, "private.near.ai", provider.rawValue)
+            XCTAssertEqual(components.path, path, provider.rawValue)
+            XCTAssertEqual(values["frontend_callback"], WebSignInView.hostedCallbackURL.absoluteString, provider.rawValue)
+            XCTAssertFalse((values["frontend_callback"] ?? "").hasPrefix("nearai://"), provider.rawValue)
+            XCTAssertFalse((values["frontend_callback"] ?? "").hasPrefix("nearprivatechat://"), provider.rawValue)
+        }
+    }
+
+    func testInAppWebSignInRescuesHostedHomeAndWelcomeWhenNoSessionIsHarvested() throws {
+        XCTAssertTrue(WebSignInView.isHostedAuthStrandedURL(URL(string: "https://private.near.ai/")!))
+        XCTAssertTrue(WebSignInView.isHostedAuthStrandedURL(URL(string: "https://private.near.ai/welcome")!))
+        XCTAssertTrue(WebSignInView.isHostedAuthStrandedURL(URL(string: "https://private.near.ai/auth/mobile")!))
+
+        XCTAssertFalse(WebSignInView.isHostedAuthStrandedURL(URL(string: "https://private.near.ai/auth")!))
+        XCTAssertFalse(WebSignInView.isHostedAuthStrandedURL(URL(string: "https://attacker-private.near.ai/")!))
+        XCTAssertFalse(WebSignInView.isHostedAuthStrandedURL(URL(string: "https://example.com/welcome")!))
+    }
+
+    func testInAppWebSignInForcesStrandedHostedRoutesBackToAuth() throws {
+        XCTAssertEqual(
+            WebSignInView.hostedAuthReloadURL(for: URL(string: "https://private.near.ai/")!),
+            WebSignInView.loginURL
+        )
+        XCTAssertEqual(
+            WebSignInView.hostedAuthReloadURL(for: URL(string: "https://private.near.ai/welcome")!),
+            WebSignInView.loginURL
+        )
+        XCTAssertEqual(
+            WebSignInView.hostedAuthReloadURL(for: URL(string: "https://private.near.ai/auth/mobile")!),
+            WebSignInView.loginURL
+        )
+
+        XCTAssertNil(WebSignInView.hostedAuthReloadURL(for: WebSignInView.loginURL))
+        XCTAssertNil(WebSignInView.hostedAuthReloadURL(for: URL(string: "https://example.com/")!))
+    }
+
+    func testInAppWebSignInCapturesHostedTokenCallbackURL() throws {
+        let url = URL(string: "https://private.near.ai/auth/callback?token=session-token-1&session_id=session-id-1&expires_at=2026-06-12T00%3A00%3A00Z&is_new_user=true")!
+
+        let session = try XCTUnwrap(WebSignInView.sessionFromCallbackURL(url))
+
+        XCTAssertEqual(session.token, "session-token-1")
+        XCTAssertEqual(session.sessionID, "session-id-1")
+        XCTAssertEqual(session.expiresAt, "2026-06-12T00:00:00Z")
+        XCTAssertTrue(session.isNewUser)
+    }
+
+    func testInAppWebSignInCapturesMobileTokenCallbackURL() throws {
+        let url = URL(string: "nearai://auth?session_token=session-token-2&sessionId=session-id-2")!
+
+        let session = try XCTUnwrap(WebSignInView.sessionFromCallbackURL(url))
+
+        XCTAssertEqual(session.token, "session-token-2")
+        XCTAssertEqual(session.sessionID, "session-id-2")
+    }
+
+    func testInAppWebSignInRejectsUntrustedTokenCallbackURL() {
+        XCTAssertNil(WebSignInView.sessionFromCallbackURL(URL(string: "https://evil.example/auth/callback?token=session-token")!))
+        XCTAssertNil(WebSignInView.sessionFromCallbackURL(URL(string: "https://private.near.ai.evil.example/auth/callback?token=session-token")!))
+        XCTAssertNil(WebSignInView.sessionFromCallbackURL(URL(string: "nearai://evil?token=session-token")!))
     }
 
     func testUserProfileRoundTripsForLaunchCache() throws {
@@ -155,13 +246,14 @@ extension PrivateChatCoreTests {
         }
     }
 
-    func testAuthCallbackConfigurationAcceptsOnlyOwnedAppScheme() throws {
+    func testAuthCallbackConfigurationAcceptsValidatedMobileSchemes() throws {
         let configuration = AppConfiguration.production
 
         XCTAssertTrue(configuration.isAuthCallback(URL(string: "nearai://auth?token=token&state=nonce-1")!))
+        XCTAssertTrue(configuration.isAuthCallback(URL(string: "nearprivatechat://auth?token=token&state=nonce-1")!))
         XCTAssertFalse(configuration.isAuthCallback(URL(string: "privatechat://auth?token=token&state=nonce-1")!))
-        XCTAssertFalse(configuration.isAuthCallback(URL(string: "nearprivatechat://auth?token=token&state=nonce-1")!))
         XCTAssertFalse(configuration.isAuthCallback(URL(string: "nearai://auth/other?token=token&state=nonce-1")!))
+        XCTAssertFalse(configuration.isAuthCallback(URL(string: "nearprivatechat://auth/other?token=token&state=nonce-1")!))
         XCTAssertFalse(configuration.isAuthCallback(URL(string: "https://private.near.ai/auth/callback?token=token&state=nonce-1")!))
     }
 
@@ -172,6 +264,34 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(SessionPersistence.simulatorFallbackKey, "debug.session")
         XCTAssertEqual(SessionPersistence.pendingAuthTTL, TimeInterval(10 * 60))
         XCTAssertEqual(SessionPersistence.simulatorFallbackTTL, TimeInterval(24 * 60 * 60))
+    }
+
+    func testSessionStoreNormalizesUsableSessionBeforeReuse() throws {
+        let futureExpiry = ISO8601DateFormatter().string(from: Date().addingTimeInterval(3_600))
+        let session = AuthSession(
+            token: "  session-token-1 \n",
+            sessionID: " session-id-1 ",
+            expiresAt: " \(futureExpiry) ",
+            isNewUser: false
+        )
+
+        let normalized = try XCTUnwrap(SessionStore.normalizedUsableSession(session))
+
+        XCTAssertEqual(normalized.token, "session-token-1")
+        XCTAssertEqual(normalized.sessionID, "session-id-1")
+        XCTAssertEqual(normalized.expiresAt, futureExpiry)
+        XCTAssertFalse(normalized.isNewUser)
+    }
+
+    func testSessionStoreRejectsWhitespaceOrExpiredSessionBeforeReuse() {
+        XCTAssertNil(SessionStore.normalizedUsableSession(
+            AuthSession(token: " \n\t ", sessionID: "session-id-1", expiresAt: nil, isNewUser: false)
+        ))
+
+        let expired = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-60))
+        XCTAssertNil(SessionStore.normalizedUsableSession(
+            AuthSession(token: "session-token-1", sessionID: "session-id-1", expiresAt: expired, isNewUser: false)
+        ))
     }
 
     func testSessionPersistencePendingAuthStateRoundTripsOnStableKey() throws {
@@ -260,6 +380,7 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(verified.researchMode)
 
         XCTAssertNil(AppDeepLinkAction.parse(URL(string: "nearai://auth?token=abc&state=nonce-1")!))
+        XCTAssertNil(AppDeepLinkAction.parse(URL(string: "nearprivatechat://auth?token=abc&state=nonce-1")!))
         XCTAssertNil(AppDeepLinkAction.parse(URL(string: "https://private.near.ai/c/conv_123")!))
     }
 
