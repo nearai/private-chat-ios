@@ -101,6 +101,8 @@ final class PrivateChatMessageAPI: MessageAPI {
                     switch event {
                     case let .failed(message):
                         throw APIError.status(403, message)
+                    case let .failedWithStatus(message, statusCode):
+                        throw APIError.status(statusCode, message)
                     case .completed:
                         return
                     default:
@@ -142,7 +144,10 @@ final class PrivateChatMessageAPI: MessageAPI {
 
         switch type {
         case "error", "response.error":
-            return .failed(Self.firstErrorMessage(in: object) ?? "The model request failed.")
+            return Self.failedEvent(
+                Self.streamFailure(in: object) ??
+                    StreamFailure(message: "The model request failed.", statusCode: Self.firstStatusCode(in: object))
+            )
         case "response.web_search_call.in_progress", "response.web_search_call.searching":
             return .webSearchStarted(query: nil)
         case "response.web_search_call.completed":
@@ -165,21 +170,21 @@ final class PrivateChatMessageAPI: MessageAPI {
             }
         case "response.output_text.delta":
             let delta = object["delta"] as? String ?? ""
-            if let failedMessage = Self.streamFailureMessage(from: delta) {
-                return .failed(failedMessage)
+            if let failure = Self.streamFailure(from: delta) {
+                return Self.failedEvent(failure)
             }
             return .textDelta(delta)
         case "response.output_text.done":
             let text = object["text"] as? String
-            if let failedMessage = Self.streamFailureMessage(from: text) {
-                return .failed(failedMessage)
+            if let failure = Self.streamFailure(from: text) {
+                return Self.failedEvent(failure)
             }
             return .itemDone(text: text)
         case "response.content_part.done":
             let part = object["part"] as? [String: Any]
             let text = part?["text"] as? String
-            if let failedMessage = Self.streamFailureMessage(from: text) {
-                return .failed(failedMessage)
+            if let failure = Self.streamFailure(from: text) {
+                return Self.failedEvent(failure)
             }
             return .itemDone(text: text)
         case "response.output_item.done":
@@ -193,8 +198,8 @@ final class PrivateChatMessageAPI: MessageAPI {
             }
             let content = item?["content"] as? [[String: Any]]
             let text = content?.compactMap { $0["text"] as? String }.joined()
-            if let failedMessage = Self.streamFailureMessage(from: text) {
-                return .failed(failedMessage)
+            if let failure = Self.streamFailure(from: text) {
+                return Self.failedEvent(failure)
             }
             return .itemDone(text: text)
         case "conversation.title.updated":
@@ -206,12 +211,14 @@ final class PrivateChatMessageAPI: MessageAPI {
             let text = object["text"] as? String
             let response = object["response"] as? [String: Any]
             let error = response?["error"] as? [String: Any]
-            return .failed(
-                Self.streamFailureMessage(from: text) ??
-                    text ??
-                    Self.firstErrorMessage(in: response) ??
-                    error?["message"] as? String ??
-                    "The model is currently unavailable."
+            return Self.failedEvent(
+                Self.streamFailure(from: text) ??
+                    Self.streamFailure(in: response) ??
+                    Self.streamFailure(in: error) ??
+                    StreamFailure(
+                        message: text ?? "The model is currently unavailable.",
+                        statusCode: Self.firstStatusCode(in: object)
+                    )
             )
         default:
             #if DEBUG
@@ -223,6 +230,18 @@ final class PrivateChatMessageAPI: MessageAPI {
             #endif
             return nil
         }
+    }
+
+    private struct StreamFailure: Equatable {
+        let message: String
+        let statusCode: Int?
+    }
+
+    private static func failedEvent(_ failure: StreamFailure) -> ResponseStreamEvent {
+        if let statusCode = failure.statusCode {
+            return .failedWithStatus(message: failure.message, statusCode: statusCode)
+        }
+        return .failed(failure.message)
     }
 
     static var widgetInstructionForTesting: String { widgetInstruction }
@@ -250,23 +269,98 @@ final class PrivateChatMessageAPI: MessageAPI {
         return nil
     }
 
-    private static func streamFailureMessage(from text: String?) -> String? {
+    private static func streamFailure(from text: String?) -> StreamFailure? {
         guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines),
               !trimmed.isEmpty,
               let data = trimmed.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
+        return streamFailure(in: object)
+    }
 
-        for key in ["error", "message", "detail"] {
-            if let value = object[key] as? String, !value.isEmpty {
-                return value
+    private static func streamFailure(in object: [String: Any]?) -> StreamFailure? {
+        guard let object else { return nil }
+        guard let message = firstErrorMessage(in: object) else { return nil }
+        return StreamFailure(
+            message: message,
+            statusCode: firstStatusCode(in: object) ?? statusCode(forErrorCode: firstErrorCode(in: object))
+        )
+    }
+
+    private static func firstStatusCode(in object: Any?) -> Int? {
+        guard let object else { return nil }
+        if let dictionary = object as? [String: Any] {
+            for key in ["status", "status_code", "statusCode", "http_status", "httpStatus"] {
+                if let code = intValue(dictionary[key]) {
+                    return code
+                }
             }
-            if let nested = object[key] as? [String: Any],
-               let message = nested["message"] as? String,
-               !message.isEmpty {
-                return message
+            for key in ["error", "detail", "response"] {
+                if let code = firstStatusCode(in: dictionary[key]) {
+                    return code
+                }
             }
+        } else if let array = object as? [Any] {
+            for value in array {
+                if let code = firstStatusCode(in: value) {
+                    return code
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func firstErrorCode(in object: Any?) -> String? {
+        guard let object else { return nil }
+        if let dictionary = object as? [String: Any] {
+            for key in ["code", "error_code", "errorCode", "reason"] {
+                if let value = dictionary[key] as? String, !value.isEmpty {
+                    return value
+                }
+            }
+            for key in ["error", "detail", "response"] {
+                if let value = firstErrorCode(in: dictionary[key]) {
+                    return value
+                }
+            }
+        } else if let array = object as? [Any] {
+            for value in array {
+                if let code = firstErrorCode(in: value) {
+                    return code
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func statusCode(forErrorCode rawValue: String?) -> Int? {
+        guard let rawValue else { return nil }
+        let lowercased = rawValue.lowercased()
+        if lowercased.contains("rate") && lowercased.contains("limit") ||
+            lowercased.contains("quota") ||
+            lowercased.contains("too_many") {
+            return 429
+        }
+        if lowercased.contains("capacity") ||
+            lowercased.contains("busy") ||
+            lowercased.contains("unavailable") {
+            return 503
+        }
+        if lowercased.contains("session") ||
+            lowercased.contains("auth") ||
+            lowercased.contains("token") {
+            return 401
+        }
+        return nil
+    }
+
+    private static func intValue(_ value: Any?) -> Int? {
+        if let intValue = value as? Int {
+            return intValue
+        }
+        if let stringValue = value as? String {
+            return Int(stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         return nil
     }

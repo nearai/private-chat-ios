@@ -12,6 +12,7 @@ enum ResponseStreamEvent: Equatable {
     case titleUpdated(String)
     case completed(responseID: String?)
     case failed(String)
+    case failedWithStatus(message: String, statusCode: Int)
 
     var hasVisibleOutput: Bool {
         switch self {

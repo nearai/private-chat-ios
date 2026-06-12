@@ -60,6 +60,8 @@ extension PrivateChatCoreTests {
         XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(429, "Too many requests")))
         XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(403, "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn.")))
         XCTAssertTrue(RouteHealthMonitor.isTransientBusyFailure(APIError.status(403, "The private route is busy right now. Retry private, or use the privacy proxy for this turn.")))
+        XCTAssertTrue(RouteHealthMonitor.isTransientBusyFailure(APIError.status(503, "The private route is temporarily busy.")))
+        XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(503, "Private route is rate-limited for this session.")))
 
         XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(401, "Missing authorization header")))
         XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(403, "Missing authorization header")))

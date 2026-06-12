@@ -183,6 +183,16 @@ extension PrivateChatCoreTests {
             api.parseStreamEvent(Data(#"{"type":"response.failed","response":{"error":{"message":"Access denied"}}}"#.utf8)),
             .failed("Access denied")
         )
+
+        XCTAssertEqual(
+            api.parseStreamEvent(Data(#"{"type":"response.failed","response":{"error":{"message":"Access temporarily restricted. Please try again later.","status":429,"code":"private_route_rate_limited"}}}"#.utf8)),
+            .failedWithStatus(message: "Access temporarily restricted. Please try again later.", statusCode: 429)
+        )
+
+        XCTAssertEqual(
+            api.parseStreamEvent(Data(#"{"type":"response.failed","response":{"error":{"message":"The private route is temporarily busy.","code":"private_route_capacity"}}}"#.utf8)),
+            .failedWithStatus(message: "The private route is temporarily busy.", statusCode: 503)
+        )
     }
 
     func testChatStreamEventGateRejectsStaleConversationEvents() {
@@ -198,6 +208,158 @@ extension PrivateChatCoreTests {
             selectedConversationID: nil,
             eventConversationID: "conv-live"
         ))
+    }
+
+    @MainActor
+    func testPrivateRouteBusyRetriesSameRouteOnceBeforeBreaker() async throws {
+        PrivateRouteRetryURLProtocol.install(responses: [
+            (
+                statusCode: 403,
+                body: """
+                data: {"error":{"message":"The private route is temporarily busy. Try again in a moment."}}
+
+                """
+            ),
+            (
+                statusCode: 200,
+                body: """
+                data: {"type":"response.created","response":{"id":"resp_retry"}}
+                data: {"type":"response.output_text.delta","delta":"Recovered privately."}
+                data: {"type":"response.completed","response":{"id":"resp_retry"}}
+                data: [DONE]
+
+                """
+            )
+        ])
+        defer { PrivateRouteRetryURLProtocol.uninstall() }
+
+        let api = PrivateChatAPI(configuration: .production)
+        api.authToken = "test-session-token"
+        let routeHealth = RouteHealthMonitor()
+        let diagnostics = ConnectionDiagnostics()
+        let conversationStore = ConversationStore(
+            repository: ConversationRepository(api: PrivateChatAPI(configuration: .production))
+        )
+        let timelineStore = MessageTimelineStore()
+        let store = ChatStore(
+            api: api,
+            conversationStore: conversationStore,
+            messageTimelineStore: timelineStore,
+            routeHealth: routeHealth,
+            diagnostics: diagnostics
+        )
+        let conversation = ConversationSummary(
+            id: "conv-retry",
+            createdAt: 1_700_000_000,
+            metadata: ConversationMetadata(title: "Retry")
+        )
+        store.selectedConversation = conversation
+        store.sendCurrentAssistantMessageID = "assistant-retry"
+        store.messages = [
+            ChatMessage(
+                id: "assistant-retry",
+                role: .assistant,
+                text: "",
+                model: ModelOption.nearPrivateDefaultModelID,
+                createdAt: Date(timeIntervalSince1970: 1_000),
+                status: "streaming",
+                responseID: nil,
+                isStreaming: true
+            )
+        ]
+
+        let finalModel = try await store.streamResponseWithFallback(
+            initialModel: ModelOption.nearPrivateDefaultModelID,
+            text: "health check",
+            attachments: [],
+            conversationID: conversation.id,
+            previousResponseID: nil,
+            initiator: "test"
+        )
+        store.flushPendingTextDelta(for: "assistant-retry")
+
+        XCTAssertEqual(finalModel, ModelOption.nearPrivateDefaultModelID)
+        XCTAssertEqual(PrivateRouteRetryURLProtocol.requestPaths, ["/v1/responses", "/v1/responses"])
+        XCTAssertFalse(routeHealth.isTripped(.nearPrivate))
+        XCTAssertEqual(diagnostics.lastPrivateOutcome?.succeeded, true)
+        XCTAssertEqual(store.messages.first?.text, "Recovered privately.")
+    }
+
+    @MainActor
+    func testPrivateRouteRateLimitDoesNotAutoRetrySameRoute() async throws {
+        PrivateRouteRetryURLProtocol.install(responses: [
+            (
+                statusCode: 403,
+                body: """
+                data: {"error":{"message":"Access temporarily restricted. Please try again later."}}
+
+                """
+            ),
+            (
+                statusCode: 200,
+                body: """
+                data: {"type":"response.created","response":{"id":"resp_should_not_run"}}
+                data: {"type":"response.output_text.delta","delta":"This should not render."}
+                data: {"type":"response.completed","response":{"id":"resp_should_not_run"}}
+                data: [DONE]
+
+                """
+            )
+        ])
+        defer { PrivateRouteRetryURLProtocol.uninstall() }
+
+        let api = PrivateChatAPI(configuration: .production)
+        api.authToken = "test-session-token"
+        let routeHealth = RouteHealthMonitor()
+        let diagnostics = ConnectionDiagnostics()
+        let conversationStore = ConversationStore(
+            repository: ConversationRepository(api: PrivateChatAPI(configuration: .production))
+        )
+        let timelineStore = MessageTimelineStore()
+        let store = ChatStore(
+            api: api,
+            conversationStore: conversationStore,
+            messageTimelineStore: timelineStore,
+            routeHealth: routeHealth,
+            diagnostics: diagnostics
+        )
+        let conversation = ConversationSummary(
+            id: "conv-rate-limit",
+            createdAt: 1_700_000_000,
+            metadata: ConversationMetadata(title: "Rate limit")
+        )
+        store.selectedConversation = conversation
+        store.sendCurrentAssistantMessageID = "assistant-rate-limit"
+        store.messages = [
+            ChatMessage(
+                id: "assistant-rate-limit",
+                role: .assistant,
+                text: "",
+                model: ModelOption.nearPrivateDefaultModelID,
+                createdAt: Date(timeIntervalSince1970: 1_000),
+                status: "streaming",
+                responseID: nil,
+                isStreaming: true
+            )
+        ]
+
+        do {
+            _ = try await store.streamResponseWithFallback(
+                initialModel: ModelOption.nearPrivateDefaultModelID,
+                text: "health check",
+                attachments: [],
+                conversationID: conversation.id,
+                previousResponseID: nil,
+                initiator: "test"
+            )
+            XCTFail("Explicit private-route rate limits must not auto-retry.")
+        } catch {
+            XCTAssertEqual(PrivateRouteRetryURLProtocol.requestPaths, ["/v1/responses"])
+            XCTAssertTrue(routeHealth.isTripped(.nearPrivate))
+            XCTAssertEqual(diagnostics.lastPrivateOutcome?.succeeded, false)
+            XCTAssertTrue(diagnostics.privateLooksSessionRateLimited)
+            XCTAssertEqual(store.messages.first?.text, "")
+        }
     }
 
     func testWidgetStrippedStreamingPreviewHidesUnclosedFence() {
@@ -362,3 +524,58 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(placeholder?.status, "cancelled")
     }
 }
+
+private final class PrivateRouteRetryURLProtocol: URLProtocol {
+    private static let lock = NSLock()
+    private static var queuedResponses: [(statusCode: Int, body: String)] = []
+    private(set) static var requestPaths: [String] = []
+
+    static func install(responses: [(statusCode: Int, body: String)]) {
+        lock.lock()
+        queuedResponses = responses
+        requestPaths = []
+        lock.unlock()
+        URLProtocol.registerClass(Self.self)
+    }
+
+    static func uninstall() {
+        URLProtocol.unregisterClass(Self.self)
+        lock.lock()
+        queuedResponses = []
+        requestPaths = []
+        lock.unlock()
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.path == "/v1/responses"
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: APIError.invalidURL)
+            return
+        }
+
+        Self.lock.lock()
+        Self.requestPaths.append(url.path)
+        let response = Self.queuedResponses.isEmpty
+            ? (statusCode: 500, body: #"data: {"error":{"message":"unexpected request"}}"#)
+            : Self.queuedResponses.removeFirst()
+        Self.lock.unlock()
+
+        let httpResponse = HTTPURLResponse(
+            url: url,
+            statusCode: response.statusCode,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "text/event-stream"]
+        )!
+        client?.urlProtocol(self, didReceive: httpResponse, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(response.body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}

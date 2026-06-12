@@ -197,6 +197,18 @@ final class MessageTimelineStore: ObservableObject {
                     message.text += "\n\nResponse failed: \(displayMessage)"
                 }
             }
+        case let .failedWithStatus(message, _):
+            flushPendingTextDelta(for: assistantMessageID)
+            let displayMessage = MessageRepository.displayFailureMessage(message)
+            updateMessage(assistantMessageID) { message in
+                message.status = "failed"
+                message.isStreaming = false
+                if message.text.isEmpty || MessageRepository.localFailureMessage(from: message.text) != nil {
+                    message.text = displayMessage
+                } else if !message.text.localizedCaseInsensitiveContains(displayMessage) {
+                    message.text += "\n\nResponse failed: \(displayMessage)"
+                }
+            }
         }
     }
 

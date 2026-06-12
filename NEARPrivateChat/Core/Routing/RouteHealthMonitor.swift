@@ -160,7 +160,10 @@ final class RouteHealthMonitor: ObservableObject {
     /// breaker opens. Explicit rate limits should not retry automatically:
     /// another immediate request can extend or amplify the same limit bucket.
     nonisolated static func isTransientBusyFailure(_ error: Error) -> Bool {
-        !isAuthFailure(error) && !isExplicitRateLimitFailure(error) && isBusyFailureMessage(errorMessage(error))
+        if case let APIError.status(503, message) = error {
+            return !isAuthFailure(error) && !isExplicitRateLimitMessage(message)
+        }
+        return !isAuthFailure(error) && !isExplicitRateLimitFailure(error) && isBusyFailureMessage(errorMessage(error))
     }
 
     nonisolated static func isExplicitRateLimitFailure(_ error: Error) -> Bool {
