@@ -598,6 +598,16 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(result.answer.trimmingCharacters(in: .whitespacesAndNewlines), "Hello from the stub.")
     }
 
+    /// SSE unavailable (e.g. per-caller 429 cap) degrades to timeline polling and
+    /// still surfaces the answer.
+    func testRebornAgentFlowFallsBackToTimelinePollWhenSSEUnavailable() async throws {
+        RebornStubURLProtocol.reset()
+        RebornStubURLProtocol.eventsStatus = 429
+        let result = try await runStubbedRebornFlow()
+        XCTAssertNil(result.failure, "timeline-poll fallback should recover, got: \(result.failure ?? "")")
+        XCTAssertEqual(result.answer.trimmingCharacters(in: .whitespacesAndNewlines), "Hello from the stub.")
+    }
+
     private func runStubbedRebornFlow() async throws -> (answer: String, failure: String?) {
         URLProtocol.registerClass(RebornStubURLProtocol.self)
         defer { URLProtocol.unregisterClass(RebornStubURLProtocol.self) }
@@ -628,11 +638,13 @@ extension PrivateChatCoreTests {
 /// runs offline. Configurable per test via the static knobs.
 private final class RebornStubURLProtocol: URLProtocol {
     nonisolated(unsafe) static var runStatus = "completed"
+    nonisolated(unsafe) static var eventsStatus = 200
     nonisolated(unsafe) static var timelineEmptyFirstFetches = 0
     nonisolated(unsafe) static var timelineFetchCount = 0
 
     static func reset() {
         runStatus = "completed"
+        eventsStatus = 200
         timelineEmptyFirstFetches = 0
         timelineFetchCount = 0
     }
@@ -650,6 +662,7 @@ private final class RebornStubURLProtocol: URLProtocol {
         }
         let path = url.path
         let method = request.httpMethod ?? "GET"
+        var status = 200
         let contentType: String
         let body: String
         if method == "POST", path.hasSuffix("/threads") {
@@ -659,6 +672,7 @@ private final class RebornStubURLProtocol: URLProtocol {
             contentType = "application/json"
             body = #"{"outcome":"submitted","run_id":"r1","status":"Queued"}"#
         } else if path.hasSuffix("/events") {
+            status = Self.eventsStatus
             contentType = "text/event-stream"
             body = "event: projection_update\ndata: {\"type\":\"projection_update\",\"state\":{\"items\":[{\"run_status\":{\"run_id\":\"r1\",\"status\":\"\(Self.runStatus)\"}}]}}\n\n"
         } else if path.hasSuffix("/timeline") {
@@ -673,7 +687,7 @@ private final class RebornStubURLProtocol: URLProtocol {
             contentType = "application/json"
             body = "{}"
         }
-        if let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": contentType]) {
+        if let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": contentType]) {
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         }
         client?.urlProtocol(self, didLoad: Data(body.utf8))
