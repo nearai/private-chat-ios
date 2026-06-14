@@ -28,6 +28,34 @@ enum BriefingSamples {
             schedule: .daily(hour: 8, minute: 0),
             createdAt: Date().addingTimeInterval(-86_400),
             kind: .customPrompt
+        ),
+        Briefing(
+            title: "ETH price watcher",
+            prompt: "Alert me when ETH drops below $3,180 and summarize why it moved.",
+            schedule: .daily(hour: 8, minute: 0),
+            createdAt: Date().addingTimeInterval(-86_400 * 2),
+            lastRunAt: Date().addingTimeInterval(-3_600),
+            latestResult: MessageWidget(
+                kind: .metric,
+                title: "ETH watcher",
+                freshness: .fresh,
+                time: "1h ago",
+                followUp: "Why did it move?",
+                metric: WidgetMetric(
+                    label: "ETH · USD",
+                    value: "$3,124",
+                    delta: "−2.3% (1h)",
+                    trend: .down,
+                    caption: "threshold $3,180 breached"
+                )
+            ),
+            kind: .customPrompt,
+            condition: BriefingCondition(
+                coinID: "ethereum",
+                symbol: "ETH",
+                comparator: .below,
+                threshold: 3180
+            )
         )
     ]
 

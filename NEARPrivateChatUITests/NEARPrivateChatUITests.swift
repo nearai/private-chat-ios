@@ -143,9 +143,19 @@ final class NEARPrivateChatUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Streams"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.descendants(matching: .any)["home.default.streams"].exists)
-        XCTAssertGreaterThanOrEqual(buttonCount(containing: "Chats", in: app), 2)
-        XCTAssertGreaterThanOrEqual(buttonCount(containing: "Briefings", in: app), 2)
-        XCTAssertGreaterThanOrEqual(buttonCount(containing: "Watchers", in: app), 2)
+        // The scope strip renders one filter chip per scope (Briefings / Watchers
+        // / Chats), each a button whose accessibility label is the full scope
+        // title. Cards use singular type prefixes ("Briefing ·", "Watcher ·",
+        // "Answer ·"), so the chip is the reliable per-scope button.
+        XCTAssertGreaterThanOrEqual(buttonCount(containing: "Chats", in: app), 1)
+        XCTAssertGreaterThanOrEqual(buttonCount(containing: "Briefings", in: app), 1)
+        XCTAssertGreaterThanOrEqual(buttonCount(containing: "Watchers", in: app), 1)
+        // Stream-focused means actual feed cards are present (each card label
+        // carries a " · " metadata separator), not an empty or expanded surface.
+        XCTAssertGreaterThanOrEqual(
+            app.buttons.matching(NSPredicate(format: "label CONTAINS %@", " · ")).count,
+            2
+        )
         XCTAssertTrue(app.buttons["Briefings"].exists || app.staticTexts["Briefings"].exists)
         XCTAssertTrue(app.buttons["Watchers"].exists || app.staticTexts["Watchers"].exists)
         XCTAssertTrue(app.buttons["Chats"].exists || app.staticTexts["Chats"].exists)
