@@ -192,8 +192,11 @@ struct SecurityView: View {
         let proof = currentProofViewModel
         return VStack(spacing: 14) {
             ZStack {
+                // A soft filled disc is a single container for the glyph. The
+                // previous thin stroked outline competed with the shield/seal
+                // glyph's own outline, reading as two stacked rounded shapes.
                 Circle()
-                    .stroke(proof.tintColor.opacity(0.25), lineWidth: 0.5)
+                    .fill(proof.tintColor.opacity(0.12))
                     .frame(width: 64, height: 64)
                 if proof.state == .verifying {
                     ProgressView()
