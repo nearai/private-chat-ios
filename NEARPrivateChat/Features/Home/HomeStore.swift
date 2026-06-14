@@ -4,6 +4,7 @@ import SwiftUI
 final class HomeStore: ObservableObject {
     @Published var searchText = ""
     @Published var selectedHomeFilter: HomeFilter = .all
+    @Published var selectedFeedScope: HomeFeedScope = .all
     @Published var showingNewProject = false
     @Published var showingProjectFiles = false
     @Published var showingAccountSettings = false
@@ -26,6 +27,7 @@ final class HomeStore: ObservableObject {
 
     func resetDefaultFilter() {
         selectedHomeFilter = .all
+        selectedFeedScope = .all
     }
 
     func toggleSearch() {

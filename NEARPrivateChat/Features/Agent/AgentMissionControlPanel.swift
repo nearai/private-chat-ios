@@ -136,8 +136,8 @@ struct AgentMissionControlPanel: View {
                         .labelStyle(.titleAndIcon)
                         .foregroundStyle(Color.brandSky)
                         .padding(.horizontal, 10)
-                        .frame(height: 32)
-                        .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .frame(height: 44)
+                        .background(.white.opacity(0.12), in: RoundedRectangle.app(AppRadius.pill))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Open Project context")
@@ -226,8 +226,8 @@ struct AgentMissionControlPanel: View {
                         .labelStyle(.titleAndIcon)
                         .foregroundStyle(Color.brandBlack)
                         .padding(.horizontal, 12)
-                        .frame(height: 34)
-                        .background(Color.brandSky, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .frame(height: 44)
+                        .background(Color.brandSky, in: RoundedRectangle.app(AppRadius.pill))
                 }
                 .buttonStyle(.plain)
                 .disabled(trimmedMissionBrief.isEmpty)

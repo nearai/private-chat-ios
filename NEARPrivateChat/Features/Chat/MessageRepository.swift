@@ -83,14 +83,221 @@ struct MessageRepository {
         } else {
             sourceMessages = loadLocalMessages(for: conversationID) ?? []
         }
-        return sourceMessages
-            .reversed()
-            .first { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return Self.previewMessage(from: sourceMessages)
             .map { Self.compactPreviewText($0.text) }
+    }
+
+    func cachedConversationHasSourceCue(
+        for conversationID: String,
+        selectedConversationID: String?,
+        currentMessages: [ChatMessage]
+    ) -> Bool {
+        let sourceMessages: [ChatMessage]
+        if selectedConversationID == conversationID, !currentMessages.isEmpty {
+            sourceMessages = currentMessages
+        } else {
+            sourceMessages = loadLocalMessages(for: conversationID) ?? []
+        }
+        return Self.hasSourceCue(from: sourceMessages)
+    }
+
+    func cachedConversationSourceSummary(
+        for conversationID: String,
+        selectedConversationID: String?,
+        currentMessages: [ChatMessage]
+    ) -> String? {
+        let sourceMessages: [ChatMessage]
+        if selectedConversationID == conversationID, !currentMessages.isEmpty {
+            sourceMessages = currentMessages
+        } else {
+            sourceMessages = loadLocalMessages(for: conversationID) ?? []
+        }
+        return Self.sourceSummary(from: sourceMessages)
+    }
+
+    static func previewMessage(from messages: [ChatMessage]) -> ChatMessage? {
+        func hasText(_ message: ChatMessage) -> Bool {
+            !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
+        if let synthesis = messages.reversed().first(where: {
+            hasText($0) && $0.role == .assistant && $0.model == ModelOption.llmCouncilSynthesisModelID
+        }) {
+            return synthesis
+        }
+        if let answer = messages.reversed().first(where: { hasText($0) && $0.role == .assistant }) {
+            return answer
+        }
+        return messages.reversed().first(where: hasText)
+    }
+
+    static func hasSourceCue(from messages: [ChatMessage]) -> Bool {
+        guard let message = previewMessage(from: messages) else { return false }
+        return hasSourceCue(in: message)
+    }
+
+    static func sourceSummary(from messages: [ChatMessage]) -> String? {
+        guard let message = previewMessage(from: messages) else { return nil }
+        return sourceSummary(in: message)
+    }
+
+    static func sourceSummary(in message: ChatMessage) -> String? {
+        var labels = orderedUnique(message.sources.map(\.host).filter { !$0.isEmpty })
+        var sourceCount = labels.count
+
+        let widgets = [
+            message.widget,
+            MessageWidget.extract(from: message.text).widget
+        ]
+        for widget in widgets.compactMap({ $0 }) {
+            let evidence = widgetSourceEvidence(widget)
+            labels.append(contentsOf: evidence.labels)
+            sourceCount += evidence.count
+        }
+
+        labels = orderedUnique(labels)
+        sourceCount = max(sourceCount, labels.count)
+
+        if let label = labels.first {
+            let displayLabel = SourceFaviconResolver.displayName(for: label, fallback: label) ?? label
+            if sourceCount > 1 {
+                return "\(displayLabel) + \(sourceCount - 1)"
+            }
+            return displayLabel
+        }
+        if sourceCount > 1 {
+            return "\(sourceCount) sources"
+        }
+        return textHasSourceCue(message.text) ? "Sources" : nil
+    }
+
+    static func hasSourceCue(in message: ChatMessage) -> Bool {
+        if !message.sources.isEmpty { return true }
+        if widgetHasSourceCue(message.widget) { return true }
+        if let extraction = MessageWidget.extract(from: message.text).widget,
+           widgetHasSourceCue(extraction) {
+            return true
+        }
+        return textHasSourceCue(message.text)
+    }
+
+    static func textHasSourceCue(_ text: String) -> Bool {
+        let normalized = text.lowercased()
+        return normalized.contains("sources:") ||
+            normalized.contains("source:") ||
+            normalized.contains("source ") ||
+            normalized.contains("citation") ||
+            normalized.contains("cites ") ||
+            normalized.contains("reuters") ||
+            normalized.contains("apnews") ||
+            normalized.contains("associated press") ||
+            normalized.contains("bloomberg") ||
+            normalized.contains("guardian") ||
+            normalized.contains("al jazeera") ||
+            normalized.contains("macrumors") ||
+            normalized.contains("releasebot") ||
+            normalized.contains("buildfastwithai") ||
+            normalized.contains("http://") ||
+            normalized.contains("https://") ||
+            normalized.range(of: #"\b[a-z0-9-]+\.(?:com|org|net|ai|io|gov|edu|co)\b"#, options: .regularExpression) != nil
+    }
+
+    private static func widgetHasSourceCue(_ widget: MessageWidget?) -> Bool {
+        guard let widget else { return false }
+        if let newsBrief = widget.newsBrief {
+            return newsBrief.stories.contains { story in
+                !story.sources.isEmpty || story.url?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            }
+        }
+        if let actionPlan = widget.actionPlan {
+            return actionPlan.actions.contains { action in
+                action.source?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            }
+        }
+        return false
+    }
+
+    private static func widgetSourceEvidence(_ widget: MessageWidget) -> (labels: [String], count: Int) {
+        var labels: [String] = []
+        var count = 0
+        if let newsBrief = widget.newsBrief {
+            for story in newsBrief.stories {
+                for source in story.sources {
+                    count += 1
+                    if let domain = source.domain?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !domain.isEmpty {
+                        labels.append(normalizedSourceLabel(domain))
+                    }
+                }
+                if let url = story.url?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !url.isEmpty {
+                    count += 1
+                    labels.append(normalizedSourceLabel(url))
+                }
+            }
+        }
+        if let actionPlan = widget.actionPlan {
+            for action in actionPlan.actions {
+                if let source = action.source?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !source.isEmpty {
+                    count += 1
+                }
+            }
+        }
+        return (orderedUnique(labels), count)
+    }
+
+    private static func normalizedSourceLabel(_ raw: String) -> String {
+        if let host = URL(string: raw)?.host(percentEncoded: false) {
+            return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        }
+        return raw
+            .replacingOccurrences(of: #"^https?://"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"^www\."#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+    }
+
+    private static func orderedUnique(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+        for value in values {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.lowercased()
+            guard !key.isEmpty, !seen.contains(key) else { continue }
+            seen.insert(key)
+            result.append(trimmed)
+        }
+        return result
     }
 
     static func mergedMessages(remoteMessages: [ChatMessage], localCache: [ChatMessage]?) -> [ChatMessage] {
         guard let localCache, !localCache.isEmpty else { return remoteMessages }
+        let locallySourcedAssistantsByResponseID = Dictionary(
+            grouping: localCache.filter { message in
+                message.role == .assistant &&
+                    message.responseID?.isEmpty == false &&
+                    (!message.sources.isEmpty || message.searchQuery?.isEmpty == false)
+            },
+            by: { $0.responseID ?? "" }
+        )
+        let remoteMessages = remoteMessages.map { remoteMessage -> ChatMessage in
+            guard remoteMessage.role == .assistant,
+                  let responseID = remoteMessage.responseID,
+                  let localMessage = locallySourcedAssistantsByResponseID[responseID]?.first else {
+                return remoteMessage
+            }
+            var merged = remoteMessage
+            if merged.sources.isEmpty {
+                merged.sources = localMessage.sources
+            }
+            if merged.searchQuery?.isEmpty != false {
+                merged.searchQuery = localMessage.searchQuery
+            }
+            if merged.trustMetadata == nil {
+                merged.trustMetadata = localMessage.trustMetadata
+            }
+            return merged
+        }
         let remoteIDs = Set(remoteMessages.map(\.id))
         let remoteResponseIDs = Set(remoteMessages.compactMap(\.responseID))
 
@@ -106,6 +313,14 @@ struct MessageRepository {
                 .filter { $0.role == .user }
                 .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
         )
+        let councilBatchIDsWithAssistantMessages = Set(
+            localCache.compactMap { message -> String? in
+                guard message.role == .assistant,
+                      let batchID = message.councilBatchID,
+                      !batchID.isEmpty else { return nil }
+                return batchID
+            }
+        )
         let localOnly = localCache.filter { message in
             guard !remoteIDs.contains(message.id) else { return false }
             // If the server ever starts returning this turn (same responseID
@@ -114,7 +329,12 @@ struct MessageRepository {
                 return false
             }
             if isExternalModel(message.model ?? "") { return true }
-            if message.councilBatchID?.isEmpty == false { return true }
+            if let batchID = message.councilBatchID, !batchID.isEmpty {
+                guard message.role == .user else { return true }
+                let trimmedText = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return councilBatchIDsWithAssistantMessages.contains(batchID) &&
+                    !remoteUserTexts.contains(trimmedText)
+            }
             if message.model == ModelOption.llmCouncilSynthesisModelID { return true }
             if ["failed", "approval", "cancelled"].contains(message.status) { return true }
             if message.role == .user {
@@ -158,7 +378,7 @@ struct MessageRepository {
                 ChatMessage(
                     id: item.id,
                     role: item.role ?? .assistant,
-                    text: item.displayText,
+                    text: displayText(for: item),
                     model: item.model,
                     createdAt: Date(timeIntervalSince1970: item.createdAt ?? Date().timeIntervalSince1970),
                     status: item.status ?? "completed",
@@ -171,8 +391,60 @@ struct MessageRepository {
                     branchVariant: item.role == .assistant ? branchVariants[item.responseID] : nil,
                     metadata: item.metadata
                 )
-            }
+        }
         return normalizedMessages(messages, assumingStreamLost: false)
+    }
+
+    private static func displayText(for item: ConversationItem) -> String {
+        let text = item.displayText
+        guard item.role == .user else { return text }
+        return sanitizedUserDisplayText(text)
+    }
+
+    static func sanitizedUserDisplayText(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let visibleWebRequest = visibleAppWebGroundingRequest(from: trimmed) {
+            return sanitizedUserDisplayText(visibleWebRequest)
+        }
+
+        let hasInjectedDocumentContext = trimmed.hasPrefix("Relevant excerpts from the attached document(s):") ||
+            trimmed.hasPrefix("Relevant excerpts from the attached table(s):")
+        guard hasInjectedDocumentContext else { return trimmed }
+
+        let markers = [
+            "\n\nUsing those excerpts (and the attached file or table) where relevant:\n",
+            "\n\nUsing those excerpts (my attached on-device document) where relevant:\n"
+        ]
+        guard let match = markers
+            .compactMap({ marker -> Range<String.Index>? in trimmed.range(of: marker, options: .backwards) })
+            .max(by: { $0.lowerBound < $1.lowerBound }) else {
+            return trimmed
+        }
+
+        let visibleQuestion = trimmed[match.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+        return visibleQuestion.isEmpty ? trimmed : sanitizedUserDisplayText(visibleQuestion)
+    }
+
+    private static func visibleAppWebGroundingRequest(from text: String) -> String? {
+        guard text.contains("App-side web search results for"),
+              let requestMarker = text.range(of: "User request:\n") else {
+            return nil
+        }
+        let contextMarkers = [
+            "\n\nApp-side web search results for",
+            "\nApp-side web search results for"
+        ]
+        guard let contextMarker = contextMarkers
+            .compactMap({ marker -> Range<String.Index>? in
+                text.range(of: marker, range: requestMarker.upperBound..<text.endIndex)
+            })
+            .min(by: { $0.lowerBound < $1.lowerBound }) else {
+            return nil
+        }
+
+        let request = text[requestMarker.upperBound..<contextMarker.lowerBound]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return request.isEmpty ? nil : request
     }
 
     static func normalizedMessages(_ messages: [ChatMessage], assumingStreamLost: Bool) -> [ChatMessage] {
@@ -235,13 +507,72 @@ struct MessageRepository {
     }
 
     static func compactPreviewText(_ text: String) -> String {
-        let collapsed = text
+        var collapsed = text
             .replacingOccurrences(of: "\n", with: " ")
             .split(separator: " ", omittingEmptySubsequences: true)
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let failurePreview = compactFailurePreview(collapsed) {
+            return failurePreview
+        }
+        collapsed = cleanedPreviewLead(collapsed)
         guard collapsed.count > 140 else { return collapsed }
         return "\(collapsed.prefix(137))..."
+    }
+
+    private static func compactFailurePreview(_ text: String) -> String? {
+        let lowercased = text.lowercased()
+        if lowercased.contains("private route is rate-limited") ||
+            lowercased.contains("private route is temporarily busy") ||
+            lowercased.contains("access temporarily restricted") {
+            return "Private route limited. Retry private or add Cloud key."
+        }
+        if lowercased.contains("authentication is missing or expired") ||
+            lowercased.contains("sign in again") ||
+            lowercased.contains("isn't authenticated") {
+            return "Sign-in needed. Open Account, then retry."
+        }
+        return nil
+    }
+
+    private static func cleanedPreviewLead(_ text: String) -> String {
+        var value = text
+        if value.hasPrefix("#") {
+            value = value.replacingOccurrences(
+                of: #"^#{1,6}\s+"#,
+                with: "",
+                options: .regularExpression
+            )
+        }
+
+        let boilerplates = [
+            "Direct answer:",
+            "Direct answer",
+            "Short answer:",
+            "Answer:",
+            "Summary:"
+        ]
+        for boilerplate in boilerplates where value.localizedCaseInsensitiveCompare(boilerplate) == .orderedSame {
+            return ""
+        }
+        for boilerplate in boilerplates {
+            let prefix = boilerplate + " "
+            if hasCaseInsensitivePrefix(value, prefix) {
+                value = String(value.dropFirst(prefix.count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                break
+            }
+        }
+        guard let first = value.unicodeScalars.first,
+              CharacterSet.lowercaseLetters.contains(first) else {
+            return value
+        }
+        let firstCharacter = String(Character(first)).uppercased()
+        return firstCharacter + String(value.dropFirst())
+    }
+
+    private static func hasCaseInsensitivePrefix(_ value: String, _ prefix: String) -> Bool {
+        value.range(of: prefix, options: [.anchored, .caseInsensitive]) != nil
     }
 
     static func isExternalModel(_ modelID: String) -> Bool {

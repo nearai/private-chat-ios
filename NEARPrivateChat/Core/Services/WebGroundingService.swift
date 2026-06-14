@@ -110,27 +110,32 @@ final class WebGroundingService {
     }
 
     func search(for prompt: String, preferNews: Bool) async throws -> WebGroundingContext {
-        let query = Self.query(from: prompt)
-        async let newsResults = safeFetchGoogleNews(query: query)
-        async let webResults = safeFetchDuckDuckGo(query: query)
+        let queries = Self.queries(from: prompt)
+        var combined: [WebGroundingResult] = []
+        for query in queries {
+            async let newsResults = safeFetchGoogleNews(query: query)
+            async let webResults = safeFetchDuckDuckGo(query: query)
+            let news = await newsResults
+            let web = await webResults
 
-        let combined: [WebGroundingResult]
-        if preferNews {
-            combined = await newsResults + webResults
-        } else {
-            combined = await webResults + newsResults
+            if preferNews {
+                combined += news + web
+            } else {
+                combined += web + news
+            }
         }
 
-        let ranked = Self.ranked(Self.unique(combined).compactMap(Self.publicHTTPSResult), query: query).prefix(8)
+        let rankingQuery = queries.joined(separator: " ")
+        let ranked = Self.ranked(Self.unique(combined).compactMap(Self.publicHTTPSResult), query: rankingQuery).prefix(8)
         guard !ranked.isEmpty else {
             throw APIError.status(0, "No web results found.")
         }
 #if DEBUG
         let newsCount = ranked.filter { $0.kind == "news" }.count
         let webCount = ranked.filter { $0.kind == "web" }.count
-        logger.debug("web search query=\(query, privacy: .public) preferNews=\(preferNews) resultCount=\(ranked.count) news=\(newsCount) web=\(webCount)")
+        logger.debug("web search queries=\(queries.joined(separator: " | "), privacy: .public) preferNews=\(preferNews) resultCount=\(ranked.count) news=\(newsCount) web=\(webCount)")
 #endif
-        return WebGroundingContext(query: query, fetchedAt: Date(), results: Array(ranked))
+        return WebGroundingContext(query: queries.joined(separator: " | "), fetchedAt: Date(), results: Array(ranked))
     }
 
     private func safeFetchGoogleNews(query: String) async -> [WebGroundingResult] {
@@ -148,19 +153,24 @@ final class WebGroundingService {
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if let newsTopic = extractNewsTopic(from: normalizedPrompt) {
+        let directiveStrippedPrompt = strippedLeadingSearchDirective(from: normalizedPrompt)
+        if !looksMultiTopicCurrentEventsPrompt(directiveStrippedPrompt),
+           let newsTopic = extractNewsTopic(from: directiveStrippedPrompt) {
             return clippedQuery("\(newsTopic) latest news")
         }
 
-        var query = normalizedPrompt
+        var query = directiveStrippedPrompt
         let instructionPatterns = [
             #"(?i)\b(from\s+)?(google\s+)?news\s+only\b"#,
             #"(?i)\b(from\s+)?google\s+news\b"#,
             #"(?i)\b(web|internet|general\s+web)\s+only\b"#,
             #"(?i)\bnot\s+news\b"#,
-            #"(?i)\b(use|using|with|run|do)\s+(the\s+)?(live\s+)?(web\s+search|web|search|internet|sources?)\b.*$"#,
+            #"(?i)\b(with|using)\s+(the\s+)?(live\s+|current\s+)?(web(\s+search|\s+sources?)?|internet|sources?)\b"#,
             #"(?i)\b(and\s+)?cite\s+(your\s+)?sources?\b.*$"#,
             #"(?i)\b(with\s+)?sources?\b.*$"#,
+            #"(?i)\b(answer|respond|return)\s+(in|with|as)\b.*$"#,
+            #"(?i)\b(in|as)\s+(\d+|one|two|three|four|five)\s+(bullets?|sentences?|points?)\b.*$"#,
+            #"(?i)\bseparate\s+confirmed\s+facts\b.*$"#,
             #"(?i)\bplease\b"#
         ]
         for pattern in instructionPatterns {
@@ -174,12 +184,15 @@ final class WebGroundingService {
             #"(?i)^where\s+(is|are|was|were|did)\s+"#,
             #"(?i)^why\s+(is|are|was|were|did|does|do)\s+"#,
             #"(?i)^how\s+(is|are|was|were|did|does|do)\s+"#,
-            #"(?i)^(tell me about|give me|find|search for|look up|research)\s+"#
+            #"(?i)^(tell me about|give me|find|search for|look up|research|investigate)\s+"#,
+            #"(?i)^check\s+(today'?s|todays|latest|current)?\s*(reporting|reports|news|developments)\s+(on|about)\s+"#,
+            #"(?i)^check\s+"#
         ]
         for pattern in leadingQuestionPatterns {
             query = query.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
         }
 
+        query = normalizedNewsHeadlineQuery(query)
         query = cleanedQuery(query)
 
         if query.isEmpty {
@@ -189,6 +202,23 @@ final class WebGroundingService {
             return clippedQuery(query)
         }
         return query.isEmpty ? "current news" : query
+    }
+
+    static func queries(from prompt: String) -> [String] {
+        let primaryQuery = query(from: prompt)
+        var candidates = [primaryQuery]
+        candidates.append(contentsOf: currentEventsTopicQueries(from: primaryQuery))
+
+        var seen: Set<String> = []
+        return candidates.compactMap { candidate in
+            let cleaned = clippedQuery(candidate)
+            let key = cleaned.lowercased()
+            guard !cleaned.isEmpty, !seen.contains(key) else { return nil }
+            seen.insert(key)
+            return cleaned
+        }
+        .prefix(3)
+        .map { $0 }
     }
 
     static func searchMode(for prompt: String) -> SearchMode {
@@ -207,7 +237,9 @@ final class WebGroundingService {
         let newsPatterns = [
             #"\b(from\s+)?google\s+news\b"#,
             #"\bnews\s+only\b"#,
-            #"\b(latest|recent|current)\s+news\b"#
+            #"\b(latest|recent|current)\s+news\b"#,
+            #"\b(news|headlines?|stories)\b.*\b(today|this\s+(morning|week|month|year))\b"#,
+            #"\b(today|this\s+(morning|week|month|year))\b.*\b(news|headlines?|stories)\b"#
         ]
         if newsPatterns.contains(where: { normalized.range(of: $0, options: .regularExpression) != nil }) {
             return .newsFirst
@@ -370,6 +402,48 @@ final class WebGroundingService {
         return nil
     }
 
+    private static func looksMultiTopicCurrentEventsPrompt(_ value: String) -> Bool {
+        let lowercased = value.lowercased()
+        let hasConnector = lowercased.range(of: #"\b(and|or|plus)\b"#, options: .regularExpression) != nil
+        let hasFreshCue = lowercased.range(
+            of: #"\b(today|latest|current|recent|news|reporting|developments|updates)\b"#,
+            options: .regularExpression
+        ) != nil
+        return hasConnector && hasFreshCue
+    }
+
+    private static func strippedLeadingSearchDirective(from value: String) -> String {
+        value
+            .replacingOccurrences(
+                of: #"(?i)^\s*(use|using|with)\s+(the\s+)?(live\s+|current\s+)?(web(\s+search|\s+sources?)?|internet|search|sources?)\s*(to\s+)?[:,\-]?\s*"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: #"(?i)^\s*run\s+(a\s+)?(live\s+|current\s+)?(web\s+)?search\s+(for|on|about)\s+"#,
+                with: "",
+                options: .regularExpression
+            )
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func normalizedNewsHeadlineQuery(_ value: String) -> String {
+        var query = value
+        let leadingHeadlinePatterns = [
+            #"(?i)^the\s+"#,
+            #"(?i)^top\s+(\d+|one|two|three|four|five)\s+"#,
+            #"(?i)^biggest\s+(\d+|one|two|three|four|five)?\s*"#,
+            #"(?i)^major\s+(\d+|one|two|three|four|five)?\s*"#
+        ]
+        for pattern in leadingHeadlinePatterns {
+            query = query.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
+        }
+        query = query.replacingOccurrences(of: #"(?i)\bnews\s+stories\b"#, with: "news", options: .regularExpression)
+        query = query.replacingOccurrences(of: #"(?i)\bstories\b"#, with: "news", options: .regularExpression)
+        query = query.replacingOccurrences(of: #"(?i)\bheadlines?\b"#, with: "news", options: .regularExpression)
+        return query
+    }
+
     private static func cleanedQuery(_ value: String) -> String {
         value
             .replacingOccurrences(of: #"(?i)\b(and|or)\s*$"#, with: "", options: .regularExpression)
@@ -384,6 +458,51 @@ final class WebGroundingService {
         guard cleaned.count > 180 else { return cleaned.isEmpty ? "current news" : cleaned }
         let end = cleaned.index(cleaned.startIndex, offsetBy: 180)
         return cleanedQuery(String(cleaned[..<end]))
+    }
+
+    private static func currentEventsTopicQueries(from query: String) -> [String] {
+        let lowercased = query.lowercased()
+        let isFreshQuery = [
+            "today", "latest", "current", "news", "reporting", "developments", "updates"
+        ].contains { lowercased.contains($0) }
+        let hasConnector = lowercased.range(of: #"\b(and|or|plus)\b"#, options: .regularExpression) != nil
+        guard isFreshQuery, hasConnector else { return [] }
+
+        let splitReady = query
+            .replacingOccurrences(
+                of: #"(?i)\s+\b(and|plus)\b\s+(the\s+)?(latest|current|recent)\s+"#,
+                with: " | ",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: #"(?i)\s+\b(and|plus)\b\s+"#,
+                with: " | ",
+                options: .regularExpression
+            )
+
+        let parts = splitReady
+            .split(separator: "|")
+            .map { topicQuery(from: String($0)) }
+            .filter { !$0.isEmpty }
+
+        guard parts.count > 1 else { return [] }
+        return parts
+    }
+
+    private static func topicQuery(from value: String) -> String {
+        var topic = value
+            .replacingOccurrences(of: #"(?i)\b(or)\b"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"(?i)^(the\s+)?(latest|current|recent|today'?s|todays)\s+"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"(?i)\bprivate-market\b"#, with: "private market", options: .regularExpression)
+        topic = cleanedQuery(topic)
+
+        let wordCount = wordTokens(in: topic).count
+        guard wordCount >= 2 else { return "" }
+
+        if topic.range(of: #"(?i)\b(news|updates|developments|reporting)\b"#, options: .regularExpression) != nil {
+            return topic
+        }
+        return "\(topic) latest news"
     }
 
     private func fetchGoogleNews(query: String) async throws -> [WebGroundingResult] {

@@ -23,6 +23,13 @@ extension ChatMessage {
             !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Rich widget cards already own their primary interaction. Keep answer
+    /// proof visible, but avoid stacking the full copy/export/regenerate strip
+    /// under chart, briefing, and action-plan cards.
+    var canShowAssistantInlineActions: Bool {
+        canShowAssistantActions && widget == nil
+    }
+
     var isAgentRouteMessage: Bool {
         model == ModelOption.ironclawModelID ||
             model == ModelOption.ironclawMobileModelID

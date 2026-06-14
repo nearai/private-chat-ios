@@ -138,12 +138,6 @@ struct ChatToolbar: View {
                     isPrimary: true
                 )
 
-                MetadataPill(
-                    title: compactSourceModeTitle,
-                    symbolName: compactSourceModeSymbolName,
-                    isPrimary: sourceRoutingSemantics.modelNativeWebToolEnabledByDefault || modelCatalogStore.researchModeEnabled
-                )
-
                 if let selectedProject = projectStore.selectedProject {
                     Button {
                         showingProjectFiles = true
@@ -333,28 +327,33 @@ struct ChatToolbar: View {
         Button {
             showingSecurity = true
         } label: {
-            let status = currentAttestationStatus
-            let copy = status.userFacingCopy()
-            let isCloudTrust = modelCatalogStore.selectedRouteUsesNearCloud || (modelCatalogStore.isCouncilModeEnabled && modelCatalogStore.activeCouncilHasNearCloudRoutes)
-            let tint = isCloudTrust ? Color.brandAccent : status.tintColor
-            HStack(spacing: 5) {
-                Image(systemName: isCloudTrust ? "eye.slash" : status.symbolName)
-                    .font(.caption.weight(.bold))
-                Text(isCloudTrust ? "Privacy proxy" : compactAttestationLabel(copy.badge))
-                    .font(.caption2.weight(.semibold))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(tint)
-            .padding(.horizontal, 9)
-            .frame(height: 34)
-            .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Image(systemName: compactAttestationPresentation.symbolName)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(compactAttestationPresentation.tint)
+                .frame(width: 44, height: 44)
+                .background(compactAttestationPresentation.tint.opacity(0.10), in: RoundedRectangle.app(AppRadius.control))
+                .contentShape(RoundedRectangle.app(AppRadius.control))
             .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(tint.opacity(0.16), lineWidth: 1)
+                RoundedRectangle.app(AppRadius.control)
+                    .stroke(compactAttestationPresentation.tint.opacity(0.16), lineWidth: 1)
             }
         }
         .accessibilityLabel(currentAttestationStatus.accessibilityLabel())
+        .accessibilityValue(compactAttestationPresentation.value)
         .accessibilityHint(currentAttestationStatus.accessibilityHint())
+    }
+
+    private var compactAttestationPresentation: (symbolName: String, tint: Color, value: String) {
+        let status = currentAttestationStatus
+        let copy = status.userFacingCopy()
+        let isCloudTrust = modelCatalogStore.selectedRouteUsesNearCloud ||
+            (modelCatalogStore.isCouncilModeEnabled && modelCatalogStore.activeCouncilHasNearCloudRoutes)
+        let value = isCloudTrust ? "Privacy proxy" : ChatToolbarProofLabelFormatter.compactAttestationLabel(copy.badge)
+        return (
+            symbolName: isCloudTrust ? "eye.slash" : status.symbolName,
+            tint: isCloudTrust ? Color.brandAccent : status.tintColor,
+            value: value
+        )
     }
 
     private var currentAttestationStatus: AttestationStatus {
@@ -364,16 +363,6 @@ struct ChatToolbar: View {
             isCouncilModeEnabled: modelCatalogStore.isCouncilModeEnabled,
             activeCouncilHasExternalRoutes: modelCatalogStore.activeCouncilHasExternalRoutes
         )
-    }
-
-    private func compactAttestationLabel(_ value: String) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.localizedCaseInsensitiveCompare("No model proof") == .orderedSame {
-            return "No proof"
-        }
-        return trimmed
-            .replacingOccurrences(of: "Verified ", with: "")
-            .replacingOccurrences(of: " proof", with: "")
     }
 
     private var reloadButton: some View {
@@ -472,6 +461,22 @@ struct ChatToolbar: View {
     }
 
     private var shouldShowAgentWorkspaceButton: Bool {
-        modelCatalogStore.selectedProviderDisplayName == "IronClaw" || agentStore.ironclawRemoteWorkstationAvailable
+        modelCatalogStore.selectedRouteKind.isIronclawRoute
+    }
+}
+
+enum ChatToolbarProofLabelFormatter {
+    static func compactAttestationLabel(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.localizedCaseInsensitiveCompare("No model proof") == .orderedSame {
+            return "No proof"
+        }
+        if trimmed.localizedCaseInsensitiveCompare("Get proof") == .orderedSame {
+            return "Get proof"
+        }
+        if trimmed.localizedCaseInsensitiveCompare("Verified proof") == .orderedSame {
+            return "Proof"
+        }
+        return trimmed.replacingOccurrences(of: "Verified ", with: "")
     }
 }

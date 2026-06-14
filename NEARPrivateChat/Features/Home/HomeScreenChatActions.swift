@@ -109,5 +109,42 @@ extension HomeScreen {
         onStartNewChat()
     }
 
+    func stageEmptyHomeFeedPrompt(scope: HomeFeedScope? = nil) {
+        let resolvedScope = scope ?? homeStore.selectedFeedScope
+        let draft = HomeEmptyFeedDraftPlanner.draft(for: resolvedScope)
 
+        chatStore.startNewConversation()
+        chatStore.draft = draft.prompt
+        chatStore.bannerMessage = draft.banner
+        AppHaptics.selection()
+        onStartNewChat()
+    }
+
+}
+
+struct HomeEmptyFeedDraft: Equatable {
+    let prompt: String
+    let banner: String
+}
+
+enum HomeEmptyFeedDraftPlanner {
+    static func draft(for scope: HomeFeedScope) -> HomeEmptyFeedDraft {
+        switch scope {
+        case .briefings:
+            return HomeEmptyFeedDraft(
+                prompt: "Create a daily briefing every morning at 8am for a topic, project, file, or search I care about. Use current sources when needed, cite what matters, lead with what changed, and include anything that needs attention.",
+                banner: "Briefing draft ready."
+            )
+        case .watchers:
+            return HomeEmptyFeedDraft(
+                prompt: "Track something that changes every morning at 8am: a product price, token, account, release date, regulation, or topic. Use current sources when needed, lead with the latest change, and tell me if it needs attention.",
+                banner: "Watcher draft ready."
+            )
+        case .all, .chats:
+            return HomeEmptyFeedDraft(
+                prompt: "",
+                banner: "Private chat ready."
+            )
+        }
+    }
 }

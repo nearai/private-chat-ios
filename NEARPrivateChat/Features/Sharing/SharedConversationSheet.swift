@@ -41,7 +41,7 @@ struct SharedConversationSheet: View {
                             shareStore.closeSharedPreview()
                         } label: {
                             Image(systemName: "xmark")
-                                .frame(width: 40, height: 34)
+                                .frame(width: 44, height: 44)
                         }
                         .buttonStyle(.bordered)
                         .accessibilityLabel("Clear")
@@ -544,10 +544,10 @@ private struct SharedPreviewActionButton: View {
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(isPrimary ? Color.brandBlack : Color.primaryAction)
                 .frame(maxWidth: .infinity)
-                .frame(height: 40)
+                .frame(minHeight: 44)
                 .background(
                     isPrimary ? Color.brandSky : Color.appSecondaryBackground,
-                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    in: RoundedRectangle.app(AppRadius.control)
                 )
         }
         .buttonStyle(.plain)

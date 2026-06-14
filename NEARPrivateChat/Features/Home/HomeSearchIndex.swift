@@ -59,6 +59,84 @@ enum HomeFilter: String, CaseIterable, Identifiable {
     }
 }
 
+enum HomeFeedScope: String, CaseIterable, Identifiable {
+    case all
+    case briefings
+    case watchers
+    case chats
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "All"
+        case .briefings: "Briefings"
+        case .watchers: "Watchers"
+        case .chats: "Chats"
+        }
+    }
+
+    var compactTitle: String {
+        switch self {
+        case .all: "All"
+        case .briefings: "Briefs"
+        case .watchers: "Watch"
+        case .chats: "Chats"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .all: "sparkles"
+        case .briefings: "doc.text"
+        case .watchers: "bell.badge"
+        case .chats: "bubble.left.and.bubble.right"
+        }
+    }
+}
+
+enum HomeStreamsCopy {
+    static func subtitle(for counts: [HomeFeedScope: Int]) -> String {
+        let briefings = counts[.briefings, default: 0]
+        let watchers = counts[.watchers, default: 0]
+        let chats = counts[.chats, default: 0]
+        let segments = [
+            countSegment(briefings, singular: "briefing", plural: "briefings"),
+            countSegment(watchers, singular: "watcher", plural: "watchers"),
+            countSegment(chats, singular: "chat", plural: "chats")
+        ].compactMap { $0 }
+
+        guard !segments.isEmpty else {
+            return "Ask privately, then turn useful work into streams."
+        }
+
+        return "\(joinedSegments(segments)) ready to continue."
+    }
+
+    static func liveCountText(for counts: [HomeFeedScope: Int]) -> String {
+        let count = counts[.all, default: 0]
+        return count == 0 ? "Ready" : "\(count) live"
+    }
+
+    private static func countSegment(_ count: Int, singular: String, plural: String) -> String? {
+        guard count > 0 else { return nil }
+        return "\(count) \(count == 1 ? singular : plural)"
+    }
+
+    private static func joinedSegments(_ segments: [String]) -> String {
+        switch segments.count {
+        case 0:
+            return ""
+        case 1:
+            return segments[0]
+        case 2:
+            return "\(segments[0]) and \(segments[1])"
+        default:
+            return "\(segments.dropLast().joined(separator: ", ")), and \(segments.last ?? "")"
+        }
+    }
+}
+
 struct SetupLaunchCardState: Identifiable {
     let accountID: String
     let profile: UserSetupProfile
@@ -109,6 +187,323 @@ struct HomeProjectContextMatch: Identifiable, Hashable {
     let kind: Kind
     let title: String
     let detail: String?
+}
+
+enum HomeConversationPreviewFormatter {
+    static func displayTitle(_ title: String) -> String {
+        var value = normalizedTitle(title)
+        if let feedTitle = feedTitleForCurrentEventsPrompt(value) {
+            return feedTitle
+        }
+
+        var strippedInstruction = false
+        for pattern in [
+            #"\s*\.\s*use web search\b.*$"#,
+            #"\s+use web search\b.*$"#,
+            #"\s+lead with\b.*$"#,
+            #"\s+with sources\b.*$"#,
+            #"\s+and cite sources\b.*$"#,
+            #"\s+and include sources\b.*$"#,
+            #"\s+and include links\b.*$"#,
+            #"\s*,\s*(preorder timing|preorder|availability|launch price|price rumors)\b.*$"#,
+            #"\s+updates\s+and\b.*$"#
+        ] {
+            let cleaned = value.replacingOccurrences(
+                of: pattern,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            if cleaned != value {
+                strippedInstruction = true
+                value = cleaned
+            }
+        }
+        return strippedInstruction
+            ? value.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+            : value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func preview(cachedPreview: String?, title: String) -> String {
+        if let cached = cachedPreview?.trimmingCharacters(in: .whitespacesAndNewlines), !cached.isEmpty {
+            return displayPreviewText(cached)
+        }
+
+        let normalizedTitle = displayTitle(title)
+
+        guard !normalizedTitle.isEmpty,
+              normalizedTitle.localizedCaseInsensitiveCompare("New conversation") != .orderedSame else {
+            return "Open chat to continue."
+        }
+
+        return "Asked: \(displayPreviewText(normalizedTitle))"
+    }
+
+    static func hasSourceCue(cachedPreview: String?, title: String) -> Bool {
+        let text = [cachedPreview, title]
+            .compactMap { $0 }
+            .joined(separator: " ")
+        return MessageRepository.textHasSourceCue(text)
+    }
+
+    private static func displayPreviewText(_ text: String) -> String {
+        MessageRepository.compactPreviewText(markdownDisplayText(text))
+    }
+
+    private static func markdownDisplayText(_ text: String) -> String {
+        var value = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+
+        for (pattern, replacement) in [
+            (#"(?s)```.*?```"#, ""),
+            (#"(?m)^\s*[-*_]{3,}\s*$"#, ""),
+            (#"(?m)^\s{0,3}#{1,6}\s*"#, ""),
+            (#"\s+#{1,6}\s*"#, " "),
+            (#"\*\*([^*]+)\*\*"#, "$1"),
+            (#"\*\*"#, ""),
+            (#"__([^_]+)__"#, "$1"),
+            (#"`([^`]+)`"#, "$1"),
+            (#"\[([^\]]+)\]\([^)]+\)"#, "$1"),
+            (#"(?m)^\s*[-*]\s+"#, ""),
+            (#"\s[-*_]{3,}\s"#, " "),
+            (#":\s*[-*]\s+"#, ": "),
+            (#"\s[-*]\s+"#, " "),
+            (#"\*"#, ""),
+            (#"\s+"#, " ")
+        ] {
+            value = value.replacingOccurrences(
+                of: pattern,
+                with: replacement,
+                options: .regularExpression
+            )
+        }
+
+        return removingDecorativeEmoji(value)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func removingDecorativeEmoji(_ text: String) -> String {
+        String(text.unicodeScalars.filter { scalar in
+            !scalar.properties.isEmojiPresentation && scalar.value != 0xFE0F
+        })
+    }
+
+    private static func normalizedTitle(_ title: String) -> String {
+        title
+            .replacingOccurrences(of: "\n", with: " ")
+            .split(separator: " ", omittingEmptySubsequences: true)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func feedTitleForCurrentEventsPrompt(_ title: String) -> String? {
+        let normalized = title
+            .lowercased()
+            .trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+
+        let currentNewsPrefixes = [
+            "what is news today",
+            "what's news today",
+            "what is the news today",
+            "what's the news today",
+            "what are the news today",
+            "give me the news today",
+            "tell me the news today",
+            "latest news today"
+        ]
+        guard currentNewsPrefixes.contains(where: { normalized.hasPrefix($0) }) else {
+            return nil
+        }
+        return "Today's news brief"
+    }
+}
+
+enum HomeFeedPlanner {
+    static func defaultAllBriefingLimit(totalCardLimit: Int, hasRecentConversations: Bool) -> Int {
+        guard totalCardLimit > 0 else { return 0 }
+        return hasRecentConversations ? max(0, totalCardLimit - 1) : totalCardLimit
+    }
+
+    static func visibleBriefings(
+        _ briefings: [Briefing],
+        scope: HomeFeedScope,
+        allLimit: Int = 2,
+        scopedLimit: Int = 8
+    ) -> [Briefing] {
+        switch scope {
+        case .all:
+            let sorted = sortedBriefings(briefings, failedFirst: true)
+            return defaultStreamBriefings(from: sorted, limit: allLimit)
+        case .briefings:
+            let sorted = sortedBriefings(briefings, failedFirst: false)
+            return Array(sorted.filter { !$0.isWatcherLike }.prefix(scopedLimit))
+        case .watchers:
+            let sorted = sortedBriefings(briefings, failedFirst: false)
+            return Array(sorted.filter(\.isWatcherLike).prefix(scopedLimit))
+        case .chats:
+            return []
+        }
+    }
+
+    private static func sortedBriefings(_ briefings: [Briefing], failedFirst: Bool) -> [Briefing] {
+        briefings.sorted { lhs, rhs in
+            if lhs.isPinned != rhs.isPinned { return lhs.isPinned }
+            let lhsRank = lhs.status.feedSortRank(failedFirst: failedFirst)
+            let rhsRank = rhs.status.feedSortRank(failedFirst: failedFirst)
+            if lhsRank != rhsRank { return lhsRank < rhsRank }
+            return (lhs.lastRunAt ?? lhs.createdAt) > (rhs.lastRunAt ?? rhs.createdAt)
+        }
+    }
+
+    private static func defaultStreamBriefings(from sorted: [Briefing], limit: Int) -> [Briefing] {
+        let unique = uniqueBriefings(sorted)
+        guard limit > 0 else { return [] }
+
+        let active = unique.filter { !$0.isDefaultStreamAttentionOnly }
+        let attention = unique.filter(\.isDefaultStreamAttentionOnly)
+
+        if active.isEmpty {
+            return Array(attention.prefix(1))
+        }
+
+        var result = Array(active.prefix(limit))
+        if result.count < limit, let firstAttention = attention.first {
+            result.append(firstAttention)
+        }
+        return result
+    }
+
+    static func scopeCounts(
+        briefings: [Briefing],
+        visibleConversationCount: Int
+    ) -> [HomeFeedScope: Int] {
+        let watcherCount = briefings.filter(\.isWatcherLike).count
+        let briefingCount = briefings.count - watcherCount
+        return [
+            .all: briefings.count + visibleConversationCount,
+            .briefings: briefingCount,
+            .watchers: watcherCount,
+            .chats: visibleConversationCount
+        ]
+    }
+
+    static func uniqueRecentConversations(
+        _ conversations: [ConversationSummary],
+        limit: Int,
+        excludingBriefings briefings: [Briefing] = [],
+        isRecoveryCandidate: ((ConversationSummary) -> Bool)? = nil
+    ) -> [ConversationSummary] {
+        let excludedTitles = Set(briefings.map { canonicalFeedTitle($0.title) }.filter { !$0.isEmpty })
+        var seenTitles: Set<String> = []
+        var active: [ConversationSummary] = []
+        var recovery: [ConversationSummary] = []
+        for conversation in conversations {
+            let key = canonicalFeedTitle(conversation.title)
+            if !key.isEmpty, excludedTitles.contains(key) {
+                continue
+            }
+            if !key.isEmpty, seenTitles.contains(key) {
+                continue
+            }
+            if !key.isEmpty {
+                seenTitles.insert(key)
+            }
+            if isRecoveryCandidate?(conversation) == true {
+                recovery.append(conversation)
+            } else {
+                active.append(conversation)
+            }
+            if isRecoveryCandidate == nil, active.count == limit { break }
+        }
+
+        guard isRecoveryCandidate != nil else {
+            return Array(active.prefix(limit))
+        }
+        if active.isEmpty {
+            return Array(recovery.prefix(1))
+        }
+        var result = Array(active.prefix(limit))
+        if result.count < limit, let firstRecovery = recovery.first {
+            result.append(firstRecovery)
+        }
+        return result
+    }
+
+    private static func uniqueBriefings(_ briefings: [Briefing]) -> [Briefing] {
+        var seenKeys: Set<String> = []
+        var result: [Briefing] = []
+        for briefing in briefings {
+            let key = [
+                canonicalFeedTitle(briefing.title),
+                briefing.kind.rawValue,
+                briefing.schedule.scheduleLabel.lowercased()
+            ]
+            .joined(separator: "|")
+            if !key.isEmpty, seenKeys.contains(key) {
+                continue
+            }
+            seenKeys.insert(key)
+            result.append(briefing)
+        }
+        return result
+    }
+
+    private static func canonicalFeedTitle(_ title: String) -> String {
+        var value = HomeConversationPreviewFormatter.displayTitle(title)
+            .lowercased()
+
+        let suffixPatterns = [
+            #"\s+updates(?:\s+and\s+(?:tell|notify|alert|let\s+me\s+know).*)?$"#,
+            #"\s+and\s+(?:tell|notify|alert|let\s+me\s+know).*$"#,
+            #"\s+if\s+.+\s+changes$"#
+        ]
+        for pattern in suffixPatterns {
+            value = value.replacingOccurrences(
+                of: pattern,
+                with: "",
+                options: .regularExpression
+            )
+        }
+
+        return value
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+enum HomeConversationRecoveryPolicy {
+    static func isRecovery(title: String, preview: String, hasSourceCue: Bool) -> Bool {
+        let normalized = "\(title) \(preview)".lowercased()
+        return isAttentionState(normalized) || isSourceGapState(normalized, hasSourceCue: hasSourceCue)
+    }
+
+    static func hasTopicCue(_ normalizedText: String) -> Bool {
+        normalizedText.contains("spacex") ||
+            normalizedText.contains("iran") ||
+            normalizedText.contains("ipo") ||
+            normalizedText.contains("news") ||
+            normalizedText.contains("release")
+    }
+
+    static func isAttentionState(_ normalizedText: String) -> Bool {
+        normalizedText.contains("rate-limited") ||
+            normalizedText.contains("private route limited") ||
+            normalizedText.contains("temporarily busy") ||
+            normalizedText.contains("failed") ||
+            normalizedText.contains("needs attention")
+    }
+
+    static func isSourceGapState(_ normalizedText: String, hasSourceCue: Bool) -> Bool {
+        !isAttentionState(normalizedText) &&
+            hasTopicCue(normalizedText) &&
+            !hasSourceCue
+    }
+}
+
+private extension Briefing {
+    var isDefaultStreamAttentionOnly: Bool {
+        status == .failed || lastFailureAt != nil
+    }
 }
 
 enum HomeSearchIndex {

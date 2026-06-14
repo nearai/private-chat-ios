@@ -34,37 +34,8 @@ enum HomeOrchestrationPlanner {
             ? selectedCouncilModelCount >= 2
             : defaultCouncilModelCount >= 2
 
-        if isCouncilModeEnabled || defaultCouncilModelCount >= 2 {
-            items.append(councilItem(
-                isEnabled: isCouncilModeEnabled,
-                defaultModelCount: defaultCouncilModelCount,
-                modelNames: councilModelNames
-            ))
-        }
-
-        if hostedAgentAvailable || mobileAgentAvailable {
-            items.append(agentItem(
-                hostedAvailable: hostedAgentAvailable,
-                mobileAvailable: mobileAgentAvailable,
-                selectedProject: sortedProjects.first
-            ))
-        }
-
-        if let setupPlan,
-           let skill = setupPlan.starterSkillSuggestions.first {
-            items.append(setupSkillItem(skill: skill, setupPlan: setupPlan, selectedProject: sortedProjects.first))
-        }
-
-        let remainingSlots = max(0, 6 - items.count)
-        items.append(contentsOf: sortedProjects.prefix(remainingSlots).map(projectItem))
-
-        if items.count < 4 {
-            let chatSlots = max(0, 4 - items.count)
-            items.append(contentsOf: conversations.prefix(chatSlots).map(chatItem))
-        }
-
-        if items.isEmpty {
-            items.append(emptyStarterItem())
+        if let selectedProject = sortedProjects.first(where: { $0.id == selectedProjectID }) {
+            items.append(projectItem(selectedProject))
         }
 
         let scheduledItems = sortedBriefings.prefix(4).map(scheduleItem)
@@ -79,14 +50,7 @@ enum HomeOrchestrationPlanner {
             subtitle: subtitle,
             liveItems: items,
             scheduledItems: scheduledItems,
-            commands: commandItems(
-                selectedProject: sortedProjects.first,
-                isCouncilModeEnabled: isCouncilModeEnabled,
-                selectedCouncilModelCount: selectedCouncilModelCount,
-                defaultCouncilModelCount: defaultCouncilModelCount,
-                agentAvailable: hostedAgentAvailable || mobileAgentAvailable,
-                includesSetupDefaultsCommand: includesSetupDefaultsCommand
-            )
+            commands: []
         )
     }
 
@@ -247,23 +211,6 @@ enum HomeOrchestrationPlanner {
             symbolName: "bubble.left.and.bubble.right",
             tone: .neutral,
             action: .openConversation(conversation.id)
-        )
-    }
-
-    private static func emptyStarterItem() -> HomeOrchestrationItem {
-        HomeOrchestrationItem(
-            id: "starter-actions",
-            kind: .setup,
-            title: "Action scan",
-            subtitle: "Track, remind, schedule, brief",
-            detail: "Turn loose context into actions to approve.",
-            statusText: "new",
-            symbolName: "sparkles.rectangle.stack",
-            tone: .blue,
-            action: .stagePrompt(HomeStagedPrompt(
-                prompt: "Turn this context into next moves: trackers, reminders, calendar items, decisions, risks, open questions, and the first action to stage.",
-                banner: "Action scan prompt ready."
-            ))
         )
     }
 

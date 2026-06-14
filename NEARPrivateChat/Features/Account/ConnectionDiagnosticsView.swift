@@ -96,7 +96,7 @@ struct ConnectionDiagnosticsView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.textSecondary)
                 Text(title)
                     .font(.subheadline.weight(.semibold))

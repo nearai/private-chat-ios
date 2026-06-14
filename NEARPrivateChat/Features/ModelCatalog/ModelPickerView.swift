@@ -275,7 +275,7 @@ struct ModelPickerView: View {
             // SINGLE ROUTE
             ModelSpecSection(
                 title: "Single Model Route",
-                subtitle: "Private is always available. Cloud routes need a NEAR AI Cloud key."
+                subtitle: "Private is the default route. Cloud routes use your NEAR AI Cloud key when connected."
             ) {
                 ForEach(Array(primaryPrivateModels.enumerated()), id: \.element.id) { index, model in
                     ModelSpecRow(

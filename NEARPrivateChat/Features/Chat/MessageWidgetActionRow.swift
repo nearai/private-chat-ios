@@ -8,10 +8,10 @@ struct WidgetActionRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: symbolName)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(tint)
                 .frame(width: 26, height: 26)
-                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .background(tint.opacity(0.12), in: RoundedRectangle.app(AppRadius.pill))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(action.title.isEmpty ? "Action" : action.title)
@@ -34,10 +34,11 @@ struct WidgetActionRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if !action.missingFields.isEmpty {
-                    Text("Needs: \(action.missingFields.prefix(3).joined(separator: ", "))")
+                let missingFields = action.reviewMissingFields
+                if !missingFields.isEmpty {
+                    Text("Needs: \(missingFields.prefix(3).joined(separator: ", "))")
                         .font(.caption2)
-                        .foregroundStyle(Color.textTertiary)
+                        .foregroundStyle(Color.proofStaleText)
                         .lineLimit(2)
                 }
             }
@@ -48,9 +49,9 @@ struct WidgetActionRow: View {
                     onPreview?(action)
                 } label: {
                     Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 21, weight: .semibold))
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(Color.actionPrimary)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Stage action")
@@ -113,4 +114,3 @@ struct WidgetActionRow: View {
         widgetToneColor(action.tone)
     }
 }
-

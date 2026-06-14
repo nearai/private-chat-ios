@@ -50,6 +50,7 @@ struct NewProjectView: View {
                                             .padding(3)
                                     }
                                     .buttonStyle(.plain)
+                                    .minimumTouchTarget()
                                     .accessibilityLabel("\(palette.label) project color")
                                 }
                             }
@@ -58,7 +59,7 @@ struct NewProjectView: View {
                         TextField("Search icons", text: $iconSearchText)
                             .textFieldStyle(.plain)
                             .padding(.horizontal, 12)
-                            .frame(height: 40)
+                            .frame(height: 44)
                             .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
 
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 48), spacing: 8)], spacing: 8) {
@@ -69,7 +70,7 @@ struct NewProjectView: View {
                                     Image(systemName: icon.symbolName)
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(selectedIcon == icon ? selectedPalette.tintColor : .secondary)
-                                        .frame(height: 42)
+                                        .frame(height: 44)
                                         .frame(maxWidth: .infinity)
                                         .background(
                                             selectedIcon == icon ? selectedPalette.backgroundColor : Color.appSecondaryBackground,
@@ -193,6 +194,7 @@ struct EditProjectView: View {
                                             .padding(3)
                                     }
                                     .buttonStyle(.plain)
+                                    .minimumTouchTarget()
                                     .accessibilityLabel("\(palette.label) project color")
                                 }
                             }
@@ -205,7 +207,7 @@ struct EditProjectView: View {
                         TextField("Search icons", text: $iconSearchText)
                             .textFieldStyle(.plain)
                             .padding(.horizontal, 12)
-                            .frame(height: 40)
+                            .frame(height: 44)
                             .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
 
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 48), spacing: 8)], spacing: 8) {
@@ -216,7 +218,7 @@ struct EditProjectView: View {
                                     Image(systemName: icon.symbolName)
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(selectedIcon == icon ? selectedPalette.tintColor : .secondary)
-                                        .frame(height: 42)
+                                        .frame(height: 44)
                                         .frame(maxWidth: .infinity)
                                         .background(
                                             selectedIcon == icon ? selectedPalette.backgroundColor : Color.appSecondaryBackground,

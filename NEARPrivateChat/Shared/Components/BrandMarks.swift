@@ -66,7 +66,7 @@ struct PrivacySeal: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: max(8, size * 0.22), style: .continuous)
+            RoundedRectangle.app(max(AppRadius.pill, size * 0.22))
                 .fill(Color.actionTint)
 
             NearMark(size: size * 0.64)

@@ -61,7 +61,7 @@ struct ResponseVariantPicker: View {
         } label: {
             Image(systemName: symbolName)
                 .font(.caption.weight(.bold))
-                .frame(width: 24, height: 24)
+                .frame(width: 44, height: 44)
                 .foregroundStyle(responseID == nil ? Color.secondary.opacity(0.45) : Color.brandAccent)
                 .contentShape(Circle())
         }

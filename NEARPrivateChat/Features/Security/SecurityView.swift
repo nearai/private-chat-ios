@@ -71,7 +71,7 @@ struct SecurityView: View {
                 case .success:
                     showBanner("Proof report exported.")
                 case let .failure(error):
-                    showBanner(error.localizedDescription)
+                    showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
                 }
             }
         }
@@ -199,7 +199,7 @@ struct SecurityView: View {
                     ProgressView()
                 } else {
                     Image(systemName: proof.symbolName)
-                        .font(.system(size: 44, weight: .semibold))
+                        .font(.largeTitle.weight(.semibold))
                         .foregroundStyle(proofTextTint(for: proof.state))
                 }
             }
@@ -249,7 +249,7 @@ struct SecurityView: View {
 
             ClaudeDetailRow(
                 label: "Proof report",
-                trailing: AnyView(Image(systemName: "chevron.right").font(.system(size: 14)).foregroundStyle(Color.textTertiary))
+                trailing: AnyView(Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(Color.textTertiary))
             ) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(conversationSummary)
@@ -317,7 +317,7 @@ struct SecurityView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.actionPrimaryText)
                 .frame(width: 24, height: 24)
-                .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .background(Color.actionTint, in: RoundedRectangle.app(AppRadius.pill))
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
                     .font(.caption2.weight(.semibold))
@@ -428,7 +428,7 @@ struct SecurityView: View {
                     HStack(spacing: 6) {
                         Text("Export proof report")
                         Image(systemName: "arrow.up.right")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.subheadline.weight(.semibold))
                     }
                     .font(.headline)
                     .foregroundStyle(Color.actionPrimaryText)
@@ -457,7 +457,7 @@ struct SecurityView: View {
                                 .tint(.white)
                         } else {
                             Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.body.weight(.semibold))
                         }
                         Text(isLoadingAttestation ? "Fetching proof" : "Fetch proof")
                     }
@@ -480,7 +480,7 @@ struct SecurityView: View {
                 HStack(spacing: 4) {
                     Text("Learn how this works")
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.caption2.weight(.semibold))
                 }
                 .font(.footnote)
                 .fontWeight(.regular)
@@ -494,7 +494,7 @@ struct SecurityView: View {
     }
 
     private var modelTrailing: AnyView {
-        AnyView(Image(systemName: "chevron.right").font(.system(size: 14)).foregroundStyle(Color.textTertiary))
+        AnyView(Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(Color.textTertiary))
     }
 
     private var hardwareTrailing: AnyView {
@@ -502,7 +502,7 @@ struct SecurityView: View {
             currentAttestationStatus.effectiveState() == .valid
         return AnyView(
             Image(systemName: isCovered ? "checkmark.seal.fill" : "shield")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(isCovered ? Color.proofVerifiedText : Color.textTertiary)
         )
     }

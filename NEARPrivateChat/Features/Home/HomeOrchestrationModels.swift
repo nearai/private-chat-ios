@@ -151,4 +151,5 @@ struct HomeOrchestrationPlan: Equatable {
     let commands: [HomeOrchestrationCommand]
 
     var activeCount: Int { liveItems.count }
+    var hasContent: Bool { !liveItems.isEmpty || !scheduledItems.isEmpty }
 }

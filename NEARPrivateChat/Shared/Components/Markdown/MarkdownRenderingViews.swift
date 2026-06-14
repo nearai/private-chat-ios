@@ -3,10 +3,12 @@ import SwiftUI
 struct MarkdownMessageText: View {
     let text: String
     let sources: [WebSearchSource]
+    let textSelectionEnabled: Bool
 
-    init(text: String, sources: [WebSearchSource] = []) {
+    init(text: String, sources: [WebSearchSource] = [], textSelectionEnabled: Bool = true) {
         self.text = text
         self.sources = sources
+        self.textSelectionEnabled = textSelectionEnabled
     }
 
     private var blocks: [MarkdownBlock] {
@@ -96,6 +98,15 @@ struct MarkdownMessageText: View {
     }
 
     var body: some View {
+        if textSelectionEnabled {
+            content
+                .textSelection(.enabled)
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 9) {
             ForEach(blocks) { block in
                 switch block.kind {
@@ -122,7 +133,6 @@ struct MarkdownMessageText: View {
                 }
             }
         }
-        .textSelection(.enabled)
     }
 }
 
@@ -158,9 +168,9 @@ private struct MarkdownList: View {
     private func markerView(for item: MarkdownListItem) -> some View {
         switch item.marker {
         case .unordered:
-            Image(systemName: "circle.fill")
-                .font(.system(size: 4, weight: .bold))
-                .foregroundStyle(.secondary)
+            Circle()
+                .fill(.secondary)
+                .frame(width: 4, height: 4)
                 .frame(width: 22, alignment: .trailing)
         case let .ordered(number):
             Text("\(number).")
@@ -206,6 +216,7 @@ private struct MarkdownCodeBlock: View {
                 } label: {
                     Image(systemName: "doc.on.doc")
                         .font(.caption.weight(.semibold))
+                        .minimumTouchTarget()
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
@@ -223,9 +234,9 @@ private struct MarkdownCodeBlock: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
+        .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.pill))
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle.app(AppRadius.pill)
                 .stroke(Color.secondary.opacity(0.10), lineWidth: 1)
         )
     }
@@ -246,6 +257,7 @@ private struct MarkdownMathBlock: View {
                 } label: {
                     Image(systemName: "doc.on.doc")
                         .font(.caption.weight(.semibold))
+                        .minimumTouchTarget()
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
@@ -265,9 +277,9 @@ private struct MarkdownMathBlock: View {
                 .frame(maxWidth: .infinity)
             }
         }
-        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
+        .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.pill))
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle.app(AppRadius.pill)
                 .stroke(Color.brandAccent.opacity(0.16), lineWidth: 1)
         )
     }
@@ -281,17 +293,23 @@ private struct MarkdownTable: View {
         rows.map(\.count).max() ?? 0
     }
 
+    private var header: [String] {
+        rows.first ?? []
+    }
+
+    private var bodyRows: [[String]] {
+        rows.count > 1 ? Array(rows.dropFirst()) : rows
+    }
+
     var body: some View {
         Group {
-            if columnCount <= 3 {
+            if columnCount <= 2 {
                 // Narrow tables fill the bubble width and wrap fully —
                 // hard 96/128pt caps were truncating every cell with "…".
                 tableGrid(cellMaxWidth: .infinity)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                ScrollView(.horizontal, showsIndicators: true) {
-                    tableGrid(cellMaxWidth: 200)
-                }
+                stackedRows
             }
         }
         .contentShape(Rectangle())
@@ -300,6 +318,48 @@ private struct MarkdownTable: View {
             MarkdownTableDetailSheet(rows: rows)
         }
         .accessibilityHint("Tap to view the full table.")
+    }
+
+    private var stackedRows: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(bodyRows.enumerated()), id: \.offset) { rowIndex, row in
+                if rowIndex > 0 {
+                    Divider()
+                        .padding(.horizontal, 10)
+                }
+
+                VStack(alignment: .leading, spacing: 7) {
+                    ForEach(0..<columnCount, id: \.self) { columnIndex in
+                        let title = header.indices.contains(columnIndex) && !header[columnIndex].isEmpty
+                            ? header[columnIndex]
+                            : "Column \(columnIndex + 1)"
+                        let value = row.indices.contains(columnIndex) ? row[columnIndex] : ""
+                        if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(title)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                InlineMarkdownText(text: value)
+                                    .font(.caption)
+                                    .foregroundStyle(.primary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 9)
+                .background(rowIndex.isMultiple(of: 2) ? Color.clear : Color.brandAccent.opacity(0.035))
+            }
+        }
+        .overlay(
+            RoundedRectangle.app(AppRadius.pill)
+                .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle.app(AppRadius.pill))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("markdown.table.stacked")
     }
 
     private func tableGrid(cellMaxWidth: CGFloat?) -> some View {
@@ -324,10 +384,10 @@ private struct MarkdownTable: View {
             }
         }
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle.app(AppRadius.pill)
                 .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle.app(AppRadius.pill))
     }
 }
 
@@ -505,86 +565,86 @@ struct SearchContextStrip: View {
     let sources: [WebSearchSource]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                ZStack {
-                    Circle()
-                        .fill(Color.trustVerified.opacity(0.20))
-                    Image(systemName: "link")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(Color.trustVerified)
-                }
-                .frame(width: 22, height: 22)
-                Text("Sources checked")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
-                Text(headerText)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-            }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                Image(systemName: "link")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.trustVerified)
+                    .frame(width: 22, height: 22)
+                    .background(Color.trustVerified.opacity(0.12), in: Circle())
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(Array(sources.prefix(4).enumerated()), id: \.element.id) { index, source in
-                        if let url = source.safeURL {
-                            Link(destination: url) {
-                                SourcePill(index: index + 1, source: source)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-
-                    if sources.count > 4 {
-                        Text("\(sources.count - 4) more")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 12)
-                            .frame(height: 34)
-                            .background(Color.appPanelBackground, in: Capsule())
-                    }
-
-                    if !sources.isEmpty {
-                        NavigationLink {
-                            SourcesDetailView(query: query, sources: sources)
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "list.bullet.rectangle")
-                                    .font(.caption2.weight(.bold))
-                                Text("View all")
-                                    .font(.caption.weight(.semibold))
-                            }
-                            .foregroundStyle(Color.actionPrimary)
-                            .padding(.horizontal, 11)
-                            .frame(height: 34)
-                            .background(Color.actionPrimary.opacity(0.08), in: Capsule())
+                ForEach(Array(sources.prefix(4).enumerated()), id: \.element.id) { index, source in
+                    if let url = source.safeURL {
+                        Link(destination: url) {
+                            SourcePill(index: index + 1, source: source)
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.trailing, 2)
+
+                if sources.count > 4 {
+                    Text("+\(sources.count - 4)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 9)
+                        .frame(height: 28)
+                        .background(Color.appPanelBackground, in: Capsule())
+                        .overlay {
+                            Capsule()
+                                .stroke(Color.appBorder.opacity(0.45), lineWidth: 1)
+                        }
+                }
+
+                if !sources.isEmpty {
+                    NavigationLink {
+                        SourcesDetailView(query: query, sources: sources)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("All")
+                                .font(.caption2.weight(.semibold))
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.bold))
+                        }
+                        .foregroundStyle(Color.actionPrimary)
+                        .padding(.horizontal, 9)
+                        .frame(height: 28)
+                        .background(Color.actionPrimary.opacity(0.08), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
             }
+            .padding(.trailing, 2)
         }
-        .padding(10)
         .frame(maxWidth: 620, alignment: .leading)
-        .background(Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.appBorder.opacity(0.8), lineWidth: 1)
-        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Sources checked, \(headerText)")
     }
 
     private var headerText: String {
         let countLabel = "\(sources.count) source\(sources.count == 1 ? "" : "s")"
-        guard let query = displayQuery, !query.isEmpty else {
+        guard let query = SourceSearchDisplay(query: query).summary, !query.isEmpty else {
             return countLabel
         }
         return "\(countLabel) · \(query)"
     }
+}
 
-    private var displayQuery: String? {
+struct SourceSearchDisplay: Equatable {
+    let summary: String?
+    let queries: [String]
+
+    init(query: String?) {
+        guard let cleaned = Self.cleanedQuery(query) else {
+            summary = nil
+            queries = []
+            return
+        }
+        let parts = Self.queryParts(from: cleaned)
+        queries = parts
+        summary = parts.isEmpty ? cleaned : parts.joined(separator: " · ")
+    }
+
+    private static func cleanedQuery(_ query: String?) -> String? {
         guard var value = query?.trimmingCharacters(in: .whitespacesAndNewlines),
               !value.isEmpty else {
             return nil
@@ -604,6 +664,20 @@ struct SearchContextStrip: View {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value
     }
+
+    private static func queryParts(from value: String) -> [String] {
+        var seen = Set<String>()
+        return value
+            .components(separatedBy: "|")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .filter { part in
+                let key = part.lowercased()
+                guard !seen.contains(key) else { return false }
+                seen.insert(key)
+                return true
+            }
+    }
 }
 
 private struct SourcePill: View {
@@ -611,23 +685,20 @@ private struct SourcePill: View {
     let source: WebSearchSource
 
     var body: some View {
-        HStack(spacing: 7) {
-            Text("[\(index)]")
-                .font(.caption2.monospacedDigit().weight(.bold))
-                .foregroundStyle(Color.trustVerified)
-            SourceLogo(source: source, fallbackText: "\(index)")
+        HStack(spacing: 5) {
+            SourceLogo(source: source, fallbackText: "\(index)", size: 16)
             Text(source.host)
-                .font(.caption.weight(.semibold))
+                .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-        .padding(.leading, 7)
-        .padding(.trailing, 11)
-        .frame(height: 34)
+        .padding(.leading, 6)
+        .padding(.trailing, 9)
+        .frame(height: 28)
         .background(Color.appPanelBackground, in: Capsule())
         .overlay {
             Capsule()
-                .stroke(Color.appBorder.opacity(0.55), lineWidth: 1)
+                .stroke(Color.appBorder.opacity(0.45), lineWidth: 1)
         }
         .accessibilityLabel("Source \(index), \(source.title ?? source.host)")
     }
@@ -636,13 +707,14 @@ private struct SourcePill: View {
 private struct SourceLogo: View {
     let source: WebSearchSource
     let fallbackText: String
+    var size: CGFloat = 22
 
     var body: some View {
         SourceFaviconView(
             domain: source.host,
-            size: 22,
+            size: size,
             fallbackText: fallbackLabel,
-            cornerRadius: 11,
+            cornerRadius: size / 2,
             borderColor: Color.appBorder.opacity(0.65),
             borderWidth: 1,
             allowsNetworkFavicon: source.allowsNetworkFavicon
@@ -661,15 +733,32 @@ struct SourcesDetailView: View {
     let sources: [WebSearchSource]
 
     var body: some View {
+        let searchDisplay = SourceSearchDisplay(query: query)
+
         NavigationStack {
             List {
-                if let query = query?.trimmingCharacters(in: .whitespacesAndNewlines), !query.isEmpty {
+                if !searchDisplay.queries.isEmpty {
                     Section {
-                        Text(query)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(searchDisplay.queries, id: \.self) { query in
+                                HStack(alignment: .top, spacing: 8) {
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(Color.actionPrimary)
+                                        .frame(width: 18, height: 18)
+                                    Text(query)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .padding(10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.actionPrimary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                        }
+                        .padding(.vertical, 2)
                     } header: {
-                        Text("Search")
+                        Text(searchDisplay.queries.count == 1 ? "Search" : "Searches")
                     }
                 }
 
@@ -694,12 +783,14 @@ struct SourcesDetailView: View {
                                         .foregroundStyle(Color.actionPrimary)
                                 }
                             }
+                            .accessibilityIdentifier("sources.detail.row.\(index + 1)")
                         }
                     }
                 } header: {
                     Text("\(sources.count) linked source\(sources.count == 1 ? "" : "s")")
                 }
             }
+            .accessibilityIdentifier("sources.detail")
             .navigationTitle("Sources")
             .platformInlineNavigationTitle()
             .toolbar {

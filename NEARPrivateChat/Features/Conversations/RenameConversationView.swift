@@ -51,7 +51,7 @@ struct RenameConversationView: View {
             try await conversationStore.renameConversation(conversation, title: title)
             dismiss()
         } catch {
-            conversationStore.showBanner(error.localizedDescription)
+            conversationStore.showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
         }
     }
 }

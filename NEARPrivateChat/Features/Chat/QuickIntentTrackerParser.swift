@@ -70,6 +70,8 @@ extension QuickIntentParser {
         let infoCue = contains(text, ["price", "value", "cost", "worth", "quote", "rate", "index", "stock",
                                       "score", "level", "status", "forecast", "floor price", "market cap",
                                       "how much", "trading at"])
+        let priceCue = contains(text, ["price", "value", "cost", "worth", "quote", "rate",
+                                       "floor price", "market cap", "how much", "trading at"])
         if startsWithWatchCommand(text), infoCue, hasUnresolvedAssetListSubject(text),
            let generic = makeOpenEndedInfoTracker(from: original, text: text, schedule: schedule, council: council, label: label) {
             return generic
@@ -85,7 +87,7 @@ extension QuickIntentParser {
                 confirmation: "Watchlist · \(count) assets · \(label)"
             )
         }
-        if let coin = matchedCoin(in: text) {
+        if priceCue, let coin = matchedCoin(in: text) {
             return TrackerSpec(
                 title: "\(coin.symbol) price",
                 kind: .cryptoPrice,
@@ -114,19 +116,6 @@ extension QuickIntentParser {
             return makeOpenEndedInfoTracker(from: original, text: text, schedule: schedule, council: council, label: label)
         }
 
-        if let generic = genericScheduledTaskSubject(from: text, original: original) {
-            let title = prettyTrackerTitle(from: generic)
-            return TrackerSpec(
-                title: title,
-                kind: .customPrompt,
-                subject: nil,
-                schedule: schedule,
-                council: council,
-                confirmation: "Tracking \(title) · \(label)",
-                prompt: "Run this recurring task: \(generic). Use web search when fresh facts are needed, include dates/sources when relevant, and lead with what changed or what needs attention."
-            )
-        }
-
         // A recurring briefing/digest (or a council request) becomes a scheduled
         // custom-prompt task on the user's actual question. A bare reminder with
         // no informational noun falls through so we don't manufacture trackers
@@ -135,18 +124,97 @@ extension QuickIntentParser {
             "briefing", "brief", "digest", "summary", "summarize", "summarise",
             "report", "rundown", "recap", "roundup", "round-up"
         ])
-        guard wantsBriefing else { return nil }
-        let prompt = cleanedTrackerPrompt(from: original)
-        guard prompt.count >= 4 else { return nil }
-        return TrackerSpec(
-            title: council ? "Council briefing" : "Daily briefing",
-            kind: .customPrompt,
-            subject: nil,
-            schedule: schedule,
-            council: council,
-            confirmation: "\(council ? "Council briefing" : "Briefing") · \(label)",
-            prompt: prompt
+        if wantsBriefing {
+            let prompt = recurringBriefingPrompt(from: original)
+            guard prompt.count >= 4 else { return nil }
+            let title = recurringBriefingTitle(from: prompt, council: council)
+            return TrackerSpec(
+                title: title,
+                kind: .customPrompt,
+                subject: nil,
+                schedule: schedule,
+                council: council,
+                confirmation: "\(council ? "Council briefing" : "Briefing") · \(title) · \(label)",
+                prompt: prompt
+            )
+        }
+
+        if let generic = genericScheduledTaskSubject(from: text, original: original) {
+            let title = prettyTrackerTitle(from: generic)
+            let task = recurringTaskPromptSubject(from: generic, title: title)
+            return TrackerSpec(
+                title: title,
+                kind: .customPrompt,
+                subject: nil,
+                schedule: schedule,
+                council: council,
+                confirmation: "Tracking \(title) · \(label)",
+                prompt: "Run this recurring task: \(task). Use web search when fresh facts are needed, include dates/sources when relevant, and lead with what changed or what needs attention."
+            )
+        }
+
+        return nil
+    }
+
+    static func recurringBriefingPrompt(from original: String) -> String {
+        var prompt = cleanedTrackerPrompt(from: original)
+        prompt = prompt.replacingOccurrences(
+            of: #"^\s*(please\s+)?(create|set ?up|make|build|schedule|start|add)\s+(an|the|a)?\b\s*"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
         )
+        prompt = prompt.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+        if prompt.isEmpty {
+            prompt = original.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+        }
+        return prompt
+    }
+
+    static func recurringBriefingTitle(from prompt: String, council: Bool) -> String {
+        var title = prompt
+            .replacingOccurrences(
+                of: #"^\s*(please\s+)?(brief me on|brief me about|give me|send me|pull|create|make|build|run)\s+"#,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            .replacingOccurrences(
+                of: #"^\s*(an|the|a)\b\s+"#,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            .replacingOccurrences(
+                of: #"^\s*(daily|weekly|monthly|morning|evening)\s+"#,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            .trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+
+        for trailingCue in [
+            " with sources",
+            " with citations",
+            " with links",
+            " including sources",
+            " including citations",
+            " and cite sources",
+            " and include",
+            " and surface",
+            " and tell me",
+            " covering "
+        ] {
+            if let range = title.range(of: trailingCue, options: [.caseInsensitive]),
+               title.distance(from: title.startIndex, to: range.lowerBound) >= 4 {
+                title = String(title[..<range.lowerBound])
+                    .trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+                break
+            }
+        }
+
+        if title.isEmpty {
+            title = council ? "Council briefing" : "Daily briefing"
+        }
+        title = String(title.prefix(48)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.prefix(1).uppercased() + title.dropFirst()
     }
 
     static func makeOpenEndedInfoTracker(
@@ -170,6 +238,29 @@ extension QuickIntentParser {
         )
     }
 
+    static func recurringTaskPromptSubject(from subject: String, title: String) -> String {
+        var condition: String?
+        for cue in [" and tell me if ", " and tell me when ", " and notify me if ", " and alert me if ", " and let me know if "] {
+            if let range = subject.range(of: cue, options: [.caseInsensitive]) {
+                let suffix = subject[range.upperBound...]
+                    .trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+                if !suffix.isEmpty {
+                    condition = suffix
+                }
+                break
+            }
+        }
+
+        var task = title.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+        if task.isEmpty {
+            task = subject.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+        }
+        guard let condition else {
+            return task
+        }
+        return "\(task). Watch for \(condition)"
+    }
+
     /// The subject of an open-ended tracker: the cleaned prompt with leading
     /// watch verbs and articles stripped. "track the price of a Rolex GMT Master
     /// II every morning" → "price of a Rolex GMT Master II".
@@ -179,7 +270,8 @@ extension QuickIntentParser {
             "keep an eye on ", "keep tabs on ", "keep track of ", "track ",
             "watch for ", "watch ", "monitor ", "follow ", "check on ", "check ",
             "research ", "scan for ", "scan ", "look up ", "look for ",
-            "find ", "investigate ", "run "
+            "find ", "investigate ", "run ", "create ", "make ", "build ",
+            "schedule ", "set up ", "setup ", "start ", "add "
         ]
         var changed = true
         while changed {
@@ -190,6 +282,13 @@ extension QuickIntentParser {
             }
             for article in ["the ", "a ", "an ", "my "] where subject.lowercased().hasPrefix(article) {
                 subject = String(subject.dropFirst(article.count)); changed = true; break
+            }
+        }
+        for separator in [#"\.\s+"#, #";\s+"#] {
+            if let range = subject.range(of: separator, options: .regularExpression),
+               subject.distance(from: subject.startIndex, to: range.lowerBound) >= 4 {
+                subject = String(subject[..<range.lowerBound])
+                break
             }
         }
         return subject.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))

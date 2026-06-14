@@ -260,15 +260,56 @@ extension HomeScreen {
         shouldShowDefaultWorkSurface && !resumeConversations.isEmpty
     }
 
+    var visibleHomeFeedBriefings: [Briefing] {
+        guard shouldShowDefaultWorkSurface else { return [] }
+        return HomeFeedPlanner.visibleBriefings(
+            briefingStore.briefings,
+            scope: homeStore.selectedFeedScope,
+            allLimit: HomeFeedPlanner.defaultAllBriefingLimit(
+                totalCardLimit: defaultHomeFeedCardLimit,
+                hasRecentConversations: !resumeConversations.isEmpty
+            )
+        )
+    }
+
+    var visibleHomeFeedChats: [ConversationSummary] {
+        guard shouldShowDefaultWorkSurface else { return [] }
+        switch homeStore.selectedFeedScope {
+        case .all:
+            let remainingCardCount = max(0, defaultHomeFeedCardLimit - visibleHomeFeedBriefings.count)
+            return HomeFeedPlanner.uniqueRecentConversations(
+                resumeConversations,
+                limit: remainingCardCount,
+                excludingBriefings: visibleHomeFeedBriefings,
+                isRecoveryCandidate: isRecoveryConversation
+            )
+        case .chats:
+            return Array(filteredConversations.prefix(8))
+        case .briefings, .watchers:
+            return []
+        }
+    }
+
+    private var defaultHomeFeedCardLimit: Int {
+        3
+    }
+
+    var homeFeedScopeCounts: [HomeFeedScope: Int] {
+        HomeFeedPlanner.scopeCounts(
+            briefings: briefingStore.briefings,
+            visibleConversationCount: filteredConversations.count
+        )
+    }
+
     var homeLaunchSubtitle: String {
         if let projectName = chatStore.selectedProject?.name.nilIfBlank {
-            return "\(projectName) context is active. Ask, research, prove, or hand off."
+            return "\(projectName) context active."
         }
-        return "Ask, research, prove, or hand off from one place."
+        return ""
     }
 
     var homeLaunchSuggestions: [EmptyChatStarterSuggestion] {
-        Array(EmptyChatStarterCoordinator.suggestions(for: chatStore).prefix(4))
+        []
     }
 
     var selectedHomeLaunchSuggestion: EmptyChatStarterSuggestion? {
@@ -277,7 +318,7 @@ extension HomeScreen {
 
     var homeLaunchActionTitle: String {
         guard let suggestion = selectedHomeLaunchSuggestion else {
-            return "Prepare chat"
+            return "Start chat"
         }
         switch suggestion.action {
         case .agent:
@@ -296,12 +337,12 @@ extension HomeScreen {
     }
 
     var homeLaunchActionSymbolName: String {
-        selectedHomeLaunchSuggestion?.symbolName ?? "arrow.up.right.circle.fill"
+        selectedHomeLaunchSuggestion?.symbolName ?? "arrow.up.circle.fill"
     }
 
     var homeLaunchActionEnabled: Bool {
         selectedHomeLaunchSuggestion != nil ||
-        !homeStore.homeLaunchDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            !homeStore.homeLaunchDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
 

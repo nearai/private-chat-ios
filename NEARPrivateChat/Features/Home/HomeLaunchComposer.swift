@@ -1,11 +1,37 @@
 import SwiftUI
 
+enum HomeComposerRouteBadgeText {
+    static func visibleText(routeTitle: String, routeDetail: String) -> String {
+        let title = routeTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let detail = routeDetail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !detail.isEmpty else { return title.isEmpty ? "Route" : title }
+
+        if title.localizedCaseInsensitiveContains("private") {
+            if detail.localizedCaseInsensitiveContains("private") {
+                return detail
+            }
+            if detail.localizedCaseInsensitiveContains("web") {
+                let model = detail
+                    .components(separatedBy: "·")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .first { !$0.localizedCaseInsensitiveContains("web") }
+                return "Private + Web · \(model?.nilIfBlank ?? detail)"
+            }
+            return "Private · \(detail)"
+        }
+
+        return detail
+    }
+}
+
 struct HomePromptCaptureCard: View {
     let subtitle: String
     @Binding var draft: String
     let suggestions: [EmptyChatStarterSuggestion]
     let selectedSuggestionID: String?
     let selectedProjectName: String?
+    let routeTitle: String
+    let routeDetail: String
     let actionTitle: String
     let actionSymbolName: String
     let actionEnabled: Bool
@@ -14,83 +40,133 @@ struct HomePromptCaptureCard: View {
     @FocusState private var isPromptFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Start from one prompt")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                Text(subtitle)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Color.textSecondary)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                projectContextPill
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 7) {
+                routeBadge
+                if let selectedProjectName = selectedProjectName?.nilIfBlank {
+                    projectContextPill(selectedProjectName)
+                }
+                Spacer(minLength: 0)
             }
 
-            TextField(
-                "Paste a task, source, file, or handoff",
-                text: $draft,
-                axis: .vertical
-            )
-            .textFieldStyle(.plain)
-            .font(.body)
-            .lineLimit(3...6)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 11)
-            .frame(minHeight: 72, alignment: .topLeading)
-            .focused($isPromptFocused)
-            .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.control))
-            .overlay {
-                RoundedRectangle.app(AppRadius.control)
-                    .stroke(isPromptFocused ? Color.actionPrimary.opacity(0.34) : Color.appBorder, lineWidth: 1)
+            if let visibleSubtitle {
+                Text(visibleSubtitle)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.textTertiary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.9)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if !suggestions.isEmpty {
-                LazyVGrid(columns: chipColumns, alignment: .leading, spacing: 8) {
-                    promptIntentChips()
+                LazyVGrid(columns: chipColumns, spacing: 8) {
+                    ForEach(suggestions) { suggestion in
+                        HomePromptIntentChip(
+                            suggestion: suggestion,
+                            isSelected: suggestion.id == selectedSuggestionID,
+                            action: { onSelectSuggestion(suggestion) }
+                        )
+                    }
                 }
+                .padding(.top, 4)
             }
 
-            Button(action: onSubmit) {
-                Label(actionEnabled ? actionTitle : "Add prompt first", systemImage: actionSymbolName)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(actionEnabled ? Color.appPanelBackground : Color.textSecondary)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 44)
-                    .background(
-                        actionEnabled ? Color.actionPrimary : Color.appSecondaryBackground,
-                        in: RoundedRectangle.app(AppRadius.control)
-                    )
-                    .overlay {
-                        RoundedRectangle.app(AppRadius.control)
-                            .stroke(actionEnabled ? Color.clear : Color.appBorder, lineWidth: 1)
+            composerRow
+        }
+        .padding(10)
+        .background(Color.appBackground.opacity(0.94), in: RoundedRectangle.app(AppRadius.card))
+        .overlay {
+            RoundedRectangle.app(AppRadius.card)
+                .stroke(Color.appBorder.opacity(0.76), lineWidth: 1)
+        }
+        .shadow(color: Color.brandBlack.opacity(0.10), radius: 22, y: 10)
+    }
+
+    private var composerRow: some View {
+        HStack(spacing: 9) {
+            TextField("Ask privately.", text: $draft, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.body)
+                .lineLimit(1...4)
+                .tokenInputTraits()
+                .focused($isPromptFocused)
+                .submitLabel(.send)
+                .onSubmit {
+                    if actionEnabled {
+                        onSubmit()
                     }
+                }
+
+            Button(action: onSubmit) {
+                Image(systemName: actionSymbolName)
+                    .font(.callout.weight(.bold))
+                    .foregroundStyle(actionEnabled ? Color.white : Color.actionPrimary.opacity(0.72))
+                    .frame(width: 34, height: 34)
+                    .background(actionEnabled ? Color.actionPrimary : Color.actionFill, in: Circle())
             }
             .buttonStyle(.plain)
             .disabled(!actionEnabled)
-            .accessibilityHint("Stages the draft in chat for review.")
+            .accessibilityLabel(actionTitle)
         }
-        .padding(12)
-        .featureCardBackground(radius: AppRadius.control)
+        .padding(.leading, 14)
+        .padding(.trailing, 6)
+        .padding(.vertical, 5)
+        .frame(minHeight: 46)
+        .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.pill))
+        .overlay {
+            RoundedRectangle.app(AppRadius.pill)
+                .stroke(isPromptFocused ? Color.actionPrimary.opacity(0.32) : Color.actionPrimary.opacity(0.08), lineWidth: 1)
+        }
     }
 
-    @ViewBuilder
-    private var projectContextPill: some View {
-        if let selectedProjectName = selectedProjectName?.nilIfBlank {
-            Label(selectedProjectName, systemImage: "folder.fill")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(Color.actionPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.86)
-                .padding(.horizontal, 9)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(height: 26)
-                .background(Color.actionTint, in: RoundedRectangle.app(AppRadius.pill))
-                .accessibilityLabel("\(selectedProjectName) context active")
+    private func projectContextPill(_ selectedProjectName: String) -> some View {
+        Label(selectedProjectName, systemImage: "folder")
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(Color.textSecondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.78)
+            .padding(.horizontal, 7)
+            .frame(height: 22)
+            .background(Color.appSecondaryBackground.opacity(0.82), in: RoundedRectangle.app(AppRadius.pill))
+            .overlay {
+                RoundedRectangle.app(AppRadius.pill)
+                    .stroke(Color.appBorder.opacity(0.75), lineWidth: 1)
+            }
+            .accessibilityLabel("\(selectedProjectName) context active")
+    }
+
+    private var routeSymbolName: String {
+        if routeTitle == "Council" {
+            return "person.3.sequence.fill"
         }
+        if routeDetail.localizedCaseInsensitiveContains("web") {
+            return "globe"
+        }
+        return "checkmark.shield.fill"
+    }
+
+    private var routeBadge: some View {
+        Label(visibleRouteText, systemImage: routeSymbolName)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(Color.textSecondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.78)
+            .padding(.horizontal, 7)
+            .frame(height: 22)
+            .background(Color.appPanelBackground.opacity(0.92), in: RoundedRectangle.app(AppRadius.pill))
+            .overlay {
+                RoundedRectangle.app(AppRadius.pill)
+                    .stroke(Color.appBorder.opacity(0.75), lineWidth: 1)
+            }
+            .accessibilityLabel("\(routeTitle), \(routeDetail)")
+    }
+
+    private var visibleRouteText: String {
+        HomeComposerRouteBadgeText.visibleText(routeTitle: routeTitle, routeDetail: routeDetail)
+    }
+
+    private var visibleSubtitle: String? {
+        subtitle.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
     }
 
     @ViewBuilder
@@ -121,7 +197,7 @@ private struct HomePromptIntentChip: View {
         Button(action: action) {
             HStack(alignment: .center, spacing: 8) {
                 Image(systemName: suggestion.symbolName)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .symbolRenderingMode(.hierarchical)
                     .frame(width: 24, height: 24)
                     .foregroundStyle(isSelected ? Color.actionPrimary : Color.textSecondary)

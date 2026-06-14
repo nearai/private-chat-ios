@@ -24,6 +24,7 @@ extension ThreadedBriefingView {
                     BriefingSourceTag(letter: "N", colorHex: "#0091FD"),
                     BriefingSourceTag(letter: "a", colorHex: "#000000")
                 ],
+                verifiedModel: "GLM 5.1",
                 replyCount: 2,
                 unread: true,
                 thread: DeliveryThread(

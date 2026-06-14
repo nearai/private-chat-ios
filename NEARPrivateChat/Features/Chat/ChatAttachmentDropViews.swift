@@ -40,8 +40,23 @@ struct AttachmentDropTargetOverlay: View {
     }
 }
 
+enum ChatAutoScrollAnchor: Equatable {
+    case top
+    case bottom
+
+    var unitPoint: UnitPoint {
+        switch self {
+        case .top:
+            return .top
+        case .bottom:
+            return .bottom
+        }
+    }
+}
+
 struct ChatAutoScrollSignature: Equatable {
     let targetID: String?
+    let targetAnchor: ChatAutoScrollAnchor
     let messageCount: Int
     let lastTextLength: Int
     let lastStatus: String?
@@ -49,7 +64,13 @@ struct ChatAutoScrollSignature: Equatable {
 
     init(displayItems: [ChatDisplayItem], messages: [ChatMessage], isStreaming: Bool) {
         let lastMessage = messages.last
-        self.targetID = displayItems.last?.id
+        let lastDisplayItem = displayItems.last
+        self.targetID = lastDisplayItem?.id
+        if case .council = lastDisplayItem, !isStreaming {
+            self.targetAnchor = .top
+        } else {
+            self.targetAnchor = .bottom
+        }
         self.messageCount = messages.count
         self.lastTextLength = lastMessage?.text.count ?? 0
         self.lastStatus = lastMessage?.status

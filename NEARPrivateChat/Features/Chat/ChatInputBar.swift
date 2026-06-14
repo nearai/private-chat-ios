@@ -95,12 +95,6 @@ struct InputBar: View {
                     : "Choose what grounds the next answer.")
             }
         )
-        .confirmationDialog(
-            "Reasoning effort",
-            isPresented: $showingReasoningEffortOptions,
-            titleVisibility: .visible,
-            actions: { reasoningEffortOptionsDialog }
-        )
         .fileImporter(
             isPresented: $showingFileImporter,
             allowedContentTypes: [
@@ -159,6 +153,7 @@ struct InputBar: View {
         .sheet(isPresented: $showingCapabilities, content: capabilitiesSheet)
         .sheet(isPresented: $showingRouteConfig, content: composerRouteConfigSheet)
         .sheet(isPresented: $showingModelPicker, content: modelPickerSheet)
+        .sheet(isPresented: $showingReasoningEffortOptions, content: reasoningEffortSheet)
     }
 
     @ViewBuilder
@@ -251,6 +246,16 @@ struct InputBar: View {
             }
         )
             .environmentObject(chatStore)
+    }
+
+    private func reasoningEffortSheet() -> some View {
+        ReasoningEffortOptionsSheet {
+            showingReasoningEffortOptions = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                openModelPicker(openingCouncil: false)
+            }
+        }
+        .environmentObject(chatStore)
     }
 
     @ViewBuilder
@@ -375,7 +380,7 @@ private struct ComposerInputControls: View {
                     }
                 } label: {
                     Image(systemName: isStreaming ? "stop.fill" : "arrow.up.circle.fill")
-                        .font(.system(size: 36, weight: .semibold))
+                        .font(.largeTitle.weight(.semibold))
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(isStreaming ? Color.proofMismatch : Color.actionPrimary)
                         .frame(width: 44, height: 44)

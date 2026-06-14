@@ -177,6 +177,32 @@ struct WidgetNewsSource: Codable, Hashable {
 }
 
 extension WidgetNewsSource {
+    var faviconIdentity: String? {
+        SourceFaviconResolver.sourceIdentity(domain: domain, label: label)
+    }
+
+    var displaySourceText: String {
+        SourceFaviconResolver.displayName(for: faviconIdentity, fallback: label.nilIfBlank) ?? "Source"
+    }
+
+    var fallbackMark: String {
+        label.nilIfBlank ?? domain?.nilIfBlank ?? "S"
+    }
+
+    var allowsNetworkFavicon: Bool {
+        if let host = SourceFaviconResolver.canonicalFaviconHost(for: domain),
+           URLSecurity.isPublicHost(host) {
+            return true
+        }
+        if let host = SourceFaviconResolver.canonicalFaviconHost(for: label),
+           URLSecurity.isPublicHost(host) {
+            return true
+        }
+        return false
+    }
+}
+
+extension WidgetNewsSource {
     init(from decoder: Decoder) throws {
         if let single = try? decoder.singleValueContainer(), let s = try? single.decode(String.self) {
             self.init(label: String(s.prefix(1)).uppercased(), color: nil, domain: s)

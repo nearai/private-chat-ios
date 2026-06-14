@@ -848,7 +848,7 @@ struct IronclawSettings: Codable, Hashable {
         var copy = self
         copy.baseURL = normalizedBaseURL
         copy.threadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
-        if Self.retiredLocalDefaults.contains(copy.baseURL) {
+        if copy.endpointValidationMessage != nil, copy.hasEndpoint {
             copy.baseURL = ""
         }
         if !copy.hasUsableHostedEndpoint {

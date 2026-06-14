@@ -6,6 +6,7 @@ struct AccountSettingsView: View {
     @EnvironmentObject private var agentStore: AgentStore
     @EnvironmentObject private var modelCatalogStore: ModelCatalogStore
     @EnvironmentObject private var securityStore: SecurityStore
+    @EnvironmentObject private var diagnostics: ConnectionDiagnostics
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     let initialDeepLink: AccountSettingsDeepLink?
@@ -116,7 +117,7 @@ struct AccountSettingsView: View {
                         await accountStore.importChats(from: url)
                     }
                 case let .failure(error):
-                    accountStore.showBanner(error.localizedDescription)
+                    accountStore.showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
                 }
             }
             .sheet(isPresented: $showingShareGroups) {
@@ -182,6 +183,10 @@ struct AccountSettingsView: View {
             .padding(.vertical, 4)
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
 
+            if diagnostics.privateLooksSessionRateLimited {
+                accountPrivateRouteLimitedRow
+            }
+
             NavigationLink {
                 SignInMethodDetailView()
                     .environmentObject(sessionStore)
@@ -209,6 +214,19 @@ struct AccountSettingsView: View {
                     .foregroundStyle(Color.proofMismatch)
             }
         }
+    }
+
+    private var accountPrivateRouteLimitedRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Private route limited", systemImage: "exclamationmark.shield")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.proofStale)
+            Text("Retry private first. If it keeps failing, sign out and sign back in to refresh this session before using a proxy answer.")
+                .font(.footnote)
+                .foregroundStyle(Color.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 6)
     }
 
     private func accountDetailRow(title: String, detail: String) -> some View {
@@ -417,7 +435,7 @@ struct AccountSettingsView: View {
     private func powerToolSubRow(icon: String, title: String, subtitle: String?) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 18))
+                .font(.title3)
                 .foregroundStyle(Color.textSecondary)
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 1) {

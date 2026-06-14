@@ -15,8 +15,14 @@ struct SourceCarousel: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 10) {
                 ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
-                    SourceCard(index: index + 1, source: source)
-                        .onTapGesture { onSelect(index) }
+                    Button {
+                        onSelect(index)
+                    } label: {
+                        SourceCard(index: index + 1, source: source)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("source.card.\(index + 1)")
+                    .accessibilityLabel("Open source \(index + 1), \(source.displayTitle), \(source.host)")
                 }
             }
         }
@@ -81,7 +87,6 @@ private struct SourceCard: View {
         }
         .frame(width: 284, alignment: .topLeading)
         .contentShape(Rectangle())
-        .accessibilityLabel("Source \(index), \(source.displayTitle), \(source.host)")
     }
 }
 

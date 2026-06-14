@@ -5,12 +5,14 @@ struct AppConfiguration {
     var baseURL: URL
     var callbackScheme: String
     var callbackURL: URL
+    var legacyCallbackSchemes: [String]
     var deepLinkScheme: String
 
     static let production = AppConfiguration(
         baseURL: validatedURL("https://private.near.ai"),
         callbackScheme: "nearai",
         callbackURL: validatedURL("nearai://auth"),
+        legacyCallbackSchemes: ["nearprivatechat"],
         deepLinkScheme: "nearprivatechat"
     )
 
@@ -27,10 +29,17 @@ struct AppConfiguration {
         let host = url.host?.lowercased()
         let callbackHost = callbackURL.host?.lowercased()
 
+        let acceptedSchemes = ([callbackScheme] + legacyCallbackSchemes).map { $0.lowercased() }
         if let scheme,
-           scheme == callbackScheme.lowercased(),
+           acceptedSchemes.contains(scheme),
            host == callbackHost,
            url.path.isEmpty {
+            return true
+        }
+
+        if scheme == "https",
+           host == baseURL.host?.lowercased(),
+           url.path == "/auth/callback" {
             return true
         }
         return false

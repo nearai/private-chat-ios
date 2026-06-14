@@ -382,8 +382,8 @@ struct UserSetupView: View {
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(Color.textSecondary)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 40)
-                        .background(Color.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .frame(minHeight: 44)
+                        .background(Color.panel, in: RoundedRectangle.app(AppRadius.control))
                 }
             }
         }

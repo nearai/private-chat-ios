@@ -23,7 +23,7 @@ struct CouncilSynthesisCard: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.actionPrimary)
                     .padding(.horizontal, 10)
-                    .frame(minHeight: 34)
+                    .frame(minHeight: 44)
                     .background(Color.actionPrimary.opacity(0.10), in: Capsule())
                     .accessibilityHint("Retry synthesis from the completed Council answers")
                 }
@@ -55,7 +55,7 @@ struct CouncilSynthesisCard: View {
                             }
                             .foregroundStyle(chip.tint)
                             .padding(.horizontal, 10)
-                            .frame(height: 34)
+                            .frame(minHeight: 44)
                             .background(chip.tint.opacity(expandedChip == chip ? 0.16 : 0.09), in: Capsule())
                         }
                         .buttonStyle(.plain)
@@ -69,9 +69,9 @@ struct CouncilSynthesisCard: View {
                         .textSelection(.enabled)
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.control))
                         .overlay {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            RoundedRectangle.app(AppRadius.control)
                                 .stroke(Color.appHairline, lineWidth: 1)
                         }
                         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -80,9 +80,9 @@ struct CouncilSynthesisCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.card))
         .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle.app(AppRadius.card)
                 .stroke(Color.appBorder, lineWidth: 1)
         }
     }

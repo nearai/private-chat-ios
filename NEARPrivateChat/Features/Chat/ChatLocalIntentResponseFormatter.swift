@@ -3,13 +3,13 @@ import Foundation
 enum ChatLocalIntentResponseFormatter {
     static func trackerCreated(spec: TrackerSpec) -> String {
         if spec.condition != nil {
-            return "Set up an alert — **\(spec.confirmation)**. I’ll check on that cadence and notify you the first time it triggers, then pause it so I don’t repeat. It lives in Trackers; reopen it any time to re-arm, change, or delete it."
+            return "Set up an alert — **\(spec.confirmation)**. I’ll check on that cadence and notify you the first time it triggers, then pause it so I don’t repeat. It lives in Watchers; reopen it any time to re-arm, change, or delete it."
         }
-        return "Created a tracker — **\(spec.confirmation)**. It runs on schedule and lands in Trackers; open it any time to Run now, change it, or delete it."
+        return "Created a tracker — **\(spec.confirmation)**. It runs on schedule and lands in Watchers; open it any time to Run now, change it, or delete it."
     }
 
     static func trackLastCreated(title: String, schedule: BriefingSchedule) -> String {
-        "On it — I’ll track **\(title)** (\(schedule.scheduleLabel)) and surface it in Trackers. It builds a chart as it runs; reopen it any time to Run now, change, or delete."
+        "On it — I’ll track **\(title)** (\(schedule.scheduleLabel)) and surface it in Watchers. It builds a chart as it runs; reopen it any time to Run now, change, or delete."
     }
 
     static var trackLastNeedsSubject: String {
@@ -25,7 +25,7 @@ enum ChatLocalIntentResponseFormatter {
     }
 
     static func nearAccountTrackerCreated(account: String, schedule: BriefingSchedule) -> String {
-        "Created a tracker — **NEAR account · \(account) · \(schedule.scheduleLabel)**. It runs on schedule and lands in Trackers; open it any time to Run now, change it, or delete it."
+        "Created a tracker — **NEAR account · \(account) · \(schedule.scheduleLabel)**. It runs on schedule and lands in Watchers; open it any time to Run now, change it, or delete it."
     }
 
     static func remembered(_ text: String) -> String {

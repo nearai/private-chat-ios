@@ -90,8 +90,8 @@ struct RootView: View {
             #if DEBUG
             if Self.isReleaseGateRun {
                 Text(gateStateDescription)
-                    .font(.system(size: 4))
-                    .frame(width: 4, height: 4)
+                    .font(.caption2)
+                    .frame(width: 6, height: 6)
                     .opacity(0.02)
                     .accessibilityIdentifier("gate.state")
                     .accessibilityLabel(gateStateDescription)

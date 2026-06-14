@@ -156,7 +156,7 @@ private var publicURL: URL? {
                 case .success:
                     shareStore.showBanner("Signed JSON exported.")
                 case let .failure(error):
-                    shareStore.showBanner(error.localizedDescription)
+                    shareStore.showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
                 }
             }
             .fileExporter(
@@ -169,7 +169,7 @@ private var publicURL: URL? {
                 case .success:
                     shareStore.showBanner("Proof report exported.")
                 case let .failure(error):
-                    shareStore.showBanner(error.localizedDescription)
+                    shareStore.showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
                 }
             }
         }
@@ -754,7 +754,7 @@ private var publicURL: URL? {
             )
             showingVerifiedExporter = true
         } catch {
-            shareStore.showBanner(error.localizedDescription)
+            shareStore.showBanner(MessageRepository.displayFailureMessage(error.localizedDescription))
         }
     }
 

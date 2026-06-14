@@ -8,9 +8,9 @@ struct PrimaryButton<Label: View>: View {
         var height: CGFloat {
             switch self {
             case .regular:
-                return 52
+                return AppTouchTarget.primaryRegular
             case .compact:
-                return 44
+                return AppTouchTarget.primaryCompact
             }
         }
     }
@@ -19,6 +19,8 @@ struct PrimaryButton<Label: View>: View {
     let action: () -> Void
     let label: () -> Label
     @Environment(\.isEnabled) private var isEnabled
+    @ScaledMetric(relativeTo: .body) private var scaledRegularHeight = AppTouchTarget.primaryRegular
+    @ScaledMetric(relativeTo: .body) private var scaledCompactHeight = AppTouchTarget.primaryCompact
 
     init(
         size: Size = .regular,
@@ -34,9 +36,10 @@ struct PrimaryButton<Label: View>: View {
         Button(action: action) {
             label()
                 .font(.headline)
-                .foregroundStyle(isEnabled ? Color.white : Color.white.opacity(0.62))
+                .foregroundStyle(buttonForeground)
                 .frame(maxWidth: .infinity)
-                .frame(height: size.height)
+                .frame(height: scaledHeight)
+                .minimumTouchTarget()
                 .background(buttonBackground, in: RoundedRectangle.app(AppRadius.control))
         }
         .buttonStyle(.plain)
@@ -45,7 +48,20 @@ struct PrimaryButton<Label: View>: View {
     }
 
     private var buttonBackground: Color {
-        isEnabled ? .actionPrimary : .actionPrimary.opacity(0.42)
+        isEnabled ? .actionPrimary : .disabledControlBackground
+    }
+
+    private var buttonForeground: Color {
+        isEnabled ? .white : .disabledControlText
+    }
+
+    private var scaledHeight: CGFloat {
+        switch size {
+        case .regular:
+            return max(size.height, scaledRegularHeight)
+        case .compact:
+            return max(size.height, scaledCompactHeight)
+        }
     }
 }
 

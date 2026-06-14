@@ -24,9 +24,9 @@ struct CouncilComposerBar: View {
                     .lineLimit(1...4)
                     .padding(.horizontal, 11)
                     .padding(.vertical, 9)
-                    .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.control))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle.app(AppRadius.control)
                             .stroke(Color.appHairline, lineWidth: 1)
                     }
 
@@ -120,7 +120,7 @@ struct CouncilComposerBar: View {
         }
         .foregroundStyle(Color.textSecondary)
         .padding(.horizontal, 10)
-        .frame(height: 36)
+        .frame(minHeight: 44)
         .background(Color.appSecondaryBackground, in: Capsule())
         .accessibilityLabel("Stage a room follow-up")
     }

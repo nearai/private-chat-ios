@@ -138,10 +138,10 @@ struct CouncilRosterStrip: View {
                     }
                     VStack(alignment: .leading, spacing: 1) {
                         Text(participant.displayName)
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.caption.weight(.medium))
                             .lineLimit(1)
                         Text(stateLabel(participant.stance))
-                            .font(.system(size: 10))
+                            .font(.caption2)
                             .foregroundStyle(stateColor(participant.stance))
                     }
                     Spacer(minLength: 0)

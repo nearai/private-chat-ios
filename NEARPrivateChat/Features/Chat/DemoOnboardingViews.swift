@@ -155,7 +155,7 @@ struct DemoMockLoginView: View {
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 22)
-                        .frame(height: 42)
+                        .frame(height: 44)
                         .background(Color.actionPrimary, in: Capsule())
                     }
                     .buttonStyle(.plain)

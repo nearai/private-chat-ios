@@ -85,8 +85,9 @@ final class AgentStore: ObservableObject {
                 try settingsPersistence.saveIronclawAuthToken(trimmedToken)
                 ironclawTokenConfigured = true
             } catch {
-                ironclawStatusText = error.localizedDescription
-                showBanner(error.localizedDescription)
+                let message = Self.displayFailureMessage(error.localizedDescription)
+                ironclawStatusText = message
+                showBanner(message)
                 return
             }
         }
@@ -141,8 +142,9 @@ final class AgentStore: ObservableObject {
             await refreshIronclawTools()
             showBanner("Hosted IronClaw reachable.")
         } catch {
-            ironclawStatusText = error.localizedDescription
-            showBanner(error.localizedDescription)
+            let message = Self.displayFailureMessage(error.localizedDescription)
+            ironclawStatusText = message
+            showBanner(message)
         }
     }
 

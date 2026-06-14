@@ -82,4 +82,12 @@ extension InputBar {
     var researchButtonActive: Bool {
         chatStore.researchModeEnabled && !chatStore.selectedRouteUsesNearCloud
     }
+
+    var autoSourceModeInfersLiveWeb: Bool {
+        ChatStore.shouldDiscloseAutoLiveWeb(
+            sourceMode: chatStore.sourceMode,
+            researchModeEnabled: chatStore.researchModeEnabled,
+            prompt: composerStore.draft
+        )
+    }
 }

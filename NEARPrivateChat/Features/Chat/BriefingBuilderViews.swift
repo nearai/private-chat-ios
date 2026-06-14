@@ -61,10 +61,10 @@ struct BriefingBuilderActionCards: View {
         return VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: symbolName(for: action))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(tint(for: action, approved: approved))
                     .frame(width: 28, height: 28)
-                    .background(tint(for: action, approved: approved).opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .background(tint(for: action, approved: approved).opacity(0.12), in: RoundedRectangle.app(AppRadius.pill))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(action.title.isEmpty ? "Action" : action.title)
@@ -84,10 +84,11 @@ struct BriefingBuilderActionCards: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    if !action.missingFields.isEmpty {
-                        Text("Needs: \(action.missingFields.prefix(3).joined(separator: ", "))")
+                    let missingFields = action.reviewMissingFields
+                    if !missingFields.isEmpty {
+                        Text("Needs: \(missingFields.prefix(3).joined(separator: ", "))")
                             .font(.caption2)
-                            .foregroundStyle(Color.textTertiary)
+                            .foregroundStyle(Color.proofStaleText)
                             .lineLimit(2)
                     }
                 }
@@ -353,16 +354,17 @@ struct BriefingDraftPreview: View {
                         } label: {
                             Text(shortLabel(for: item))
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(frequency == item ? Color.actionPrimary : Color.textSecondary)
-                                .lineLimit(1)
-                                .padding(.horizontal, 10)
-                                .frame(height: 30)
-                                .background(
-                                    frequency == item ? Color.actionTint : Color.appSecondaryBackground,
-                                    in: Capsule()
-                                )
+                            .foregroundStyle(frequency == item ? Color.actionPrimary : Color.textSecondary)
+                            .lineLimit(1)
+                            .padding(.horizontal, 10)
+                            .frame(minHeight: 44)
+                            .background(
+                                frequency == item ? Color.actionTint : Color.appSecondaryBackground,
+                                in: Capsule()
+                            )
                         }
                         .buttonStyle(.plain)
+                        .minimumTouchTarget()
                     }
                 }
                 .padding(.horizontal, 1)

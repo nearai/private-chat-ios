@@ -16,6 +16,22 @@ struct ProxyRetryOffer: Identifiable, Equatable {
     let conversationID: String?
 }
 
+enum PrivateRouteRecoveryPolicy {
+    static func shouldOfferPrivacyProxyRetry(
+        modelID: String,
+        failureMessage: String?,
+        routeIsTripped: Bool
+    ) -> Bool {
+        guard RoutePlanner.routeKind(forModelID: modelID) == .nearPrivate else { return false }
+        if routeIsTripped { return true }
+
+        let lowercased = failureMessage?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+        return lowercased.contains("private route") && lowercased.contains("privacy proxy")
+    }
+}
+
 struct ChatRouteReadinessIssue: Identifiable, Hashable {
     enum BlockedRoute: String, Hashable {
         case nearCloud
@@ -217,6 +233,22 @@ struct RoutePlanner {
             return true
         }
 
+        let recurringWorkflowCue = [
+            "every morning", "every day", "each day", "daily", "weekday",
+            "weekdays", "weekly", "monthly", "every week", "every month",
+            "at 8am", "at 8 am", "at 9am", "at 9 am"
+        ].contains { lowercased.contains($0) }
+        let recurringFreshCue = [
+            "digest", "briefing", "release date", "release monitor",
+            "model launch", "model launches", "developer tool",
+            "developer tools", "pricing change", "pricing changes",
+            "safety update", "safety updates", "watch for", "monitor",
+            "scan for"
+        ].contains { lowercased.contains($0) }
+        if recurringWorkflowCue && recurringFreshCue {
+            return true
+        }
+
         let valueCue = [
             "price", "prices", "value", "worth", "quote", "rate",
             "market cap", "floor price", "trading at"
@@ -229,6 +261,17 @@ struct RoutePlanner {
         let endsWithValueCue =
             lowercased.range(of: #"\b(price|prices|value|worth|quote|rate)\??$"#, options: .regularExpression) != nil
         return valueCue && (liveAskCue || endsWithValueCue)
+    }
+
+    static func shouldDiscloseAutoLiveWeb(
+        sourceMode: ChatSourceMode,
+        researchModeEnabled: Bool,
+        prompt: String
+    ) -> Bool {
+        guard sourceMode == .auto, !researchModeEnabled else {
+            return false
+        }
+        return promptNeedsLiveWeb(prompt)
     }
 
     static func promptRequestsCouncil(_ prompt: String) -> Bool {
@@ -309,6 +352,19 @@ struct RoutePlanner {
         guard !lowercased.isEmpty else { return false }
         guard !promptForbidsRemoteWorkstation(lowercased) else { return false }
 
+        let bounded = " " + lowercased
+            .replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines) + " "
+
+        func containsBoundedPhrase(_ phrase: String) -> Bool {
+            let normalized = phrase
+                .lowercased()
+                .replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty else { return false }
+            return bounded.contains(" \(normalized) ")
+        }
+
         let explicitAgentPhrases = [
             "use ironclaw",
             "ask ironclaw",
@@ -319,7 +375,7 @@ struct RoutePlanner {
             "remote workstation",
             "hosted workstation",
             "agent mission:",
-            "Phone Agent:",
+            "phone agent:",
             "run tests",
             "run the tests",
             "git status",
@@ -334,7 +390,7 @@ struct RoutePlanner {
             "write software",
             "build software"
         ]
-        if explicitAgentPhrases.contains(where: { lowercased.contains($0) }) {
+        if explicitAgentPhrases.contains(where: containsBoundedPhrase) {
             return true
         }
 
@@ -379,16 +435,11 @@ struct RoutePlanner {
             "from my phone"
         ]
         let remoteTargets = [
-            "git ",
-            " git",
-            "git?",
-            "git.",
+            "git",
             "github",
             "repo",
             "repository",
-            " code ",
-            "code?",
-            "code.",
+            "code",
             "codebase",
             "source code",
             "source file",
@@ -421,8 +472,8 @@ struct RoutePlanner {
             "workstation",
             "ironclaw hosted"
         ]
-        let hasAction = remoteActions.contains { lowercased.contains($0) }
-        let hasTarget = remoteTargets.contains { lowercased.contains($0) }
+        let hasAction = remoteActions.contains(where: containsBoundedPhrase)
+        let hasTarget = remoteTargets.contains(where: containsBoundedPhrase)
         return hasAction && hasTarget
     }
 

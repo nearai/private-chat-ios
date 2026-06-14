@@ -45,7 +45,7 @@ struct CouncilResponseGroup: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(canStopWaiting ? Color.brandAccent : .secondary)
                     .padding(.horizontal, 9)
-                    .frame(height: 28)
+                    .frame(minHeight: 44)
                     .background((canStopWaiting ? Color.brandAccent : Color.secondary).opacity(0.09), in: Capsule())
                     .accessibilityHint(canStopWaiting ? "Synthesize from completed Council answers now" : "Cancel the Council run")
                 }
@@ -60,7 +60,7 @@ struct CouncilResponseGroup: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.brandAccent)
                     .padding(.horizontal, 9)
-                    .frame(height: 28)
+                    .frame(minHeight: 44)
                     .background(Color.brandAccent.opacity(0.09), in: Capsule())
                     .accessibilityHint("Open the Council room view")
                 }
@@ -147,19 +147,7 @@ struct CouncilResponseGroup: View {
     }
 
     private var statusText: String {
-        let ready = messages.filter(\.hasUsableCouncilAnswer).count
-        let running = messages.filter(\.isStreaming).count
-        let failed = messages.filter { $0.status == "failed" }.count
-        if running > 0 {
-            return ready > 0 ? "\(ready) ready · \(running) still running" : "\(running) models thinking"
-        }
-        if failed > 0, ready > 0 {
-            return "\(ready) ready · \(failed) failed"
-        }
-        if failed > 0 {
-            return "\(failed) failed"
-        }
-        return ready == messages.count ? "\(messages.count) answers ready" : "\(ready) usable answers"
+        CouncilResponseGroupStatusText.text(for: messages)
     }
 
     private var hasRunningModels: Bool {
@@ -174,6 +162,48 @@ struct CouncilResponseGroup: View {
         let usableCount = messages.filter(\.hasUsableCouncilAnswer).count
         guard usableCount > 1 else { return nil }
         return hasRunningModels ? "Synthesize now" : "Synthesize again"
+    }
+}
+
+enum CouncilResponseGroupStatusText {
+    static func text(for messages: [ChatMessage]) -> String {
+        let memberMessages = nonSynthesisMessages(in: messages)
+        let ready = memberMessages.filter(\.hasUsableCouncilAnswer).count
+        let running = memberMessages.filter(\.isStreaming).count
+        let failed = memberMessages.filter { $0.status == "failed" }.count
+
+        if running > 0 {
+            return ready > 0 ? "\(ready) ready · \(running) still running" : "\(running) models thinking"
+        }
+        if failed > 0, ready > 0 {
+            return "\(ready) ready · \(failed) failed"
+        }
+        if failed > 0 {
+            return "\(failed) failed"
+        }
+
+        return ready == memberMessages.count
+            ? "\(ready) \(answerNoun(for: ready)) ready"
+            : "\(ready) usable \(answerNoun(for: ready))"
+    }
+
+    private static func nonSynthesisMessages(in messages: [ChatMessage]) -> [ChatMessage] {
+        let members = messages.filter { !isSynthesisMessage($0) }
+        return members.isEmpty ? messages : members
+    }
+
+    private static func isSynthesisMessage(_ message: ChatMessage) -> Bool {
+        guard let modelID = message.model?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !modelID.isEmpty else {
+            return false
+        }
+        return modelID == ModelOption.llmCouncilSynthesisModelID ||
+            modelID.localizedCaseInsensitiveContains("council/synthesis") ||
+            modelID.localizedCaseInsensitiveContains("synthesis")
+    }
+
+    private static func answerNoun(for count: Int) -> String {
+        count == 1 ? "answer" : "answers"
     }
 }
 

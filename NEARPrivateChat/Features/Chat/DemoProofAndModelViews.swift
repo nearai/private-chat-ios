@@ -1,31 +1,28 @@
 import SwiftUI
 
 #if DEBUG
-struct DemoVerifiedProofCard: View {
+struct DemoAnswerStatusFooter: View {
+    let sourceCount: Int
+
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "checkmark.shield.fill")
-                .font(.title3.weight(.bold))
-                .foregroundStyle(Color.trustVerified)
-                .frame(width: 36, height: 36)
-                .background(Color.trustVerified.opacity(0.16), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Proof checked")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(Color.trustVerified)
-                Text("Fresh proof for the selected private model on the NEAR Private route. Tap the shield to inspect nonce, model hash, gateway, and signature.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
+        HStack(spacing: 5) {
+            Circle()
+                .fill(Color.proofVerifiedText)
+                .frame(width: 5, height: 5)
+            Text("Verified · GLM 5.1 · \(sourceText) · just now")
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(Color.proofVerifiedText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
         }
-        .padding(12)
-        .background(Color.trustVerified.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.trustVerified.opacity(0.24), lineWidth: 1)
+        .accessibilityLabel("Verified, GLM 5.1, \(sourceText), just now")
+    }
+
+    private var sourceText: String {
+        if sourceCount == 1 {
+            return "1 source"
         }
+        return "\(sourceCount) sources"
     }
 }
 

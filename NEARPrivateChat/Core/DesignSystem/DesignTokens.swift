@@ -21,6 +21,12 @@ enum AppSpacing {
     static let xxxl: CGFloat = 32
 }
 
+enum AppTouchTarget {
+    static let minimum: CGFloat = 44
+    static let primaryCompact: CGFloat = 44
+    static let primaryRegular: CGFloat = 52
+}
+
 extension RoundedRectangle {
     static func app(_ radius: CGFloat) -> RoundedRectangle {
         RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -28,7 +34,7 @@ extension RoundedRectangle {
 }
 
 extension View {
-    func minimumTouchTarget(_ size: CGFloat = 44) -> some View {
+    func minimumTouchTarget(_ size: CGFloat = AppTouchTarget.minimum) -> some View {
         frame(minWidth: size, minHeight: size)
             .contentShape(Rectangle())
     }
@@ -100,6 +106,8 @@ extension Color {
     static let primaryAction = Color.actionPrimary
     static let actionTint = Color.actionPrimary.opacity(0.12)
     static let actionPress = Color.actionPrimary.opacity(0.85)
+    static let disabledControlText = Color.textSecondary
+    static let disabledControlBackground = Color.appSecondaryBackground
     // Saturated avatar / chip fill — matches Claude Design --action-fill
     // (#C7E8FF light, rgba(0,145,253,0.22) dark).
     #if canImport(UIKit)

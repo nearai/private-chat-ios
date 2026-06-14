@@ -122,7 +122,7 @@ struct CapabilityActionButton: View {
                 .minimumScaleFactor(0.82)
                 .foregroundStyle(action.role == .primary ? Color.white : Color.primaryAction)
                 .frame(maxWidth: .infinity)
-                .frame(height: 36)
+                .frame(minHeight: 44)
                 .background(backgroundShape)
                 .overlay {
                     if action.role == .secondary {
@@ -132,6 +132,7 @@ struct CapabilityActionButton: View {
                 }
         }
         .buttonStyle(.plain)
+        .minimumTouchTarget()
     }
 
     @ViewBuilder

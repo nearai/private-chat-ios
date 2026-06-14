@@ -111,6 +111,9 @@ extension InputBar {
         if researchButtonActive {
             return "doc.text.magnifyingglass"
         }
+        if autoSourceModeInfersLiveWeb {
+            return "globe"
+        }
         switch chatStore.sourceMode {
         case .auto:
             return "sparkles"

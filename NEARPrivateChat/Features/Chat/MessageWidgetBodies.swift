@@ -5,6 +5,7 @@ struct WidgetShell<Content: View>: View {
     let time: String?
     let freshness: WidgetFreshness?
     let followUpPlaceholder: String?
+    let followUpDraft: String?
     var onFollowUp: ((String) -> Void)? = nil
     @ViewBuilder let content: Content
 
@@ -13,7 +14,7 @@ struct WidgetShell<Content: View>: View {
             if title != nil || time != nil {
                 HStack(spacing: 8) {
                     Image(systemName: "seal.fill")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.caption2.weight(.semibold))
                         .foregroundStyle(freshness == .stale ? Color.proofStale : Color.proofVerified)
                     if let title {
                         Text(title)
@@ -41,7 +42,7 @@ struct WidgetShell<Content: View>: View {
 
             if onFollowUp != nil {
                 Button {
-                    onFollowUp?(followUpPlaceholder ?? "Tell me more about this")
+                    onFollowUp?(followUpDraft ?? followUpPlaceholder ?? "Tell me more about this")
                 } label: {
                     HStack(spacing: 8) {
                         Text(followUpPlaceholder ?? "Ask about this…")
@@ -51,12 +52,12 @@ struct WidgetShell<Content: View>: View {
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 0)
                         Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 17))
+                            .font(.body)
                             .foregroundStyle(Color.actionPrimary)
                     }
                     .padding(.leading, 14)
                     .padding(.trailing, 8)
-                    .frame(minHeight: 38)
+                    .frame(minHeight: 44)
                     .background(Color.appSecondaryBackground, in: Capsule())
                 }
                 .buttonStyle(.plain)
@@ -65,9 +66,9 @@ struct WidgetShell<Content: View>: View {
                 .accessibilityLabel("Ask a follow-up about this widget")
             }
         }
-        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.card))
         .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle.app(AppRadius.card)
                 .stroke(Color.appBorder, lineWidth: 1)
         }
     }
@@ -241,32 +242,132 @@ struct WidgetNewsBriefBody: View {
                     .tracking(0.6)
                     .foregroundStyle(.secondary)
             }
-            ForEach(Array(brief.stories.enumerated()), id: \.offset) { _, story in
-                HStack(alignment: .top, spacing: 10) {
-                    Circle()
-                        .fill(Color.textSecondary)
-                        .frame(width: 4, height: 4)
-                        .padding(.top, 7)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(story.title)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.primary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        HStack(spacing: 4) {
-                            ForEach(Array(story.sources.enumerated()), id: \.offset) { _, src in
-                                WidgetSourceDot(source: src)
-                            }
-                            if let tag = story.tag {
-                                Text(tag)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.leading, 2)
-                            }
+
+            VStack(spacing: 0) {
+                ForEach(Array(brief.compactDisplayStories.enumerated()), id: \.offset) { index, story in
+                    if index > 0 {
+                        Divider()
+                            .overlay(Color.appHairline)
+                            .padding(.leading, 29)
+                    }
+
+                    WidgetNewsStoryRow(story: story)
+                        .padding(.vertical, 8)
+                        .accessibilityIdentifier("message.widget.newsBrief.story.\(index + 1)")
+                }
+
+                if brief.compactRemainingStoryCount > 0 {
+                    Divider()
+                        .overlay(Color.appHairline)
+                        .padding(.leading, 29)
+
+                    HStack(spacing: 6) {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.caption2.weight(.semibold))
+                        Text("\(brief.compactRemainingStoryCount) more \(brief.compactRemainingStoryCount == 1 ? "story" : "stories") in the answer")
+                            .font(.caption.weight(.semibold))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(Color.textTertiary)
+                    .padding(.vertical, 8)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 2)
+            .background(Color.appSecondaryBackground.opacity(0.72), in: RoundedRectangle.app(AppRadius.control))
+            .overlay {
+                RoundedRectangle.app(AppRadius.control)
+                    .stroke(Color.appBorder.opacity(0.72), lineWidth: 1)
+            }
+        }
+        .accessibilityIdentifier("message.widget.newsBrief.body")
+    }
+
+}
+
+extension WidgetNewsBrief {
+    var compactDisplayStories: [WidgetNewsStory] {
+        Array(stories.prefix(3))
+    }
+
+    var compactRemainingStoryCount: Int {
+        max(stories.count - compactDisplayStories.count, 0)
+    }
+}
+
+struct WidgetNewsStoryRow: View {
+    let story: WidgetNewsStory
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 9) {
+            WidgetNewsSourceCluster(sources: story.sources)
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(story.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                let context = contextText
+                if context != nil || story.tag?.nilIfBlank != nil {
+                    HStack(spacing: 5) {
+                        if let tag = story.tag?.nilIfBlank {
+                            Text(tag)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(Color.textTertiary)
+                        }
+
+                        if let context {
+                            Text(context)
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(Color.textTertiary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                         }
                     }
                 }
             }
         }
+    }
+
+    var contextText: String? {
+        let domains = story.sources
+            .map(\.displaySourceText)
+            .filter { !$0.isEmpty }
+        guard !domains.isEmpty else { return nil }
+        if domains.count == 1 {
+            return domains[0]
+        }
+        return "\(domains.count) sources"
+    }
+}
+
+struct WidgetNewsSourceCluster: View {
+    let sources: [WidgetNewsSource]
+
+    var body: some View {
+        HStack(spacing: 2) {
+            if sources.isEmpty {
+                Image(systemName: "newspaper.fill")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.textTertiary)
+                    .frame(width: sourceSize, height: sourceSize)
+                    .background(Color.appPanelBackground, in: RoundedRectangle.app(5))
+            } else {
+                ForEach(Array(sources.prefix(2).enumerated()), id: \.offset) { _, source in
+                    WidgetSourceDot(source: source, size: sourceSize)
+                }
+            }
+        }
+        .frame(width: sources.count > 1 ? 34 : sourceSize, height: sourceSize, alignment: .leading)
+        .accessibilityHidden(true)
+    }
+
+    private var sourceSize: CGFloat {
+        sources.count > 1 ? 16 : 18
     }
 }
 

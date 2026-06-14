@@ -210,7 +210,7 @@ struct ChatSourceRoutingSemantics: Hashable {
             route: route
         )
         let supportsNativeWebTool = route == .nearPrivate || route == .ironclawMobile
-        let supportsAppGrounding = route == .nearCloud || route == .ironclawMobile || route == .ironclawHosted
+        let supportsAppGrounding = route == .nearPrivate || route == .nearCloud || route == .ironclawMobile || route == .ironclawHosted
 
         return ChatSourceRoutingSemantics(
             route: route,
@@ -284,7 +284,8 @@ enum ChatWebGroundingDecision {
     ) -> Bool {
         guard !privacyBlocksWeb else { return false }
         guard semantics.appWebGroundingPolicy != .never else { return false }
-        if semantics.modelNativeWebToolPolicy == .always,
+        if route == .ironclawMobile,
+           semantics.modelNativeWebToolPolicy == .always,
            shouldEnableNativeWebTool(
                 semantics: semantics,
                 benefitsFromSearch: benefitsFromSearch,

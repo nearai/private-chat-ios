@@ -36,12 +36,26 @@ struct SourceSheet: View {
                         .lineLimit(3)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("source.sheet.title")
+
+                    HStack(spacing: 6) {
+                        Image(systemName: "globe")
+                            .font(.caption.weight(.semibold))
+                        Text(source.host)
+                            .font(.footnote.weight(.semibold))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(Color.textSecondary)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Source host \(source.host)")
+                    .accessibilityIdentifier("source.sheet.host")
 
                     if let metaLine, !metaLine.isEmpty {
                         Text(metaLine)
                             .font(.footnote)
                             .fontWeight(.regular)
                             .foregroundStyle(Color.textSecondary)
+                            .accessibilityIdentifier("source.sheet.meta")
                     }
 
                     if let snippet = source.snippetFallback {
@@ -52,6 +66,7 @@ struct SourceSheet: View {
                             .padding(14)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .accessibilityIdentifier("source.sheet.snippet")
                     }
                 }
                 .padding(.horizontal, 16)
@@ -74,18 +89,20 @@ struct SourceSheet: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(1)
+                .accessibilityIdentifier("source.sheet.headerHost")
             Spacer(minLength: 0)
             Button {
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.textSecondary)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close")
+            .accessibilityIdentifier("source.sheet.close")
         }
         .padding(.leading, 16)
         .padding(.trailing, 4)
@@ -102,16 +119,17 @@ struct SourceSheet: View {
                 HStack(spacing: 6) {
                     Text("Open in Safari")
                     Image(systemName: "arrow.up.right")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                 }
                 .font(.headline)
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
-                .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(Color.actionPrimary, in: RoundedRectangle.app(AppRadius.control))
             }
             .buttonStyle(.plain)
             .disabled(source.safeURL == nil)
+            .accessibilityIdentifier("source.sheet.open")
 
             Button {
                 if let url = source.safeURL { Clipboard.copy(url.absoluteString) }
@@ -124,6 +142,7 @@ struct SourceSheet: View {
             }
             .buttonStyle(.plain)
             .disabled(source.safeURL == nil)
+            .accessibilityIdentifier("source.sheet.copyLink")
 
             Button {
                 Clipboard.copy(source.citationCopyText)
@@ -135,6 +154,7 @@ struct SourceSheet: View {
                     .frame(height: 44)
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("source.sheet.copyCitation")
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)

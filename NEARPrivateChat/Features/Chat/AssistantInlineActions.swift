@@ -12,107 +12,119 @@ struct AssistantInlineActions: View {
     let onSave: () -> Void
     let onOpen: () -> Void
     let onSources: () -> Void
+    @State private var showingMoreActions = false
 
     var body: some View {
-        // Width-constrained so trailing affordances (the sources pill) clip at
-        // the scroll edge instead of bleeding past the screen.
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                actionButton(symbolName: "doc.on.doc", label: "Copy", action: onCopy)
-                exportMenu
-                actionButton(symbolName: "arrow.clockwise", label: "Regenerate", action: onRegenerate)
-                if canOpen {
-                    actionButton(symbolName: "rectangle.expand.vertical", label: "Open Output", action: onOpen)
-                }
-                actionButton(symbolName: "checkmark.shield", label: "Copy Device-Signed Snippet", action: onCopySigned)
-                saveButton
+            HStack(spacing: 7) {
+                compactActionButton(
+                    symbolName: "doc.on.doc",
+                    title: "Copy",
+                    accessibilityIdentifier: "message.action.copy",
+                    action: onCopy
+                )
+
                 if sourceCount > 0 {
-                    Button(action: onSources) {
-                        HStack(spacing: 7) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.trustVerified.opacity(0.20))
-                                Image(systemName: "link")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(Color.trustVerified)
-                            }
-                            .frame(width: 24, height: 24)
-                            Text(sourceButtonLabel)
-                                .font(.subheadline.weight(.medium))
-                        }
-                        .foregroundStyle(.secondary)
-                        .frame(height: 34)
-                        .padding(.horizontal, 8)
-                        .background(Color.clear, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .minimumTouchTarget()
-                    .accessibilityLabel(sourceCount == 1 ? "Open source" : "Open \(sourceCount) sources")
+                    compactActionButton(
+                        symbolName: "link",
+                        title: sourceButtonLabel,
+                        tint: Color.trustVerified,
+                        accessibilityIdentifier: "message.action.sources",
+                        accessibilityLabel: sourceAccessibilityLabel,
+                        action: onSources
+                    )
                 }
+
+                if canOpen {
+                    compactActionButton(
+                        symbolName: "rectangle.expand.vertical",
+                        title: "Open",
+                        accessibilityIdentifier: "message.action.open",
+                        action: onOpen
+                    )
+                }
+
+                moreMenu
             }
+            .padding(.trailing, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 2)
+        .padding(.top, 1)
+        .confirmationDialog("Answer actions", isPresented: $showingMoreActions, titleVisibility: .visible) {
+            moreActionButtons
+        }
     }
 
-    private var exportMenu: some View {
-        Menu {
-            Button {
-                onExport(.markdown)
-            } label: {
-                Label("Markdown", systemImage: "doc.plaintext")
-            }
-            Button {
-                onExport(.pdf)
-            } label: {
-                Label("PDF", systemImage: "doc.richtext")
-            }
-            Button {
-                onExport(.docx)
-            } label: {
-                Label("Word Document", systemImage: "doc")
-            }
+    private var moreMenu: some View {
+        Button {
+            showingMoreActions = true
         } label: {
-            Image(systemName: "square.and.arrow.up")
-                .font(.title3.weight(.regular))
-                .foregroundStyle(.secondary)
-                .frame(width: 34, height: 34)
-                .background(Color.clear, in: Circle())
+            Image(systemName: "ellipsis")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.textSecondary)
+                .frame(width: 44, height: 44)
+                .background(Color.appPanelBackground, in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(Color.appBorder.opacity(0.7), lineWidth: 1)
+                }
+                .accessibilityHidden(true)
         }
         .buttonStyle(.plain)
-        .minimumTouchTarget()
-        .accessibilityLabel("Export Answer")
+        .accessibilityLabel("More answer actions")
+        .accessibilityIdentifier("message.action.more")
     }
 
-    private var saveButton: some View {
-        Button(action: onSave) {
-            Image(systemName: saveSymbolName)
-                .font(.title3.weight(.regular))
-                .foregroundStyle(saveForeground)
-                .frame(width: 34, height: 34)
-                .background(saveBackground, in: Circle())
+    @ViewBuilder
+    private var moreActionButtons: some View {
+        if canOpen {
+            Button("Open output") { onOpen() }
+        }
+        Button("Export Markdown") { onExport(.markdown) }
+        Button("Export PDF") { onExport(.pdf) }
+        Button("Export Word Document") { onExport(.docx) }
+        Button("Copy signed snippet") { onCopySigned() }
+        Button("Regenerate") { onRegenerate() }
+        Button(saveLabel) { onSave() }
+            .disabled(isSavedToProject)
+    }
+
+    private func compactActionButton(
+        symbolName: String,
+        title: String,
+        tint: Color = Color.actionPrimary,
+        accessibilityIdentifier: String,
+        accessibilityLabel: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: symbolName)
+                    .font(.caption.weight(.bold))
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(tint)
+            .padding(.horizontal, 10)
+            .frame(height: 44)
+            .background(tint.opacity(0.08), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(tint.opacity(0.14), lineWidth: 1)
+            }
         }
         .buttonStyle(.plain)
-        .disabled(isSavedToProject)
-        .minimumTouchTarget()
-        .accessibilityLabel(saveAccessibilityLabel)
+        .accessibilityLabel(accessibilityLabel ?? title)
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 
     private var sourceButtonLabel: String {
-        "\(sourceCount) source\(sourceCount == 1 ? "" : "s")"
+        sourceCount > 99 ? "99+" : "\(sourceCount)"
     }
 
-    private func actionButton(symbolName: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbolName)
-                .font(.title3.weight(.regular))
-                .foregroundStyle(.secondary)
-                .frame(width: 34, height: 34)
-                .background(Color.clear, in: Circle())
-        }
-        .buttonStyle(.plain)
-        .minimumTouchTarget()
-        .accessibilityLabel(label)
+    private var sourceAccessibilityLabel: String {
+        "\(sourceCount) source\(sourceCount == 1 ? "" : "s")"
     }
 
     private var saveLabel: String {
@@ -127,20 +139,5 @@ struct AssistantInlineActions: View {
             return "checkmark"
         }
         return canSaveToProject ? "bookmark.fill" : "bookmark"
-    }
-
-    private var saveForeground: Color {
-        isSavedToProject || canSaveToProject ? Color.brandAccent : .secondary
-    }
-
-    private var saveBackground: Color {
-        isSavedToProject || canSaveToProject ? Color.brandAccent.opacity(0.10) : Color.appSecondaryBackground
-    }
-
-    private var saveAccessibilityLabel: String {
-        if isSavedToProject {
-            return "Saved to Project"
-        }
-        return canSaveToProject ? "Save to Project" : "Select a Project to Save"
     }
 }

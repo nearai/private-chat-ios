@@ -131,13 +131,13 @@ struct DefaultModelDetailView: View {
                                             .lineLimit(1)
                                             .padding(.horizontal, 8)
                                             .frame(height: 24)
-                                            .background(badge.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                                            .background(badge.tint.opacity(0.10), in: RoundedRectangle.app(AppRadius.pill))
                                     }
                                 }
                                 Spacer(minLength: 0)
                                 if option.id == currentSelection {
                                     Image(systemName: "checkmark")
-                                        .font(.system(size: 15, weight: .semibold))
+                                        .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(Color.actionPrimary)
                                 }
                             }

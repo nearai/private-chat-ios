@@ -1,6 +1,139 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct AssistantMessagePresentationPolicy {
+    static func widgetForDisplay(_ widget: MessageWidget?, sources: [WebSearchSource]) -> MessageWidget? {
+        guard let widget else { return nil }
+        guard widget.kind == .newsBrief, !sources.isEmpty else { return widget }
+        guard let brief = widget.newsBrief, !brief.stories.isEmpty else { return widget }
+        if newsBriefStoriesAreSourceGrounded(brief, sources: sources) {
+            return widget
+        }
+        return sourceBackedNewsWidget(from: sources, fallback: widget)
+    }
+
+    static func visibleCompletedText(_ text: String, widget: MessageWidget?) -> String? {
+        guard widget?.kind == .newsBrief else {
+            return text.isEmpty ? " " : text
+        }
+        return nil
+    }
+
+    static func shouldShowSourceCarousel(sources: [WebSearchSource], widget: MessageWidget?) -> Bool {
+        guard !sources.isEmpty else { return false }
+        guard widget?.kind == .newsBrief else { return true }
+        return !widgetHasInlineStorySources(widget)
+    }
+
+    private static func widgetHasInlineStorySources(_ widget: MessageWidget?) -> Bool {
+        widget?.newsBrief?.stories.contains { story in
+            story.sources.contains { source in
+                !source.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                    source.domain?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            }
+        } == true
+    }
+
+    private static func sourceBackedNewsWidget(from sources: [WebSearchSource], fallback: MessageWidget) -> MessageWidget? {
+        var seenTitles = Set<String>()
+        let stories = sources.compactMap { source -> WidgetNewsStory? in
+            let title = source.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty else { return nil }
+            let normalizedTitle = normalizedWidgetTitle(title)
+            guard seenTitles.insert(normalizedTitle).inserted else { return nil }
+            return WidgetNewsStory(
+                title: title,
+                tag: source.sourceBadgeLabel,
+                sources: [
+                    WidgetNewsSource(
+                        label: SourceFaviconResolver.fallbackMark(for: source.host, fallback: source.sourceInitials),
+                        domain: source.host
+                    )
+                ],
+                url: source.url
+            )
+        }
+        .prefix(3)
+        guard !stories.isEmpty else { return nil }
+        return MessageWidget(
+            kind: .newsBrief,
+            title: fallback.title ?? "Live web sources",
+            freshness: fallback.freshness,
+            time: fallback.time,
+            followUp: fallback.followUp,
+            newsBrief: WidgetNewsBrief(
+                heading: "Live web · \(sources.count) source\(sources.count == 1 ? "" : "s")",
+                stories: Array(stories)
+            )
+        )
+    }
+
+    private static func newsBriefStoriesAreSourceGrounded(_ brief: WidgetNewsBrief, sources: [WebSearchSource]) -> Bool {
+        guard !sources.isEmpty else { return false }
+        return brief.stories.allSatisfy { story in
+            let title = story.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty else { return false }
+            if let storyURL = story.url.flatMap(WebSearchSource.sanitizedURLString),
+               sources.contains(where: { $0.url == storyURL }) {
+                return true
+            }
+            let candidateSources = sourceCandidates(for: story, sources: sources)
+            return candidateSources.contains { source in
+                titlesHaveGroundingOverlap(storyTitle: title, sourceTitle: source.displayTitle)
+            }
+        }
+    }
+
+    private static func sourceCandidates(for story: WidgetNewsStory, sources: [WebSearchSource]) -> [WebSearchSource] {
+        let storyHosts = Set(story.sources.compactMap { source -> String? in
+            SourceFaviconResolver.canonicalSourceDomain(from: source.domain) ??
+                SourceFaviconResolver.canonicalSourceDomain(from: source.label)
+        })
+        guard !storyHosts.isEmpty else { return sources }
+        let matching = sources.filter { source in
+            guard let sourceHost = SourceFaviconResolver.canonicalSourceDomain(from: source.host) else {
+                return false
+            }
+            return storyHosts.contains(sourceHost)
+        }
+        return matching.isEmpty ? sources : matching
+    }
+
+    private static func titlesHaveGroundingOverlap(storyTitle: String, sourceTitle: String) -> Bool {
+        let storyTokens = normalizedTitleTokens(storyTitle)
+        let sourceTokens = normalizedTitleTokens(sourceTitle)
+        guard !storyTokens.isEmpty, !sourceTokens.isEmpty else { return false }
+        let overlap = storyTokens.intersection(sourceTokens).count
+        let storyCoverage = Double(overlap) / Double(storyTokens.count)
+        return (overlap >= 3 && storyCoverage >= 0.55) ||
+            (overlap >= 2 && storyCoverage >= 0.50 && min(storyTokens.count, sourceTokens.count) <= 5)
+    }
+
+    private static func normalizedWidgetTitle(_ title: String) -> String {
+        normalizedTitleTokens(title).sorted().joined(separator: " ")
+    }
+
+    private static func normalizedTitleTokens(_ title: String) -> Set<String> {
+        let rawTokens = title
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+        let stopwords: Set<String> = [
+            "the", "and", "for", "with", "from", "after", "over", "into", "that",
+            "this", "latest", "headline", "headlines", "development", "developments",
+            "updates", "update", "news", "today", "says", "said", "its", "are", "was"
+        ]
+        return Set(rawTokens.compactMap { token in
+            var value = token.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty, !stopwords.contains(value) else { return nil }
+            if value.count > 4, value.hasSuffix("s") {
+                value.removeLast()
+            }
+            guard value.count > 2 || value == "ai" || value == "us" else { return nil }
+            return value
+        })
+    }
+}
+
 struct MessageBubble: View {
     let message: ChatMessage
     let chatStore: ChatStore
@@ -42,7 +175,7 @@ struct MessageBubble: View {
                     }
                 }
 
-                if message.role == .assistant && !message.sources.isEmpty {
+                if message.role == .assistant, shouldShowSourceCarousel {
                     SourceCarousel(sources: message.sources) { tappedIndex in
                         tappedSource = SourceSheetPresentation(
                             index: tappedIndex,
@@ -65,8 +198,22 @@ struct MessageBubble: View {
                     } else if message.role == .assistant {
                         if message.isStreaming {
                             StreamingMessageText(message: message)
+                        } else if message.status == "failed" {
+                            AssistantFailureRecoveryCard(
+                                title: failedPresentation.title,
+                                detail: failedPresentation.detail,
+                                routeLabel: failedPresentation.routeLabel,
+                                primaryTitle: failedRetryTitle,
+                                primarySymbolName: "arrow.clockwise",
+                                secondaryTitle: failedSecondaryActionTitle,
+                                secondarySymbolName: failedSecondaryActionSymbolName,
+                                onPrimary: retryFailedMessage,
+                                onSecondary: retryFailedMessageViaProxy
+                            )
                         } else {
-                            MarkdownMessageText(text: message.text.isEmpty ? " " : message.text, sources: message.sources)
+                            if let visibleText = renderedAssistantMessageText {
+                                MarkdownMessageText(text: visibleText, sources: message.sources)
+                            }
                         }
                     } else {
                         Text(message.text.isEmpty ? " " : message.text)
@@ -144,7 +291,7 @@ struct MessageBubble: View {
                     }
                 }
 
-                if message.role == .assistant, let widget = message.widget, !message.isStreaming {
+                if message.role == .assistant, let widget = displayWidget, !message.isStreaming {
                     MessageWidgetCard(widget: widget) { followUp in
                         chatStore.composeWidgetFollowUp(followUp)
                     } onCreateAppAction: { action in
@@ -173,7 +320,7 @@ struct MessageBubble: View {
                     MessageAttachmentStrip(attachments: message.attachments)
                 }
 
-                if message.canShowAssistantActions {
+                if message.canShowAssistantInlineActions {
                     AssistantInlineActions(
                         canSaveToProject: chatStore.selectedProject != nil,
                         isSavedToProject: chatStore.isMessageSavedToSelectedProject(message),
@@ -194,21 +341,34 @@ struct MessageBubble: View {
                         .environmentObject(chatStore)
                 }
 
-                if message.status == "failed", !message.shouldShowAgentRunStatus {
-                    HStack(spacing: 12) {
+                if message.status == "failed", !message.shouldShowAgentRunStatus, !shouldUseFailureRecoveryCard {
+                    HStack(spacing: 10) {
                         Label("Failed", systemImage: "exclamationmark.triangle")
                             .font(.caption)
                             .foregroundStyle(.red)
                             .accessibilityIdentifier("message.failedRow")
                         Button {
-                            chatStore.regenerateResponse(for: message)
+                            retryFailedMessage()
                         } label: {
-                            Label("Retry", systemImage: "arrow.clockwise")
+                            Label(failedRetryTitle, systemImage: "arrow.clockwise")
                                 .font(.caption.weight(.semibold))
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .accessibilityIdentifier("message.retry")
+
+                        if shouldShowProxyRetryAction {
+                            Button {
+                                retryFailedMessageViaProxy()
+                            } label: {
+                                Label(proxyRetryActionTitle, systemImage: proxyRetryActionSymbolName)
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                            .tint(Color.actionPrimary)
+                            .accessibilityIdentifier("message.recovery.proxy")
+                        }
                     }
                 }
 
@@ -327,6 +487,135 @@ struct MessageBubble: View {
         return message.authorDisplayLabel
     }
 
+    private var proxyRetryOffer: ProxyRetryOffer? {
+        guard let offer = chatStore.composerStore.proxyRetryOffer,
+              offer.id == message.id else {
+            return nil
+        }
+        return offer
+    }
+
+    private var renderedMessageText: String {
+        let text = message.text.isEmpty ? " " : message.text
+        guard message.role == .assistant else { return text }
+        if message.status == "failed" {
+            return MessageRepository.displayFailureMessage(text)
+        }
+        guard !message.isStreaming,
+              message.widget == nil,
+              let extraction = displayWidgetExtraction,
+              extraction.widget != nil else {
+            return text
+        }
+        return extraction.cleanedText.isEmpty ? " " : extraction.cleanedText
+    }
+
+    private var renderedAssistantMessageText: String? {
+        AssistantMessagePresentationPolicy.visibleCompletedText(
+            renderedMessageText,
+            widget: displayWidget
+        )
+    }
+
+    private var shouldShowSourceCarousel: Bool {
+        AssistantMessagePresentationPolicy.shouldShowSourceCarousel(
+            sources: message.sources,
+            widget: displayWidget
+        )
+    }
+
+    private var displayWidget: MessageWidget? {
+        guard message.role == .assistant, !message.isStreaming else { return nil }
+        if let widget = message.widget {
+            return AssistantMessagePresentationPolicy.widgetForDisplay(widget, sources: message.sources)
+        }
+        return AssistantMessagePresentationPolicy.widgetForDisplay(displayWidgetExtraction?.widget, sources: message.sources)
+    }
+
+    private var displayWidgetExtraction: (widget: MessageWidget?, cleanedText: String)? {
+        guard message.role == .assistant,
+              !message.isStreaming,
+              message.status != "failed",
+              message.widget == nil else {
+            return nil
+        }
+        let extraction = MessageWidget.extract(from: message.text)
+        return extraction.widget == nil ? nil : extraction
+    }
+
+    private var isFailedPrivateRouteMessage: Bool {
+        FailedMessageRecoveryPolicy.isFailedPrivateRouteMessage(message)
+    }
+
+    private var failedRetryTitle: String {
+        isFailedPrivateRouteMessage ? "Retry private" : "Retry"
+    }
+
+    private var shouldUseFailureRecoveryCard: Bool {
+        message.role == .assistant && message.status == "failed"
+    }
+
+    private var failedPresentation: AssistantFailurePresentation {
+        AssistantFailurePresentation(
+            message: message,
+            nearCloudKeyConfigured: chatStore.nearCloudKeyConfigured
+        )
+    }
+
+    private var failedSecondaryActionTitle: String? {
+        failedPresentation.secondaryActionTitle
+    }
+
+    private var failedSecondaryActionSymbolName: String {
+        failedPresentation.secondaryActionSymbolName
+    }
+
+    private var shouldShowProxyRetryAction: Bool {
+        FailedMessageRecoveryPolicy.shouldShowProxyRetryAction(
+            message: message,
+            proxyRetryOffer: proxyRetryOffer
+        )
+    }
+
+    private var proxyRetryActionTitle: String {
+        if let offer = proxyRetryOffer, offer.proxyModelID == nil {
+            return "Add Cloud key"
+        }
+        return chatStore.nearCloudKeyConfigured ? "Use privacy proxy" : "Add Cloud key"
+    }
+
+    private var proxyRetryActionSymbolName: String {
+        proxyRetryActionTitle == "Add Cloud key" ? "key" : "eye.slash"
+    }
+
+    private func retryFailedMessage() {
+        if message.councilBatchID?.isEmpty == false {
+            chatStore.retryFailedCouncilMemberNow(for: message)
+        } else if isFailedPrivateRouteMessage {
+            chatStore.retryFailedPrivateResponseNow(for: message)
+        } else {
+            chatStore.regenerateResponse(for: message)
+        }
+    }
+
+    private func retryFailedMessageViaProxy() {
+        if let offer = proxyRetryOffer {
+            if offer.proxyModelID == nil {
+                chatStore.declineProxyRetry()
+                chatStore.performRouteReadinessRecovery(.addNearCloudKey)
+            } else {
+                chatStore.acceptProxyRetry()
+            }
+            return
+        }
+
+        guard chatStore.nearCloudKeyConfigured else {
+            chatStore.performRouteReadinessRecovery(.addNearCloudKey)
+            return
+        }
+        chatStore.retryFailedResponseViaPrivacyProxy(for: message)
+    }
+
     private func prepareAnswerExport(_ format: ConversationExportFormat) {
         do {
             answerExportDocument = try ConversationExportBuilder.selectedAnswerDocument(
@@ -418,6 +707,151 @@ struct MessageBubble: View {
                 badge: "Agent",
                 symbolName: "terminal"
             )
+        }
+    }
+}
+
+enum FailedMessageRecoveryPolicy {
+    static func isFailedPrivateRouteMessage(_ message: ChatMessage) -> Bool {
+        guard message.status == "failed", message.role == .assistant else { return false }
+        if let modelID = message.model, ChatStore.routeKind(forModelID: modelID) == .nearPrivate {
+            return true
+        }
+        return message.text.localizedCaseInsensitiveContains("private route")
+    }
+
+    static func shouldShowProxyRetryAction(
+        message: ChatMessage,
+        proxyRetryOffer: ProxyRetryOffer?
+    ) -> Bool {
+        guard isFailedPrivateRouteMessage(message),
+              proxyRetryOffer != nil else {
+            return false
+        }
+        return true
+    }
+}
+
+struct AssistantFailurePresentation: Equatable {
+    let title: String
+    let detail: String
+    let routeLabel: String
+    let secondaryActionTitle: String?
+    let secondaryActionSymbolName: String
+
+    init(message: ChatMessage, nearCloudKeyConfigured: Bool) {
+        let compact = MessageRepository.displayFailureMessage(message.text)
+        let lowercased = "\(message.text) \(compact)".lowercased()
+        let isPrivate = FailedMessageRecoveryPolicy.isFailedPrivateRouteMessage(message)
+        let isRateLimited = lowercased.contains("rate-limited") ||
+            lowercased.contains("temporarily restricted") ||
+            lowercased.contains("temporarily busy") ||
+            lowercased.contains("private route limited") ||
+            lowercased.contains("failed to check rate limit")
+        let isAuth = lowercased.contains("authorization") ||
+            lowercased.contains("sign in") ||
+            lowercased.contains("authenticated") ||
+            lowercased.contains("session token")
+
+        if isPrivate && isRateLimited {
+            title = "Private route needs a moment"
+            detail = "The private route rejected this turn for the current session. Retry private when the route cools down, or use Cloud once for this answer."
+            routeLabel = message.modelDisplayName
+            secondaryActionTitle = nearCloudKeyConfigured ? "Use Cloud once" : "Add Cloud key"
+            secondaryActionSymbolName = nearCloudKeyConfigured ? "eye.slash" : "key"
+        } else if isPrivate && isAuth {
+            title = "Sign in again"
+            detail = "The private route did not accept this session. Refresh sign-in, then retry the private answer."
+            routeLabel = message.modelDisplayName
+            secondaryActionTitle = nil
+            secondaryActionSymbolName = "key"
+        } else {
+            title = "Answer stopped"
+            detail = compact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "The request failed before a final answer arrived. Retry when the route is reachable."
+                : compact
+            routeLabel = message.modelDisplayName
+            secondaryActionTitle = nil
+            secondaryActionSymbolName = "eye.slash"
+        }
+    }
+}
+
+private struct AssistantFailureRecoveryCard: View {
+    let title: String
+    let detail: String
+    let routeLabel: String
+    let primaryTitle: String
+    let primarySymbolName: String
+    let secondaryTitle: String?
+    let secondarySymbolName: String
+    let onPrimary: () -> Void
+    let onSecondary: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 11) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.proofStaleText)
+                    .frame(width: 30, height: 30)
+                    .background(Color.proofStale.opacity(0.14), in: RoundedRectangle.app(AppRadius.control))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(Color.textPrimary)
+                    Text(detail)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            HStack(spacing: 7) {
+                Label(routeLabel, systemImage: "lock.shield")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color.textTertiary)
+                    .lineLimit(1)
+                    .padding(.horizontal, 8)
+                    .frame(height: 22)
+                    .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.pill))
+
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 8) {
+                Button(action: onPrimary) {
+                    Label(primaryTitle, systemImage: primarySymbolName)
+                        .font(.caption.weight(.bold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.actionPrimary)
+                .background(Color.actionFill.opacity(0.72), in: RoundedRectangle.app(AppRadius.pill))
+                .accessibilityIdentifier("message.retry")
+
+                if let secondaryTitle {
+                    Button(action: onSecondary) {
+                        Label(secondaryTitle, systemImage: secondarySymbolName)
+                            .font(.caption.weight(.bold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 36)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.proofStaleText)
+                    .background(Color.proofStale.opacity(0.12), in: RoundedRectangle.app(AppRadius.pill))
+                    .accessibilityIdentifier("message.recovery.proxy")
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.proofStale.opacity(0.055), in: RoundedRectangle.app(AppRadius.control))
+        .overlay {
+            RoundedRectangle.app(AppRadius.control)
+                .stroke(Color.proofStale.opacity(0.24), lineWidth: 1)
         }
     }
 }

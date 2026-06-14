@@ -10,6 +10,7 @@ final class FileStore: ObservableObject {
     var bannerHandler: (@MainActor (String) -> Void)?
 
     private let service: FileService
+    private var remoteFilePreviewCache: [String: RemoteFilePreview] = [:]
 
     init(service: FileService) {
         self.service = service
@@ -23,6 +24,7 @@ final class FileStore: ObservableObject {
     func reset() {
         remoteFiles = []
         remoteFilePreview = nil
+        remoteFilePreviewCache = [:]
         isLoadingRemoteFiles = false
         isLoadingRemoteFilePreview = false
     }
@@ -39,21 +41,27 @@ final class FileStore: ObservableObject {
             }
         } catch {
             if showErrors {
-                showBanner(error.localizedDescription)
+                showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
             }
         }
     }
 
     func previewRemoteFile(_ file: RemoteFileInfo) async {
         guard !isLoadingRemoteFilePreview else { return }
+        if let cached = remoteFilePreviewCache[file.id] {
+            remoteFilePreview = cached
+            return
+        }
         isLoadingRemoteFilePreview = true
         remoteFilePreview = nil
         defer { isLoadingRemoteFilePreview = false }
 
         do {
-            remoteFilePreview = try await service.remoteFilePreview(file)
+            let preview = try await service.remoteFilePreview(file)
+            remoteFilePreviewCache[file.id] = preview
+            remoteFilePreview = preview
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
         }
     }
 
@@ -62,13 +70,14 @@ final class FileStore: ObservableObject {
         do {
             try await service.deleteRemoteFile(file.id)
             remoteFiles.removeAll { $0.id == file.id }
+            remoteFilePreviewCache[file.id] = nil
             if remoteFilePreview?.id == file.id {
                 remoteFilePreview = nil
             }
             showBanner("Deleted \(file.name).")
             return file.id
         } catch {
-            showBanner(error.localizedDescription)
+            showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
             return nil
         }
     }

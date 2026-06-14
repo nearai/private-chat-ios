@@ -147,6 +147,15 @@ struct CouncilAnswerTab: Identifiable, Equatable {
     let label: String
     let messageID: String?
 
+    var displayLabel: String {
+        switch kind {
+        case .model:
+            return Self.compactModelLabel(label)
+        case .synthesis, .sources:
+            return label
+        }
+    }
+
     static func synthesis(messageID: String) -> CouncilAnswerTab {
         CouncilAnswerTab(id: "synthesis", kind: .synthesis, label: "Synthesis", messageID: messageID)
     }
@@ -157,6 +166,72 @@ struct CouncilAnswerTab: Identifiable, Equatable {
 
     static var sources: CouncilAnswerTab {
         CouncilAnswerTab(id: "sources", kind: .sources, label: "Sources", messageID: nil)
+    }
+
+    static func compactModelLabel(_ rawLabel: String) -> String {
+        let label = rawLabel
+            .replacingOccurrences(of: "/", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !label.isEmpty else { return "Model" }
+
+        let lowercased = label.lowercased()
+        if lowercased.contains("glm") {
+            if let version = versionText(in: label) {
+                return "GLM \(version)"
+            }
+            return "GLM"
+        }
+        if lowercased.contains("qwen") {
+            if lowercased.contains("vl") {
+                return "Qwen VL"
+            }
+            if let version = versionText(in: label) {
+                return "Qwen \(version)"
+            }
+            return "Qwen"
+        }
+        if lowercased.contains("deepseek") {
+            if let version = versionText(in: label) {
+                return "DeepSeek \(version)"
+            }
+            return "DeepSeek"
+        }
+        if lowercased.contains("claude") || lowercased.contains("sonnet") || lowercased.contains("opus") {
+            if lowercased.contains("opus"), let version = versionText(in: label) {
+                return "Opus \(version)"
+            }
+            if lowercased.contains("sonnet"), let version = versionText(in: label) {
+                return "Sonnet \(version)"
+            }
+            if let version = versionText(in: label) {
+                return "Claude \(version)"
+            }
+        }
+        if label.count <= 16 {
+            return label
+        }
+        let tokens = label.split(separator: " ").filter { token in
+            !["FP8", "A3B", "A10B", "Instruct", "2507"].contains(String(token))
+        }
+        let shortened = tokens.prefix(2).joined(separator: " ")
+        if !shortened.isEmpty, shortened.count <= 18 {
+            return shortened
+        }
+        return String(label.prefix(15)).trimmingCharacters(in: .whitespacesAndNewlines) + "..."
+    }
+
+    private static func versionText(in label: String) -> String? {
+        let pattern = #"(?i)(?:v)?(\d+(?:\.\d+)?)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: label, range: NSRange(label.startIndex..., in: label)),
+              let range = Range(match.range(at: 1), in: label) else {
+            return nil
+        }
+        return String(label[range])
     }
 }
 
@@ -202,19 +277,18 @@ struct CouncilAnswerTabs: View {
     }
 
     private var tabStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(tabModel.tabs) { tab in
-                    CouncilAnswerTabButton(
-                        title: tab.label,
-                        isSelected: tab.id == selectedTab?.id
-                    ) {
-                        selectedTabID = tab.id
-                    }
+        ChipFlowLayout(spacing: 8, lineSpacing: 8) {
+            ForEach(tabModel.tabs) { tab in
+                CouncilAnswerTabButton(
+                    title: tab.displayLabel,
+                    accessibilityLabel: tab.label,
+                    isSelected: tab.id == selectedTab?.id
+                ) {
+                    selectedTabID = tab.id
                 }
             }
-            .padding(.trailing, 2)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -249,6 +323,7 @@ struct CouncilAnswerTabs: View {
 
 private struct CouncilAnswerTabButton: View {
     let title: String
+    let accessibilityLabel: String
     let isSelected: Bool
     let action: () -> Void
 
@@ -257,8 +332,10 @@ private struct CouncilAnswerTabButton: View {
             Text(title)
                 .font(.caption.weight(.semibold))
                 .lineLimit(1)
+                .truncationMode(.tail)
                 .foregroundStyle(isSelected ? Color.white : Color.routeCouncil)
                 .padding(.horizontal, 13)
+                .frame(maxWidth: 118)
                 .frame(minHeight: 44)
                 .background(isSelected ? Color.actionPrimary : Color.clear, in: Capsule())
                 .overlay {
@@ -267,6 +344,7 @@ private struct CouncilAnswerTabButton: View {
                 }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier("council.tab.\(accessibilityName)")
     }
 
@@ -361,7 +439,7 @@ private struct CouncilSynthesisChip: View {
                 .lineLimit(1)
                 .foregroundStyle(isSelected ? Color.white : Color.routeCouncil)
                 .padding(.horizontal, 12)
-                .frame(minHeight: 36)
+                .frame(minHeight: 44)
                 .background(isSelected ? Color.actionPrimary : Color.clear, in: Capsule())
                 .overlay {
                     Capsule()

@@ -6,9 +6,18 @@ struct HomeSurfaceBackground: View {
             Color.appBackground
             LinearGradient(
                 colors: [
-                    Color.brandAccent.opacity(0.10),
-                    Color.brandSky.opacity(0.05),
+                    Color.actionFill.opacity(0.48),
+                    Color.proofVerified.opacity(0.08),
                     Color.clear,
+                    Color.clear
+                ],
+                startPoint: .topLeading,
+                endPoint: .center
+            )
+            LinearGradient(
+                colors: [
+                    Color(red: 0.49, green: 0.36, blue: 0.86).opacity(0.13),
+                    Color.brandSky.opacity(0.08),
                     Color.clear
                 ],
                 startPoint: .topTrailing,
@@ -145,6 +154,7 @@ struct HomeSectionHeader: View {
                     .foregroundStyle(Color.primaryAction)
                 }
                 .buttonStyle(.plain)
+                .minimumTouchTarget()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -168,6 +178,7 @@ struct HomeToolbarIconButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
+        .minimumTouchTarget()
     }
 }
 
@@ -197,7 +208,7 @@ struct ClaudeHomeTopBar: View {
             HStack(spacing: 0) {
                 Button(action: onSearch) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 22, weight: .regular))
+                        .font(.title3.weight(.regular))
                         .foregroundStyle(isSearchVisible ? Color.actionPrimary : Color.textSecondary)
                         .frame(width: 44, height: 44)
                 }
@@ -206,27 +217,38 @@ struct ClaudeHomeTopBar: View {
 
                 Button(action: onNewChat) {
                     Image(systemName: "square.and.pencil")
-                        .font(.system(size: 22, weight: .regular))
+                        .font(.title3.weight(.regular))
                         .foregroundStyle(Color.textSecondary)
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("New chat")
+                .accessibilityIdentifier("home.newChat")
             }
         }
         .overlay {
-            Text("Today")
-                .font(.headline)
-                .foregroundStyle(.primary)
-                .lineLimit(1)
+            VStack(spacing: 1) {
+                Text("Today")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(Self.dateSubtitle)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(Color.textTertiary)
+                    .lineLimit(1)
+            }
         }
         .frame(height: 44)
         .padding(.horizontal, 12)
-        .background(Color.appBackground)
+        .background(Color.appBackground.opacity(0.96))
     }
 
     private var avatarLetter: String {
         String(displayName.trimmingCharacters(in: .whitespacesAndNewlines).first ?? "A").uppercased()
     }
-}
 
+    private static var dateSubtitle: String {
+        Date().formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
+    }
+}

@@ -77,8 +77,13 @@ enum ChatPromptContextBuilder {
         if attachments.isEmpty {
             attachmentNote = ""
         } else {
-            let names = attachments.map(\.name).joined(separator: ", ")
-            attachmentNote = "\n\nAttachment context: The user attached \(names). Use any extracted text or project context supplied by the app; if only filenames are present, say that clearly before making file-specific claims."
+            let uploadedAttachments = attachments.filter { !$0.isLocalOnly }
+            if uploadedAttachments.isEmpty {
+                attachmentNote = ""
+            } else {
+                let names = uploadedAttachments.map(\.name).joined(separator: ", ")
+                attachmentNote = "\n\nAttachment context: The user attached \(names). Use any extracted text or project context supplied by the app; if only filenames are present, say that clearly before making file-specific claims."
+            }
         }
         let webNote: String
         if let webContext {
@@ -104,6 +109,21 @@ enum ChatPromptContextBuilder {
         Current request:
         \(currentPrompt)
         \(attachmentNote)\(webNote)
+        """
+    }
+
+    static func cloudBriefingPrompt(
+        prompt: String,
+        webContext: WebGroundingContext?
+    ) -> String {
+        guard let webContext else { return prompt }
+        return """
+        \(prompt)
+
+        Live web context supplied by the iOS app:
+        \(webContext.promptSection)
+
+        Use this search context for current facts and cite sources by name. Do not say you cannot browse; the app has already fetched the web context.
         """
     }
 
@@ -180,9 +200,18 @@ enum ChatPromptContextBuilder {
             if lines.isEmpty {
                 lines.append("iOS prompt context:")
             }
-            lines.append("- Prompt files attached as untrusted filename labels: \(quotedUntrustedMetadataLabels(promptAttachments.map(\.name)))")
-            let documentTexts = promptAttachments
-                .filter { !$0.isLocalOnly }
+            let uploadedPromptAttachments = promptAttachments.filter { !$0.isLocalOnly }
+            if !uploadedPromptAttachments.isEmpty {
+                lines.append("- Prompt files attached as untrusted filename labels: \(quotedUntrustedMetadataLabels(uploadedPromptAttachments.map(\.name)))")
+            }
+            let omittedLocalOnlyPromptAttachments = promptAttachments.count - uploadedPromptAttachments.count
+            if omittedLocalOnlyPromptAttachments > 0 {
+                lines.append("- Local-only prompt files omitted for Hosted IronClaw: \(omittedLocalOnlyPromptAttachments)")
+            }
+            let documentTexts = uploadedPromptAttachments
+                .filter { attachment in
+                    attachment.kind == "pdf_text" || attachment.kind == "table_text"
+                }
                 .compactMap { documentText($0.id) }
             if !documentTexts.isEmpty {
                 let excerpt = clipped(documentTexts.joined(separator: "\n---\n"), maxCharacters: 2_000)

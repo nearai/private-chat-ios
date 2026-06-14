@@ -578,7 +578,7 @@ struct ProjectFilesView: View {
 
     private var actionShelfSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ProjectSectionLabel("Next actions")
+            ProjectSectionLabel("Actions")
                 .padding(.horizontal, 16)
             ProjectActionShelf(
                 projectName: projectStore.selectedProject?.name,

@@ -51,6 +51,14 @@ struct WidgetAppActionDraft: Equatable {
 }
 
 extension WidgetActionItem {
+    var reviewMissingFields: [String] {
+        var missing = missingFields
+        if let appDraft = appActionDraft() {
+            missing.append(contentsOf: appDraft.missingFields)
+        }
+        return missing.uniquedNonEmpty()
+    }
+
     var systemActionKind: WidgetSystemActionKind? {
         let normalized = (type ?? "").lowercased()
         if normalized.contains("calendar") || normalized.contains("invite") || normalized.contains("event") {
@@ -292,6 +300,11 @@ extension WidgetActionItem {
             .joined(separator: " ")
 
         var missing = missingFields
+        if Self.hasFuzzyTimingCue(scheduleText),
+           !Self.hasConcreteTime(date: date, time: time, schedule: schedule, command: command),
+           !missing.contains(where: { $0.localizedCaseInsensitiveContains("exact time") || $0.localizedCaseInsensitiveContains("time") }) {
+            missing.append("exact time")
+        }
         if !Self.hasTrackerCadence(scheduleText) &&
             !missing.contains(where: { $0.localizedCaseInsensitiveContains("schedule") || $0.localizedCaseInsensitiveContains("recurrence") }) {
             missing.append("recurrence")
@@ -365,6 +378,18 @@ extension WidgetActionItem {
         ]
         return cues.contains { normalized.contains($0) }
     }
+
+    private static func hasFuzzyTimingCue(_ text: String) -> Bool {
+        let normalized = " \(text.lowercased()) "
+        let cues = [
+            " upon waking ", " on waking ", " after waking ", " wake up ", " wake-up ",
+            " before bed ", " at bedtime ", " bedtime ", " before sleep ",
+            " with breakfast ", " with lunch ", " with dinner ", " with meals ",
+            " with food ", " before meal ", " before meals ", " after meal ",
+            " after meals ", " post-workout ", " pre-workout "
+        ]
+        return cues.contains { normalized.contains($0) }
+    }
 }
 
 private extension Array where Element == String {
@@ -425,6 +450,7 @@ struct MessageWidget: Codable, Hashable, Identifiable {
         case note, chart, metric, comparison
         case newsBrief = "news_brief"
         case actionPlan = "action_plan"
+        case heading, stories, summary, actions
     }
 }
 
@@ -434,8 +460,25 @@ extension MessageWidget {
         let chart = try? c.decode(WidgetChart.self, forKey: .chart)
         let metric = try? c.decode(WidgetMetric.self, forKey: .metric)
         let comparison = try? c.decode(WidgetComparison.self, forKey: .comparison)
-        let news = try? c.decode(WidgetNewsBrief.self, forKey: .newsBrief)
-        let actionPlan = try? c.decode(WidgetActionPlan.self, forKey: .actionPlan)
+        let nestedNews = try? c.decode(WidgetNewsBrief.self, forKey: .newsBrief)
+        let flatStories = (try? c.decode([WidgetNewsStory].self, forKey: .stories)) ?? []
+        let flatNews = flatStories.isEmpty
+            ? nil
+            : WidgetNewsBrief(
+                heading: try? c.decode(String.self, forKey: .heading),
+                stories: flatStories
+            )
+        let news = nestedNews ?? flatNews
+        let nestedActionPlan = try? c.decode(WidgetActionPlan.self, forKey: .actionPlan)
+        let flatActions = (try? c.decode([WidgetActionItem].self, forKey: .actions)) ?? []
+        let flatActionPlan = flatActions.isEmpty
+            ? nil
+            : WidgetActionPlan(
+                heading: try? c.decode(String.self, forKey: .heading),
+                summary: try? c.decode(String.self, forKey: .summary),
+                actions: flatActions
+            )
+        let actionPlan = nestedActionPlan ?? flatActionPlan
 
         var kind = (try? c.decode(WidgetKind.self, forKey: .kind)) ?? .generic
         if kind == .generic {
@@ -462,6 +505,22 @@ extension MessageWidget {
         )
     }
 
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(kind, forKey: .kind)
+        try c.encodeIfPresent(title, forKey: .title)
+        try c.encodeIfPresent(freshness, forKey: .freshness)
+        try c.encodeIfPresent(time, forKey: .time)
+        try c.encodeIfPresent(followUp, forKey: .followUp)
+        try c.encodeIfPresent(note, forKey: .note)
+        try c.encodeIfPresent(chart, forKey: .chart)
+        try c.encodeIfPresent(metric, forKey: .metric)
+        try c.encodeIfPresent(comparison, forKey: .comparison)
+        try c.encodeIfPresent(newsBrief, forKey: .newsBrief)
+        try c.encodeIfPresent(actionPlan, forKey: .actionPlan)
+    }
+
     /// True when the payload carries something renderable for its kind.
     var hasRenderableBody: Bool {
         switch kind {
@@ -474,32 +533,54 @@ extension MessageWidget {
         }
     }
 
-    private static let fenceTokens = ["```near-widget", "```near_widget", "```widget"]
+    var followUpLabel: String? {
+        if usesTrackChoiceFollowUp {
+            return "Track one of these stories"
+        }
+        return widgetNonBlank(followUp)
+    }
+
+    var followUpDraft: String? {
+        if usesTrackChoiceFollowUp {
+            return newsBriefTrackerDraft
+        }
+        return widgetNonBlank(followUp)
+    }
+
+    private var usesTrackChoiceFollowUp: Bool {
+        guard kind == .newsBrief else { return false }
+        let normalized = widgetNonBlank(followUp)?.lowercased() ?? ""
+        return normalized.contains("which") &&
+            normalized.contains("track") &&
+            (normalized.contains("story") || normalized.contains("stories"))
+    }
+
+    private var newsBriefTrackerDraft: String {
+        let stories = newsBrief?.stories
+            .prefix(3)
+            .map(\.title)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "; ")
+        let optionsText = stories?.isEmpty == false ? " Options: \(stories!)." : ""
+        return "Create a watcher for one story from this brief.\(optionsText) Ask me which story to track if needed, then propose cadence, sources, and what will be monitored before creating anything."
+    }
+
+    private static let widgetSentinelTokens = ["near-widget", "near_widget", "near widget", "widget"]
 
     /// Scans assistant text for the first valid fenced near-widget JSON block.
     /// Returns the parsed widget (or nil) and the text with that block removed.
     /// On any parse failure the original text is returned untouched, so a
     /// malformed block degrades to visible prose rather than being lost.
-    /// Earliest fenced opener (any alias) at or after `from`.
-    private static func nextFenceOpener(in text: String, from: String.Index) -> (tokenStart: String.Index, tokenEnd: String.Index)? {
-        var best: (start: String.Index, end: String.Index)?
-        for token in fenceTokens {
-            if let r = text.range(of: token, options: .caseInsensitive, range: from..<text.endIndex) {
-                if best == nil || r.lowerBound < best!.start {
-                    best = (r.lowerBound, r.upperBound)
-                }
-            }
-        }
-        return best.map { ($0.start, $0.end) }
+    private struct WidgetFence {
+        var tokenStart: String.Index
+        var payloadStart: String.Index
+        var closeRange: Range<String.Index>
     }
 
     static func extract(from text: String) -> (widget: MessageWidget?, cleanedText: String) {
         var searchStart = text.startIndex
-        while let opener = nextFenceOpener(in: text, from: searchStart) {
-            guard let closeRange = text.range(of: "```", range: opener.tokenEnd..<text.endIndex) else {
-                break // unclosed fence — nothing parseable beyond here
-            }
-            var jsonString = text[opener.tokenEnd..<closeRange.lowerBound]
+        while let fence = nextWidgetFence(in: text, from: searchStart) {
+            var jsonString = text[fence.payloadStart..<fence.closeRange.lowerBound]
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             // Drop a leading info-string line (e.g. ```near-widget json) before the JSON body.
             if let firstChar = jsonString.first, firstChar != "{", firstChar != "[",
@@ -511,12 +592,65 @@ extension MessageWidget {
                let widget = try? JSONDecoder().decode(MessageWidget.self, from: data),
                widget.hasRenderableBody {
                 var cleaned = text
-                cleaned.removeSubrange(opener.tokenStart..<closeRange.upperBound)
+                cleaned.removeSubrange(fence.tokenStart..<fence.closeRange.upperBound)
                 return (widget, cleaned.trimmingCharacters(in: .whitespacesAndNewlines))
             }
-            searchStart = closeRange.upperBound // skip this block, keep scanning for a valid one
+            searchStart = fence.closeRange.upperBound // skip this block, keep scanning for a valid one
         }
         return (nil, text)
+    }
+
+    /// Earliest fenced widget block at or after `from`.
+    ///
+    /// The model is instructed to emit ```near-widget blocks, but live models
+    /// sometimes choose a generic ```json fence and put NEAR-WIDGET as the
+    /// first body line. Treat that sentinel as sanctioned widget markup too so
+    /// raw JSON never leaks into the chat transcript.
+    private static func nextWidgetFence(in text: String, from: String.Index) -> WidgetFence? {
+        var searchStart = from
+        while let openRange = text.range(of: "```", range: searchStart..<text.endIndex) {
+            let headerStart = openRange.upperBound
+            let headerEnd = text[headerStart..<text.endIndex].firstIndex(of: "\n") ?? text.endIndex
+            let infoString = text[headerStart..<headerEnd].trimmingCharacters(in: .whitespacesAndNewlines)
+            let payloadStart = headerEnd < text.endIndex ? text.index(after: headerEnd) : headerEnd
+
+            guard let closeRange = text.range(of: "```", range: payloadStart..<text.endIndex) else {
+                return widgetFenceInfoLooksSanctioned(infoString) ||
+                    payloadStartsWithWidgetSentinel(text[payloadStart..<text.endIndex])
+                    ? WidgetFence(tokenStart: openRange.lowerBound, payloadStart: payloadStart, closeRange: text.endIndex..<text.endIndex)
+                    : nil
+            }
+
+            if widgetFenceInfoLooksSanctioned(infoString) ||
+                payloadStartsWithWidgetSentinel(text[payloadStart..<closeRange.lowerBound]) {
+                return WidgetFence(tokenStart: openRange.lowerBound, payloadStart: payloadStart, closeRange: closeRange)
+            }
+
+            searchStart = closeRange.upperBound
+        }
+        return nil
+    }
+
+    private static func widgetFenceInfoLooksSanctioned(_ infoString: String) -> Bool {
+        let normalized = normalizedWidgetMarker(infoString)
+        return widgetSentinelTokens.contains { normalized.hasPrefix(normalizedWidgetMarker($0)) }
+    }
+
+    private static func payloadStartsWithWidgetSentinel(_ payload: Substring) -> Bool {
+        let trimmed = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let firstLine = trimmed.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first else {
+            return false
+        }
+        let marker = normalizedWidgetMarker(String(firstLine))
+        return widgetSentinelTokens.contains { marker == normalizedWidgetMarker($0) }
+    }
+
+    private static func normalizedWidgetMarker(_ marker: String) -> String {
+        marker
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "-")
+            .replacingOccurrences(of: " ", with: "-")
     }
 
     /// During streaming, hide an as-yet-unclosed near-widget fence so the user
@@ -526,12 +660,10 @@ extension MessageWidget {
         // so its raw JSON never shows.
         let withoutClosed = extract(from: text).cleanedText
         // Then hide a still-open trailing fence.
-        for token in fenceTokens {
-            if let openRange = withoutClosed.range(of: token, options: .caseInsensitive),
-               withoutClosed.range(of: "```", range: openRange.upperBound..<withoutClosed.endIndex) == nil {
-                return String(withoutClosed[withoutClosed.startIndex..<openRange.lowerBound])
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-            }
+        if let fence = nextWidgetFence(in: withoutClosed, from: withoutClosed.startIndex),
+           fence.closeRange.isEmpty {
+            return String(withoutClosed[withoutClosed.startIndex..<fence.tokenStart])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return withoutClosed
     }

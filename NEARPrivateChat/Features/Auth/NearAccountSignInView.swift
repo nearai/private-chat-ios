@@ -31,7 +31,7 @@ struct NearAccountSignInView: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .padding(12)
-                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.pill))
                             .accessibilityLabel("NEAR account ID")
                             .accessibilityHint("Enter the account that has authorized this device key.")
                             .accessibilityIdentifier("auth.nearAccountID")
@@ -56,7 +56,7 @@ struct NearAccountSignInView: View {
                             .textSelection(.enabled)
                             .padding(12)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.pill))
                             .accessibilityLabel("Device public key")
                             .accessibilityIdentifier("auth.nearDevicePublicKey")
                         Button {
@@ -68,6 +68,7 @@ struct NearAccountSignInView: View {
                                 .foregroundStyle(Color.actionPrimary)
                                 .padding(.vertical, 8)
                                 .padding(.horizontal, 14)
+                                .minimumTouchTarget()
                                 .background(Color.actionTint, in: Capsule())
                         }
                         .buttonStyle(.plain)
@@ -96,7 +97,7 @@ struct NearAccountSignInView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
-                        .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(Color.actionPrimary, in: RoundedRectangle.app(AppRadius.control))
                         .foregroundStyle(.white)
                     }
                     .buttonStyle(.plain)

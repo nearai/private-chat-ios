@@ -45,7 +45,7 @@ extension HomeScreen {
         commitHomeLaunchPrompt(
             prefix: suggestion?.prompt,
             draft: trimmedDraft,
-            banner: suggestion.map { "\($0.title) prompt ready." } ?? "Prompt ready."
+            banner: suggestion.map { "Sending \($0.title.lowercased()) prompt." } ?? "Sending prompt."
         )
     }
 
@@ -83,17 +83,22 @@ extension HomeScreen {
         commitHomeLaunchPrompt(
             prefix: suggestion.prompt,
             draft: homeStore.pendingHomeLaunchDraft,
-            banner: "\(suggestion.title) prompt ready."
+            banner: "Sending \(suggestion.title.lowercased()) prompt."
         )
     }
 
-    func commitHomeLaunchPrompt(prefix: String?, draft: String, banner: String) {
+    func commitHomeLaunchPrompt(prefix: String?, draft: String, banner: String, sendImmediately: Bool = true) {
         chatStore.startNewConversation()
         chatStore.draft = EmptyChatStarterCoordinator.stagedPrompt(prefix ?? "", existingDraft: draft)
-        chatStore.bannerMessage = banner
         homeStore.clearLaunchComposer()
         AppHaptics.selection()
         onStartNewChat()
+        if sendImmediately {
+            chatStore.bannerMessage = nil
+            chatStore.sendDraft()
+        } else {
+            chatStore.bannerMessage = banner
+        }
     }
 
     func clearPendingHomeLaunch() {

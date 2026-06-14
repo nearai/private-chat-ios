@@ -64,6 +64,9 @@ extension QuickIntentParser {
         contains(text, [
             "model y", "model 3", "cybertruck", "car", "vehicle", "ev ",
             "iphone", "ipad", "macbook", "airpods", "apple watch",
+            "rolex", "gmt-master", "gmt master", "secondary market",
+            "resale", "pre-owned", "preowned", "collectible", "collectibles",
+            "grey market", "gray market", "bezel",
             "prime", "subscription", "ticket", "tickets", "movie", "movies",
             "phone", "laptop", "shoe", "shoes", "sneaker", "sneakers",
             "console", "device", "service", "plan", "membership"
@@ -180,7 +183,23 @@ extension QuickIntentParser {
             title = String(title.dropFirst(article.count))
         }
         title = title.trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
-        return String(title.prefix(48))
+        if let range = title.range(of: " covering ", options: [.caseInsensitive]),
+           title.distance(from: title.startIndex, to: range.lowerBound) >= 8 {
+            title = String(title[..<range.lowerBound])
+                .trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+        }
+        for trailingCue in [" and tell me", " and notify me", " and alert me", " and let me know"] {
+            if let range = title.range(of: trailingCue, options: [.caseInsensitive]),
+               title.distance(from: title.startIndex, to: range.lowerBound) >= 8 {
+                title = String(title[..<range.lowerBound])
+                    .trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,"))
+                break
+            }
+        }
+        if title.lowercased().hasSuffix(" release date updates") {
+            title = String(title.dropLast(" updates".count))
+        }
+        return BriefingPresentationText.wordBoundaryTitle(title)
     }
 
     /// True when a news request carries NO topic — just "news" / "headlines" /
@@ -347,6 +366,9 @@ extension QuickIntentParser {
             || contains(text, ["should i", "should we", "is it worth", "worth buying",
                                 "good idea", "what do you think", "do you think", "would you"])
         guard alertVerb || (conditional && !isQuestion) else { return nil }
+        if let percentMove = makePercentMoveTracker(from: text, original: original) {
+            return percentMove
+        }
         // The comparator + number is what makes this an alert (not prose), so it
         // gates both the crypto and stock paths.
         guard let (comparator, threshold) = parsePriceCondition(text) else { return nil }
@@ -379,6 +401,41 @@ extension QuickIntentParser {
         return nil
     }
 
+    /// "alert me if NEAR moves more than 5%" is a percentage-move alert, not
+    /// an absolute price alert at $5. Preserve it as a model-routed tracker
+    /// until the local condition schema supports percent-change gates.
+    static func makePercentMoveTracker(from text: String, original: String) -> TrackerSpec? {
+        guard let percent = parsePercentageMoveThreshold(text) else { return nil }
+        let schedule = hasExplicitCadence(text) ? extractSchedule(from: text) : .everyNHours(3)
+        let percentLabel = formatPercentMove(percent)
+
+        if let coin = matchedCoin(in: text) {
+            return TrackerSpec(
+                title: "\(coin.symbol) move alert",
+                kind: .customPrompt,
+                subject: nil,
+                schedule: schedule,
+                council: false,
+                confirmation: "Alerts when \(coin.symbol) moves \(percentLabel)+ in 24h · checks \(schedule.scheduleLabel)",
+                prompt: "Using live market data or web search, check \(coin.symbol) / USD and its 24h percent move. If the absolute 24h move is at least \(percentLabel), lead with the alert and explain the move briefly with sources. If it is below \(percentLabel), return a concise no-alert status with the latest price, the 24h move, and next check time."
+            )
+        }
+
+        if let stock = alertStock(in: text, original: original) {
+            return TrackerSpec(
+                title: "\(stock.symbol) move alert",
+                kind: .customPrompt,
+                subject: nil,
+                schedule: schedule,
+                council: false,
+                confirmation: "Alerts when \(stock.symbol) moves \(percentLabel)+ in 24h · checks \(schedule.scheduleLabel)",
+                prompt: "Using live market data or web search, check \(stock.symbol) and its latest daily percent move. If the absolute move is at least \(percentLabel), lead with the alert and explain the move briefly with sources. If it is below \(percentLabel), return a concise no-alert status with the latest price, the percent move, and next check time."
+            )
+        }
+
+        return nil
+    }
+
     /// Resolves a stock for an ALERT (lenient — the alert verb + threshold is the
     /// cue, so no stock/price word is required): a `$ticker`, a known all-caps
     /// ticker, or a known company name.
@@ -395,7 +452,8 @@ extension QuickIntentParser {
         // "Netflix subscription", "Apple store") is about the product, not the
         // equity. The explicit-ticker path above already returned; here we only
         // have a fuzzy name match, so a product/service noun disqualifies it.
-        let nonAssetContext = contains(text, ["ticket", "tickets", "movie", "movies", "show", "concert",
+        let nonAssetContext = hasProductPriceContext(text) ||
+            contains(text, ["ticket", "tickets", "movie", "movies", "show", "concert",
                                               "flight", "hotel", "seat", "seats", "merch", "subscription",
                                               "store", "shop", "park", "ride", "menu", "delivery"])
         guard !nonAssetContext else { return nil }
@@ -426,6 +484,10 @@ extension QuickIntentParser {
                 guard let m = re.firstMatch(in: text, options: [], range: range),
                       let numR = Range(m.range(at: 1), in: text),
                       var value = Double(text[numR].replacingOccurrences(of: ",", with: "")) else { continue }
+                if let fullRange = Range(m.range, in: text),
+                   text[fullRange.upperBound...].drop(while: { $0.isWhitespace }).first == "%" {
+                    continue
+                }
                 if m.range(at: 2).location != NSNotFound, let sufR = Range(m.range(at: 2), in: text) {
                     switch text[sufR].lowercased() {
                     case "k": value *= 1_000
@@ -446,6 +508,30 @@ extension QuickIntentParser {
         case let (nil, a?): return (.above, a.value)
         case (nil, nil): return nil
         }
+    }
+
+    static func parsePercentageMoveThreshold(_ text: String) -> Double? {
+        let patterns = [
+            #"\b(?:moves?|changes?|swings?|gains?|loses?|drops?|rises?|falls?)\b.{0,48}\b(?:more than|over|above|at least|greater than|>=)\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*%"#,
+            #"\b([0-9][0-9,]*(?:\.[0-9]+)?)\s*%\s*(?:move|moves|change|changes|swing|swings|gain|gains|loss|losses|drop|drops|rise|rises)\b"#
+        ]
+        for pattern in patterns {
+            guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            guard let match = re.firstMatch(in: text, options: [], range: range),
+                  let valueRange = Range(match.range(at: 1), in: text),
+                  let value = Double(text[valueRange].replacingOccurrences(of: ",", with: "")) else { continue }
+            return value
+        }
+        return nil
+    }
+
+    static func formatPercentMove(_ percent: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.maximumFractionDigits = percent.rounded() == percent ? 0 : 2
+        formatter.minimumFractionDigits = 0
+        let value = formatter.string(from: NSNumber(value: percent)) ?? "\(percent)"
+        return "\(value)%"
     }
 
     /// True when the text names a concrete cadence/time, so we keep it instead of
@@ -499,7 +585,7 @@ extension QuickIntentParser {
         )
         s = s.replacingOccurrences(of: #"\b(at\s+)?\d{1,2}(:\d{2})?\s*(am|pm)\b"#, with: " ", options: [.regularExpression, .caseInsensitive])
         s = s.replacingOccurrences(
-            of: #"^\s*(please\s+)?(create|set ?up|make|build|schedule|start|add)\s+(a|an|the)?\s*(tracker|briefing|alert|watcher|digest)\s*(to|for|that|which)?\s*"#,
+            of: #"^\s*(please\s+)?(create|set ?up|make|build|schedule|start|add)\s+(an|the|a)?\b\s*(tracker|briefing|alert|watcher|digest)\s*(to|for|that|which)?\s*"#,
             with: "",
             options: [.regularExpression, .caseInsensitive]
         )

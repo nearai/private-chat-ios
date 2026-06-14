@@ -11,6 +11,7 @@ struct ChatView: View {
 
 private struct ChatTranscriptView: View {
     @EnvironmentObject private var shareStore: ShareStore
+    @EnvironmentObject private var sessionStore: SessionStore
     @ObservedObject var chatStore: ChatStore
     @ObservedObject var transcriptStore: ChatTranscriptStore
     @State private var lastAutoScrollNanoseconds: UInt64 = 0
@@ -19,6 +20,8 @@ private struct ChatTranscriptView: View {
     @State private var isAttachmentDropTargeted = false
     @State private var showingEmptyProjectFiles = false
     @State private var showingEmptyCouncilPicker = false
+    @State private var showingAccountSettings = false
+    @State private var accountSettingsDeepLink: AccountSettingsDeepLink?
 
     private static let streamingAutoScrollIntervalNanoseconds: UInt64 = 300_000_000
     private static let dragAutoScrollPauseNanoseconds: UInt64 = 1_500_000_000
@@ -102,7 +105,7 @@ private struct ChatTranscriptView: View {
                         guard let targetID = scrollSignature.targetID else { return }
                         try? await Task.sleep(nanoseconds: 250_000_000)
                         await MainActor.run {
-                            proxy.scrollTo(targetID, anchor: .bottom)
+                            proxy.scrollTo(targetID, anchor: scrollSignature.targetAnchor.unitPoint)
                         }
                     }
                     .onChange(of: isStreaming) { _, isStreaming in
@@ -117,10 +120,10 @@ private struct ChatTranscriptView: View {
                         guard shouldAutoScroll(now: now, isStreaming: signature.isStreaming) else { return }
                         lastAutoScrollNanoseconds = now
                         if signature.isStreaming {
-                            proxy.scrollTo(targetID, anchor: .bottom)
+                            proxy.scrollTo(targetID, anchor: signature.targetAnchor.unitPoint)
                         } else {
                             withAnimation(.easeOut(duration: 0.2)) {
-                                proxy.scrollTo(targetID, anchor: .bottom)
+                                proxy.scrollTo(targetID, anchor: signature.targetAnchor.unitPoint)
                             }
                         }
                     }
@@ -166,8 +169,24 @@ private struct ChatTranscriptView: View {
             )
         }
         .sheet(isPresented: $showingEmptyCouncilPicker) {
-            ModelPickerView(openingCouncil: true)
+            ModelPickerView(
+                openingCouncil: true,
+                onOpenNearCloudKeys: {
+                    accountSettingsDeepLink = .nearCloudKeys
+                    showingAccountSettings = true
+                }
+            )
                 .environmentObject(chatStore)
+        }
+        .sheet(isPresented: $showingAccountSettings, onDismiss: {
+            accountSettingsDeepLink = nil
+        }) {
+            AccountSettingsView(
+                initialDeepLink: accountSettingsDeepLink,
+                onRunSetupAgain: {},
+                isCurrentChatEmpty: { chatStore.selectedConversation == nil && transcriptStore.messages.isEmpty }
+            )
+            .environmentObject(sessionStore)
         }
     }
 

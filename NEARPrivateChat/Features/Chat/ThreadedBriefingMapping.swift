@@ -27,26 +27,100 @@ extension ThreadedBriefingView {
         let timeFormatter = DateFormatter()
         timeFormatter.dateFormat = "h:mma"
         let isFailed = briefing.status == .failed
+        let scheduledRunLabel = scheduledRunTimeLabel(for: briefing.schedule)
+        let failureTitle = "The \(scheduledRunLabel) run didn't start"
         let body = briefing.latestResult.map(summary(for:))
             ?? (isFailed
-                ? briefing.lastFailureMessage ?? "Last run failed before producing a result."
+                ? failureSummary(for: briefing)
                 : "No delivery yet — it will appear here after the next scheduled run.")
         let deliveryDate = briefing.lastRunAt ?? briefing.lastFailureAt ?? runDate
+        let sourceTags = briefing.latestResult.map(sourceTags(for:)) ?? []
         return [
             BriefingDelivery(
                 dayLabel: Calendar.current.isDateInToday(deliveryDate) ? "Today" : formatter.string(from: deliveryDate),
                 time: briefing.lastRunAt == nil && !isFailed ? "—" : timeFormatter.string(from: deliveryDate).lowercased(),
-                title: isFailed ? "\(formatter.string(from: deliveryDate)) · run failed" : "\(formatter.string(from: deliveryDate)) · briefing",
-                headline: isFailed ? "Run failed" : nil,
-                // BotDeliveryRow renders summary (not body) when a headline is
-                // present, so the failure reason must ride in summary.
+                title: isFailed ? failureTitle : "\(formatter.string(from: deliveryDate)) · briefing",
+                headline: nil,
                 summary: isFailed ? body : nil,
                 body: body,
+                sources: sourceTags,
+                sourceStatusText: sourceTags.isEmpty ? sourceStatusText(for: briefing) : nil,
                 unread: briefing.lastRunAt != nil || isFailed,
                 isFailure: isFailed,
                 widget: briefing.latestResult
             )
         ]
+    }
+
+    private static func sourceTags(for widget: MessageWidget) -> [BriefingSourceTag] {
+        guard let stories = widget.newsBrief?.stories else { return [] }
+        var seen: Set<String> = []
+        var tags: [BriefingSourceTag] = []
+        for source in stories.flatMap(\.sources) {
+            let label = source.domain?.nilIfBlank ?? source.label.nilIfBlank
+            guard let label else { continue }
+            let key = label.lowercased()
+            guard seen.insert(key).inserted else { continue }
+            let letter = source.label.nilIfBlank ?? String(label.prefix(1)).uppercased()
+            tags.append(BriefingSourceTag(letter: letter, colorHex: source.color ?? "#007AFF"))
+        }
+        return tags
+    }
+
+    private static func sourceStatusText(for briefing: Briefing) -> String? {
+        guard briefing.latestResult != nil, briefing.status != .failed else { return nil }
+        switch briefing.kind {
+        case .ethPrice, .cryptoPrice, .stockPrice, .watchlist:
+            return "Market data"
+        case .nearAccount:
+            return "Account data"
+        case .dailyNews, .dailyBrief:
+            return "Scheduled run"
+        case .customPrompt:
+            let prompt = briefing.prompt.lowercased()
+            if prompt.contains("web search") ||
+                prompt.contains("current source") ||
+                prompt.contains("fresh source") ||
+                prompt.contains("live source") ||
+                prompt.contains("market data") {
+                return "Current-source run"
+            }
+            return nil
+        }
+    }
+
+    private static func scheduledRunTimeLabel(for schedule: BriefingSchedule) -> String {
+        guard let time = schedule.timeComponents else { return "scheduled" }
+        var components = DateComponents()
+        components.hour = time.hour
+        components.minute = time.minute
+        guard let date = Calendar.current.date(from: components) else { return "scheduled" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mma"
+        return formatter.string(from: date).lowercased()
+    }
+
+    private static func failureSummary(for briefing: Briefing) -> String {
+        let failure = briefing.lastFailureMessage?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if looksLikeSignInFailure(failure) {
+            return "The plan wasn't signed in when the brief was due. Re-run now, or check the plan's sign-in to resume the schedule."
+        }
+        if !failure.isEmpty {
+            return failure
+        }
+        return "The last scheduled run didn't produce a result. Re-run now, or check the plan's route and sign-in."
+    }
+
+    private static func looksLikeSignInFailure(_ message: String) -> Bool {
+        let lower = message.lowercased()
+        return lower.contains("sign-in") ||
+            lower.contains("sign in") ||
+            lower.contains("signed in") ||
+            lower.contains("not signed") ||
+            lower.contains("login") ||
+            lower.contains("not logged in") ||
+            lower.contains("unauthorized") ||
+            lower.contains("authorization")
     }
 
     static func summary(for widget: MessageWidget) -> String {

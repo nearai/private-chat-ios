@@ -1,17 +1,192 @@
 import SwiftUI
 
 extension HomeScreen {
+    var homeTodayFeedSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HomeFeedScopeStrip(
+                selectedScope: $homeStore.selectedFeedScope,
+                counts: homeFeedScopeCounts
+            )
+
+            if shouldLeadHomeFeedWithChats {
+                homeFeedChats
+                homeFeedBriefings
+            } else {
+                homeFeedBriefings
+                homeFeedChats
+            }
+
+            if visibleHomeFeedBriefings.isEmpty && visibleHomeFeedChats.isEmpty {
+                VStack(spacing: 12) {
+                    HomeInboxEmptyState(
+                        title: emptyHomeFeedTitle,
+                        subtitle: emptyHomeFeedSubtitle,
+                        symbolName: homeStore.selectedFeedScope.symbolName,
+                        actionTitle: emptyHomeFeedActionTitle,
+                        actionSymbolName: emptyHomeFeedActionSymbolName,
+                        action: { stageEmptyHomeFeedPrompt(scope: homeStore.selectedFeedScope) }
+                    )
+
+                    homeFeedEmptyStateActions
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+    }
+
+    @ViewBuilder
+    private var homeFeedEmptyStateActions: some View {
+        let actionScopes = homeFeedStarterScopes
+        if actionScopes.count > 1 {
+            LazyVGrid(columns: [
+                GridItem(.flexible(minimum: 0), spacing: 8),
+                GridItem(.flexible(minimum: 0), spacing: 8)
+            ], spacing: 8) {
+                ForEach(actionScopes, id: \.self) { scope in
+                    HomeFeedEmptyActionButton(
+                        title: homeFeedStarterTitle(for: scope),
+                        symbolName: homeFeedStarterSymbol(for: scope),
+                        onTap: { stageEmptyHomeFeedPrompt(scope: scope) }
+                    )
+                }
+            }
+        } else if let singleScope = actionScopes.first {
+            HomeFeedEmptyActionButton(
+                title: homeFeedStarterTitle(for: singleScope),
+                symbolName: homeFeedStarterSymbol(for: singleScope),
+                onTap: { stageEmptyHomeFeedPrompt(scope: singleScope) }
+            )
+        }
+    }
+
+    private var homeFeedStarterScopes: [HomeFeedScope] {
+        switch homeStore.selectedFeedScope {
+        case .all:
+            return [.all, .briefings, .watchers]
+        case .chats:
+            return [.chats]
+        case .briefings:
+            return [.briefings]
+        case .watchers:
+            return [.watchers]
+        }
+    }
+
+    private func homeFeedStarterTitle(for scope: HomeFeedScope) -> String {
+        switch scope {
+        case .all, .chats:
+            return "Start chat"
+        case .briefings:
+            return "Draft briefing"
+        case .watchers:
+            return "Draft watcher"
+        }
+    }
+
+    private func homeFeedStarterSymbol(for scope: HomeFeedScope) -> String {
+        switch scope {
+        case .all, .chats:
+            return "square.and.pencil"
+        case .briefings:
+            return "doc.text"
+        case .watchers:
+            return "bell.badge"
+        }
+    }
+
+    @ViewBuilder
+    private var homeFeedBriefings: some View {
+        if !visibleHomeFeedBriefings.isEmpty {
+            HomeBriefingFeedList(
+                briefings: visibleHomeFeedBriefings,
+                onOpen: { briefing in homeStore.openedBriefing = briefing }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var homeFeedChats: some View {
+        if !visibleHomeFeedChats.isEmpty {
+            HomeRecentsRow(
+                conversations: visibleHomeFeedChats,
+                previewTextForConversation: previewText(for:),
+                hasSourceCueForConversation: hasSourceCue(for:),
+                sourceSummaryForConversation: sourceSummary(for:),
+                projectNameForConversation: projectName(for:),
+                onOpenConversation: openConversation
+            )
+        }
+    }
+
+    private var shouldLeadHomeFeedWithChats: Bool {
+        homeStore.selectedFeedScope == .all &&
+            !visibleHomeFeedChats.isEmpty &&
+            !visibleHomeFeedBriefings.isEmpty &&
+            visibleHomeFeedBriefings.allSatisfy { $0.status == .failed || $0.lastFailureAt != nil }
+    }
+
     var homeRecentChatsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HomeSectionHeader(title: "Recent chats")
+        VStack(alignment: .leading, spacing: 10) {
+            HomeSectionHeader(title: "Continue")
             HomeRecentsRow(
                 conversations: resumeConversations,
+                previewTextForConversation: previewText(for:),
+                hasSourceCueForConversation: hasSourceCue(for:),
+                sourceSummaryForConversation: sourceSummary(for:),
                 projectNameForConversation: projectName(for:),
                 onOpenConversation: openConversation
             )
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 28)
+    }
+
+    private var emptyHomeFeedTitle: String {
+        switch homeStore.selectedFeedScope {
+        case .all:
+            return "Nothing live yet"
+        case .briefings:
+            return "No briefings yet"
+        case .watchers:
+            return "No watchers yet"
+        case .chats:
+            return "No chats yet"
+        }
+    }
+
+    private var emptyHomeFeedSubtitle: String {
+        switch homeStore.selectedFeedScope {
+        case .all:
+            return "Ask privately, then turn useful answers into briefings, trackers, or threads."
+        case .briefings:
+            return "Create a recurring digest from any topic, project, file, or search."
+        case .watchers:
+            return "Track prices, launches, accounts, releases, or any changing topic on a schedule."
+        case .chats:
+            return "Start a private thread; useful answers can become reusable work."
+        }
+    }
+
+    private var emptyHomeFeedActionTitle: String {
+        switch homeStore.selectedFeedScope {
+        case .all, .chats:
+            return "Start chat"
+        case .briefings:
+            return "Draft briefing"
+        case .watchers:
+            return "Draft watcher"
+        }
+    }
+
+    private var emptyHomeFeedActionSymbolName: String {
+        switch homeStore.selectedFeedScope {
+        case .all, .chats:
+            return "square.and.pencil"
+        case .briefings:
+            return "doc.text"
+        case .watchers:
+            return "bell.badge"
+        }
     }
 
     var fullChatHistorySection: some View {
@@ -223,12 +398,35 @@ extension HomeScreen {
         return "Try another search or switch filters."
     }
 
-    var sharedRefreshAction: (() -> Void)? {
+var sharedRefreshAction: (() -> Void)? {
         guard !shareStore.isLoadingSharedWithMe else { return nil }
         return {
             _ = Task { await shareStore.refreshSharedWithMe() }
         }
     }
 
+}
 
+struct HomeFeedEmptyActionButton: View {
+    let title: String
+    let symbolName: String
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            Label(title, systemImage: symbolName)
+                .font(.caption.weight(.bold))
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 44)
+                .foregroundStyle(Color.textPrimary)
+                .padding(.horizontal, 10)
+                .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.pill))
+                .overlay {
+                    RoundedRectangle.app(AppRadius.pill)
+                        .stroke(Color.appBorder, lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .minimumTouchTarget()
+    }
 }

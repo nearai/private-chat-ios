@@ -62,6 +62,7 @@ struct AppLifecycleModifier: ViewModifier {
                         chatStore.updateCurrentUser(profile: nil)
                         chatStore.prepareForAuthenticatedAccount(nil)
                     } else {
+                        chatStore.resetConnectionStateForCredentialChange()
                         router.resetForAccountSwitch(sessionStore.setupAccountID)
                         await prepareAuthenticatedChatState()
                     }

@@ -59,7 +59,7 @@ struct ModelSpecRow: View {
             VStack(spacing: 0) {
                 HStack(alignment: .top, spacing: 14) {
                     Image(systemName: symbolName)
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(isEnabled ? symbolColor : Color.textTertiary)
                         .frame(width: 22, height: 22)
 
@@ -75,9 +75,9 @@ struct ModelSpecRow: View {
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        if !badges.isEmpty {
+                        if !displayBadges.isEmpty {
                             HStack(spacing: 6) {
-                                ForEach(Array(badges.prefix(3)), id: \.self) { badge in
+                                ForEach(displayBadges, id: \.self) { badge in
                                     Text(badge)
                                         .font(.caption2.weight(.semibold))
                                         .foregroundStyle(Color.textSecondary)
@@ -122,7 +122,14 @@ struct ModelSpecRow: View {
     }
 
     private var rowAccessibilityValue: String {
-        ([subtitle] + badges).joined(separator: ", ")
+        ([subtitle] + displayBadges).joined(separator: ", ")
+    }
+
+    private var displayBadges: [String] {
+        if isSelected {
+            return Array((["Current"] + badges.prefix(1)).prefix(2))
+        }
+        return Array(badges.prefix(3))
     }
 
     @ViewBuilder
@@ -132,11 +139,11 @@ struct ModelSpecRow: View {
             EmptyView()
         case .checkmark:
             Image(systemName: "checkmark")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.body.weight(.semibold))
                 .foregroundStyle(Color.actionPrimary)
         case .chevron:
             Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.textTertiary)
         }
     }
@@ -152,7 +159,7 @@ struct CouncilNumberedRow: View {
         ZStack(alignment: .bottom) {
             HStack(alignment: .center, spacing: 14) {
                 Text("\(number)")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(Color.actionPrimary)
                     .frame(width: 22, height: 22)
                     .background(Color.actionPrimary.opacity(0.12), in: Circle())

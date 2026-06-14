@@ -258,12 +258,12 @@ struct BriefingIconChip: View {
 
     var body: some View {
         Image(systemName: symbolName)
-            .font(.system(size: 14, weight: .semibold))
+            .font(.caption.weight(.semibold))
             .foregroundStyle(tint)
             .frame(width: 32, height: 32)
-            .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .background(tint.opacity(0.12), in: RoundedRectangle.app(AppRadius.pill))
             .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                RoundedRectangle.app(AppRadius.pill)
                     .stroke(tint.opacity(0.18), lineWidth: 1)
             }
     }

@@ -18,6 +18,7 @@ final class ChatTranscriptStore: ObservableObject {
 
     private func bindTimelineStore() {
         timelineStore.objectWillChange
+            .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
     }
@@ -82,6 +83,7 @@ final class ChatComposerStore: ObservableObject {
     init(attachmentStagingStore: AttachmentStagingStore? = nil) {
         self.attachmentStagingStore = attachmentStagingStore ?? AttachmentStagingStore()
         self.attachmentStagingStore.objectWillChange
+            .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
     }

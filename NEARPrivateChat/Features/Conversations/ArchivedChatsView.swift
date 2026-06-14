@@ -142,7 +142,7 @@ struct ArchivedChatsView: View {
                 case .success:
                     conversationStore.showBanner("Archive JSON exported.")
                 case let .failure(error):
-                    conversationStore.showBanner(error.localizedDescription)
+                    conversationStore.showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
                 }
             }
         }

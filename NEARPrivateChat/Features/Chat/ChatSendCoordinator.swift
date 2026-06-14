@@ -282,6 +282,50 @@ final class ChatSendCoordinator {
         }
     }
 
+    func regenerateResponseViaPrivacyProxy(for message: ChatMessage) {
+        guard let host, !host.sendIsStreaming else { return }
+        guard let proxyModelID = host.privacyProxyModelIDForSend() else {
+            host.showBannerForSend("Connect NEAR AI Cloud in Account, then send again.")
+            return
+        }
+        guard message.role == .assistant,
+              let assistantIndex = host.sendMessages.firstIndex(where: { $0.id == message.id }),
+              let userMessage = host.sendMessages[..<assistantIndex].last(where: { $0.role == .user }) else {
+            host.showBannerForSend("No prompt found to retry through the privacy proxy.")
+            return
+        }
+        let promptAttachments = host.promptOnlyAttachmentsForSend(from: userMessage.attachments)
+        let attachments = host.activeAttachmentsForSend(promptAttachments: promptAttachments)
+        let parentResponseID = message.previousResponseID ??
+            host.sendMessages[..<assistantIndex].last(where: { $0.role == .assistant })?.responseID
+        if blockLocalOnlyDocumentsIfNeeded(
+            text: userMessage.text,
+            actionSurfaceText: userMessage.text,
+            attachments: attachments,
+            appendUserMessage: false,
+            modelOverride: proxyModelID
+        ) {
+            return
+        }
+        if let conversationID = host.sendSelectedConversation?.id {
+            host.sendMessageTimelineStore.clearSelectedResponseVariant(for: conversationID)
+        }
+        var updatedMessages = host.sendMessages
+        updatedMessages.removeSubrange(assistantIndex..<updatedMessages.endIndex)
+        host.sendMessages = updatedMessages
+        host.showBannerForSend("Answering via privacy proxy for this turn. Your default model is unchanged.")
+        host.sendStreamTask = Task { [weak self] in
+            _ = await self?.send(
+                userMessage.text,
+                attachments: attachments,
+                previousResponseIDOverride: parentResponseID,
+                initiator: "proxy_retry",
+                appendUserMessage: false,
+                modelOverride: proxyModelID
+            )
+        }
+    }
+
     func editAndResend(_ message: ChatMessage, replacementText: String) {
         guard let host, !host.sendIsStreaming else { return }
         let text = host.normalizedSendDraftInput(replacementText).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -670,7 +714,10 @@ final class ChatSendCoordinator {
                 previousResponseID: failurePreviousResponseID
             )
             if let selectedConversation = host.sendSelectedConversation,
-               host.sendMessages.contains(where: { host.isExternalModelForSend($0.model ?? "") }) {
+               host.sendMessages.contains(where: { message in
+                   host.isExternalModelForSend(message.model ?? "") ||
+                       ["failed", "cancelled", "approval"].contains(message.status.lowercased())
+               }) {
                 host.saveLocalMessagesForSend(conversationID: selectedConversation.id)
             }
             host.showBannerForSend(displayError)

@@ -20,15 +20,15 @@ struct SetupCardRecommendationView: View {
                     Label(recommendation.actionTitle, systemImage: recommendation.actionSymbolName)
                         .font(.caption.weight(.bold))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 36)
+                        .frame(minHeight: 44)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.primaryAction)
-                .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.control))
             }
         }
         .padding(12)
-        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.control))
     }
 }
 
@@ -204,11 +204,11 @@ struct SetupAgentMissionSection: View {
                         Label("Use mission", systemImage: "terminal")
                             .font(.caption.weight(.bold))
                             .frame(maxWidth: .infinity)
-                            .frame(height: 36)
+                            .frame(minHeight: 44)
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.primaryAction)
-                    .background(Color.secondarySurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(Color.secondarySurface, in: RoundedRectangle.app(AppRadius.control))
                     .accessibilityHint("Reopens setup defaults and fills the saved agent mission without sending.")
                 }
             }
@@ -273,7 +273,7 @@ private struct SetupPromptSuggestionChip: View {
             .foregroundStyle(Color.textSecondary)
             .lineLimit(1)
             .padding(.horizontal, 12)
-            .frame(height: 32)
+            .frame(minHeight: 44)
             .background(Color.appSecondaryBackground, in: Capsule())
             .overlay {
                 Capsule()

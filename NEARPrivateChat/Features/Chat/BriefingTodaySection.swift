@@ -88,12 +88,13 @@ struct TodaySection: View {
             Spacer(minLength: 12)
             Button(action: onNewBriefing) {
                 Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.appPanelBackground)
                     .frame(width: 32, height: 32)
                     .background(Color.actionPrimary, in: Circle())
             }
             .buttonStyle(.plain)
+            .minimumTouchTarget()
             .accessibilityLabel("New workflow")
         }
     }
@@ -113,4 +114,3 @@ struct TodaySection: View {
         }
     }
 }
-

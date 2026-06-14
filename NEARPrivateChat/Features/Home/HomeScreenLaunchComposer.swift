@@ -8,6 +8,8 @@ extension HomeScreen {
             suggestions: homeLaunchSuggestions,
             selectedSuggestionID: homeStore.selectedHomeLaunchSuggestionID,
             selectedProjectName: chatStore.selectedProject?.name,
+            routeTitle: chatStore.isCouncilModeEnabled ? "Council" : "Private route",
+            routeDetail: homeLaunchRouteDetail,
             actionTitle: homeLaunchActionTitle,
             actionSymbolName: homeLaunchActionSymbolName,
             actionEnabled: homeLaunchActionEnabled,
@@ -16,5 +18,18 @@ extension HomeScreen {
         )
     }
 
+    var homeLaunchRouteDetail: String {
+        if chatStore.isCouncilModeEnabled {
+            return chatStore.activeCouncilRouteSummary
+        }
+        if ChatStore.shouldDiscloseAutoLiveWeb(
+            sourceMode: chatStore.sourceMode,
+            researchModeEnabled: chatStore.researchModeEnabled,
+            prompt: homeStore.homeLaunchDraft
+        ) {
+            return "\(chatStore.selectedModelDisplayName) · Web"
+        }
+        return chatStore.selectedModelDisplayName
+    }
 
 }

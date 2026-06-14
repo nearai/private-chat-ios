@@ -64,12 +64,21 @@ enum MathFormulaTextStyle: Equatable {
     case upright
 
     func font(scale: CGFloat) -> Font {
-        let size = max(9, 17 * scale)
+        let textStyle: Font.TextStyle
+        switch scale {
+        case 0.95...:
+            textStyle = .body
+        case 0.72..<0.95:
+            textStyle = .callout
+        default:
+            textStyle = .caption
+        }
+
         switch self {
         case .math:
-            return .system(size: size, design: .serif).italic()
+            return .system(textStyle, design: .serif).italic()
         case .upright:
-            return .system(size: size, design: .serif)
+            return .system(textStyle, design: .serif)
         }
     }
 }
@@ -129,7 +138,7 @@ private struct MathFormulaNodeView: View {
         case let .squareRoot(radicand):
             HStack(alignment: .firstTextBaseline, spacing: 1) {
                 Text("√")
-                    .font(.system(size: max(14, 22 * scale), design: .serif))
+                    .font(.system(scale >= 0.95 ? .title3 : .body, design: .serif))
                 VStack(spacing: 1) {
                     Rectangle()
                         .fill(Color.primary.opacity(0.75))

@@ -164,7 +164,7 @@ struct CapabilitiesView: View {
         let needsAttention = connectionDiagnostics.privateLooksUnauthenticated
         return HStack(spacing: 12) {
             Image(systemName: needsAttention ? "exclamationmark.triangle.fill" : "waveform.path.ecg")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.body.weight(.semibold))
                 .foregroundStyle(needsAttention ? Color.proofStale : Color.textSecondary)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {

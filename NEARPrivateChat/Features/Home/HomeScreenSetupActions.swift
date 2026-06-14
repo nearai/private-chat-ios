@@ -2,7 +2,33 @@ import SwiftUI
 
 extension HomeScreen {
     func previewText(for conversation: ConversationSummary) -> String {
-        chatStore.cachedConversationPreview(for: conversation.id) ?? "Tap to continue this conversation."
+        HomeConversationPreviewFormatter.preview(
+            cachedPreview: chatStore.cachedConversationPreview(for: conversation.id),
+            title: conversation.title
+        )
+    }
+
+    func hasSourceCue(for conversation: ConversationSummary) -> Bool {
+        chatStore.cachedConversationHasSourceCue(for: conversation.id) ||
+            HomeConversationPreviewFormatter.hasSourceCue(
+            cachedPreview: chatStore.cachedConversationPreview(for: conversation.id),
+            title: conversation.title
+        )
+    }
+
+    func sourceSummary(for conversation: ConversationSummary) -> String? {
+        if let summary = chatStore.cachedConversationSourceSummary(for: conversation.id) {
+            return summary
+        }
+        return hasSourceCue(for: conversation) ? "Sources" : nil
+    }
+
+    func isRecoveryConversation(_ conversation: ConversationSummary) -> Bool {
+        HomeConversationRecoveryPolicy.isRecovery(
+            title: conversation.title,
+            preview: previewText(for: conversation),
+            hasSourceCue: hasSourceCue(for: conversation)
+        )
     }
 
     func projectName(for conversation: ConversationSummary) -> String? {

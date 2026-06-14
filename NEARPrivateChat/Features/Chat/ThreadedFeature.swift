@@ -13,8 +13,8 @@ struct BriefingFollowUpResult {
     var text: String?
     var widget: MessageWidget?
     var error: String?
-    /// When a failure can be retried through the privacy proxy, the model to
-    /// use — surfaces a one-tap "Use privacy proxy" button on the failed reply.
+    /// Restricted private-route failures can carry a proxy model for a
+    /// disclosed one-tap retry. Model/account failures leave this nil.
     var proxyModelID: String?
 
     var succeeded: Bool {
@@ -75,6 +75,8 @@ struct BriefingDelivery: Identifiable, Hashable {
     var body: String? = nil       // plain body (collapsed deliveries)
     var extra: String? = nil      // "+ Israel strikes Beirut · 2 more"
     var sources: [BriefingSourceTag] = []
+    var sourceStatusText: String? = nil
+    var verifiedModel: String? = nil
     var replyCount: Int = 0
     var unread: Bool = false
     var collapsed: Bool = false
@@ -101,6 +103,7 @@ struct ThreadedBriefingView: View {
     @State private var isRunning = false
     @State private var isReplying = false
     @State private var showingAccountEditor = false
+    @State private var showingActions = false
     @State private var accountInput = ""
 
     init(
@@ -150,7 +153,7 @@ struct ThreadedBriefingView: View {
                 HStack(spacing: 8) {
                     NearMark(size: 18)
                     Text("NEAR is thinking…")
-                        .font(.system(size: 12))
+                        .font(.caption2)
                         .foregroundStyle(Color.textTertiary)
                     Spacer(minLength: 0)
                 }
@@ -169,6 +172,9 @@ struct ThreadedBriefingView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Track a different NEAR mainnet account in this briefing.")
+        }
+        .confirmationDialog("Briefing actions", isPresented: $showingActions, titleVisibility: .visible) {
+            briefingActionButtons
         }
     }
 
@@ -196,63 +202,72 @@ struct ThreadedBriefingView: View {
         HStack(spacing: 4) {
             Button(action: onClose) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(Color.actionPrimary)
                     .frame(width: 44, height: 44)
             }
             Spacer(minLength: 0)
             VStack(spacing: 1) {
                 Text(title)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.headline.weight(.semibold))
                     .foregroundStyle(.primary)
                 Text(schedule)
-                    .font(.system(size: 11))
+                    .font(.caption2)
                     .foregroundStyle(Color.textTertiary)
             }
             Spacer(minLength: 0)
-            Menu {
-                if store != nil, briefingID != nil {
-                    Button { runNow() } label: { Label("Run now", systemImage: "arrow.clockwise") }
-                        .accessibilityIdentifier("tracker.runNow")
-                    // A one-shot alert auto-pauses after firing; let the user re-arm it.
-                    if let briefing = liveBriefing, briefing.isConditional, briefing.isPaused {
-                        Button { reArm() } label: { Label("Re-arm alert", systemImage: "bell.badge") }
-                    }
-                    if liveBriefing?.kind == .nearAccount {
-                        Button {
-                            accountInput = liveBriefing?.accountID ?? ""
-                            showingAccountEditor = true
-                        } label: { Label("Change account", systemImage: "at") }
-                    }
-                    Button(role: .destructive) { deleteBriefing() } label: { Label("Delete briefing", systemImage: "trash") }
-                } else {
-                    Button("Mark all read") {}
-                }
+            Button {
+                showingActions = true
             } label: {
                 Group {
                     if isRunning {
                         ProgressView().controlSize(.small)
                     } else {
-                        Image(systemName: "ellipsis").font(.system(size: 18, weight: .semibold))
+                        Image(systemName: "ellipsis")
+                            .font(.title3.weight(.semibold))
                     }
                 }
                 .foregroundStyle(Color.textSecondary)
                 .frame(width: 44, height: 44)
+                .accessibilityHidden(true)
             }
             .disabled(isRunning)
+            .accessibilityLabel("More briefing actions")
+            .accessibilityIdentifier("threadedBriefing.moreActions")
         }
         .padding(.horizontal, 8)
         .frame(height: 52)
+    }
+
+    @ViewBuilder
+    private var briefingActionButtons: some View {
+        if store != nil, briefingID != nil {
+            Button("Run now") { runNow() }
+                .accessibilityIdentifier("tracker.runNow")
+            // A one-shot alert auto-pauses after firing; let the user re-arm it.
+            if let briefing = liveBriefing, briefing.isConditional, briefing.isPaused {
+                Button("Re-arm alert") { reArm() }
+            }
+            if liveBriefing?.kind == .nearAccount {
+                Button("Change account") {
+                    accountInput = liveBriefing?.accountID ?? ""
+                    showingAccountEditor = true
+                }
+            }
+            Button("Delete briefing", role: .destructive) { deleteBriefing() }
+        } else {
+            Button("Mark all read") {}
+        }
     }
 
     private var replyComposer: some View {
         HStack(spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(Color.textTertiary)
                 TextField("Reply in thread…", text: $replyText, axis: .vertical)
-                    .font(.system(size: 15))
+                    .font(.subheadline)
                     .lineLimit(1...4)
             }
             .padding(.horizontal, 14)
@@ -262,10 +277,13 @@ struct ThreadedBriefingView: View {
 
             Button(action: sendReply) {
                 Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 30))
+                    .font(.title.weight(.semibold))
                     .foregroundStyle(replyTrimmed.isEmpty || isReplying ? Color.textTertiary : Color.actionPrimary)
+                    .frame(width: 44, height: 44)
             }
             .disabled(replyTrimmed.isEmpty || isReplying)
+            .accessibilityLabel("Send thread reply")
+            .accessibilityIdentifier("threadedBriefing.sendReply")
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -308,7 +326,7 @@ struct ThreadedBriefingView: View {
         AppHaptics.lightImpact()
 
         // No backend wired (previews) → the user reply is recorded locally only.
-        guard let onAskFollowUp else { return }
+        guard onAskFollowUp != nil else { return }
         let context = [
             ThreadedBriefingView.replyContext(for: deliveries[index]),
             ThreadedBriefingView.transcript(of: priorReplies)
@@ -318,7 +336,7 @@ struct ThreadedBriefingView: View {
     }
 
     /// Runs a follow-up (optionally through the privacy proxy) and appends the
-    /// reply. Failed private replies carry a one-tap proxy retry offer.
+    /// reply. Only restricted private-route failures carry a proxy retry offer.
     private func runFollowUp(question: String, context: String, viaProxyModelID: String?, verifiedLabel: String) {
         guard let onAskFollowUp else { isReplying = false; return }
         Task {

@@ -12,10 +12,10 @@ struct WidgetActionCandidateFieldList: View {
                 }
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: field.symbolName)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.actionPrimary)
                         .frame(width: 28, height: 28)
-                        .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .background(Color.actionTint, in: RoundedRectangle.app(AppRadius.pill))
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(field.title)
@@ -61,10 +61,11 @@ struct WidgetActionCandidateFieldList: View {
                 symbolName: "person.2"
             ))
         }
-        if !action.missingFields.isEmpty {
+        let missingFields = action.reviewMissingFields
+        if !missingFields.isEmpty {
             result.append(WidgetActionCandidateField(
                 title: "Needs",
-                value: action.missingFields.joined(separator: ", "),
+                value: missingFields.joined(separator: ", "),
                 symbolName: "exclamationmark.triangle"
             ))
         }
@@ -106,23 +107,30 @@ struct WidgetGenericBody: View {
 
 struct WidgetSourceDot: View {
     let source: WidgetNewsSource
+    var size: CGFloat = 14
 
     var body: some View {
-        // Widget sources are model-emitted JSON, so the favicon stays
-        // local-only (default allowsNetworkFavicon: false) — the domain is
-        // used only for the on-device tint and letter.
+        // Widget sources are model-emitted JSON. Known publisher domains/labels
+        // can still resolve network favicons; unknown sources always stay local.
         SourceFaviconView(
-            domain: source.domain,
-            size: 14,
-            fallbackText: String(source.label.prefix(1).uppercased()),
+            domain: source.faviconIdentity,
+            size: size,
+            fallbackText: source.fallbackMark,
             fallbackColor: dotColor,
-            cornerRadius: 4
+            cornerRadius: max(4, size * 0.26),
+            borderColor: Color.white.opacity(0.72),
+            borderWidth: 0.7,
+            allowsNetworkFavicon: allowsNetworkFavicon
         )
     }
 
     private var dotColor: Color {
         if let hex = source.color, let c = widgetColor(fromHex: hex) { return c }
-        return SourceFaviconResolver.fallbackTint(for: source.domain)
+        return SourceFaviconResolver.fallbackTint(for: source.faviconIdentity)
+    }
+
+    private var allowsNetworkFavicon: Bool {
+        source.allowsNetworkFavicon && size >= 18
     }
 }
 

@@ -19,11 +19,11 @@ extension InputBar {
             ProxyRetryCard(
                 offer: offer,
                 proxyDisplayName: offer.proxyModelID.map { chatStore.pickerModels.first(where: { $0.id == offer.proxyModelID })?.displayName ?? ModelOption.humanize(modelID: $0) },
-                onAccept: { chatStore.acceptProxyRetry() },
-                onAddCloudKey: {
-                    chatStore.declineProxyRetry()
-                    chatStore.performRouteReadinessRecovery(.addNearCloudKey)
+                onOpenAccount: {
+                    accountSettingsDeepLink = nil
+                    showingAccountSettings = true
                 },
+                onAccept: { chatStore.acceptProxyRetry() },
                 onDecline: { chatStore.declineProxyRetry() }
             )
         }
@@ -57,9 +57,9 @@ extension InputBar {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .frame(minHeight: 44)
-                    .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.control))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        RoundedRectangle.app(AppRadius.control)
                             .stroke(Color.appBorder, lineWidth: 0.5)
                     }
                 }
@@ -109,7 +109,7 @@ extension InputBar {
                             chatStore.retryPrivateRouteNow()
                         } label: {
                             ComposerRouteChip(
-                                title: "Private busy",
+                                title: "Private limited",
                                 symbolName: "exclamationmark.shield",
                                 isActive: true,
                                 showsChevron: false
@@ -117,7 +117,7 @@ extension InputBar {
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("composer.chip.privateBusy")
-                        .accessibilityLabel("Private route busy")
+                        .accessibilityLabel("Private route limited")
                         .accessibilityHint("Tap to re-enable the private route and retry on the next message.")
                     }
 
@@ -144,6 +144,7 @@ extension InputBar {
 
     var composerRouteSummary: (title: String, detail: String, symbolName: String)? {
         var details: [String] = []
+        var needsProminentSummary = false
 
         if chatStore.isCouncilModeEnabled {
             let count = max(chatStore.activeCouncilModels.count, chatStore.defaultCouncilModels.count)
@@ -154,6 +155,8 @@ extension InputBar {
 
         if chatStore.sourceMode != .auto {
             details.append(composerSourceTitle)
+        } else if autoSourceModeInfersLiveWeb {
+            details.append("Web inferred")
         }
 
         if researchButtonActive {
@@ -166,13 +169,15 @@ extension InputBar {
 
         if chatStore.selectedRouteKind == .nearCloud, !chatStore.nearCloudKeyConfigured {
             details.append("key needed")
+            needsProminentSummary = true
         }
 
         if chatStore.selectedRouteKind == .ironclawHosted, !chatStore.ironclawRemoteWorkstationAvailable {
             details.append("Agent setup needed")
+            needsProminentSummary = true
         }
 
-        guard !details.isEmpty else { return nil }
+        guard !details.isEmpty, needsProminentSummary else { return nil }
         let title = chatStore.isCouncilModeEnabled ? "Route config" : "Next send"
         let symbol = chatStore.isCouncilModeEnabled ? "person.3.fill" : composerModelSymbolName
         return (title, details.joined(separator: " · "), symbol)
@@ -181,14 +186,6 @@ extension InputBar {
     var selectedModelSupportsReasoningEffort: Bool {
         guard let model = chatStore.selectedModelOption else { return false }
         return model.isRecommendedReasoningModel || model.isNearCloudModel
-    }
-
-    func reasoningEffortMenuTitle(for effort: ModelReasoningEffort) -> String {
-        effort == .automatic ? "Auto effort" : "\(effort.title) effort"
-    }
-
-    func reasoningEffortMenuSymbolName(for effort: ModelReasoningEffort) -> String {
-        effort == chatStore.advancedModelParams.reasoningEffort ? "checkmark" : "gauge.medium"
     }
 
     var composerModelSymbolName: String {
@@ -211,9 +208,12 @@ extension InputBar {
         if researchButtonActive {
             return "Research"
         }
+        if autoSourceModeInfersLiveWeb {
+            return "Web"
+        }
         switch chatStore.sourceMode {
         case .auto:
-            return "Source"
+            return "Auto"
         case .web:
             return "Web"
         case .links:
@@ -241,14 +241,21 @@ extension InputBar {
             ComposerRouteChip(
                 title: composerSourceTitle,
                 symbolName: composerSourceSymbolName,
-                isActive: chatStore.sourceMode != .auto || chatStore.researchModeEnabled,
+                isActive: chatStore.sourceMode != .auto || chatStore.researchModeEnabled || autoSourceModeInfersLiveWeb,
                 showsChevron: true
             )
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("composer.chip.source")
-        .accessibilityLabel("Source mode \(composerSourceTitle)")
+        .accessibilityLabel(sourceModeAccessibilityLabel)
         .accessibilityHint("Choose web, saved link, file, combined, or research context for the next message.")
+    }
+
+    var sourceModeAccessibilityLabel: String {
+        if autoSourceModeInfersLiveWeb {
+            return "Source mode Web inferred from draft"
+        }
+        return "Source mode \(composerSourceTitle)"
     }
 
     @ViewBuilder
@@ -282,17 +289,166 @@ extension InputBar {
             }
         }
     }
+}
 
-    @ViewBuilder
-    var reasoningEffortOptionsDialog: some View {
-        ForEach(ModelReasoningEffort.allCases) { effort in
-            Button(reasoningEffortMenuTitle(for: effort)) {
-                chatStore.setReasoningEffort(effort)
+struct ReasoningEffortOptionsSheet: View {
+    @EnvironmentObject private var chatStore: ChatStore
+    @Environment(\.dismiss) private var dismiss
+
+    let onAdvanced: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    reasoningHeader
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(ModelReasoningEffort.allCases.enumerated()), id: \.element.id) { index, effort in
+                            ReasoningEffortOptionRow(
+                                effort: effort,
+                                isSelected: effort == chatStore.advancedModelParams.reasoningEffort
+                            ) {
+                                chatStore.setReasoningEffort(effort)
+                                dismiss()
+                            }
+                            .accessibilityIdentifier("reasoning.effort.\(effort.rawValue)")
+
+                            if index < ModelReasoningEffort.allCases.count - 1 {
+                                Divider()
+                                    .padding(.leading, 54)
+                            }
+                        }
+                    }
+                    .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.control))
+                    .overlay {
+                        RoundedRectangle.app(AppRadius.control)
+                            .stroke(Color.appBorder, lineWidth: 1)
+                    }
+
+                    Button {
+                        dismiss()
+                        onAdvanced()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "slider.horizontal.3")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Color.actionPrimaryText)
+                                .frame(width: 30, height: 30)
+                                .background(Color.actionFill, in: RoundedRectangle.app(AppRadius.control))
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Advanced model settings")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(Color.textPrimary)
+                                Text("Temperature, top-p, and max tokens")
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(Color.textSecondary)
+                                    .lineLimit(1)
+                            }
+
+                            Spacer(minLength: 8)
+
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(Color.textTertiary)
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+                        .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.control))
+                        .overlay {
+                            RoundedRectangle.app(AppRadius.control)
+                                .stroke(Color.appBorder, lineWidth: 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("reasoning.advanced-settings")
+                }
+                .padding(18)
+            }
+            .background(Color.appBackground)
+            .navigationTitle("Reasoning")
+            .platformInlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
             }
         }
+        .platformMediumDetent()
+    }
 
-        Button("Advanced model settings") {
-            openModelPicker(openingCouncil: false)
+    private var reasoningHeader: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "gauge.medium")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(Color.actionPrimaryText)
+                .frame(width: 36, height: 36)
+                .background(Color.actionFill, in: RoundedRectangle.app(AppRadius.control))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Reasoning effort")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(Color.textPrimary)
+                Text("Current: \(chatStore.advancedModelParams.reasoningEffort.title)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.textSecondary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct ReasoningEffortOptionRow: View {
+    let effort: ModelReasoningEffort
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(isSelected ? Color.actionPrimary : Color.textTertiary)
+                    .frame(width: 28, height: 28)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(effort.sheetTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.textPrimary)
+                    Text(effort.detail)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Color.textSecondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+            .background(isSelected ? Color.actionFill.opacity(0.34) : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .minimumTouchTarget()
+    }
+}
+
+private extension ModelReasoningEffort {
+    var sheetTitle: String {
+        switch self {
+        case .automatic:
+            return "Auto"
+        case .low:
+            return "Low effort"
+        case .medium:
+            return "Medium effort"
+        case .high:
+            return "High effort"
         }
     }
 }

@@ -27,7 +27,8 @@ struct MessageWidgetCard: View {
             title: widget.title,
             time: widget.time,
             freshness: widget.freshness,
-            followUpPlaceholder: widget.followUp,
+            followUpPlaceholder: widget.followUpLabel,
+            followUpDraft: widget.followUpDraft,
             onFollowUp: onFollowUp
         ) {
             switch widget.kind {
@@ -52,5 +53,6 @@ struct MessageWidgetCard: View {
             }
         }
         .frame(maxWidth: 560, alignment: .leading)
+        .accessibilityIdentifier("message.widget.\(widget.kind.rawValue)")
     }
 }

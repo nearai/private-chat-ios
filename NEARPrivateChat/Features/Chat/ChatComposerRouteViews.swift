@@ -9,7 +9,7 @@ struct ComposerRouteChip: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: symbolName)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.caption.weight(.semibold))
             Text(title)
                 .font(.footnote)
                 .fontWeight(.medium)
@@ -18,7 +18,7 @@ struct ComposerRouteChip: View {
                 .frame(maxWidth: 180, alignment: .leading)
             if showsChevron {
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
                     .opacity(0.55)
             }
         }
@@ -48,7 +48,7 @@ struct ComposerRouteIconChip: View {
 
     var body: some View {
         Image(systemName: symbolName)
-            .font(.system(size: 13, weight: .semibold))
+            .font(.caption.weight(.semibold))
             .foregroundStyle(isActive ? Color.actionPress : Color.textPrimary)
             .frame(width: 30, height: 30)
             .background(background, in: Capsule())
@@ -109,7 +109,7 @@ struct RouteReadinessRecoveryCard: View {
 
                 if issue.recoveryAction != .switchToPrivate {
                     Button(action: onSwitchPrivate) {
-                        Text("Use Private")
+                        Text("Use private route")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Color.primaryAction)
                             .frame(maxWidth: .infinity)
@@ -125,7 +125,7 @@ struct RouteReadinessRecoveryCard: View {
             }
 
             Button(action: onViewCapabilities) {
-                    Label("Open Capabilities", systemImage: "slider.horizontal.3")
+                    Label("Route settings", systemImage: "slider.horizontal.3")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.primaryAction)
             }
@@ -166,8 +166,8 @@ struct RouteReadinessRecoveryCard: View {
 struct ProxyRetryCard: View {
     let offer: ProxyRetryOffer
     let proxyDisplayName: String?
+    let onOpenAccount: () -> Void
     let onAccept: () -> Void
-    let onAddCloudKey: () -> Void
     let onDecline: () -> Void
 
     var body: some View {
@@ -180,7 +180,7 @@ struct ProxyRetryCard: View {
                     .background(Color.appSymbolBlueBackground, in: RoundedRectangle.app(AppRadius.pill))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Private route is busy")
+                    Text("Private route limited")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.primary)
                     Text(message)
@@ -191,8 +191,8 @@ struct ProxyRetryCard: View {
             }
 
             HStack(spacing: 8) {
-                Button(action: offer.proxyModelID == nil ? onAddCloudKey : onAccept) {
-                    Label(primaryTitle, systemImage: offer.proxyModelID == nil ? "key" : "cloud")
+                Button(action: onOpenAccount) {
+                    Label("Open Account", systemImage: "person.crop.circle.badge.exclamationmark")
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
@@ -202,21 +202,15 @@ struct ProxyRetryCard: View {
                         .background(Color.primaryAction, in: RoundedRectangle.app(AppRadius.pill))
                 }
                 .buttonStyle(.plain)
-                .accessibilityIdentifier("message.recovery.proxy")
+                .accessibilityIdentifier("message.recovery.account")
 
-                Button(action: onDecline) {
-                    Text("Not now")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.primaryAction)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 44)
-                        .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.pill))
-                        .overlay {
-                            RoundedRectangle.app(AppRadius.pill)
-                                .stroke(Color.appBorder, lineWidth: 1)
-                        }
+                if offer.proxyModelID == nil {
+                    secondaryButton(title: "Not now", symbolName: nil, action: onDecline)
+                        .accessibilityIdentifier("message.recovery.dismiss")
+                } else {
+                    secondaryButton(title: "Use proxy once", symbolName: "eye.slash", action: onAccept)
+                        .accessibilityIdentifier("message.recovery.proxy")
                 }
-                .buttonStyle(.plain)
             }
         }
         .padding(10)
@@ -226,18 +220,38 @@ struct ProxyRetryCard: View {
                 .stroke(Color.brandAccent.opacity(0.16), lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Private route is busy. \(message)")
+        .accessibilityLabel("Private route limited. \(message)")
     }
 
     private var message: String {
         if offer.proxyModelID == nil {
-            return "Add a NEAR AI Cloud key to answer this turn through the anonymizing privacy proxy, or retry private in a moment."
+            return "Retry private first. If this keeps failing, refresh sign-in. Add a Cloud key only if you want a one-turn proxy answer."
         }
         let name = proxyDisplayName ?? "a cloud model"
-        return "Answer this turn through the anonymizing privacy proxy (\(name)). Your default model stays private."
+        return "Answer this turn through the anonymizing privacy proxy (\(name)) only if private keeps failing. Your default model stays private."
     }
 
-    private var primaryTitle: String {
-        offer.proxyModelID == nil ? "Add NEAR AI Cloud key" : "Answer via privacy proxy"
+    private func secondaryButton(title: String, symbolName: String?, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Group {
+                if let symbolName {
+                    Label(title, systemImage: symbolName)
+                } else {
+                    Text(title)
+                }
+            }
+            .font(.caption.weight(.semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .foregroundStyle(Color.primaryAction)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 44)
+            .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.pill))
+            .overlay {
+                RoundedRectangle.app(AppRadius.pill)
+                    .stroke(Color.appBorder, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
     }
 }

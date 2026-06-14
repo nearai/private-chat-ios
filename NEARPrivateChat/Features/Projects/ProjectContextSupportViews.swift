@@ -97,7 +97,7 @@ struct ProjectActionShelf: View {
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: action.symbolName)
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.body.weight(.semibold))
                             .foregroundStyle(Color.actionPrimary)
                             .frame(width: 30, height: 30)
                             .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -116,7 +116,7 @@ struct ProjectActionShelf: View {
                         Spacer(minLength: 8)
 
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(Color.textTertiary)
                     }
                     .padding(12)
@@ -158,7 +158,7 @@ struct ProjectContextRoutePreviewRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: preview.symbolName)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(preview.usesAttentionStyle ? Color.proofStale : Color.actionPrimary)
                 .frame(width: 26, height: 26)
                 .background(
@@ -208,7 +208,7 @@ struct ProjectFilePill: View {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .fill(Color.actionTint)
                         Image(systemName: symbolName)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.footnote.weight(.semibold))
                             .foregroundStyle(Color.actionPrimary)
                     }
                     .frame(width: 28, height: 28)
@@ -216,7 +216,7 @@ struct ProjectFilePill: View {
                     Spacer(minLength: 0)
 
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(Color.textTertiary)
                         .frame(width: 24, height: 24)
                 }
@@ -270,7 +270,7 @@ struct ProjectAddFilePill: View {
         Button(action: action) {
             VStack(spacing: 8) {
                 Image(systemName: symbolName)
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.title3.weight(.semibold))
                 Text(title)
                     .font(.caption.weight(.semibold))
             }
@@ -314,7 +314,7 @@ struct ProjectInstructionsCard: View {
                 }
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(Color.textTertiary)
                     .padding(.top, 3)
             }
@@ -342,7 +342,7 @@ struct ProjectMemoryRow: View {
         ZStack(alignment: .bottom) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: symbolName)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.actionPrimary)
                     .frame(width: 28, height: 28)
                     .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -387,7 +387,7 @@ struct ProjectNoteRow: View {
                 Button(action: onOpen) {
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: "note.text")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Color.actionPrimary)
                             .frame(width: 28, height: 28)
                             .background(Color.actionTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -431,7 +431,7 @@ struct ProjectNoteRow: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(Color.textTertiary)
                         .frame(width: 30, height: 30)
                 }
@@ -494,7 +494,7 @@ struct ProjectChatRow: View {
                         .lineLimit(1)
 
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.textTertiary)
                 }
                 .padding(.horizontal, 14)

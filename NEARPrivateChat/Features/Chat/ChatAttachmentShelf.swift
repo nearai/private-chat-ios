@@ -57,7 +57,7 @@ struct AttachmentStrip: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Color.brandAccent)
                             .frame(width: 28, height: 28)
-                            .background(Color.brandAccent.opacity(0.09), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .background(Color.brandAccent.opacity(0.09), in: RoundedRectangle.app(AppRadius.pill))
                         VStack(alignment: .leading, spacing: 1) {
                             // Middle truncation keeps both the document name's start
                             // and its extension visible on narrow widths.
@@ -85,7 +85,7 @@ struct AttachmentStrip: View {
                     }
                     .padding(.horizontal, 8)
                     .frame(height: 56)
-                    .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.pill))
                 }
             }
         }

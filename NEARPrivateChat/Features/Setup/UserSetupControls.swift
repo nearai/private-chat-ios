@@ -183,7 +183,7 @@ struct SetupExampleChip: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .padding(.horizontal, 10)
-                .frame(height: 38)
+                .frame(minHeight: 44)
                 .background(isSelected ? Color.selectionSubtle : Color.panel, in: Capsule())
                 .overlay {
                     Capsule()
@@ -249,7 +249,7 @@ struct SetupChoiceRow: View {
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(isSelected ? Color.brandAccent : .secondary)
                     .frame(width: 40, height: 40)
-                    .background(isSelected ? Color.appSymbolBlueBackground : Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(isSelected ? Color.appSymbolBlueBackground : Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.control))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(.body.weight(.semibold))
@@ -265,9 +265,9 @@ struct SetupChoiceRow: View {
                     .foregroundStyle(isSelected ? Color.brandAccent : Color.secondary.opacity(0.35))
             }
             .padding(12)
-            .background(isSelected ? Color.appSelection : Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(isSelected ? Color.appSelection : Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.control))
             .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle.app(AppRadius.control)
                     .stroke(isSelected ? Color.brandAccent.opacity(0.14) : Color.appBorder, lineWidth: 1)
             }
         }

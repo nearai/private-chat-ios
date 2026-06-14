@@ -99,12 +99,7 @@ struct AppEnvironment {
             }
             return outcome
         }
-        chatStore.onCreateTracker = { [weak briefingStore] briefing in
-            guard let briefingStore else { return }
-            briefingStore.add(briefing)
-            Task { await briefingStore.run(briefing) }
-        }
-        chatStore.trackersProvider = { [weak briefingStore] in briefingStore?.briefings ?? [] }
+        configureTrackerPersistence(chatStore: chatStore, briefingStore: briefingStore)
         return AppEnvironment(
             api: api,
             authAPI: api,
@@ -130,5 +125,13 @@ struct AppEnvironment {
             routeHealthMonitor: routeHealthMonitor,
             connectionDiagnostics: connectionDiagnostics
         )
+    }
+
+    @MainActor
+    static func configureTrackerPersistence(chatStore: ChatStore, briefingStore: BriefingStore) {
+        chatStore.onCreateTracker = { [weak briefingStore] briefing in
+            briefingStore?.add(briefing)
+        }
+        chatStore.trackersProvider = { [weak briefingStore] in briefingStore?.briefings ?? [] }
     }
 }

@@ -108,7 +108,7 @@ private struct DemoAgentTimelineStep: View {
                                     .frame(width: 18, height: 18)
                                     .overlay {
                                         Image(systemName: "arrow.up.right")
-                                            .font(.system(size: 9, weight: .bold))
+                                            .font(.caption2.weight(.bold))
                                             .foregroundStyle(.white)
                                     }
                                 VStack(alignment: .leading, spacing: 0) {
@@ -122,7 +122,7 @@ private struct DemoAgentTimelineStep: View {
                                 }
                             }
                             .padding(.horizontal, 10)
-                            .frame(height: 42)
+                            .frame(height: 44)
                             .background(Color.appSecondaryBackground, in: Capsule())
                         }
                     }

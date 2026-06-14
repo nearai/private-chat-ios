@@ -230,7 +230,8 @@ struct WebSearchSource: Codable, Hashable, Identifiable {
            !publishedAt.isEmpty {
             parts.append(publishedAt)
         }
-        if sourceBadgeLabel == nil, let typeLabel {
+        if let typeLabel,
+           !Self.subtitleHiddenSourceTypes.contains(normalizedType ?? "") {
             parts.append(typeLabel)
         }
         return parts.joined(separator: " · ")
@@ -241,7 +242,7 @@ struct WebSearchSource: Codable, Hashable, Identifiable {
     }
 
     var isWebSearchLike: Bool {
-        guard let normalizedType else { return false }
+        guard let normalizedType else { return safeURL != nil }
         return Self.webSearchLikeTypes.contains(normalizedType)
     }
 
@@ -250,11 +251,11 @@ struct WebSearchSource: Codable, Hashable, Identifiable {
     }
 
     var sourceBadgeLabel: String? {
-        guard let normalizedType else { return nil }
+        guard let normalizedType else { return safeURL == nil ? nil : "Web" }
         switch normalizedType {
         case "news", "newsarticle":
             return "News"
-        case "web", "websearch", "search", "inferred":
+        case "web", "webpage", "website", "websearch", "search", "searchresult", "organic", "inferred", "citation", "urlcitation":
             return "Web"
         default:
             return nil
@@ -321,11 +322,31 @@ struct WebSearchSource: Codable, Hashable, Identifiable {
 
     private static let webSearchLikeTypes: Set<String> = [
         "web",
+        "webpage",
+        "website",
         "websearch",
         "search",
+        "searchresult",
+        "organic",
         "news",
         "newsarticle",
-        "inferred"
+        "inferred",
+        "citation",
+        "urlcitation"
+    ]
+
+    private static let subtitleHiddenSourceTypes: Set<String> = [
+        "web",
+        "webpage",
+        "website",
+        "websearch",
+        "search",
+        "searchresult",
+        "organic",
+        "inferred",
+        "news",
+        "citation",
+        "urlcitation"
     ]
 
     static func cleanedMetadata(_ value: String?, maxLength: Int) -> String? {

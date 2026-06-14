@@ -212,6 +212,25 @@ final class MessageTimelineStore: ObservableObject {
         }
     }
 
+    func applyIfConversationMatches(
+        selectedConversationID: String?,
+        streamEvent event: ResponseStreamEvent,
+        conversationID: String,
+        assistantMessageID: String?,
+        onTitleUpdated: ((String, String) -> Void)? = nil
+    ) {
+        guard ChatStreamEventGate.canApply(
+            selectedConversationID: selectedConversationID,
+            eventConversationID: conversationID
+        ) else { return }
+        apply(
+            streamEvent: event,
+            conversationID: conversationID,
+            assistantMessageID: assistantMessageID,
+            onTitleUpdated: onTitleUpdated
+        )
+    }
+
     func finishAssistantMessage(
         _ messageID: String,
         trustMetadata: (ChatMessage) -> MessageTrustMetadata?

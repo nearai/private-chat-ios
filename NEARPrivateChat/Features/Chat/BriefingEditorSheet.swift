@@ -201,9 +201,9 @@ struct BriefingEditorSheet: View {
                 .textFieldStyle(.plain)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
-                .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.card))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle.app(AppRadius.card)
                         .stroke(Color.appBorder, lineWidth: 1)
                 }
 
@@ -211,9 +211,10 @@ struct BriefingEditorSheet: View {
                 applyBuilderInput(builderInput)
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 32, weight: .semibold))
+                    .font(.title.weight(.semibold))
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(Color.actionPrimary)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .disabled(builderInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

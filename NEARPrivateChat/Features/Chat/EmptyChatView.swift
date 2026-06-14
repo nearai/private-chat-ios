@@ -61,48 +61,42 @@ enum EmptyChatStarterPlanner {
 
         var suggestions = [
             EmptyChatStarterSuggestion(
-                title: "Next actions",
-                symbolName: "checklist",
-                prompt: "Turn this into next moves: trackers, reminders, calendar items, risks, decisions, and exact commands. Preview before creating anything: "
+                title: "Ask",
+                symbolName: "bubble.left.and.text.bubble.right",
+                prompt: "Ask me anything about: "
             ),
             EmptyChatStarterSuggestion(
-                title: "Draft trackers",
-                symbolName: "calendar.badge.clock",
-                prompt: "Turn this into recurring trackers, reminders, and calendar drafts. Include cadence, date, time, timezone, attendees, missing_fields, confidence, and exact commands. Preview before creating anything: "
+                title: "Summarize",
+                symbolName: "text.alignleft",
+                prompt: "Summarize this clearly: "
             ),
             EmptyChatStarterSuggestion(
-                title: "Web research",
+                title: "Research",
                 symbolName: "doc.text.magnifyingglass",
                 prompt: "Research this with sources and cite what matters: ",
                 action: .research
             ),
             EmptyChatStarterSuggestion(
-                title: "Files to actions",
-                symbolName: "folder.badge.gearshape",
-                prompt: "Use attached files or a Project to turn this into actions, trackers, reminders, risks, decisions, and missing facts. Preview before creating anything: ",
+                title: "Use files",
+                symbolName: "paperclip",
+                prompt: "Use the attached files to answer: ",
                 action: .project
-            ),
-            EmptyChatStarterSuggestion(
-                title: "Sources & proof",
-                symbolName: "checkmark.shield",
-                prompt: trustPrompt(for: routeKind, projectName: nil),
-                action: .trust
             )
         ]
 
         if agentAvailable {
             suggestions.append(
                 EmptyChatStarterSuggestion(
-                    title: "Handoff to Agent",
+                    title: "Agent",
                     symbolName: "terminal",
-                    prompt: "Agent mission: define the goal, context to inspect, tools, risks, and verification for this task: ",
+                    prompt: "Draft an Agent mission for this task: ",
                     action: .agent
                 )
             )
         } else if councilAvailable {
             suggestions.append(
                 EmptyChatStarterSuggestion(
-                    title: "Compare with Council",
+                    title: "Council",
                     symbolName: "square.grid.2x2",
                     prompt: "Compare options with Council for: ",
                     action: .council
@@ -121,22 +115,23 @@ enum EmptyChatStarterPlanner {
     ) -> [EmptyChatStarterSuggestion] {
         var suggestions = [
             EmptyChatStarterSuggestion(
-                title: "Brief project",
+                title: "Brief",
                 symbolName: "folder.badge.gearshape",
                 prompt: "Use \(projectName)'s files, links, and notes to brief the next best move."
             ),
             EmptyChatStarterSuggestion(
-                title: "Context to actions",
+                title: "Summarize",
                 symbolName: "list.bullet.clipboard",
-                prompt: "Use \(projectName)'s files, links, and notes to turn this into actions, trackers, reminders, calendar drafts, risks, and decisions. Preview before creating anything."
+                prompt: "Summarize \(projectName)'s context and call out what matters next."
             ),
             EmptyChatStarterSuggestion(
-                title: "Draft trackers",
-                symbolName: "calendar.badge.clock",
-                prompt: "Use \(projectName)'s context to draft recurring trackers, reminders, and calendar items. Include cadence, date, time, timezone, missing_fields, confidence, and exact commands. Preview before creating anything."
+                title: "Research",
+                symbolName: "doc.text.magnifyingglass",
+                prompt: "Use \(projectName)'s context and current sources to answer: ",
+                action: .research
             ),
             EmptyChatStarterSuggestion(
-                title: "Sources & proof",
+                title: "Proof",
                 symbolName: "checkmark.shield",
                 prompt: trustPrompt(for: routeKind, projectName: projectName),
                 action: .trust
@@ -146,16 +141,16 @@ enum EmptyChatStarterPlanner {
         if agentAvailable {
             suggestions.append(
                 EmptyChatStarterSuggestion(
-                    title: "Handoff to Agent",
+                    title: "Agent",
                     symbolName: "terminal",
-                    prompt: "Use \(projectName)'s context to define an Agent mission: goal, files or links to inspect, risks, and verification.",
+                    prompt: "Use \(projectName)'s context to define an Agent mission: goal, context to inspect, risks, and verification.",
                     action: .agent
                 )
             )
         } else if councilAvailable {
             suggestions.append(
                 EmptyChatStarterSuggestion(
-                    title: "Review with Council",
+                    title: "Council",
                     symbolName: "square.grid.2x2",
                     prompt: "Use \(projectName)'s context to compare the Council's answers on the next decision: ",
                     action: .council
@@ -404,7 +399,7 @@ struct EmptyChatView: View {
         } label: {
             HStack(alignment: .center, spacing: 8) {
                 Image(systemName: suggestion.symbolName)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(Color.textSecondary)
                     .frame(width: 24, height: 24)
@@ -419,9 +414,9 @@ struct EmptyChatView: View {
             }
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
-            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.control))
             .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle.app(AppRadius.control)
                     .stroke(Color.appBorder, lineWidth: 1)
             }
         }

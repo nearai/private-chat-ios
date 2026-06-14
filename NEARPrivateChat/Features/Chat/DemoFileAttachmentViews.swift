@@ -148,55 +148,67 @@ struct DemoPrivateAnswerView: View {
         NavigationStack {
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        header
-                            .id("top")
-
+                    VStack(alignment: .leading, spacing: 18) {
                         if let user = chatStore.messages.first(where: { $0.role == .user }) {
-                            Text(user.text)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white)
-                                .padding(12)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.actionPrimary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            HStack {
+                                Spacer(minLength: 44)
+                                Text(user.text)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.primary)
+                                    .padding(.horizontal, 13)
+                                    .padding(.vertical, 11)
+                                    .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            }
+                            .id("top")
                         }
 
                         if let answer {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack(spacing: 8) {
-                                    AssistantAvatar()
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Private model")
-                                            .font(.subheadline.weight(.bold))
-                                        Text("NEAR Private route")
-                                            .font(.caption.weight(.medium))
-                                            .foregroundStyle(.secondary)
-                                    }
+                            HStack(alignment: .top, spacing: 10) {
+                                AssistantAvatar()
+                                    .padding(.top, 2)
+                                VStack(alignment: .leading, spacing: 10) {
+                                    MarkdownMessageText(
+                                        text: answer.text,
+                                        sources: answer.sources,
+                                        textSelectionEnabled: false
+                                    )
+                                        .font(.body)
+
+                                    SearchContextStrip(query: answer.searchQuery, sources: answer.sources)
+                                        .id("sources")
+
+                                    DemoAnswerStatusFooter(sourceCount: answer.sources.count)
+                                        .id("proof")
                                 }
-
-                                MarkdownMessageText(text: answer.text, sources: answer.sources)
-                                    .font(.body)
-
-                                SearchContextStrip(query: answer.searchQuery, sources: answer.sources)
-                                    .id("sources")
-
-                                DemoVerifiedProofCard()
-                                    .id("proof")
-                            }
-                            .padding(12)
-                            .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(Color.appBorder, lineWidth: 1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }
                     }
                     .padding(.horizontal, 18)
-                    .padding(.vertical, 18)
+                    .padding(.vertical, 16)
                 }
                 .background(Color.appBackground)
-                .navigationTitle("Private answer")
+                .navigationTitle(conversationTitle)
                 .platformInlineNavigationTitle()
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(action: {}) {
+                            Image(systemName: "chevron.left")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .accessibilityLabel("Back")
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(action: {}) {
+                            Image(systemName: "ellipsis")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .accessibilityLabel("More")
+                    }
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    DemoThreadComposerBar(projectName: "IronClaw Reborn Plan")
+                }
                 .task {
                     try? await Task.sleep(nanoseconds: 2_500_000_000)
                     await MainActor.run {
@@ -209,20 +221,69 @@ struct DemoPrivateAnswerView: View {
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "checkmark.shield.fill")
-                .foregroundStyle(Color.trustVerified)
-                .frame(width: 34, height: 34)
-                .background(Color.trustVerified.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Private answer first")
-                    .font(.headline.weight(.semibold))
-                Text("One private model, live web sources, then proof.")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
+    private var conversationTitle: String {
+        let title = chatStore.selectedConversationTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? "Iran war status today" : title
+    }
+}
+
+private struct DemoThreadComposerBar: View {
+    let projectName: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                ComposerRouteChip(
+                    title: "Private + Cloud",
+                    symbolName: "lock.shield",
+                    isActive: false,
+                    showsChevron: true
+                )
+                ComposerRouteChip(
+                    title: projectName,
+                    symbolName: "folder",
+                    isActive: false,
+                    showsChevron: false
+                )
+                Spacer(minLength: 0)
             }
+            .padding(.horizontal, 6)
+
+            HStack(spacing: 10) {
+                Image(systemName: "plus")
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 30, height: 30)
+
+                Text("Ask a follow-up.")
+                    .font(.body)
+                    .foregroundStyle(.secondary.opacity(0.72))
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "arrow.up")
+                    .font(.callout.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(Color.actionPrimary, in: Circle())
+            }
+            .padding(.leading, 9)
+            .padding(.trailing, 6)
+            .padding(.vertical, 6)
+            .frame(minHeight: 48)
+            .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.pill))
+            .overlay {
+                RoundedRectangle.app(AppRadius.pill)
+                    .stroke(Color.actionPrimary.opacity(0.08), lineWidth: 1)
+            }
+            .shadow(color: Color.brandBlack.opacity(0.08), radius: 16, y: 7)
         }
+        .padding(.horizontal, 12)
+        .padding(.top, 9)
+        .padding(.bottom, 8)
+        .background(.regularMaterial)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Private and Cloud route, \(projectName), ask a follow-up")
     }
 }
 

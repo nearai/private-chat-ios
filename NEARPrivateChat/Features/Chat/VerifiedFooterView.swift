@@ -21,7 +21,7 @@ struct VerifiedFooterButton: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: footerSymbol)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(footerTint)
                 Text(footerText)
                     .font(.footnote)
