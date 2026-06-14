@@ -771,7 +771,10 @@ extension PrivateChatCoreTests {
 
         XCTAssertEqual(plan.draft.kind, .customPrompt)
         XCTAssertEqual(plan.draft.schedule, .daily(hour: 8, minute: 0))
-        XCTAssertEqual(plan.draft.title, "client supplement actions")
+        // Tracker titles are intentionally title-cased (first letter upper, rest
+        // case-preserved) by QuickIntentTrackerParser; the prompt keeps the
+        // verbatim lowercased subject.
+        XCTAssertEqual(plan.draft.title, "Client supplement actions")
         XCTAssertTrue(plan.draft.prompt.contains("client supplement actions"))
         XCTAssertTrue(plan.draft.prompt.contains("calendar-worthy"))
         XCTAssertTrue(plan.reply.contains("Daily"))
