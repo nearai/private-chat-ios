@@ -75,7 +75,7 @@ extension InputBar {
     func openCamera() {
         #if canImport(UIKit)
         if UIImagePickerController.isSourceTypeAvailable(.camera) {
-            showingCamera = true
+            presentSheet(.camera)
         } else {
             chatStore.bannerMessage = "Camera is not available here. Choose Photos or Files."
         }

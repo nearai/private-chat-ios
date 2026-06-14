@@ -148,7 +148,7 @@ extension InputBar {
         AppHaptics.selection()
         chatStore.selectSourceMode(chatStore.selectedProject == nil ? .files : .all)
         if chatStore.selectedProject == nil && composerStore.pendingAttachments.isEmpty {
-            showingProjectFiles = true
+            presentSheet(.projectFiles)
         }
     }
 
@@ -191,7 +191,7 @@ extension InputBar {
             suggestion,
             to: chatStore,
             onOpenProject: {
-                showingProjectFiles = true
+                presentSheet(.projectFiles)
             }
         )
         isFocused = shouldFocusComposer
@@ -207,18 +207,20 @@ extension InputBar {
             isFocused = true
         case .proof:
             chatStore.draft = remainder
-            showingSecurity = true
+            presentSheet(.security)
             isFocused = false
         case .project:
             chatStore.draft = remainder
-            showingProjectFiles = true
+            presentSheet(.projectFiles)
             isFocused = false
         case .sources:
             if !chatStore.selectedRouteUsesNearCloud {
                 chatStore.selectSourceMode(chatStore.selectedProject == nil ? .web : .all)
             }
             chatStore.draft = remainder
-            showingProjectFiles = chatStore.selectedProject != nil
+            if chatStore.selectedProject != nil {
+                presentSheet(.projectFiles)
+            }
             isFocused = chatStore.selectedProject == nil
         }
     }
@@ -227,11 +229,9 @@ extension InputBar {
         AppHaptics.selection()
         switch action {
         case .addNearCloudKey:
-            accountSettingsDeepLink = .nearCloudKeys
-            showingAccountSettings = true
+            presentSheet(.accountSettings(deepLink: .nearCloudKeys))
         case .configureIronClawEndpoint:
-            accountSettingsDeepLink = .ironclawAgent
-            showingAccountSettings = true
+            presentSheet(.accountSettings(deepLink: .ironclawAgent))
         case .switchToPrivate, .editCouncilLineup:
             chatStore.performRouteReadinessRecovery(action)
         }

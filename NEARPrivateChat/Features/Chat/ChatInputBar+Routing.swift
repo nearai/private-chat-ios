@@ -11,7 +11,7 @@ extension InputBar {
                 issue: issue,
                 onPrimaryAction: { handleRouteReadinessRecovery(issue.recoveryAction) },
                 onSwitchPrivate: { chatStore.performRouteReadinessRecovery(.switchToPrivate) },
-                onViewCapabilities: { showingCapabilities = true }
+                onViewCapabilities: { presentSheet(.capabilities) }
             )
         }
 
@@ -20,8 +20,7 @@ extension InputBar {
                 offer: offer,
                 proxyDisplayName: offer.proxyModelID.map { chatStore.pickerModels.first(where: { $0.id == offer.proxyModelID })?.displayName ?? ModelOption.humanize(modelID: $0) },
                 onOpenAccount: {
-                    accountSettingsDeepLink = nil
-                    showingAccountSettings = true
+                    presentSheet(.accountSettings(deepLink: nil))
                 },
                 onAccept: { chatStore.acceptProxyRetry() },
                 onDecline: { chatStore.declineProxyRetry() }
@@ -35,7 +34,7 @@ extension InputBar {
             if let summary = composerRouteSummary {
                 Button {
                     AppHaptics.selection()
-                    showingRouteConfig = true
+                    presentSheet(.routeConfig)
                 } label: {
                     HStack(spacing: 7) {
                         Image(systemName: summary.symbolName)
@@ -124,7 +123,7 @@ extension InputBar {
                     if selectedModelSupportsReasoningEffort {
                         Button {
                             AppHaptics.selection()
-                            showingReasoningEffortOptions = true
+                            presentSheet(.reasoningEffort)
                         } label: {
                             ComposerRouteIconChip(
                                 symbolName: "gauge.medium",
@@ -200,8 +199,7 @@ extension InputBar {
 
     func openModelPicker(openingCouncil: Bool) {
         AppHaptics.selection()
-        modelPickerOpeningCouncil = openingCouncil
-        showingModelPicker = true
+        presentSheet(.modelPicker(openingCouncil: openingCouncil))
     }
 
     var composerSourceTitle: String {
@@ -284,7 +282,7 @@ extension InputBar {
                 AppHaptics.selection()
                 chatStore.selectSourceMode(mode)
                 if mode == .files && chatStore.selectedProject == nil && composerStore.pendingAttachments.isEmpty {
-                    showingProjectFiles = true
+                    presentSheet(.projectFiles)
                 }
             }
         }
@@ -327,7 +325,9 @@ struct ReasoningEffortOptionsSheet: View {
                     }
 
                     Button {
-                        dismiss()
+                        // The host dismisses this sheet and presents the model
+                        // picker from its onDismiss; calling dismiss() here too
+                        // would race that transition.
                         onAdvanced()
                     } label: {
                         HStack(spacing: 10) {

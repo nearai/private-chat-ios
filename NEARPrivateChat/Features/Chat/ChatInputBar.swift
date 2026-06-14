@@ -5,6 +5,36 @@ import PhotosUI
 import UIKit
 #endif
 
+/// Every modal the composer can present, as a single identifiable value so one
+/// `.sheet(item:)` replaces nine `.sheet(isPresented:)` modifiers. Associated
+/// values carry the per-presentation context the old separate `@State` flags
+/// used to hold (`modelPickerOpeningCouncil`, `accountSettingsDeepLink`).
+enum InputBarSheet: Identifiable, Hashable {
+    case camera
+    case projectFiles
+    case security
+    case agentWorkspace
+    case accountSettings(deepLink: AccountSettingsDeepLink?)
+    case capabilities
+    case routeConfig
+    case modelPicker(openingCouncil: Bool)
+    case reasoningEffort
+
+    var id: String {
+        switch self {
+        case .camera: return "camera"
+        case .projectFiles: return "projectFiles"
+        case .security: return "security"
+        case .agentWorkspace: return "agentWorkspace"
+        case .accountSettings: return "accountSettings"
+        case .capabilities: return "capabilities"
+        case .routeConfig: return "routeConfig"
+        case .modelPicker: return "modelPicker"
+        case .reasoningEffort: return "reasoningEffort"
+        }
+    }
+}
+
 struct InputBar: View {
     @EnvironmentObject var chatStore: ChatStore
     @EnvironmentObject var sessionStore: SessionStore
@@ -15,20 +45,14 @@ struct InputBar: View {
     @FocusState var isFocused: Bool
     @State var showingFileImporter = false
     @State var showingPhotoPicker = false
-    @State var showingCamera = false
     @State var showingAttachmentOptions = false
     @State var selectedPhotoItems: [PhotosPickerItem] = []
-    @State var showingProjectFiles = false
-    @State var showingSecurity = false
-    @State var showingAgentWorkspace = false
-    @State var showingAccountSettings = false
-    @State var accountSettingsDeepLink: AccountSettingsDeepLink?
-    @State var showingCapabilities = false
-    @State var showingModelPicker = false
-    @State var showingRouteConfig = false
-    @State var modelPickerOpeningCouncil = false
     @State var showingSourceModeOptions = false
-    @State var showingReasoningEffortOptions = false
+    // One enum drives every composer sheet (replaces nine independent
+    // `isPresented` flags). Sheet-to-sheet transitions chain through
+    // `pendingAfterDismiss` in the sheet's onDismiss instead of a fixed delay.
+    @State var activeSheet: InputBarSheet?
+    @State private var pendingAfterDismiss: (() -> Void)?
     @StateObject var dictation = VoiceDictation()
 
     var body: some View {
@@ -132,28 +156,71 @@ struct InputBar: View {
         .onChange(of: selectedPhotoItems) { _, items in
             attachPhotoItems(items)
         }
+        .sheet(item: $activeSheet, onDismiss: handleSheetDismiss) { sheet in
+            sheetContent(for: sheet)
+        }
+    }
+
+    /// Presents a composer sheet. If one is already up, it dismisses first and
+    /// the new sheet is presented from `handleSheetDismiss` — a clean
+    /// sheet-to-sheet handoff with no fixed transition delay.
+    func presentSheet(_ sheet: InputBarSheet) {
+        runAfterCurrentSheet { activeSheet = sheet }
+    }
+
+    /// Runs `action` immediately when no sheet is open, otherwise after the
+    /// current sheet finishes dismissing.
+    func runAfterCurrentSheet(_ action: @escaping () -> Void) {
+        if activeSheet == nil {
+            action()
+        } else {
+            pendingAfterDismiss = action
+            activeSheet = nil
+        }
+    }
+
+    private func handleSheetDismiss() {
+        guard let pending = pendingAfterDismiss else { return }
+        pendingAfterDismiss = nil
+        pending()
+    }
+
+    @ViewBuilder
+    private func sheetContent(for sheet: InputBarSheet) -> some View {
+        switch sheet {
+        case .camera:
+            cameraSheet
+        case .projectFiles:
+            projectFilesSheet()
+        case .security:
+            securitySheet
+        case .agentWorkspace:
+            agentWorkspaceSheet
+        case let .accountSettings(deepLink):
+            accountSettingsSheet(deepLink: deepLink)
+        case .capabilities:
+            capabilitiesSheet()
+        case .routeConfig:
+            composerRouteConfigSheet()
+        case let .modelPicker(openingCouncil):
+            modelPickerSheet(openingCouncil: openingCouncil)
+        case .reasoningEffort:
+            reasoningEffortSheet()
+        }
+    }
+
+    @ViewBuilder
+    private var cameraSheet: some View {
         #if canImport(UIKit)
-        .sheet(isPresented: $showingCamera) {
-            CameraCaptureView { image in
-                showingCamera = false
-                attachCapturedImage(image)
-            } onCancel: {
-                showingCamera = false
-            }
+        CameraCaptureView { image in
+            activeSheet = nil
+            attachCapturedImage(image)
+        } onCancel: {
+            activeSheet = nil
         }
+        #else
+        EmptyView()
         #endif
-        .sheet(isPresented: $showingProjectFiles, content: projectFilesSheet)
-        .sheet(isPresented: $showingSecurity) { securitySheet }
-        .sheet(isPresented: $showingAgentWorkspace) { agentWorkspaceSheet }
-        .sheet(isPresented: $showingAccountSettings, onDismiss: {
-            accountSettingsDeepLink = nil
-        }) {
-            accountSettingsSheet()
-        }
-        .sheet(isPresented: $showingCapabilities, content: capabilitiesSheet)
-        .sheet(isPresented: $showingRouteConfig, content: composerRouteConfigSheet)
-        .sheet(isPresented: $showingModelPicker, content: modelPickerSheet)
-        .sheet(isPresented: $showingReasoningEffortOptions, content: reasoningEffortSheet)
     }
 
     @ViewBuilder
@@ -168,9 +235,9 @@ struct InputBar: View {
             .environmentObject(chatStore)
     }
 
-    private func accountSettingsSheet() -> some View {
+    private func accountSettingsSheet(deepLink: AccountSettingsDeepLink?) -> some View {
         AccountSettingsView(
-            initialDeepLink: accountSettingsDeepLink,
+            initialDeepLink: deepLink,
             onRunSetupAgain: {},
             isCurrentChatEmpty: { chatStore.selectedConversation == nil && transcriptStore.messages.isEmpty }
         )
@@ -180,14 +247,13 @@ struct InputBar: View {
     private func capabilitiesSheet() -> some View {
         CapabilitiesView(
             onOpenAccountSettings: { deepLink in
-                accountSettingsDeepLink = deepLink
-                showingAccountSettings = true
+                presentSheet(.accountSettings(deepLink: deepLink))
             },
             onOpenSecurity: {
-                showingSecurity = true
+                presentSheet(.security)
             },
             onOpenAgentWorkspace: {
-                showingAgentWorkspace = true
+                presentSheet(.agentWorkspace)
             },
             onRunSetupAgain: nil
         )
@@ -213,36 +279,29 @@ struct InputBar: View {
     private func composerRouteConfigSheet() -> some View {
         ComposerRouteConfigSheet(
             onChooseModel: {
-                showingRouteConfig = false
-                openModelPicker(openingCouncil: false)
+                presentSheet(.modelPicker(openingCouncil: false))
             },
             onChooseCouncil: {
-                showingRouteConfig = false
-                openModelPicker(openingCouncil: true)
+                presentSheet(.modelPicker(openingCouncil: true))
             },
             onChooseSource: {
-                showingRouteConfig = false
-                showingSourceModeOptions = true
+                runAfterCurrentSheet { showingSourceModeOptions = true }
             },
             onOpenAccount: {
-                showingRouteConfig = false
-                accountSettingsDeepLink = .nearCloudKeys
-                showingAccountSettings = true
+                presentSheet(.accountSettings(deepLink: .nearCloudKeys))
             },
             onOpenAgent: {
-                showingRouteConfig = false
-                showingAgentWorkspace = true
+                presentSheet(.agentWorkspace)
             }
         )
         .environmentObject(chatStore)
     }
 
-    private func modelPickerSheet() -> some View {
+    private func modelPickerSheet(openingCouncil: Bool) -> some View {
         ModelPickerView(
-            openingCouncil: modelPickerOpeningCouncil,
+            openingCouncil: openingCouncil,
             onOpenNearCloudKeys: {
-                accountSettingsDeepLink = .nearCloudKeys
-                showingAccountSettings = true
+                presentSheet(.accountSettings(deepLink: .nearCloudKeys))
             }
         )
             .environmentObject(chatStore)
@@ -250,10 +309,7 @@ struct InputBar: View {
 
     private func reasoningEffortSheet() -> some View {
         ReasoningEffortOptionsSheet {
-            showingReasoningEffortOptions = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-                openModelPicker(openingCouncil: false)
-            }
+            presentSheet(.modelPicker(openingCouncil: false))
         }
         .environmentObject(chatStore)
     }
