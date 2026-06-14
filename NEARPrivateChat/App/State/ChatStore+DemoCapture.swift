@@ -262,11 +262,12 @@ extension ChatStore {
         let outcome = await runBriefing(briefing)
         updateMessage("live-council-pending") { message in
             message.isStreaming = false
-            message.status = "completed"
             if case let .delivered(widget) = outcome {
+                message.status = "completed"
                 message.widget = widget
                 message.text = ""
             } else {
+                message.status = "briefing_no_result"
                 message.text = "Council produced no result - check sign-in, models, or network."
             }
         }

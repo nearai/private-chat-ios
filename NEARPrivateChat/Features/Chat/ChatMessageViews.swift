@@ -189,6 +189,13 @@ struct MessageBubble: View {
                     } else if message.role == .assistant {
                         if message.isStreaming {
                             StreamingMessageText(message: message)
+                        } else if message.isBriefingNoResult {
+                            BriefingNoResultCard(
+                                title: briefingNoResultPresentation.title,
+                                detail: briefingNoResultPresentation.detail,
+                                onRetry: { chatStore.regenerateResponse(for: message) },
+                                onCopy: { Clipboard.copy(message.text) }
+                            )
                         } else if message.status == "failed" {
                             AssistantFailureRecoveryCard(
                                 title: failedPresentation.title,
@@ -543,6 +550,25 @@ struct MessageBubble: View {
         return extraction.widget == nil ? nil : extraction
     }
 
+    // Split the "Title - detail" no-result line into a heading + sentence so
+    // the error card reads like the other rounded cards instead of one run-on.
+    private var briefingNoResultPresentation: (title: String, detail: String) {
+        let raw = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let separator = raw.range(of: " - ") else {
+            return (raw.isEmpty ? "Council produced no result" : raw,
+                    "Check sign-in, models, or network.")
+        }
+        let title = String(raw[..<separator.lowerBound]).trimmingCharacters(in: .whitespaces)
+        var detail = String(raw[separator.upperBound...]).trimmingCharacters(in: .whitespaces)
+        if let first = detail.first {
+            detail = first.uppercased() + detail.dropFirst()
+        }
+        if !detail.isEmpty, !detail.hasSuffix(".") {
+            detail += "."
+        }
+        return (title.isEmpty ? "Council produced no result" : title, detail)
+    }
+
     private var isFailedPrivateRouteMessage: Bool {
         FailedMessageRecoveryPolicy.isFailedPrivateRouteMessage(message)
     }
@@ -855,5 +881,71 @@ private struct AssistantFailureRecoveryCard: View {
             RoundedRectangle.app(AppRadius.control)
                 .stroke(Color.proofStale.opacity(0.24), lineWidth: 1)
         }
+    }
+}
+
+/// A scheduled briefing that ran but produced nothing to deliver. Matches the
+/// rounded-card system (tint + glyph + heading) instead of a bare line, and
+/// carries Retry alongside Copy.
+private struct BriefingNoResultCard: View {
+    let title: String
+    let detail: String
+    let onRetry: () -> Void
+    let onCopy: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 11) {
+                Image(systemName: "exclamationmark.bubble.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.proofStaleText)
+                    .frame(width: 30, height: 30)
+                    .background(Color.proofStale.opacity(0.14), in: RoundedRectangle.app(AppRadius.control))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(Color.textPrimary)
+                    Text(detail)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(Color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button(action: onRetry) {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                        .font(.caption.weight(.bold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                }
+                .buttonStyle(.plain)
+                .minimumTouchTarget()
+                .foregroundStyle(Color.actionPrimary)
+                .background(Color.actionFill.opacity(0.72), in: RoundedRectangle.app(AppRadius.pill))
+                .accessibilityIdentifier("briefing.noResult.retry")
+
+                Button(action: onCopy) {
+                    Label("Copy", systemImage: "doc.on.doc")
+                        .font(.caption.weight(.bold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                }
+                .buttonStyle(.plain)
+                .minimumTouchTarget()
+                .foregroundStyle(Color.textSecondary)
+                .background(Color.appSecondaryBackground, in: RoundedRectangle.app(AppRadius.pill))
+                .accessibilityIdentifier("briefing.noResult.copy")
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.proofStale.opacity(0.055), in: RoundedRectangle.app(AppRadius.control))
+        .overlay {
+            RoundedRectangle.app(AppRadius.control)
+                .stroke(Color.proofStale.opacity(0.24), lineWidth: 1)
+        }
+        .accessibilityIdentifier("briefing.noResult.card")
     }
 }

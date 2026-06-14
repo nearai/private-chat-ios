@@ -15,12 +15,21 @@ extension ChatMessage {
     }
 
     /// Inline answer actions (copy, export, regenerate, proof, save) apply only
-    /// to real, completed answers — never to failed or still-streaming turns.
+    /// to real, completed answers — never to failed, still-streaming, or
+    /// briefing no-result turns (those own their own action row).
     var canShowAssistantActions: Bool {
         role == .assistant &&
             !isStreaming &&
             status.lowercased() != "failed" &&
+            !isBriefingNoResult &&
             !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// A scheduled briefing (e.g. a council tracker) that ran but returned
+    /// nothing to deliver. It renders as a dedicated error card with its own
+    /// Retry + Copy actions rather than a bare unstyled assistant line.
+    var isBriefingNoResult: Bool {
+        role == .assistant && status == "briefing_no_result"
     }
 
     /// Rich widget cards already own their primary interaction. Keep answer
