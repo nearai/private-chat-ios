@@ -568,13 +568,39 @@ extension PrivateChatCoreTests {
         )
     }
 
-    /// Deterministic end-to-end of the reborn agent flow (createThread -> send ->
-    /// SSE projection -> timeline -> answer) against a stubbed URLProtocol — no
-    /// live server or token needed. Locks in the SSE+timeline completion path.
+    /// Deterministic end-to-end of the reborn agent flow against a stubbed
+    /// URLProtocol — no live server or token. Happy path: SSE completed -> timeline
+    /// has the answer -> .itemDone.
     func testRebornAgentFlowEndToEndStubbed() async throws {
+        RebornStubURLProtocol.reset()
+        let result = try await runStubbedRebornFlow()
+        XCTAssertNil(result.failure, "stubbed reborn flow failed: \(result.failure ?? "")")
+        XCTAssertEqual(result.answer.trimmingCharacters(in: .whitespacesAndNewlines), "Hello from the stub.")
+    }
+
+    /// A `failed` run-status projection surfaces a .failed event, not an answer.
+    func testRebornAgentFlowReportsFailure() async throws {
+        RebornStubURLProtocol.reset()
+        RebornStubURLProtocol.runStatus = "failed"
+        let result = try await runStubbedRebornFlow()
+        XCTAssertTrue(result.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        XCTAssertTrue(result.failure?.contains("failed") == true, "expected a failure message, got \(result.failure ?? "nil")")
+    }
+
+    /// HIGH-bug regression: reborn can mark the run completed before the assistant
+    /// message is queryable in /timeline. completeFromTimeline must settle-retry the
+    /// timeline rather than false-fail on the first empty read.
+    func testRebornAgentFlowSettlesTimelineLag() async throws {
+        RebornStubURLProtocol.reset()
+        RebornStubURLProtocol.timelineEmptyFirstFetches = 1
+        let result = try await runStubbedRebornFlow()
+        XCTAssertNil(result.failure, "settle-retry should recover, got: \(result.failure ?? "")")
+        XCTAssertEqual(result.answer.trimmingCharacters(in: .whitespacesAndNewlines), "Hello from the stub.")
+    }
+
+    private func runStubbedRebornFlow() async throws -> (answer: String, failure: String?) {
         URLProtocol.registerClass(RebornStubURLProtocol.self)
         defer { URLProtocol.unregisterClass(RebornStubURLProtocol.self) }
-
         final class Sink: @unchecked Sendable {
             var answer = ""
             var failure: String?
@@ -582,7 +608,6 @@ extension PrivateChatCoreTests {
         let sink = Sink()
         let api = IronclawAPI()
         let settings = IronclawSettings(isEnabled: true, baseURL: "https://dangwalvaidy.family/reborn", threadID: "")
-
         try await api.streamPrompt(
             prompt: "hi",
             attachments: [],
@@ -595,18 +620,23 @@ extension PrivateChatCoreTests {
             default: break
             }
         }
-
-        XCTAssertNil(sink.failure, "stubbed reborn flow failed: \(sink.failure ?? "")")
-        XCTAssertEqual(
-            sink.answer.trimmingCharacters(in: .whitespacesAndNewlines),
-            "Hello from the stub."
-        )
+        return (sink.answer, sink.failure)
     }
 }
 
-/// URLProtocol that stubs the reborn WebChat v2 endpoints (threads / messages /
-/// events / timeline) so the full agent flow can be exercised offline.
+/// URLProtocol that stubs the reborn WebChat v2 endpoints so the full agent flow
+/// runs offline. Configurable per test via the static knobs.
 private final class RebornStubURLProtocol: URLProtocol {
+    nonisolated(unsafe) static var runStatus = "completed"
+    nonisolated(unsafe) static var timelineEmptyFirstFetches = 0
+    nonisolated(unsafe) static var timelineFetchCount = 0
+
+    static func reset() {
+        runStatus = "completed"
+        timelineEmptyFirstFetches = 0
+        timelineFetchCount = 0
+    }
+
     override class func canInit(with request: URLRequest) -> Bool {
         request.url?.host == "dangwalvaidy.family"
     }
@@ -630,10 +660,15 @@ private final class RebornStubURLProtocol: URLProtocol {
             body = #"{"outcome":"submitted","run_id":"r1","status":"Queued"}"#
         } else if path.hasSuffix("/events") {
             contentType = "text/event-stream"
-            body = "event: projection_update\ndata: {\"type\":\"projection_update\",\"state\":{\"items\":[{\"run_status\":{\"run_id\":\"r1\",\"status\":\"completed\"}}]}}\n\n"
+            body = "event: projection_update\ndata: {\"type\":\"projection_update\",\"state\":{\"items\":[{\"run_status\":{\"run_id\":\"r1\",\"status\":\"\(Self.runStatus)\"}}]}}\n\n"
         } else if path.hasSuffix("/timeline") {
+            Self.timelineFetchCount += 1
             contentType = "application/json"
-            body = #"{"messages":[{"kind":"assistant","turn_run_id":"r1","content":"Hello from the stub."}]}"#
+            if Self.timelineFetchCount <= Self.timelineEmptyFirstFetches {
+                body = #"{"messages":[]}"#
+            } else {
+                body = #"{"messages":[{"kind":"assistant","turn_run_id":"r1","content":"Hello from the stub."}]}"#
+            }
         } else {
             contentType = "application/json"
             body = "{}"
