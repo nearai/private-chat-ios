@@ -608,6 +608,19 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(result.answer.trimmingCharacters(in: .whitespacesAndNewlines), "Hello from the stub.")
     }
 
+    /// A `blocked` run-status with no surfaced gate emits an approval-needed
+    /// failure rather than completing or crashing.
+    func testRebornAgentFlowBlockedSurfacesApprovalNeeded() async throws {
+        RebornStubURLProtocol.reset()
+        RebornStubURLProtocol.runStatus = "blocked_approval"
+        let result = try await runStubbedRebornFlow()
+        XCTAssertTrue(result.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        XCTAssertTrue(
+            result.failure?.lowercased().contains("approval") == true,
+            "expected an approval-needed message, got \(result.failure ?? "nil")"
+        )
+    }
+
     private func runStubbedRebornFlow() async throws -> (answer: String, failure: String?) {
         URLProtocol.registerClass(RebornStubURLProtocol.self)
         defer { URLProtocol.unregisterClass(RebornStubURLProtocol.self) }
