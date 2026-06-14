@@ -90,6 +90,10 @@ extension ChatStore {
             selectedConversation = nil
             messages = []
             draft = ""
+        case .dashboard:
+            selectedConversation = nil
+            messages = []
+            draft = ""
         case .fileAttach:
             selectedConversation = nil
             messages = []

@@ -61,6 +61,7 @@ enum DemoCaptureScreen: String, CaseIterable {
     case trackerFailure
     case markdownGallery
     case briefingBuilder
+    case dashboard
     case councilBriefingLive
     case councilOutput
     case verification

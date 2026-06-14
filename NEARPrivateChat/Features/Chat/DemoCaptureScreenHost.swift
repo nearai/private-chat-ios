@@ -28,6 +28,15 @@ struct DemoCaptureScreenHost: View {
                 }
             case .briefingBuilder:
                 BriefingEditorSheet()
+            case .dashboard:
+                ScrollView {
+                    TodaySection(
+                        store: demoDashboardStore(),
+                        onOpenBriefing: { _ in },
+                        onNewBriefing: {}
+                    )
+                }
+                .background(Color.appBackground)
             case .ironclaw:
                 DemoIronClawResultView()
             case .ironclawThinking:

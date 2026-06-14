@@ -92,6 +92,8 @@ struct DemoCaptureRootView: View {
             return 4_000_000_000
         case .briefingBuilder:
             return 4_000_000_000
+        case .dashboard:
+            return 5_000_000_000
         case .councilBriefingLive:
             return 4_000_000_000
         case .composer:
@@ -177,6 +179,34 @@ func demoFailedTrackerContext() -> (store: BriefingStore, briefing: Briefing) {
         runner: { _ in .failed(failureCopy) }
     )
     return (store, briefing)
+}
+
+/// Dashboard ("Today") surface backed by a throwaway store seeded with the
+/// sample briefings so the Live grid + Scheduled rows render for capture.
+@MainActor
+func demoDashboardStore() -> BriefingStore {
+    func delivered(_ title: String, _ kind: BriefingKind) -> Briefing {
+        var briefing = Briefing(
+            title: title,
+            prompt: title,
+            schedule: .daily(hour: 8, minute: 0),
+            createdAt: Date().addingTimeInterval(-86_400),
+            kind: kind
+        )
+        briefing.latestResult = BriefingSamples.sampleWidget(title: title)
+        briefing.lastRunAt = Date().addingTimeInterval(-3_600)
+        return briefing
+    }
+    let live = [
+        delivered("Daily news", .dailyNews),
+        delivered("Market watch", .customPrompt),
+        delivered("Research brief", .customPrompt)
+    ]
+    return BriefingStore(
+        briefings: live + BriefingSamples.sampleBriefings,
+        fileURL: FileManager.default.temporaryDirectory.appendingPathComponent("demo-dashboard.json"),
+        runner: { _ in .quiet }
+    )
 }
 
 func demoCouncilRoomModel() -> CouncilRoomModel {
