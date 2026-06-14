@@ -27,6 +27,12 @@ enum ErrorMessageMapper {
         if lowercased == "access denied" || lowercased.contains("\"access denied\"") {
             return "Access denied by the NEAR Private API. Sign in again or choose another available model."
         }
+        // Specific preflight failure must be matched before the generic "rate
+        // limit" substring check below: "Failed to check rate limit." is an
+        // account-usage check failure, not a rate-limited response.
+        if lowercased.contains("failed to check rate limit") {
+            return "Could not verify account usage before sending. Refresh Account or sign in again, then retry."
+        }
         if lowercased.contains("temporarily restricted") ||
             lowercased.contains("access temporarily restricted") ||
             lowercased.contains("rate-limited") ||
@@ -74,9 +80,6 @@ enum ErrorMessageMapper {
             lowercased.contains("session token missing") ||
             lowercased.contains("token rejected") {
             return "Authentication is missing or expired. Sign in again, then retry."
-        }
-        if lowercased.contains("failed to check rate limit") {
-            return "Could not verify account usage before sending. Refresh Account or sign in again, then retry."
         }
         if lowercased.contains("tool 'http' failed") &&
             lowercased.contains("request returned redirect") &&
