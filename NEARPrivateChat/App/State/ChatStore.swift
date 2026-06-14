@@ -895,14 +895,25 @@ final class ChatStore: ObservableObject {
             threadID: trimmedThreadID
         ).endpointValidationMessage
 
+        // Security: a deep link can carry an attacker-controlled endpoint and a
+        // bearer token. Never silently ENABLE an external agent bridge from a
+        // link — that would route agent traffic to an unverified host with an
+        // unverified token without the user's knowledge. Import the config
+        // disabled and require the user to review the destination host and turn
+        // it on explicitly in Account → Agent.
         saveIronclawIntegration(
-            isEnabled: bridgeImport.isEnabled,
+            isEnabled: false,
             baseURL: trimmedEndpoint,
             authToken: bridgeImport.authToken ?? "",
             threadID: trimmedThreadID
         )
 
-        return validationMessage
+        if let validationMessage {
+            return validationMessage
+        }
+
+        let host = URL(string: trimmedEndpoint)?.host ?? trimmedEndpoint
+        return "IronClaw agent link from \(host) was saved but left turned off. Review the host, then enable it in Account → Agent before using it."
     }
 
     func selectModel(_ modelID: String) {
