@@ -397,6 +397,12 @@ struct HomeScreen: View {
                     homeStore.showingDashboard = false
                     homeStore.showingNewBriefing = true
                 },
+                onAsk: { text in
+                    homeStore.showingDashboard = false
+                    chatStore.startNewConversation()
+                    chatStore.draft = text
+                    onStartNewChat()
+                },
                 onClose: { homeStore.showingDashboard = false }
             )
         }

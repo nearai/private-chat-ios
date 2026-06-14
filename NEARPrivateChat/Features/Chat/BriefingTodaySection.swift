@@ -119,12 +119,19 @@ struct TodaySection: View {
 }
 
 /// Standalone "Today" dashboard surface — `TodaySection` wrapped for full-screen
-/// presentation from the home top bar.
+/// presentation from the home top bar, with an Ask-anything composer.
 struct DashboardScreen: View {
     @ObservedObject var store: BriefingStore
     var onOpenBriefing: (Briefing) -> Void
     var onNewBriefing: () -> Void
+    var onAsk: (String) -> Void
     var onClose: () -> Void
+
+    @State private var draft = ""
+
+    private var trimmedDraft: String {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
         NavigationStack {
@@ -142,6 +149,43 @@ struct DashboardScreen: View {
                     Button("Done", action: onClose)
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                composer
+            }
         }
+    }
+
+    private var composer: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "plus")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color.textTertiary)
+                TextField("Ask anything…", text: $draft, axis: .vertical)
+                    .font(.subheadline)
+                    .lineLimit(1...4)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.appPanelBackground, in: Capsule())
+            .overlay(Capsule().stroke(Color.appBorder, lineWidth: 1))
+
+            Button {
+                guard !trimmedDraft.isEmpty else { return }
+                onAsk(trimmedDraft)
+            } label: {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.title.weight(.semibold))
+                    .foregroundStyle(trimmedDraft.isEmpty ? Color.textTertiary : Color.actionPrimary)
+                    .frame(width: 44, height: 44)
+            }
+            .disabled(trimmedDraft.isEmpty)
+            .accessibilityLabel("Ask")
+            .accessibilityIdentifier("dashboard.ask")
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+        .background(.ultraThinMaterial)
     }
 }
