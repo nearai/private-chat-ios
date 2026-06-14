@@ -256,6 +256,40 @@ struct DemoIronClawModesView: View {
             .background(Color.appBackground)
             .navigationTitle("Agent")
             .platformInlineNavigationTitle()
+            // The screen previously had no primary action and a large empty
+            // lower half. Pin one dominant CTA plus a secondary so the route
+            // choice is an action, not just two descriptive cards.
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 8) {
+                    Button {} label: {
+                        Label("Use Hosted IronClaw", systemImage: "terminal")
+                            .font(.headline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white)
+                    .background(Color.actionPrimary, in: RoundedRectangle.app(AppRadius.control))
+                    .accessibilityIdentifier("agent.primary.hosted")
+
+                    Button {} label: {
+                        Text("Use IronClaw Mobile instead")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.actionPrimary)
+                            .frame(maxWidth: .infinity)
+                            .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("agent.secondary.mobile")
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 12)
+                .padding(.bottom, 6)
+                .background(Color.appBackground)
+                .overlay(alignment: .top) {
+                    Rectangle().fill(Color.appHairline).frame(height: 0.5)
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {}
