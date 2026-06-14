@@ -22,6 +22,7 @@ struct TodaySection: View {
                 SuggestedBriefingsView(store: store, onOpen: onOpenBriefing)
             } else {
                 let liveBriefings = store.briefings.filter { $0.latestResult != nil }
+                let scheduledBriefings = store.briefings.filter { $0.latestResult == nil }
                 if !liveBriefings.isEmpty {
                     labeledSection("Live", count: "\(liveBriefings.count) active")
                     LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
@@ -33,10 +34,11 @@ struct TodaySection: View {
                     }
                 }
 
-                labeledSection("Scheduled", count: "\(store.briefings.count) upcoming")
+                if !scheduledBriefings.isEmpty {
+                labeledSection("Scheduled", count: "\(scheduledBriefings.count) upcoming")
                     .padding(.top, liveBriefings.isEmpty ? 0 : 2)
                 VStack(spacing: 0) {
-                    ForEach(store.briefings) { briefing in
+                    ForEach(scheduledBriefings) { briefing in
                         ScheduleRow(briefing: briefing) {
                             onOpenBriefing(briefing)
                         }
@@ -55,7 +57,7 @@ struct TodaySection: View {
                             Divider()
                             Button(role: .destructive) { store.remove(briefing) } label: { Label("Delete", systemImage: "trash") }
                         }
-                        if briefing.id != store.briefings.last?.id {
+                        if briefing.id != scheduledBriefings.last?.id {
                             Divider()
                                 .overlay(Color.appHairline)
                                 .padding(.leading, 52)
@@ -66,6 +68,7 @@ struct TodaySection: View {
                 .overlay {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .stroke(Color.appBorder, lineWidth: 1)
+                }
                 }
 
                 SuggestedBriefingsView(store: store, onOpen: onOpenBriefing)
