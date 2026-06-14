@@ -6,6 +6,25 @@ extension HomeScreen {
         onStartNewChat()
     }
 
+    /// Runs the staged dashboard-exit action after the dashboard cover has fully
+    /// dismissed — deferring avoids the SwiftUI race of presenting another cover
+    /// or navigating while one is still dismissing.
+    func performDashboardExit() {
+        switch homeStore.pendingDashboardExit {
+        case .openBriefing(let briefing):
+            homeStore.openedBriefing = briefing
+        case .newBriefing:
+            homeStore.showingNewBriefing = true
+        case .ask(let text):
+            chatStore.startNewConversation()
+            chatStore.draft = text
+            onStartNewChat()
+        case nil:
+            break
+        }
+        homeStore.pendingDashboardExit = nil
+    }
+
     func startPrivateChatFromFirstRun() {
 
         if let accountID = sessionStore.setupAccountID,

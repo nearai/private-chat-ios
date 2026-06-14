@@ -1,5 +1,11 @@
 import SwiftUI
 
+enum DashboardExit {
+    case openBriefing(Briefing)
+    case newBriefing
+    case ask(String)
+}
+
 @MainActor
 final class HomeStore: ObservableObject {
     @Published var searchText = ""
@@ -14,6 +20,7 @@ final class HomeStore: ObservableObject {
     @Published var editingProject: ChatProject?
     @Published var showingNewBriefing = false
     @Published var showingDashboard = false
+    @Published var pendingDashboardExit: DashboardExit?
     @Published var openedBriefing: Briefing?
     @Published var homeLaunchDraft = ""
     @Published var selectedHomeLaunchSuggestionID: String?

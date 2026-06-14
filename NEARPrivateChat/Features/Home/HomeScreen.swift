@@ -386,22 +386,20 @@ struct HomeScreen: View {
                 onDelete: { briefingStore.remove($0) }
             )
         }
-        .fullScreenCover(isPresented: $homeStore.showingDashboard) {
+        .fullScreenCover(isPresented: $homeStore.showingDashboard, onDismiss: performDashboardExit) {
             DashboardScreen(
                 store: briefingStore,
                 onOpenBriefing: { briefing in
+                    homeStore.pendingDashboardExit = .openBriefing(briefing)
                     homeStore.showingDashboard = false
-                    homeStore.openedBriefing = briefing
                 },
                 onNewBriefing: {
+                    homeStore.pendingDashboardExit = .newBriefing
                     homeStore.showingDashboard = false
-                    homeStore.showingNewBriefing = true
                 },
                 onAsk: { text in
+                    homeStore.pendingDashboardExit = .ask(text)
                     homeStore.showingDashboard = false
-                    chatStore.startNewConversation()
-                    chatStore.draft = text
-                    onStartNewChat()
                 },
                 onClose: { homeStore.showingDashboard = false }
             )
