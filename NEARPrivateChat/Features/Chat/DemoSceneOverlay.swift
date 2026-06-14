@@ -17,7 +17,9 @@ struct DemoSceneOverlay: View {
                 DemoFocusBox(delay: 0.8, duration: 2.0, x: 0.07, y: 0.11, width: 0.86, height: 0.13, tint: .trustVerified)
                 DemoFocusBox(delay: 3.3, duration: 2.2, x: 0.07, y: 0.37, width: 0.86, height: 0.30, tint: .actionPrimary)
             case .cloudModels:
-                DemoFocusBox(delay: 1.1, duration: 2.2, x: 0.08, y: 0.35, width: 0.84, height: 0.18, tint: .orange)
+                // Match the blue selection language used by every other focus
+                // box; a lone orange ring read as a stuck/foreign highlight.
+                DemoFocusBox(delay: 1.1, duration: 2.2, x: 0.08, y: 0.35, width: 0.84, height: 0.18, tint: .actionPrimary)
             case .council:
                 DemoFocusBox(delay: 1.0, duration: 2.1, x: 0.06, y: 0.28, width: 0.88, height: 0.35, tint: .actionPrimary)
                 DemoFocusBox(delay: 3.7, duration: 1.8, x: 0.08, y: 0.56, width: 0.84, height: 0.14, tint: .trustVerified)

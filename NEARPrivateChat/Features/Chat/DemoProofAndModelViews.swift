@@ -226,12 +226,7 @@ private struct DemoCloudModelRow: View {
 
                 HStack(spacing: 6) {
                     ForEach(Array(model.capabilityBadges.prefix(3)), id: \.self) { badge in
-                        Text(badge)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(badge == "Not attested" ? Color.orange : Color.secondary)
-                            .padding(.horizontal, 7)
-                            .frame(height: 20)
-                            .background(Color.appSecondaryBackground, in: Capsule())
+                        badgeChip(badge)
                     }
                 }
             }
@@ -256,6 +251,25 @@ private struct DemoCloudModelRow: View {
 
     private var costLabel: String {
         model.id.localizedCaseInsensitiveContains("gpt-oss") ? "Open" : "Cloud"
+    }
+
+    // "Not attested" is a route limitation, not a capability tag. Render it as a
+    // proper tinted status chip (amber fill + amber text) instead of orange text
+    // on a neutral capsule, which read as a half-finished, inconsistent badge.
+    @ViewBuilder
+    private func badgeChip(_ badge: String) -> some View {
+        let isStatus = (badge == "Not attested")
+        Text(badge)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(isStatus ? Color.proofStaleText : Color.secondary)
+            .padding(.horizontal, 7)
+            .frame(height: 20)
+            .background(isStatus ? Color.proofStale.opacity(0.16) : Color.appSecondaryBackground, in: Capsule())
+            .overlay {
+                if isStatus {
+                    Capsule().stroke(Color.proofStaleText.opacity(0.22), lineWidth: 0.5)
+                }
+            }
     }
 }
 
