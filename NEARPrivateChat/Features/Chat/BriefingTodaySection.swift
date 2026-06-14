@@ -114,3 +114,31 @@ struct TodaySection: View {
         }
     }
 }
+
+/// Standalone "Today" dashboard surface — `TodaySection` wrapped for full-screen
+/// presentation from the home top bar.
+struct DashboardScreen: View {
+    @ObservedObject var store: BriefingStore
+    var onOpenBriefing: (Briefing) -> Void
+    var onNewBriefing: () -> Void
+    var onClose: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                TodaySection(
+                    store: store,
+                    onOpenBriefing: onOpenBriefing,
+                    onNewBriefing: onNewBriefing
+                )
+            }
+            .background(Color.appBackground)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", action: onClose)
+                }
+            }
+        }
+    }
+}

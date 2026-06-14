@@ -35,7 +35,8 @@ struct HomeScreen: View {
                     isSearchVisible: homeStore.isSearchVisible,
                     onAccount: { openAccountSettings() },
                     onSearch: toggleSearch,
-                    onNewChat: openNewChat
+                    onNewChat: openNewChat,
+                    onDashboard: { homeStore.showingDashboard = true }
                 )
 
                 if homeStore.isSearchVisible || !homeStore.searchText.isEmpty {
@@ -383,6 +384,20 @@ struct HomeScreen: View {
                 briefing: nil,
                 onSave: { briefingStore.add($0) },
                 onDelete: { briefingStore.remove($0) }
+            )
+        }
+        .fullScreenCover(isPresented: $homeStore.showingDashboard) {
+            DashboardScreen(
+                store: briefingStore,
+                onOpenBriefing: { briefing in
+                    homeStore.showingDashboard = false
+                    homeStore.openedBriefing = briefing
+                },
+                onNewBriefing: {
+                    homeStore.showingDashboard = false
+                    homeStore.showingNewBriefing = true
+                },
+                onClose: { homeStore.showingDashboard = false }
             )
         }
         .fullScreenCover(item: $homeStore.openedBriefing) { briefing in

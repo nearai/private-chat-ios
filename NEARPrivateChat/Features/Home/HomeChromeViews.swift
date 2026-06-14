@@ -188,6 +188,7 @@ struct ClaudeHomeTopBar: View {
     let onAccount: () -> Void
     let onSearch: () -> Void
     let onNewChat: () -> Void
+    let onDashboard: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
@@ -206,6 +207,16 @@ struct ClaudeHomeTopBar: View {
             Spacer(minLength: 0)
 
             HStack(spacing: 0) {
+                Button(action: onDashboard) {
+                    Image(systemName: "rectangle.grid.2x2")
+                        .font(.title3.weight(.regular))
+                        .foregroundStyle(Color.textSecondary)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Today dashboard")
+                .accessibilityIdentifier("home.dashboard")
+
                 Button(action: onSearch) {
                     Image(systemName: "magnifyingglass")
                         .font(.title3.weight(.regular))

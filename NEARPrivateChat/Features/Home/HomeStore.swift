@@ -13,6 +13,7 @@ final class HomeStore: ObservableObject {
     @Published var isSearchVisible = false
     @Published var editingProject: ChatProject?
     @Published var showingNewBriefing = false
+    @Published var showingDashboard = false
     @Published var openedBriefing: Briefing?
     @Published var homeLaunchDraft = ""
     @Published var selectedHomeLaunchSuggestionID: String?
