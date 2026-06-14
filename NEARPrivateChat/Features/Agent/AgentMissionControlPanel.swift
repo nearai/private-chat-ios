@@ -99,6 +99,7 @@ struct AgentMissionControlPanel: View {
                         .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
+                .minimumTouchTarget()
                 .disabled(agentStore.isTestingIronclawWorkstation)
                 .accessibilityLabel("Check Hosted IronClaw")
             }

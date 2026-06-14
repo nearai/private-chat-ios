@@ -52,6 +52,7 @@ struct NewProjectView: View {
                                     .buttonStyle(.plain)
                                     .minimumTouchTarget()
                                     .accessibilityLabel("\(palette.label) project color")
+                                    .accessibilityAddTraits(selectedPalette == palette ? [.isSelected] : [])
                                 }
                             }
                         }
@@ -79,6 +80,7 @@ struct NewProjectView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityLabel("\(icon.label) project icon")
+                                .accessibilityAddTraits(selectedIcon == icon ? [.isSelected] : [])
                             }
                         }
                     }
@@ -196,6 +198,7 @@ struct EditProjectView: View {
                                     .buttonStyle(.plain)
                                     .minimumTouchTarget()
                                     .accessibilityLabel("\(palette.label) project color")
+                                    .accessibilityAddTraits(selectedPalette == palette ? [.isSelected] : [])
                                 }
                             }
                         }
@@ -227,6 +230,7 @@ struct EditProjectView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityLabel("\(icon.label) project icon")
+                                .accessibilityAddTraits(selectedIcon == icon ? [.isSelected] : [])
                             }
                         }
                     }

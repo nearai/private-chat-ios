@@ -105,6 +105,7 @@ struct HomePromptCaptureCard: View {
                     .background(actionEnabled ? Color.actionPrimary : Color.actionFill, in: Circle())
             }
             .buttonStyle(.plain)
+            .minimumTouchTarget()
             .disabled(!actionEnabled)
             .accessibilityLabel(actionTitle)
         }

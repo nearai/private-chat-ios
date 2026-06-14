@@ -828,6 +828,7 @@ private struct AssistantFailureRecoveryCard: View {
                         .frame(height: 36)
                 }
                 .buttonStyle(.plain)
+                .minimumTouchTarget()
                 .foregroundStyle(Color.actionPrimary)
                 .background(Color.actionFill.opacity(0.72), in: RoundedRectangle.app(AppRadius.pill))
                 .accessibilityIdentifier("message.retry")
@@ -840,6 +841,7 @@ private struct AssistantFailureRecoveryCard: View {
                             .frame(height: 36)
                     }
                     .buttonStyle(.plain)
+                    .minimumTouchTarget()
                     .foregroundStyle(Color.proofStaleText)
                     .background(Color.proofStale.opacity(0.12), in: RoundedRectangle.app(AppRadius.pill))
                     .accessibilityIdentifier("message.recovery.proxy")
