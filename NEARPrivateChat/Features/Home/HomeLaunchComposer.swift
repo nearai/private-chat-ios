@@ -84,29 +84,51 @@ struct HomePromptCaptureCard: View {
 
     private var composerRow: some View {
         HStack(spacing: 9) {
-            TextField("Ask privately.", text: $draft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.body)
-                .lineLimit(1...4)
-                .tokenInputTraits()
-                .focused($isPromptFocused)
-                .submitLabel(.send)
-                .onSubmit {
-                    if actionEnabled {
-                        onSubmit()
-                    }
+            ZStack(alignment: .leading) {
+                // Manual placeholder: the system TextField placeholder renders at
+                // ~30% opacity (placeholderText), which read as the weakest element
+                // on Home even though the composer is the primary action. Pin it to
+                // secondaryLabel-strength contrast instead.
+                if draft.isEmpty {
+                    Text("Ask privately.")
+                        .font(.body)
+                        .foregroundStyle(Color.textSecondary)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                 }
+                TextField("", text: $draft, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.body)
+                    .lineLimit(1...4)
+                    .tokenInputTraits()
+                    .focused($isPromptFocused)
+                    .submitLabel(.send)
+                    .onSubmit {
+                        if actionEnabled {
+                            onSubmit()
+                        }
+                    }
+                    .accessibilityLabel("Ask privately.")
+            }
 
-            Button(action: onSubmit) {
+            // The send button stays at full accent blue so the primary action
+            // reads as primary. When there is nothing to send yet, tapping it
+            // focuses the field instead of silently no-opping.
+            Button {
+                if actionEnabled {
+                    onSubmit()
+                } else {
+                    isPromptFocused = true
+                }
+            } label: {
                 Image(systemName: actionSymbolName)
                     .font(.callout.weight(.bold))
-                    .foregroundStyle(actionEnabled ? Color.white : Color.actionPrimary.opacity(0.72))
+                    .foregroundStyle(Color.white)
                     .frame(width: 34, height: 34)
-                    .background(actionEnabled ? Color.actionPrimary : Color.actionFill, in: Circle())
+                    .background(Color.actionPrimary, in: Circle())
             }
             .buttonStyle(.plain)
             .minimumTouchTarget()
-            .disabled(!actionEnabled)
             .accessibilityLabel(actionTitle)
         }
         .padding(.leading, 14)
