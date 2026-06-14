@@ -25,7 +25,16 @@ final class PrivateChatConversationAPI: ConversationAPI {
     }
 
     func fetchConversations() async throws -> [ConversationSummary] {
-        try await client.request("/v1/conversations", method: "GET", authenticated: true)
+        // `/v1/conversations` currently returns a bare JSON array, but tolerate
+        // the OpenAI-style `{ "object": "list", "data": [...] }` envelope too so
+        // a server-side shape change can't silently break the conversation list
+        // (the same drift class that broke the reborn run-state route).
+        let response: ConversationListEnvelope = try await client.request(
+            "/v1/conversations",
+            method: "GET",
+            authenticated: true
+        )
+        return response.conversations
     }
 
     func createConversation(title: String) async throws -> ConversationSummary {
@@ -129,6 +138,27 @@ final class PrivateChatConversationAPI: ConversationAPI {
             authenticated: true
         )
         _ = try await client.performRaw(request)
+    }
+}
+
+/// Tolerates both the bare `[ConversationSummary]` array the conversations
+/// endpoint returns today and an OpenAI-style `{ "object": "list", "data": [...] }`
+/// envelope, so a server-side response-shape change can't silently break the
+/// conversation list.
+private struct ConversationListEnvelope: Decodable {
+    let conversations: [ConversationSummary]
+
+    private enum CodingKeys: String, CodingKey {
+        case data
+    }
+
+    init(from decoder: Decoder) throws {
+        if let array = try? [ConversationSummary](from: decoder) {
+            conversations = array
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        conversations = try container.decode([ConversationSummary].self, forKey: .data)
     }
 }
 
