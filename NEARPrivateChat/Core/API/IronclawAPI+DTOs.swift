@@ -44,6 +44,55 @@ struct IronclawSubmitResponse: Decodable {
     }
 }
 
+/// One frame of the run's SSE projection stream (`GET …/threads/{id}/events`).
+/// The reborn server emits an event-sourced projection: a `projection_snapshot`
+/// then incremental `projection_update` frames, interleaved with `keep_alive`.
+/// Live run progress rides on `state.items[].run_status`; gate details, when a
+/// run blocks, ride alongside on the same item. We decode only the fields this
+/// client acts on and ignore the rest of the projection.
+struct IronclawProjectionFrame: Decodable {
+    let type: String
+    let state: ProjectionState?
+
+    struct ProjectionState: Decodable {
+        let items: [ProjectionItem]?
+    }
+
+    struct ProjectionItem: Decodable {
+        let runStatus: RunStatusItem?
+        let gate: IronclawRunState.GateDetail?
+
+        enum CodingKeys: String, CodingKey {
+            case runStatus = "run_status"
+            case gate
+            case pendingGate = "pending_gate"
+            case pendingApproval = "pending_approval"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            runStatus = try container.decodeIfPresent(RunStatusItem.self, forKey: .runStatus)
+            gate = (try? container.decode(IronclawRunState.GateDetail.self, forKey: .gate))
+                ?? (try? container.decode(IronclawRunState.GateDetail.self, forKey: .pendingGate))
+                ?? (try? container.decode(IronclawRunState.GateDetail.self, forKey: .pendingApproval))
+        }
+    }
+
+    struct RunStatusItem: Decodable {
+        let runID: String?
+        let status: String?
+        let gateRef: String?
+        let failure: IronclawRunState.Failure?
+
+        enum CodingKeys: String, CodingKey {
+            case runID = "run_id"
+            case status
+            case gateRef = "gate_ref"
+            case failure
+        }
+    }
+}
+
 struct IronclawRunState: Decodable {
     struct Failure: Decodable {
         let category: String?

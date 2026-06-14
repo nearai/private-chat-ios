@@ -485,4 +485,46 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(store.selectedModel, ModelOption.ironclawMobileModelID)
         XCTAssertTrue(store.draft.hasPrefix("Draft an Agent mission"))
     }
+
+    // MARK: - Reborn run completion (SSE projection + timeline), grounded in
+    // payloads captured verbatim from a live `ironclaw-reborn serve`.
+
+    func testIronclawRunPhaseMapsRebornProjectionStatuses() {
+        XCTAssertEqual(IronclawAPI.runPhaseLabelForTesting(status: "completed"), "completed")
+        XCTAssertEqual(IronclawAPI.runPhaseLabelForTesting(status: "Completed"), "completed")
+        XCTAssertEqual(IronclawAPI.runPhaseLabelForTesting(status: "queued"), "running")
+        XCTAssertEqual(IronclawAPI.runPhaseLabelForTesting(status: "running"), "running")
+        XCTAssertEqual(IronclawAPI.runPhaseLabelForTesting(status: "failed"), "failed")
+        XCTAssertEqual(IronclawAPI.runPhaseLabelForTesting(status: "recovery_required"), "failed")
+        XCTAssertEqual(IronclawAPI.runPhaseLabelForTesting(status: "cancelled"), "cancelled")
+        XCTAssertEqual(IronclawAPI.runPhaseLabelForTesting(status: "blocked_approval"), "blocked")
+        XCTAssertEqual(IronclawAPI.runPhaseLabelForTesting(status: nil), "running")
+    }
+
+    func testIronclawProjectionFrameDecodesRunStatusFromRebornStream() throws {
+        let data = Data(#"{"cursor":"opaque","type":"projection_update","state":{"thread_id":"0cea4249-3086-54c5-9430-007ebe88075f","items":[{"run_status":{"run_id":"2a7697a4-bb6e-43d8-8861-5f7a55c24d0f","status":"completed"}}]}}"#.utf8)
+
+        let frame = try JSONDecoder().decode(IronclawProjectionFrame.self, from: data)
+        XCTAssertEqual(frame.type, "projection_update")
+        let runStatus = try XCTUnwrap(frame.state?.items?.first?.runStatus)
+        XCTAssertEqual(runStatus.runID, "2a7697a4-bb6e-43d8-8861-5f7a55c24d0f")
+        XCTAssertEqual(IronclawAPI.runPhaseLabelForTesting(status: runStatus.status), "completed")
+    }
+
+    func testIronclawKeepAliveAndSnapshotFramesDecodeWithoutRunStatus() throws {
+        let keepAlive = try JSONDecoder().decode(IronclawProjectionFrame.self, from: Data(#"{"type":"keep_alive"}"#.utf8))
+        XCTAssertEqual(keepAlive.type, "keep_alive")
+        XCTAssertNil(keepAlive.state)
+    }
+
+    func testIronclawTimelineScopesAssistantAnswerToRun() throws {
+        let data = Data(#"{"thread":{"thread_id":"t"},"messages":[{"message_id":"m1","kind":"user","turn_run_id":"630d4b3c-2a62-4646-bf54-81810b27af1a","content":"hi"},{"message_id":"m2","kind":"assistant","status":"finalized","turn_run_id":"630d4b3c-2a62-4646-bf54-81810b27af1a","content":"Hello from the other side of the terminal."}],"summary_artifacts":[]}"#.utf8)
+
+        XCTAssertEqual(
+            try IronclawAPI.assistantTextForTesting(timeline: data, runID: "630d4b3c-2a62-4646-bf54-81810b27af1a"),
+            "Hello from the other side of the terminal."
+        )
+        // A different run id must not pick up this thread's prior answer.
+        XCTAssertNil(try IronclawAPI.assistantTextForTesting(timeline: data, runID: "no-such-run"))
+    }
 }

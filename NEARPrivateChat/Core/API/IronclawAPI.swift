@@ -10,9 +10,11 @@ import Foundation
 /// - Every mutation requires a client-generated idempotency key
 ///   (`client_action_id`).
 /// - `send_message` returns a `run_id` immediately and the answer is produced
-///   asynchronously; this client polls run state + the thread timeline (rather
-///   than opening the SSE stream) so the existing `onEvent` callback contract
-///   and poll architecture are preserved.
+///   asynchronously; this client consumes the run's SSE projection stream
+///   (`…/events`) for live status and reads the thread timeline for the
+///   finalized answer text, falling back to timeline polling if the stream is
+///   unavailable. The existing `onEvent` callback contract is preserved.
+///   (The reborn core never mounted a `GET …/runs/{run_id}` state route.)
 /// - Auth is `Authorization: Bearer <token>` where the token is the reborn
 ///   `IRONCLAW_REBORN_WEBUI_TOKEN`, configured by the user as the Agent token.
 final class IronclawAPI {
@@ -22,10 +24,26 @@ final class IronclawAPI {
     private static let threadsPath = "api/webchat/v2/threads"
     private static let defaultTimelineLimit = 100
     private static let fallbackTimelineLimit = 250
+    private static let runDeadlineSeconds: TimeInterval = 360
 
     #if DEBUG
     static func resolvedSubmitRunIDForTesting(from data: Data) throws -> String? {
         try JSONDecoder().decode(IronclawSubmitResponse.self, from: data).resolvedRunID
+    }
+
+    static func runPhaseLabelForTesting(status: String?) -> String {
+        switch runPhase(for: status) {
+        case .running: return "running"
+        case .completed: return "completed"
+        case .failed: return "failed"
+        case .cancelled: return "cancelled"
+        case .blocked: return "blocked"
+        }
+    }
+
+    static func assistantTextForTesting(timeline: Data, runID: String) throws -> String? {
+        let decoded = try JSONDecoder().decode(IronclawTimelineResponse.self, from: timeline)
+        return assistantText(in: decoded, forRunID: runID)
     }
     #endif
 
@@ -157,7 +175,7 @@ final class IronclawAPI {
             return
         }
         await onEvent(.reasoningStarted)
-        let outcome = await pollRunUntilFinished(
+        let outcome = await awaitRunCompletion(
             settings: settings,
             authToken: authToken,
             threadID: threadID,
@@ -223,7 +241,7 @@ final class IronclawAPI {
             await onEvent(.completed(responseID: nil))
             return
         }
-        let outcome = await pollRunUntilFinished(
+        let outcome = await awaitRunCompletion(
             settings: settings,
             authToken: authToken,
             threadID: threadID,
@@ -297,21 +315,6 @@ final class IronclawAPI {
         let _: IronclawResolveGateResponse = try await performWithBoundedRetry(request)
     }
 
-    private func fetchRunState(
-        baseURL: URL,
-        authToken: String?,
-        threadID: String,
-        runID: String
-    ) async throws -> IronclawRunState {
-        let request = jsonRequest(
-            url: baseURL.appending(path: "\(Self.threadsPath)/\(threadID)/runs/\(runID)"),
-            method: "GET",
-            authToken: authToken,
-            timeout: 12
-        )
-        return try await performWithBoundedRetry(request)
-    }
-
     private func fetchTimeline(
         baseURL: URL,
         authToken: String?,
@@ -348,7 +351,13 @@ final class IronclawAPI {
         )
     }
 
-    private func pollRunUntilFinished(
+    /// Awaits the run's terminal verdict. Primary path: consume the SSE
+    /// projection stream for live status, then read the timeline for the
+    /// finalized answer. If the stream cannot be opened or drops without a
+    /// verdict (per-caller 429 cap, transport error), degrade to polling the
+    /// timeline — which carries the same finalized assistant message keyed by
+    /// `turn_run_id`.
+    private func awaitRunCompletion(
         settings: IronclawSettings,
         authToken: String?,
         threadID: String,
@@ -359,15 +368,212 @@ final class IronclawAPI {
             await onEvent(.failed("IronClaw endpoint is not a valid Hosted IronClaw URL."))
             return .failed
         }
-        let maxAttempts = 180
+        do {
+            if let outcome = try await streamRunViaSSE(
+                baseURL: baseURL,
+                authToken: authToken,
+                threadID: threadID,
+                runID: runID,
+                onEvent: onEvent
+            ) {
+                return outcome
+            }
+            // Stream closed without a terminal status — sweep the timeline below.
+        } catch is CancellationError {
+            return .failed
+        } catch {
+            // SSE unavailable; the timeline poll below is the resilient fallback.
+        }
+        return await pollRunViaTimeline(
+            baseURL: baseURL,
+            authToken: authToken,
+            threadID: threadID,
+            runID: runID,
+            onEvent: onEvent
+        )
+    }
 
+    /// Reads the run's SSE projection stream line by line, decoding each event's
+    /// `data:` payload as an `IronclawProjectionFrame`. Returns a terminal
+    /// outcome once the target run reaches a terminal status, or `nil` if the
+    /// stream ends first (caller falls back to the timeline).
+    private func streamRunViaSSE(
+        baseURL: URL,
+        authToken: String?,
+        threadID: String,
+        runID: String,
+        onEvent: @escaping (ResponseStreamEvent) async -> Void
+    ) async throws -> IronclawPollOutcome? {
+        let url = baseURL.appending(path: "\(Self.threadsPath)/\(threadID)/events")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 90
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        if let authToken, !authToken.isEmpty {
+            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        guard let http = response as? HTTPURLResponse else { throw APIError.emptyResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            throw IronclawHTTPStatusError(
+                statusCode: http.statusCode,
+                message: "",
+                retryAfter: Self.retryAfter(from: http)
+            )
+        }
+
+        let deadline = Date().addingTimeInterval(Self.runDeadlineSeconds)
+        var dataBuffer = ""
+
+        for try await line in bytes.lines {
+            if Task.isCancelled { throw CancellationError() }
+            if Date() > deadline { return nil }
+
+            if line.isEmpty {
+                if let outcome = try await handleProjectionData(
+                    dataBuffer,
+                    baseURL: baseURL,
+                    authToken: authToken,
+                    threadID: threadID,
+                    runID: runID,
+                    onEvent: onEvent
+                ) {
+                    return outcome
+                }
+                dataBuffer = ""
+                continue
+            }
+            if line.hasPrefix("data:") {
+                let chunk = String(line.dropFirst("data:".count).drop(while: { $0 == " " }))
+                if !dataBuffer.isEmpty { dataBuffer += "\n" }
+                dataBuffer += chunk
+            }
+            // `event:`, `id:`, and `:`-comment lines carry no payload we act on.
+        }
+
+        if !dataBuffer.isEmpty {
+            return try await handleProjectionData(
+                dataBuffer,
+                baseURL: baseURL,
+                authToken: authToken,
+                threadID: threadID,
+                runID: runID,
+                onEvent: onEvent
+            )
+        }
+        return nil
+    }
+
+    /// Decodes one SSE `data:` payload and reacts to the target run's status.
+    /// Returns a terminal outcome, or `nil` to keep reading the stream.
+    private func handleProjectionData(
+        _ payload: String,
+        baseURL: URL,
+        authToken: String?,
+        threadID: String,
+        runID: String,
+        onEvent: @escaping (ResponseStreamEvent) async -> Void
+    ) async throws -> IronclawPollOutcome? {
+        guard !payload.isEmpty,
+              let data = payload.data(using: .utf8),
+              let frame = try? decoder.decode(IronclawProjectionFrame.self, from: data),
+              frame.type != "keep_alive",
+              let items = frame.state?.items else {
+            return nil
+        }
+
+        for item in items {
+            guard let runStatus = item.runStatus,
+                  runStatus.runID == nil || runStatus.runID == runID else { continue }
+
+            switch Self.runPhase(for: runStatus.status) {
+            case .completed:
+                return await completeFromTimeline(
+                    baseURL: baseURL,
+                    authToken: authToken,
+                    threadID: threadID,
+                    runID: runID,
+                    onEvent: onEvent
+                )
+
+            case .failed:
+                let reason = runStatus.failure?.category.map { ": \($0)" } ?? "."
+                await onEvent(.failed("IronClaw failed on this turn\(reason) Check Hosted IronClaw logs, then retry."))
+                return .failed
+
+            case .cancelled:
+                await onEvent(.failed("IronClaw cancelled this turn."))
+                return .failed
+
+            case .blocked:
+                if let gate = Self.makeGate(
+                    detail: item.gate,
+                    gateRef: runStatus.gateRef,
+                    isAuth: Self.statusIsAuthGate(runStatus.status) || item.gate?.gateKind == .authentication,
+                    threadID: threadID,
+                    runID: runID
+                ) {
+                    await onEvent(.approvalNeeded(gate))
+                    return .approvalNeeded
+                }
+                await onEvent(.failed("IronClaw is waiting on an approval it can't surface here yet. Open IronClaw to approve, then retry."))
+                return .failed
+
+            case .running:
+                await onEvent(.reasoningStarted)
+                return nil
+            }
+        }
+        return nil
+    }
+
+    private func completeFromTimeline(
+        baseURL: URL,
+        authToken: String?,
+        threadID: String,
+        runID: String,
+        onEvent: @escaping (ResponseStreamEvent) async -> Void
+    ) async -> IronclawPollOutcome {
+        let text: String
+        do {
+            let timeline = try await fetchTimelineEnsuringAssistant(
+                baseURL: baseURL,
+                authToken: authToken,
+                threadID: threadID,
+                runID: runID
+            )
+            text = Self.assistantText(in: timeline, forRunID: runID) ?? ""
+        } catch {
+            await onEvent(.failed(Self.pollFailureMessage(for: error)))
+            return .failed
+        }
+        let presented = Self.presentationText(from: text)
+        if presented.isEmpty {
+            await onEvent(.failed("IronClaw finished but returned no answer text. Check the Agent connection logs, then retry."))
+            return .failed
+        }
+        await onEvent(.itemDone(text: presented))
+        return .completed
+    }
+
+    /// Fallback when the SSE stream is unavailable: poll the timeline for the
+    /// finalized assistant message scoped to this run.
+    private func pollRunViaTimeline(
+        baseURL: URL,
+        authToken: String?,
+        threadID: String,
+        runID: String,
+        onEvent: @escaping (ResponseStreamEvent) async -> Void
+    ) async -> IronclawPollOutcome {
+        let maxAttempts = 180
         for attempt in 0..<maxAttempts {
             try? await Task.sleep(nanoseconds: attempt == 0 ? 800_000_000 : 2_000_000_000)
             if Task.isCancelled { return .failed }
 
-            let state: IronclawRunState
+            let timeline: IronclawTimelineResponse
             do {
-                state = try await fetchRunState(
+                timeline = try await fetchTimelineEnsuringAssistant(
                     baseURL: baseURL,
                     authToken: authToken,
                     threadID: threadID,
@@ -378,21 +584,7 @@ final class IronclawAPI {
                 return .failed
             }
 
-            switch state.status {
-            case "Completed":
-                let text: String
-                do {
-                    let timeline = try await fetchTimelineEnsuringAssistant(
-                        baseURL: baseURL,
-                        authToken: authToken,
-                        threadID: threadID,
-                        runID: runID
-                    )
-                    text = Self.latestAssistantText(in: timeline, runID: runID) ?? ""
-                } catch {
-                    await onEvent(.failed(Self.pollFailureMessage(for: error)))
-                    return .failed
-                }
+            if let text = Self.assistantText(in: timeline, forRunID: runID) {
                 let presented = Self.presentationText(from: text)
                 if presented.isEmpty {
                     await onEvent(.failed("IronClaw finished but returned no answer text. Check the Agent connection logs, then retry."))
@@ -400,37 +592,44 @@ final class IronclawAPI {
                 }
                 await onEvent(.itemDone(text: presented))
                 return .completed
-
-            case "Failed", "RecoveryRequired":
-                let reason = state.failure?.category.map { ": \($0)" } ?? "."
-                await onEvent(.failed("IronClaw failed on this turn\(reason) Check Hosted IronClaw logs, then retry."))
-                return .failed
-
-            case "Cancelled":
-                await onEvent(.failed("IronClaw cancelled this turn."))
-                return .failed
-
-            case "BlockedApproval", "BlockedAuth":
-                let gate = Self.makeGate(state: state, threadID: threadID, runID: runID)
-                await onEvent(.approvalNeeded(gate))
-                return .approvalNeeded
-
-            default:
-                // Queued, Running, BlockedResource, BlockedDependentRun,
-                // CancelRequested — keep waiting.
-                await onEvent(.reasoningStarted)
             }
+            await onEvent(.reasoningStarted)
         }
 
         await onEvent(.failed("IronClaw returned no output within six minutes. Check Hosted IronClaw, then retry."))
         return .failed
     }
 
-    private static func makeGate(state: IronclawRunState, threadID: String, runID: String) -> IronclawPendingGate {
-        let detail = state.gate
-        let isAuth = state.status == "BlockedAuth" || detail?.gateKind == .authentication
+    private static func runPhase(for rawStatus: String?) -> IronclawRunPhase {
+        switch (rawStatus ?? "").lowercased() {
+        case "completed", "succeeded", "success", "finalized", "done":
+            return .completed
+        case "failed", "error", "errored", "recovery_required", "recoveryrequired":
+            return .failed
+        case "cancelled", "canceled", "cancel_requested", "cancelrequested":
+            return .cancelled
+        case let status where status.hasPrefix("blocked"):
+            return .blocked
+        default:
+            // queued, running, pending, and any unknown status — keep waiting.
+            return .running
+        }
+    }
+
+    private static func statusIsAuthGate(_ rawStatus: String?) -> Bool {
+        (rawStatus ?? "").lowercased().contains("auth")
+    }
+
+    private static func makeGate(
+        detail: IronclawRunState.GateDetail?,
+        gateRef: String?,
+        isAuth: Bool,
+        threadID: String,
+        runID: String
+    ) -> IronclawPendingGate? {
+        guard let requestID = firstNonEmpty(gateRef, detail?.requestID) else { return nil }
         return IronclawPendingGate(
-            requestID: firstNonEmpty(state.gateRef, detail?.requestID) ?? "gate",
+            requestID: requestID,
             threadID: threadID,
             runID: runID,
             gateName: firstNonEmpty(detail?.gateName, isAuth ? "authentication" : "approval") ?? "approval",
@@ -478,6 +677,17 @@ final class IronclawAPI {
             return scoped
         }
         return assistantMessages.last?.content
+    }
+
+    /// Strict run-scoped lookup: only an assistant message whose `turn_run_id`
+    /// matches this run. The completion paths use this so a prior answer in the
+    /// thread can never be mistaken for the current run's reply mid-poll.
+    private static func assistantText(in timeline: IronclawTimelineResponse, forRunID runID: String) -> String? {
+        timeline.messages.last(where: {
+            $0.kind == "assistant"
+                && $0.turnRunID == runID
+                && ($0.content?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+        })?.content
     }
 
     // MARK: - HTTP plumbing
@@ -730,6 +940,14 @@ private enum IronclawPollOutcome {
     case completed
     case approvalNeeded
     case failed
+}
+
+private enum IronclawRunPhase {
+    case running
+    case completed
+    case failed
+    case cancelled
+    case blocked
 }
 
 enum IronclawRetryClassification: Equatable {
