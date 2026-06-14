@@ -39,4 +39,53 @@ extension PrivateChatCoreTests {
             XCTAssertNotNil(plan.firstRunDraft)
         }
     }
+
+    func testSetupRouteDefaultResolverPreservesFallbacksAndFiltersUnsafeCouncilRoutes() {
+        let defaults = SetupRouteDefaultResolver.currentDefaults(
+            selectedModelID: ModelOption.ironclawModelID,
+            isCouncilModeEnabled: false,
+            councilModelIDs: [
+                " zai-org/GLM-5.1-FP8 ",
+                ModelOption.ironclawModelID,
+                "ZAI-ORG/glm-5.1-fp8",
+                ModelOption.ironclawMobileModelID,
+                "Qwen/Qwen3.6-35B-A3B-FP8",
+                "anthropic/claude-sonnet-4-6"
+            ],
+            agentModelIDs: [ModelOption.ironclawMobileModelID],
+            preferredAvailableModelID: "zai-org/GLM-5.1-FP8",
+            defaultModelID: ModelCatalogStore.defaultModelID,
+            maxCouncilModels: 3
+        )
+
+        XCTAssertEqual(defaults.privateModelID, "zai-org/GLM-5.1-FP8")
+        XCTAssertEqual(
+            defaults.councilModelIDs,
+            ["zai-org/GLM-5.1-FP8", "Qwen/Qwen3.6-35B-A3B-FP8", "anthropic/claude-sonnet-4-6"]
+        )
+        XCTAssertEqual(defaults.ironclawMobileModelID, ModelOption.ironclawMobileModelID)
+    }
+
+    func testSetupRouteDefaultResolverRejectsNonPrivateStoredDefault() {
+        let resolved = SetupRouteDefaultResolver.resolvedDefaults(
+            stored: SetupRouteDefaults(
+                privateModelID: ModelOption.nearCloudModelID(for: "anthropic/claude-sonnet-4-6"),
+                councilModelIDs: [],
+                ironclawMobileModelID: ModelOption.ironclawMobileModelID
+            ),
+            fallback: SetupRouteDefaults(
+                privateModelID: "zai-org/GLM-5.1-FP8",
+                councilModelIDs: ["zai-org/GLM-5.1-FP8"],
+                ironclawMobileModelID: nil
+            ),
+            preferredAvailableModelID: "Qwen/Qwen3.6-35B-A3B-FP8",
+            agentModelIDs: [],
+            defaultModelID: ModelCatalogStore.defaultModelID,
+            maxCouncilModels: 3
+        )
+
+        XCTAssertEqual(resolved.privateModelID, "zai-org/GLM-5.1-FP8")
+        XCTAssertEqual(resolved.councilModelIDs, ["zai-org/GLM-5.1-FP8"])
+        XCTAssertNil(resolved.ironclawMobileModelID)
+    }
 }

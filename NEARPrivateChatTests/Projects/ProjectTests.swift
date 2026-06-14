@@ -204,7 +204,7 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(memoryMatches.first?.title, "Memory summary")
     }
 
-    func testHomeOrchestrationPlannerStagesAgentWorkFromSelectedProject() {
+    func testHomeOrchestrationPlannerPromotesOnlySelectedProjectContext() {
         let selected = ChatProject(
             id: "project-selected",
             name: "Private Chat iOS",
@@ -234,16 +234,12 @@ extension PrivateChatCoreTests {
             mobileAgentAvailable: false
         )
 
-        guard case let .stagePrompt(staged)? = plan.liveItems.first(where: { $0.id == "agent-builder" })?.action else {
-            return XCTFail("Expected agent builder to stage a prompt.")
-        }
-        XCTAssertEqual(staged.projectID, selected.id)
-        XCTAssertTrue(staged.prompt.contains("Private Chat iOS"))
-        XCTAssertEqual(plan.liveItems.first(where: { $0.kind == .project })?.id, "project-\(selected.id)")
-        XCTAssertTrue(plan.commands.contains { command in
-            guard case let .stagePrompt(prompt) = command.action else { return false }
-            return command.id == "patch" && prompt.projectID == selected.id
-        })
+        let projectItem = plan.liveItems.first(where: { $0.kind == .project })
+        XCTAssertEqual(projectItem?.id, "project-\(selected.id)")
+        XCTAssertEqual(projectItem?.title, "Private Chat iOS")
+        XCTAssertEqual(projectItem?.action, .openProject(selected.id))
+        XCTAssertFalse(plan.liveItems.contains { $0.id == "agent-builder" })
+        XCTAssertTrue(plan.commands.isEmpty)
     }
 
     func testProjectIdentityDefaultsAndEncoding() throws {
@@ -502,9 +498,9 @@ extension PrivateChatCoreTests {
     func testEmptyChatStarterPrepareProjectRequestsPickerWhenNoProjectIsSelected() {
         let store = ChatStore(api: PrivateChatAPI(configuration: .production))
         let suggestion = EmptyChatStarterSuggestion(
-            title: "Files to actions",
-            symbolName: "folder.badge.gearshape",
-            prompt: "Use attached files or a Project and turn this into actions: ",
+            title: "Use files",
+            symbolName: "paperclip",
+            prompt: "Use the attached files to answer: ",
             action: .project
         )
         var openedProjectPicker = false
@@ -526,9 +522,9 @@ extension PrivateChatCoreTests {
         let store = ChatStore(api: PrivateChatAPI(configuration: .production))
         store.createProject(named: "Launch")
         let suggestion = EmptyChatStarterSuggestion(
-            title: "Files to actions",
-            symbolName: "folder.badge.gearshape",
-            prompt: "Use attached files or a Project and turn this into actions: ",
+            title: "Use files",
+            symbolName: "paperclip",
+            prompt: "Use the attached files to answer: ",
             action: .project
         )
 
@@ -573,9 +569,9 @@ extension PrivateChatCoreTests {
         let store = ChatStore(api: PrivateChatAPI(configuration: .production))
         var didOpenProjectPicker = false
         let suggestion = EmptyChatStarterSuggestion(
-            title: "Files to actions",
-            symbolName: "folder.badge.gearshape",
-            prompt: "Use attached files or a Project and turn this into actions, trackers, reminders, risks, decisions, and missing facts. Preview before creating anything: ",
+            title: "Use files",
+            symbolName: "paperclip",
+            prompt: "Use the attached files to answer: ",
             action: .project
         )
 

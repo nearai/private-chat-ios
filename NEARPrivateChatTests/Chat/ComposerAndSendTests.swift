@@ -548,6 +548,74 @@ extension PrivateChatCoreTests {
     }
 
     @MainActor
+    func testPrivateModelAccessFailureDoesNotOfferPrivacyProxyRetry() async {
+        let host = PreConversationFailureSendHost()
+        host.shouldFailCreateConversation = false
+        host.councilModelIDsOverride = [ModelOption.nearPrivateDefaultModelID]
+        host.privacyProxyModelIDStub = ModelOption.nearCloudModelID(for: "openai/gpt-5.2")
+        host.streamError = APIError.status(403, "Access denied")
+        let coordinator = ChatSendCoordinator(host: host)
+
+        let didHandleSend = await coordinator.sendForBridge(
+            "Try the selected private model.",
+            attachments: []
+        )
+
+        XCTAssertTrue(didHandleSend)
+        XCTAssertNil(host.sendProxyRetryOffer)
+        XCTAssertEqual(host.sendMessages.last?.status, "failed")
+        XCTAssertEqual(host.sendMessages.last?.text, "Access denied")
+    }
+
+    @MainActor
+    func testPrivateRouteRestrictionOffersPrivacyProxyRetry() async throws {
+        let host = PreConversationFailureSendHost()
+        host.shouldFailCreateConversation = false
+        host.councilModelIDsOverride = [ModelOption.nearPrivateDefaultModelID]
+        let proxyModelID = ModelOption.nearCloudModelID(for: "openai/gpt-5.2")
+        host.privacyProxyModelIDStub = proxyModelID
+        host.streamError = APIError.status(403, "Access temporarily restricted. Please try again later.")
+        let coordinator = ChatSendCoordinator(host: host)
+
+        let didHandleSend = await coordinator.sendForBridge(
+            "What is happening in Iran?",
+            attachments: []
+        )
+
+        XCTAssertTrue(didHandleSend)
+        let offer = try XCTUnwrap(host.sendProxyRetryOffer)
+        XCTAssertEqual(offer.originalModelID, ModelOption.nearPrivateDefaultModelID)
+        XCTAssertEqual(offer.proxyModelID, proxyModelID)
+        XCTAssertEqual(offer.text, "What is happening in Iran?")
+        XCTAssertEqual(host.sendMessages.last?.status, "failed")
+    }
+
+    @MainActor
+    func testPrivateRouteRestrictionPersistsFailedTurnForHomePreview() async throws {
+        let host = PreConversationFailureSendHost()
+        host.shouldFailCreateConversation = false
+        host.councilModelIDsOverride = [ModelOption.nearPrivateDefaultModelID]
+        host.streamError = APIError.status(403, "Access temporarily restricted. Please try again later.")
+        let coordinator = ChatSendCoordinator(host: host)
+
+        let didHandleSend = await coordinator.sendForBridge(
+            "What is happening in Iran right now? Give a concise sourced update.",
+            attachments: []
+        )
+
+        XCTAssertTrue(didHandleSend)
+        XCTAssertEqual(host.savedConversationIDs, ["created-conversation"])
+        XCTAssertEqual(
+            MessageRepository.previewMessage(from: host.savedMessagesByConversationID["created-conversation"] ?? [])?.status,
+            "failed"
+        )
+        XCTAssertEqual(
+            MessageRepository.previewMessage(from: host.savedMessagesByConversationID["created-conversation"] ?? [])?.text,
+            "Access temporarily restricted. Please try again later."
+        )
+    }
+
+    @MainActor
     func testHostedRegenerateAndEditBlockLocalOnlyDocumentsBeforePreflight() {
         let host = PreConversationFailureSendHost()
         host.shouldFailCreateConversation = false
@@ -639,6 +707,68 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(MessageRepository.chatMessages(from: camelCase.data).first?.model, "Qwen/Qwen3.5-122B-A10B")
     }
 
+    func testConversationItemsHideInjectedDocumentContextInUserBubble() throws {
+        let response = try Self.conversationItemsResponseJSON("""
+        {
+          "data": [
+            {
+              "type": "message",
+              "id": "remote-user-doc-context",
+              "response_id": "resp-doc-context",
+              "created_at": 1001,
+              "status": "completed",
+              "role": "user",
+              "model_id": "zai-org/GLM-5.1-FP8",
+              "content": [{
+                "type": "input_text",
+                "text": "Relevant excerpts from the attached document(s):\\n\\n[Excerpt 1]\\nThe ZEPHYR-7 thermal margin is 42.\\n\\nUsing those excerpts (and the attached file or table) where relevant:\\nWhat is the ZEPHYR-7 thermal margin in the attached document?\\nAnswer with the number."
+              }]
+            }
+          ],
+          "has_more": false
+        }
+        """)
+
+        let message = try XCTUnwrap(MessageRepository.chatMessages(from: response.data).first)
+        XCTAssertEqual(
+            message.text,
+            "What is the ZEPHYR-7 thermal margin in the attached document?\nAnswer with the number."
+        )
+        XCTAssertFalse(message.text.contains("Relevant excerpts"))
+        XCTAssertFalse(message.text.contains("Using those excerpts"))
+    }
+
+    func testConversationItemsHideInjectedWebSearchContextInUserBubble() throws {
+        let response = try Self.conversationItemsResponseJSON("""
+        {
+          "data": [
+            {
+              "type": "message",
+              "id": "remote-user-web-context",
+              "response_id": "resp-web-context",
+              "created_at": 1001,
+              "status": "completed",
+              "role": "user",
+              "model_id": "zai-org/GLM-5.1-FP8",
+              "content": [{
+                "type": "input_text",
+                "text": "Current date: Saturday, 13 June 2026.\\n\\nUser request:\\nUsing live web sources, check today's reporting on SpaceX IPO and latest Iran conflict developments.\\n\\nApp-side web search results for \\"SpaceX IPO Iran conflict\\".\\nRetrieved: Saturday, 13 June 2026 at 7:34 pm.\\n\\n1. Reuters story\\nSource: www.reuters.com.\\n\\nInstructions:\\n- Use the app-side web results above as the live search context.\\n- Do not say you cannot perform web searches; the search has already been performed by the app."
+              }]
+            }
+          ],
+          "has_more": false
+        }
+        """)
+
+        let message = try XCTUnwrap(MessageRepository.chatMessages(from: response.data).first)
+        XCTAssertEqual(
+            message.text,
+            "Using live web sources, check today's reporting on SpaceX IPO and latest Iran conflict developments."
+        )
+        XCTAssertFalse(message.text.contains("App-side web search results"))
+        XCTAssertFalse(message.text.contains("Do not say you cannot perform web searches"))
+    }
+
     func testFailedAssistantTurnsDoNotShowProofFooter() {
         let failed = ChatMessage(
             id: "failed-restricted",
@@ -668,6 +798,95 @@ extension PrivateChatCoreTests {
         // a failed reply must not carry answer affordances.
         XCTAssertFalse(failed.canShowAssistantActions)
         XCTAssertTrue(completed.canShowAssistantActions)
+        XCTAssertFalse(failed.canShowAssistantInlineActions)
+        XCTAssertTrue(completed.canShowAssistantInlineActions)
+    }
+
+    func testWidgetAssistantTurnsKeepProofButHideInlineActionStrip() {
+        let widgetReply = ChatMessage(
+            id: "widget-reply",
+            role: .assistant,
+            text: "I separated phone-ready actions from rows that need one more detail.",
+            model: ModelOption.nearPrivateDefaultModelID,
+            createdAt: Date(),
+            status: "completed",
+            responseID: "widget-reply-r",
+            isStreaming: false,
+            widget: MessageWidget(kind: .actionPlan, title: "Actions from PDF + supplement table")
+        )
+
+        XCTAssertTrue(widgetReply.canShowAssistantActions)
+        XCTAssertTrue(widgetReply.canShowAnswerProofFooter)
+        XCTAssertFalse(widgetReply.canShowAssistantInlineActions)
+    }
+
+    func testFailedMessageProxyRetryAffordanceRequiresRouteRecoverySignal() {
+        let accessDenied = ChatMessage(
+            id: "failed-access-denied",
+            role: .assistant,
+            text: "Access denied",
+            model: ModelOption.nearPrivateDefaultModelID,
+            createdAt: Date(),
+            status: "failed",
+            responseID: nil,
+            isStreaming: false
+        )
+        let restricted = ChatMessage(
+            id: "failed-restricted",
+            role: .assistant,
+            text: "Access temporarily restricted. Please try again later.",
+            model: ModelOption.nearPrivateDefaultModelID,
+            createdAt: Date(),
+            status: "failed",
+            responseID: nil,
+            isStreaming: false
+        )
+        let explicitOffer = ProxyRetryOffer(
+            id: accessDenied.id,
+            originalModelID: ModelOption.nearPrivateDefaultModelID,
+            proxyModelID: ModelOption.nearCloudModelID(for: "openai/gpt-5.2"),
+            text: "Try the selected private model.",
+            attachments: [],
+            previousResponseID: nil,
+            conversationID: "conversation-id"
+        )
+        let missingProxyOffer = ProxyRetryOffer(
+            id: restricted.id,
+            originalModelID: ModelOption.nearPrivateDefaultModelID,
+            proxyModelID: nil,
+            text: "What is happening in Iran?",
+            attachments: [],
+            previousResponseID: nil,
+            conversationID: "conversation-id"
+        )
+
+        XCTAssertTrue(FailedMessageRecoveryPolicy.isFailedPrivateRouteMessage(accessDenied))
+        XCTAssertFalse(FailedMessageRecoveryPolicy.shouldShowProxyRetryAction(message: accessDenied, proxyRetryOffer: nil))
+        XCTAssertFalse(FailedMessageRecoveryPolicy.shouldShowProxyRetryAction(message: restricted, proxyRetryOffer: nil))
+        XCTAssertTrue(FailedMessageRecoveryPolicy.shouldShowProxyRetryAction(message: restricted, proxyRetryOffer: missingProxyOffer))
+        XCTAssertTrue(FailedMessageRecoveryPolicy.shouldShowProxyRetryAction(message: accessDenied, proxyRetryOffer: explicitOffer))
+    }
+
+    func testAssistantFailurePresentationSummarizesPrivateRouteRateLimit() {
+        let message = ChatMessage(
+            id: "failed-rate-limit",
+            role: .assistant,
+            text: "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn.",
+            model: ModelOption.nearPrivateDefaultModelID,
+            createdAt: Date(),
+            status: "failed",
+            responseID: nil,
+            isStreaming: false
+        )
+
+        let noCloud = AssistantFailurePresentation(message: message, nearCloudKeyConfigured: false)
+        XCTAssertEqual(noCloud.title, "Private route needs a moment")
+        XCTAssertTrue(noCloud.detail.localizedCaseInsensitiveContains("current session"))
+        XCTAssertEqual(noCloud.secondaryActionTitle, "Add Cloud key")
+
+        let withCloud = AssistantFailurePresentation(message: message, nearCloudKeyConfigured: true)
+        XCTAssertEqual(withCloud.secondaryActionTitle, "Use Cloud once")
+        XCTAssertEqual(withCloud.secondaryActionSymbolName, "eye.slash")
     }
 
     func testRelativeFooterSuffixNeverReadsNowAgo() {
@@ -1182,7 +1401,11 @@ extension PrivateChatCoreTests {
         )
         XCTAssertEqual(
             store.displayFailureMessageForSend("Access temporarily restricted. Please try again later."),
-            "The private route is temporarily busy. Use the privacy proxy for this turn, or retry private in a moment."
+            "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn."
+        )
+        XCTAssertEqual(
+            store.displayFailureMessageForSend("The private route is temporarily busy — retrying automatically in about 109s. Use the privacy proxy for this turn, or try private again from the route chip."),
+            "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn."
         )
     }
 
@@ -1272,6 +1495,49 @@ extension PrivateChatCoreTests {
                 currentMessages: [current]
             ),
             "Cached answer that should only appear when another chat is previewed."
+        )
+    }
+
+    func testConversationPreviewPrefersAnswerAndCouncilSynthesisOverLastPrompt() {
+        let base = Date(timeIntervalSince1970: 1_000)
+        let user = makeMessage(id: "user", role: .user, text: "What is happening in Iran?", createdAt: base)
+        let assistant = makeMessage(
+            id: "assistant",
+            role: .assistant,
+            text: "The ceasefire is holding into its third day.",
+            model: ChatStore.defaultModelID,
+            createdAt: base.addingTimeInterval(1)
+        )
+        let followUpPrompt = makeMessage(
+            id: "follow-up",
+            role: .user,
+            text: "Can you watch this daily?",
+            createdAt: base.addingTimeInterval(2)
+        )
+
+        XCTAssertEqual(
+            MessageRepository.previewMessage(from: [user, assistant, followUpPrompt])?.id,
+            "assistant"
+        )
+
+        let dissent = makeMessage(
+            id: "dissent",
+            role: .assistant,
+            text: "Qwen disagrees with the confidence level.",
+            model: "near-cloud/Qwen/Qwen3.6-35B-A3B-FP8",
+            createdAt: base.addingTimeInterval(3)
+        )
+        let synthesis = makeMessage(
+            id: "synthesis",
+            role: .assistant,
+            text: "The council synthesis is not over, but closer to an off-ramp.",
+            model: ModelOption.llmCouncilSynthesisModelID,
+            createdAt: base.addingTimeInterval(4)
+        )
+
+        XCTAssertEqual(
+            MessageRepository.previewMessage(from: [user, assistant, dissent, synthesis])?.id,
+            "synthesis"
         )
     }
 
@@ -1846,7 +2112,8 @@ private final class PreConversationFailureSendHost: ChatSendCoordinatorHost {
     var sendRouteReadinessIssue: ChatRouteReadinessIssue?
     var sendPendingHostedHandoffPreflight: HostedIronclawHandoffPreflight?
     var sendSelectedModel = ModelOption.nearPrivateDefaultModelID
-    var sendSelectedConversation: ConversationSummary? { nil }
+    var selectedConversationStub: ConversationSummary?
+    var sendSelectedConversation: ConversationSummary? { selectedConversationStub }
     var sendSelectedProjectID: String? { nil }
     var shouldFailCreateConversation = true
     var sendProxyRetryOffer: ProxyRetryOffer?
@@ -1854,6 +2121,9 @@ private final class PreConversationFailureSendHost: ChatSendCoordinatorHost {
     var hostedPreflight: HostedIronclawHandoffPreflight?
     var hostedPreflightRequestCount = 0
     var localDocumentPayloadsOverride: [DocumentTextExtractor.LocalDocumentContextPayload] = []
+    var streamError: Error?
+    var savedConversationIDs: [String] = []
+    var savedMessagesByConversationID: [String: [ChatMessage]] = [:]
 
     func privacyProxyModelIDForSend() -> String? { privacyProxyModelIDStub }
 
@@ -1993,7 +2263,9 @@ private final class PreConversationFailureSendHost: ChatSendCoordinatorHost {
         throw conversationFailure
     }
 
-    func activateConversationForSend(_ conversation: ConversationSummary) {}
+    func activateConversationForSend(_ conversation: ConversationSummary) {
+        selectedConversationStub = conversation
+    }
 
     func organizePhoneAgentConversationIfNeededForSend(
         conversation: ConversationSummary,
@@ -2029,10 +2301,16 @@ private final class PreConversationFailureSendHost: ChatSendCoordinatorHost {
     ) async throws -> String {
         lastStreamPreviousResponseID = previousResponseID
         lastStreamAttachmentIDs = attachments.map(\.id)
+        if let streamError {
+            throw streamError
+        }
         return initialModel
     }
 
-    func saveLocalMessagesForSend(conversationID: String) {}
+    func saveLocalMessagesForSend(conversationID: String) {
+        savedConversationIDs.append(conversationID)
+        savedMessagesByConversationID[conversationID] = sendMessages
+    }
 
     func scheduleMessageLoadForSend(conversation: ConversationSummary, preferCached: Bool) {}
 

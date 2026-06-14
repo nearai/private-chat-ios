@@ -28,6 +28,18 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(store.remoteFilePreview?.text.contains("Preview body sentinel") == true)
         XCTAssertEqual(api.previewFetches, ["file-new"])
 
+        api.previewDataByID["file-new"] = Data("Changed preview body that should stay cached".utf8)
+        await store.previewRemoteFile(store.remoteFiles[0])
+        XCTAssertEqual(api.previewFetches, ["file-new"], "Second preview of the same remote file should use the in-memory cache.")
+        XCTAssertTrue(store.remoteFilePreview?.text.contains("Preview body sentinel") == true)
+        XCTAssertFalse(store.remoteFilePreview?.text.contains("Changed preview body") == true)
+
+        store.reset()
+        await store.refreshRemoteFiles(showErrors: false)
+        await store.previewRemoteFile(store.remoteFiles[0])
+        XCTAssertEqual(api.previewFetches, ["file-new", "file-new"], "Reset should invalidate cached previews.")
+        XCTAssertTrue(store.remoteFilePreview?.text.contains("Changed preview body") == true)
+
         let deletedID = await store.deleteRemoteFile(store.remoteFiles[0])
         XCTAssertEqual(deletedID, "file-new")
         XCTAssertEqual(api.deletedFileIDs, ["file-new"])

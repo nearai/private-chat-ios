@@ -105,6 +105,341 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(widget.metric?.value, "7")
     }
 
+    func testWidgetExtractParsesGenericJsonFenceWithNearWidgetSentinel() throws {
+        let text = """
+        Here are today's stories.
+
+        ```json
+        NEAR-WIDGET
+        {"kind":"news_brief","heading":"Today · 2 stories","time":"now","freshness":"fresh","stories":[{"title":"SpaceX IPO opens with volatility","tag":"Markets","sources":[{"label":"AP","domain":"apnews.com"}]},{"title":"Iran deal remains uncertain","tag":"Geopolitics","sources":[{"label":"Al Jazeera","domain":"aljazeera.com"}]}]}
+        ```
+        """
+        let result = MessageWidget.extract(from: text)
+        let widget = try XCTUnwrap(result.widget)
+        XCTAssertEqual(widget.kind, .newsBrief)
+        XCTAssertEqual(widget.newsBrief?.heading, "Today · 2 stories")
+        XCTAssertEqual(widget.newsBrief?.stories.count, 2)
+        XCTAssertEqual(widget.time, "now")
+        XCTAssertEqual(widget.freshness, .fresh)
+        XCTAssertEqual(result.cleanedText, "Here are today's stories.")
+        XCTAssertFalse(result.cleanedText.contains("NEAR-WIDGET"))
+        XCTAssertFalse(result.cleanedText.contains("\"kind\""))
+    }
+
+    func testNewsWidgetTrackingChoiceStagesConcreteWatcherDraft() throws {
+        let widget = MessageWidget(
+            kind: .newsBrief,
+            followUp: "Which of these stories should I track for updates?",
+            newsBrief: WidgetNewsBrief(
+                heading: "Today · 3 stories",
+                stories: [
+                    WidgetNewsStory(title: "SpaceX IPO opens with volatility", tag: "Markets"),
+                    WidgetNewsStory(title: "Iran deal remains uncertain", tag: "Geopolitics"),
+                    WidgetNewsStory(title: "Apple launches Core AI framework", tag: "AI")
+                ]
+            )
+        )
+
+        XCTAssertEqual(widget.followUpLabel, "Track one of these stories")
+        let draft = try XCTUnwrap(widget.followUpDraft)
+        XCTAssertTrue(draft.contains("Create a watcher for one story from this brief."))
+        XCTAssertTrue(draft.contains("SpaceX IPO opens with volatility"))
+        XCTAssertTrue(draft.contains("Iran deal remains uncertain"))
+        XCTAssertTrue(draft.contains("Apple launches Core AI framework"))
+        XCTAssertTrue(draft.localizedCaseInsensitiveContains("propose cadence"))
+        XCTAssertTrue(draft.localizedCaseInsensitiveContains("sources"))
+        XCTAssertFalse(draft.hasPrefix("Which of these stories"))
+    }
+
+    func testNewsWidgetStoryRowSummarizesSourceContext() {
+        let singleSource = WidgetNewsStoryRow(
+            story: WidgetNewsStory(
+                title: "SpaceX IPO opens",
+                tag: "Markets",
+                sources: [WidgetNewsSource(label: "R", domain: "https://www.reuters.com/markets")]
+            )
+        )
+        XCTAssertEqual(singleSource.contextText, "Reuters")
+
+        let multiSource = WidgetNewsStoryRow(
+            story: WidgetNewsStory(
+                title: "AI product launch",
+                tag: "AI",
+                sources: [
+                    WidgetNewsSource(label: "M", domain: "macrumors.com"),
+                    WidgetNewsSource(label: "B", domain: "bloomberg.com")
+                ]
+            )
+        )
+        XCTAssertEqual(multiSource.contextText, "2 sources")
+
+        let noSource = WidgetNewsStoryRow(
+            story: WidgetNewsStory(title: "Unsourced model note", tag: "Brief")
+        )
+        XCTAssertNil(noSource.contextText)
+    }
+
+    func testNewsWidgetCompactPresentationCapsVisibleStories() {
+        let brief = WidgetNewsBrief(
+            heading: "Today · 5 stories",
+            stories: [
+                WidgetNewsStory(title: "SpaceX private-market pricing shifts"),
+                WidgetNewsStory(title: "Iran talks remain uncertain"),
+                WidgetNewsStory(title: "AI release dates move"),
+                WidgetNewsStory(title: "Watch market spreads widen"),
+                WidgetNewsStory(title: "Semiconductor guidance changes")
+            ]
+        )
+
+        XCTAssertEqual(brief.compactDisplayStories.map(\.title), [
+            "SpaceX private-market pricing shifts",
+            "Iran talks remain uncertain",
+            "AI release dates move"
+        ])
+        XCTAssertEqual(brief.compactRemainingStoryCount, 2)
+    }
+
+    func testNewsWidgetPresentationUsesStructuredSurfaceInsteadOfDuplicateProse() {
+        let newsWidget = MessageWidget(
+            kind: .newsBrief,
+            newsBrief: WidgetNewsBrief(
+                heading: "Today · 2 stories",
+                stories: [
+                    WidgetNewsStory(title: "Iran ceasefire enters third day", tag: "World", sources: [
+                        WidgetNewsSource(label: "R", domain: "reuters.com")
+                    ])
+                ]
+            )
+        )
+
+        XCTAssertNil(
+            AssistantMessagePresentationPolicy.visibleCompletedText(
+                "Here are today's top stories with sources and short notes.",
+                widget: newsWidget
+            )
+        )
+
+        let actionWidget = MessageWidget(
+            kind: .actionPlan,
+            title: "Document actions",
+            actionPlan: WidgetActionPlan(actions: [
+                WidgetActionItem(title: "Draft agreement", type: "document")
+            ])
+        )
+        XCTAssertEqual(
+            AssistantMessagePresentationPolicy.visibleCompletedText(
+                "I separated the actions from the PDF.",
+                widget: actionWidget
+            ),
+            "I separated the actions from the PDF."
+        )
+    }
+
+    func testSourceGroundedNewsWidgetSurvivesLiveWebDisplayPolicy() throws {
+        let source = WebSearchSource(
+            type: "news",
+            url: "https://www.reuters.com/technology/anthropic-ai-models-foreign-access/",
+            title: "Anthropic halts top AI models after US order to limit foreign access",
+            publishedAt: nil,
+            snippet: nil
+        )
+        let widget = MessageWidget(
+            kind: .newsBrief,
+            title: "Today",
+            newsBrief: WidgetNewsBrief(
+                heading: "Today · 1 story",
+                stories: [
+                    WidgetNewsStory(title: "US order forces Anthropic AI model limits", tag: "Regulation", sources: [
+                        WidgetNewsSource(label: "R", domain: "reuters.com")
+                    ])
+                ]
+            )
+        )
+
+        let display = try XCTUnwrap(AssistantMessagePresentationPolicy.widgetForDisplay(widget, sources: [source]))
+
+        XCTAssertEqual(display.newsBrief?.stories.first?.title, "US order forces Anthropic AI model limits")
+        XCTAssertEqual(display.newsBrief?.heading, "Today · 1 story")
+    }
+
+    func testUngroundedLiveWebNewsWidgetFallsBackToSourceTitles() throws {
+        let sources = [
+            WebSearchSource(
+                type: "news",
+                url: "https://www.reuters.com/technology/anthropic-ai-models-foreign-access/",
+                title: "Anthropic halts top AI models after US order to limit foreign access",
+                publishedAt: nil,
+                snippet: nil
+            ),
+            WebSearchSource(
+                type: "web",
+                url: "https://www.bloomberg.com/news/articles/ai-race-trending-news",
+                title: "The AI Race: Trending News, Latest Updates, Analysis",
+                publishedAt: nil,
+                snippet: nil
+            )
+        ]
+        let widget = MessageWidget(
+            kind: .newsBrief,
+            title: "Today",
+            newsBrief: WidgetNewsBrief(
+                heading: "Today · 2 stories",
+                stories: [
+                    WidgetNewsStory(title: "US order forces Anthropic AI model limits", tag: "Regulation", sources: [
+                        WidgetNewsSource(label: "R", domain: "reuters.com")
+                    ]),
+                    WidgetNewsStory(title: "Anthropic suspends Claude Fable 5 and Mythos 5 over security fears", tag: "Industry", sources: [
+                        WidgetNewsSource(label: "B", domain: "bloomberg.com")
+                    ])
+                ]
+            )
+        )
+
+        let display = try XCTUnwrap(AssistantMessagePresentationPolicy.widgetForDisplay(widget, sources: sources))
+        let storyTitles = try XCTUnwrap(display.newsBrief?.stories.map(\.title))
+
+        XCTAssertEqual(storyTitles, sources.map(\.displayTitle))
+        XCTAssertEqual(display.newsBrief?.heading, "Live web · 2 sources")
+        XCTAssertEqual(display.newsBrief?.stories.first?.sources.first?.displaySourceText, "Reuters")
+        XCTAssertFalse(
+            AssistantMessagePresentationPolicy.shouldShowSourceCarousel(
+                sources: sources,
+                widget: display
+            )
+        )
+    }
+
+    func testPartlyOverlappingNewsWidgetWithInventedNamesFallsBackToSourceTitle() throws {
+        let source = WebSearchSource(
+            type: "news",
+            url: "https://news.google.com/articles/anthropic-foreign-access",
+            title: "Anthropic halts top AI models after US order to limit foreign access",
+            publishedAt: nil,
+            snippet: nil
+        )
+        let widget = MessageWidget(
+            kind: .newsBrief,
+            title: "Today",
+            newsBrief: WidgetNewsBrief(
+                heading: "Today · 1 story",
+                stories: [
+                    WidgetNewsStory(title: "US orders Anthropic to suspend Fable 5 & Mythos 5 for foreign nationals", tag: "Regulation", sources: [
+                        WidgetNewsSource(label: "G", domain: "news.google.com")
+                    ])
+                ]
+            )
+        )
+
+        let display = try XCTUnwrap(AssistantMessagePresentationPolicy.widgetForDisplay(widget, sources: [source]))
+
+        XCTAssertEqual(display.newsBrief?.stories.first?.title, source.displayTitle)
+        XCTAssertEqual(display.newsBrief?.heading, "Live web · 1 source")
+    }
+
+    func testNewsWidgetWithInlineSourcesHidesRedundantSourceCarouselOnly() {
+        let webSources = [
+            WebSearchSource(
+                type: "web",
+                url: "https://www.reuters.com/world/",
+                title: "Reuters",
+                publishedAt: nil,
+                snippet: nil
+            )
+        ]
+        let sourcedNewsWidget = MessageWidget(
+            kind: .newsBrief,
+            newsBrief: WidgetNewsBrief(
+                stories: [
+                    WidgetNewsStory(title: "Iran ceasefire enters third day", sources: [
+                        WidgetNewsSource(label: "R", domain: "reuters.com")
+                    ])
+                ]
+            )
+        )
+        let unsourcedNewsWidget = MessageWidget(
+            kind: .newsBrief,
+            newsBrief: WidgetNewsBrief(stories: [
+                WidgetNewsStory(title: "Iran ceasefire enters third day")
+            ])
+        )
+
+        XCTAssertFalse(
+            AssistantMessagePresentationPolicy.shouldShowSourceCarousel(
+                sources: webSources,
+                widget: sourcedNewsWidget
+            )
+        )
+        XCTAssertTrue(
+            AssistantMessagePresentationPolicy.shouldShowSourceCarousel(
+                sources: webSources,
+                widget: unsourcedNewsWidget
+            )
+        )
+        XCTAssertTrue(
+            AssistantMessagePresentationPolicy.shouldShowSourceCarousel(
+                sources: webSources,
+                widget: MessageWidget(kind: .chart)
+            )
+        )
+    }
+
+    func testMessageRepositoryDetectsSourcesFromStoredNewsWidget() {
+        let message = ChatMessage(
+            id: "assistant-1",
+            role: .assistant,
+            text: "Three stories leading today.",
+            model: ModelOption.nearPrivateDefaultModelID,
+            createdAt: Date(),
+            status: "completed",
+            responseID: "response-1",
+            isStreaming: false,
+            widget: MessageWidget(
+                kind: .newsBrief,
+                newsBrief: WidgetNewsBrief(
+                    heading: "Today · 2 stories",
+                    stories: [
+                        WidgetNewsStory(title: "SpaceX IPO opens", tag: "Markets", sources: [
+                            WidgetNewsSource(label: "R", domain: "reuters.com")
+                        ])
+                    ]
+                )
+            )
+        )
+
+        XCTAssertTrue(MessageRepository.hasSourceCue(from: [message]))
+        XCTAssertEqual(MessageRepository.sourceSummary(from: [message]), "Reuters")
+    }
+
+    func testMessageRepositorySummarizesMultiSourceNewsWidgets() {
+        let message = ChatMessage(
+            id: "assistant-1",
+            role: .assistant,
+            text: "Three stories leading today.",
+            model: ModelOption.nearPrivateDefaultModelID,
+            createdAt: Date(),
+            status: "completed",
+            responseID: "response-1",
+            isStreaming: false,
+            widget: MessageWidget(
+                kind: .newsBrief,
+                newsBrief: WidgetNewsBrief(
+                    heading: "Today · 3 stories",
+                    stories: [
+                        WidgetNewsStory(title: "SpaceX IPO opens", tag: "Markets", sources: [
+                            WidgetNewsSource(label: "R", domain: "reuters.com"),
+                            WidgetNewsSource(label: "A", domain: "apnews.com")
+                        ]),
+                        WidgetNewsStory(title: "AI release update", tag: "AI", sources: [
+                            WidgetNewsSource(label: "M", domain: "macrumors.com")
+                        ])
+                    ]
+                )
+            )
+        )
+
+        XCTAssertEqual(MessageRepository.sourceSummary(from: [message]), "Reuters + 2")
+    }
+
     func testWidgetExtractParsesActionPlanBlockAndStripsIt() throws {
         let text = """
         I found the top actions.
@@ -210,6 +545,94 @@ extension PrivateChatCoreTests {
 
         XCTAssertNil(calendarAction.systemActionDraft(now: now))
         XCTAssertNil(reminderAction.systemActionDraft(now: now))
+    }
+
+    func testWidgetActionItemRequiresExactTimeForFuzzyTrackerWhenModelOmitsMissingFields() throws {
+        let action = WidgetActionItem(
+            title: "Upon waking supplements",
+            type: "tracker",
+            detail: "The source table says this should happen upon waking.",
+            schedule: "daily upon waking",
+            command: "Create a tracker for upon waking supplements daily",
+            source: "Supplement table row 7",
+            date: nil,
+            time: "upon waking",
+            duration: nil,
+            recurrence: "daily",
+            timezone: nil,
+            location: nil,
+            attendees: [],
+            missingFields: [],
+            confidence: 0.79,
+            tone: nil
+        )
+
+        let draft = try XCTUnwrap(action.appActionDraft())
+
+        XCTAssertFalse(draft.isReady)
+        XCTAssertTrue(draft.missingFields.contains("exact time"))
+        XCTAssertTrue(action.reviewMissingFields.contains("exact time"))
+        XCTAssertEqual(draft.schedule, .daily(hour: 8, minute: 0))
+        XCTAssertTrue(draft.prompt.contains("Supplement table row 7"))
+    }
+
+    func testWidgetActionPlanSeparatesConcreteCalendarRowsFromFuzzySupplementTrackers() throws {
+        let text = """
+        I extracted the useful actions.
+
+        ```near-widget
+        {"kind":"action_plan","title":"Client action plan","action_plan":{"heading":"Actions to review","summary":"Concrete phone actions and fuzzy supplement rows are separated.","actions":[{"title":"Services agreement review","type":"calendar invite","detail":"Review the draft services agreement with counsel.","date":"2026-07-02","time":"11:00 AM","duration":"1 hour","timezone":"America/New_York","location":"Zoom","attendees":["legal@example.com"],"source":"PDF template instructions page 2","confidence":0.92},{"title":"Bedtime magnesium","type":"tracker","detail":"The table says bedtime but does not provide an exact time.","schedule":"before bed","time":"before bed","recurrence":"daily","source":"Supplement table row 11","command":"Create a tracker for bedtime magnesium daily","missing_fields":[],"confidence":0.75}]}}
+        ```
+        """
+        let now = Date(timeIntervalSince1970: 1_782_777_600) // 2026-06-30 00:00 UTC
+        let widget = try XCTUnwrap(MessageWidget.extract(from: text).widget)
+        let actions = try XCTUnwrap(widget.actionPlan?.actions)
+        let calendarAction = try XCTUnwrap(actions.first)
+        let fuzzyTracker = try XCTUnwrap(actions.last)
+
+        let calendarDraft = try XCTUnwrap(calendarAction.systemActionDraft(now: now))
+        XCTAssertEqual(calendarDraft.kind, .calendarEvent)
+        XCTAssertEqual(calendarDraft.title, "Services agreement review")
+        XCTAssertEqual(calendarDraft.location, "Zoom")
+        XCTAssertEqual(calendarDraft.attendees, ["legal@example.com"])
+        XCTAssertTrue(calendarDraft.notes?.contains("PDF template instructions page 2") == true)
+
+        let trackerDraft = try XCTUnwrap(fuzzyTracker.appActionDraft())
+        XCTAssertFalse(trackerDraft.isReady)
+        XCTAssertTrue(trackerDraft.missingFields.contains("exact time"))
+        XCTAssertTrue(fuzzyTracker.reviewMissingFields.contains("exact time"))
+        XCTAssertTrue(trackerDraft.prompt.contains("Supplement table row 11"))
+    }
+
+    @MainActor
+    func testChatStoreStagesFuzzyWidgetTrackerWhenModelOmitsMissingFields() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        var created: Briefing?
+        store.onCreateTracker = { created = $0 }
+        let action = WidgetActionItem(
+            title: "With dinner supplements",
+            type: "tracker",
+            detail: "The source table uses a meal cue, not a time.",
+            schedule: "with dinner daily",
+            command: "Create a tracker for with dinner supplements daily",
+            source: "Supplement table row 18",
+            date: nil,
+            time: "with dinner",
+            duration: nil,
+            recurrence: "daily",
+            timezone: nil,
+            location: nil,
+            attendees: [],
+            missingFields: [],
+            confidence: 0.74,
+            tone: nil
+        )
+
+        store.createTracker(fromWidgetAction: action)
+
+        XCTAssertNil(created)
+        XCTAssertEqual(store.draft, "Create a tracker for with dinner supplements daily")
+        XCTAssertTrue(store.messages.isEmpty)
     }
 
     func testHostileProductTrialPrivateChatIOSActionSurfaceContract() throws {

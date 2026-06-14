@@ -779,16 +779,16 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(
             suggestions.map(\.title),
             [
-                "Next actions",
-                "Draft trackers",
-                "Web research",
-                "Files to actions",
-                "Sources & proof",
-                "Handoff to Agent"
+                "Ask",
+                "Summarize",
+                "Research",
+                "Use files",
+                "Agent"
             ]
         )
         XCTAssertEqual(suggestions.last?.action, .agent)
-        XCTAssertTrue(suggestions[4].prompt.contains("NEAR Private route can prove"))
+        XCTAssertEqual(suggestions[2].action, .research)
+        XCTAssertEqual(suggestions[3].action, .project)
     }
 
     func testEmptyChatStarterPlannerAdaptsTrustCopyForNearCloudProjects() {
@@ -803,11 +803,11 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(
             suggestions.map(\.title),
             [
-                "Brief project",
-                "Context to actions",
-                "Draft trackers",
-                "Sources & proof",
-                "Review with Council"
+                "Brief",
+                "Summarize",
+                "Research",
+                "Proof",
+                "Council"
             ]
         )
         XCTAssertEqual(suggestions[3].action, .trust)

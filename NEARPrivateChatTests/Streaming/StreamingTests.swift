@@ -211,6 +211,94 @@ extension PrivateChatCoreTests {
     }
 
     @MainActor
+    func testMessageTimelineStoreDiscardsStaleConversationEvents() {
+        let store = MessageTimelineStore()
+        store.messages = [
+            ChatMessage(
+                id: "assistant-1",
+                role: .assistant,
+                text: "",
+                model: ModelOption.nearPrivateDefaultModelID,
+                createdAt: Date(timeIntervalSince1970: 1_000),
+                status: "streaming",
+                responseID: nil,
+                isStreaming: true
+            )
+        ]
+
+        store.applyIfConversationMatches(
+            selectedConversationID: "conv-live",
+            streamEvent: .textDelta("stale answer"),
+            conversationID: "conv-stale",
+            assistantMessageID: "assistant-1"
+        )
+        store.flushPendingTextDelta(for: "assistant-1")
+
+        XCTAssertEqual(store.messages.first?.text, "")
+        XCTAssertEqual(store.messages.first?.status, "streaming")
+
+        store.applyIfConversationMatches(
+            selectedConversationID: "conv-live",
+            streamEvent: .textDelta("live answer"),
+            conversationID: "conv-live",
+            assistantMessageID: "assistant-1"
+        )
+        store.flushPendingTextDelta(for: "assistant-1")
+
+        XCTAssertEqual(store.messages.first?.text, "live answer")
+    }
+
+    @MainActor
+    func testChatStoreDiscardsStaleConversationStreamEvents() async {
+        let timelineStore = MessageTimelineStore()
+        let conversationStore = ConversationStore(
+            repository: ConversationRepository(api: PrivateChatAPI(configuration: .production))
+        )
+        let store = ChatStore(
+            api: PrivateChatAPI(configuration: .production),
+            conversationStore: conversationStore,
+            messageTimelineStore: timelineStore
+        )
+        let selectedConversation = ConversationSummary(
+            id: "conv-live",
+            createdAt: 1_700_000_000,
+            metadata: ConversationMetadata(title: "Live")
+        )
+        store.selectedConversation = selectedConversation
+        store.messages = [
+            ChatMessage(
+                id: "assistant-1",
+                role: .assistant,
+                text: "",
+                model: ModelOption.nearPrivateDefaultModelID,
+                createdAt: Date(timeIntervalSince1970: 1_000),
+                status: "streaming",
+                responseID: nil,
+                isStreaming: true
+            )
+        ]
+
+        await store.apply(
+            streamEvent: .textDelta("stale answer"),
+            conversationID: "conv-stale",
+            assistantMessageID: "assistant-1"
+        )
+        timelineStore.flushPendingTextDelta(for: "assistant-1")
+
+        XCTAssertEqual(store.messages.first?.text, "")
+        XCTAssertEqual(store.messages.first?.status, "streaming")
+
+        await store.apply(
+            streamEvent: .textDelta("live answer"),
+            conversationID: selectedConversation.id,
+            assistantMessageID: "assistant-1"
+        )
+        timelineStore.flushPendingTextDelta(for: "assistant-1")
+
+        XCTAssertEqual(store.messages.first?.text, "live answer")
+    }
+
+    @MainActor
     func testPrivateRouteBusyRetriesSameRouteOnceBeforeBreaker() async throws {
         PrivateRouteRetryURLProtocol.install(responses: [
             (
@@ -367,6 +455,14 @@ extension PrivateChatCoreTests {
         let preview = MessageWidget.strippedStreamingPreview(text)
         XCTAssertEqual(preview, "Partial answer text.")
         XCTAssertFalse(preview.contains("near-widget"))
+    }
+
+    func testWidgetStrippedStreamingPreviewHidesGenericFenceWithSentinel() {
+        let text = "Partial answer text.\n\n```json\nNEAR-WIDGET\n{\"kind\":\"news_brief\","
+        let preview = MessageWidget.strippedStreamingPreview(text)
+        XCTAssertEqual(preview, "Partial answer text.")
+        XCTAssertFalse(preview.contains("NEAR-WIDGET"))
+        XCTAssertFalse(preview.contains("\"kind\""))
     }
 
     @MainActor
@@ -579,3 +675,4 @@ private final class PrivateRouteRetryURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+}

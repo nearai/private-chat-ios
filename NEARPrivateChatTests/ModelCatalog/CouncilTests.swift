@@ -112,7 +112,7 @@ extension PrivateChatCoreTests {
         XCTAssertFalse(store.activeCouncilModels.contains { $0.isNearCloudModel })
     }
 
-    func testHomeOrchestrationPlannerPromotesLiveBriefingsCouncilAndAgent() {
+    func testHomeOrchestrationPlannerPromotesLiveBriefingsOnlyWhenTheyExist() {
         let liveID = UUID()
         let scheduledID = UUID()
         let liveBriefing = Briefing(
@@ -154,13 +154,14 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(plan.liveItems.first?.id, "briefing-\(liveID.uuidString)")
         XCTAssertEqual(plan.liveItems.first?.statusText, "8:02am")
         XCTAssertEqual(plan.liveItems.first?.action, .openBriefing(liveID))
-        XCTAssertTrue(plan.liveItems.contains { $0.id == "council-room" && $0.action != .useAutoCouncil })
-        XCTAssertTrue(plan.liveItems.contains { $0.id == "agent-builder" })
+        XCTAssertFalse(plan.liveItems.contains { $0.id == "council-room" })
+        XCTAssertFalse(plan.liveItems.contains { $0.id == "agent-builder" })
         XCTAssertEqual(plan.scheduledItems.map(\.id), [liveID, scheduledID])
-        XCTAssertTrue(plan.commands.contains { $0.title == "Run Council" })
+        XCTAssertTrue(plan.commands.isEmpty)
+        XCTAssertTrue(plan.hasContent)
     }
 
-    func testHomeOrchestrationPlannerUsesAutoCouncilBeforeCouncilIsEnabled() {
+    func testHomeOrchestrationPlannerDoesNotInventCouncilBeforeCouncilIsEnabled() {
         let plan = HomeOrchestrationPlanner.make(
             briefings: [],
             projects: [],
@@ -175,15 +176,13 @@ extension PrivateChatCoreTests {
             mobileAgentAvailable: false
         )
 
-        let councilItem = plan.liveItems.first(where: { $0.id == "council-room" })
-        XCTAssertEqual(councilItem?.title, "Recommended Council")
-        XCTAssertEqual(councilItem?.subtitle, "3 models available")
-        XCTAssertEqual(councilItem?.detail, "Enable the recommended multi-model lineup.")
-        XCTAssertEqual(councilItem?.action, .useAutoCouncil)
-        XCTAssertEqual(plan.commands.first(where: { $0.id == "council" })?.action, .useAutoCouncil)
+        XCTAssertTrue(plan.liveItems.isEmpty)
+        XCTAssertTrue(plan.scheduledItems.isEmpty)
+        XCTAssertTrue(plan.commands.isEmpty)
+        XCTAssertFalse(plan.hasContent)
     }
 
-    func testHomeOrchestrationPlannerAsksToCompleteIncompleteCouncilLineup() {
+    func testHomeOrchestrationPlannerShowsSelectedProjectWithoutCouncilSetupNoise() {
         let project = ChatProject(
             id: "project-ironclaw",
             name: "IronClaw Reborn Plan",
@@ -204,22 +203,15 @@ extension PrivateChatCoreTests {
             mobileAgentAvailable: false
         )
 
-        let councilItem = plan.liveItems.first(where: { $0.id == "council-room" })
-        XCTAssertEqual(councilItem?.title, "Finish Council setup")
-        XCTAssertEqual(councilItem?.subtitle, "1 model selected")
-        XCTAssertEqual(councilItem?.detail, "Add at least one more model before running Council.")
-        XCTAssertEqual(councilItem?.statusText, "Needs 2")
-        XCTAssertEqual(councilItem?.tone, .amber)
-        XCTAssertEqual(councilItem?.action, .editCouncilLineup)
+        let projectItem = plan.liveItems.first(where: { $0.id == "project-\(project.id)" })
+        XCTAssertEqual(projectItem?.title, "IronClaw Reborn Plan")
+        XCTAssertEqual(projectItem?.action, .openProject(project.id))
         // Subtitle format follows HomeOrchestrationPlanner.surfaceSubtitle; the
         // invariant under test is that an incomplete lineup never claims Council.
         XCTAssertEqual(plan.subtitle, "Project context loaded. Agent route ready.")
         XCTAssertFalse(plan.subtitle.contains("Council"))
-
-        let councilCommand = plan.commands.first(where: { $0.id == "council" })
-        XCTAssertEqual(councilCommand?.title, "Edit Council")
-        XCTAssertEqual(councilCommand?.action, .editCouncilLineup)
-        XCTAssertFalse(plan.commands.contains { $0.title == "Run Council" })
+        XCTAssertFalse(plan.liveItems.contains { $0.id == "council-room" })
+        XCTAssertTrue(plan.commands.isEmpty)
     }
 
     func testCouncilMessageProgressTracksFirstTokenAndUsableAnswer() {
@@ -296,6 +288,92 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(batchID, "batch-1")
         XCTAssertEqual(messages.map(\.id), ["council-early", "council-late"])
         XCTAssertEqual(items.last?.id, "assistant-1")
+    }
+
+    func testAutoScrollAnchorsSettledCouncilGroupAtTop() {
+        let baseDate = Date(timeIntervalSince1970: 1_000)
+        let user = makeMessage(id: "user-1", role: .user, text: "Compare this", createdAt: baseDate)
+        let firstCouncil = ChatMessage(
+            id: "council-a",
+            role: .assistant,
+            text: "First model",
+            model: "glm",
+            createdAt: baseDate.addingTimeInterval(1),
+            status: "completed",
+            responseID: "resp-a",
+            councilBatchID: "batch-1",
+            isStreaming: false
+        )
+        let secondCouncil = ChatMessage(
+            id: "council-b",
+            role: .assistant,
+            text: "Second model",
+            model: "qwen",
+            createdAt: baseDate.addingTimeInterval(2),
+            status: "completed",
+            responseID: "resp-b",
+            councilBatchID: "batch-1",
+            isStreaming: false
+        )
+        let messages = [user, firstCouncil, secondCouncil]
+        let items = MessageTimelineStore.displayItems(from: messages)
+
+        let signature = ChatAutoScrollSignature(displayItems: items, messages: messages, isStreaming: false)
+
+        XCTAssertEqual(signature.targetID, "batch-1")
+        XCTAssertEqual(signature.targetAnchor, .top)
+    }
+
+    func testAutoScrollKeepsStreamingCouncilAndNormalMessagesBottomAnchored() {
+        let baseDate = Date(timeIntervalSince1970: 1_000)
+        let user = makeMessage(id: "user-1", role: .user, text: "Compare this", createdAt: baseDate)
+        let streamingCouncil = ChatMessage(
+            id: "council-a",
+            role: .assistant,
+            text: "Writing",
+            model: "glm",
+            createdAt: baseDate.addingTimeInterval(1),
+            status: "streaming",
+            responseID: "resp-a",
+            councilBatchID: "batch-1",
+            isStreaming: true
+        )
+        let completedCouncil = ChatMessage(
+            id: "council-b",
+            role: .assistant,
+            text: "Done",
+            model: "qwen",
+            createdAt: baseDate.addingTimeInterval(2),
+            status: "completed",
+            responseID: "resp-b",
+            councilBatchID: "batch-1",
+            isStreaming: false
+        )
+        let councilMessages = [user, streamingCouncil, completedCouncil]
+        let councilItems = MessageTimelineStore.displayItems(from: councilMessages)
+
+        let streamingSignature = ChatAutoScrollSignature(
+            displayItems: councilItems,
+            messages: councilMessages,
+            isStreaming: true
+        )
+        XCTAssertEqual(streamingSignature.targetID, "batch-1")
+        XCTAssertEqual(streamingSignature.targetAnchor, .bottom)
+
+        let assistant = makeMessage(
+            id: "assistant-1",
+            role: .assistant,
+            text: "Plain answer",
+            createdAt: baseDate.addingTimeInterval(3)
+        )
+        let normalMessages = [user, assistant]
+        let normalSignature = ChatAutoScrollSignature(
+            displayItems: MessageTimelineStore.displayItems(from: normalMessages),
+            messages: normalMessages,
+            isStreaming: false
+        )
+        XCTAssertEqual(normalSignature.targetID, "assistant-1")
+        XCTAssertEqual(normalSignature.targetAnchor, .bottom)
     }
 
     func testCouncilRoomModelParsesDisagreementsOrUncertaintyHeading() {
@@ -390,6 +468,101 @@ extension PrivateChatCoreTests {
             CouncilStreamService.batchModelIDs(from: [qwen, synthesis, duplicateGLM, glm], batchID: batchID),
             ["zai-org/GLM-5.1-FP8", "near-cloud/qwen"]
         )
+    }
+
+    func testCouncilResponseStatusCountsMemberAnswersNotSynthesis() {
+        let batchID = "batch-status"
+        let baseDate = Date(timeIntervalSince1970: 1_000)
+        let messages = [
+            ChatMessage(
+                id: "glm",
+                role: .assistant,
+                text: "Answer",
+                model: "zai-org/GLM-5.1-FP8",
+                createdAt: baseDate,
+                status: "completed",
+                responseID: nil,
+                councilBatchID: batchID,
+                isStreaming: false
+            ),
+            ChatMessage(
+                id: "qwen",
+                role: .assistant,
+                text: "Answer",
+                model: "Qwen/Qwen3.6-35B-A3B-FP8",
+                createdAt: baseDate.addingTimeInterval(1),
+                status: "completed",
+                responseID: nil,
+                councilBatchID: batchID,
+                isStreaming: false
+            ),
+            ChatMessage(
+                id: "third",
+                role: .assistant,
+                text: "Answer",
+                model: "Qwen/Qwen3.5-122B-A10B",
+                createdAt: baseDate.addingTimeInterval(2),
+                status: "completed",
+                responseID: nil,
+                councilBatchID: batchID,
+                isStreaming: false
+            ),
+            ChatMessage(
+                id: "synthesis",
+                role: .assistant,
+                text: "Synthesis",
+                model: ModelOption.llmCouncilSynthesisModelID,
+                createdAt: baseDate.addingTimeInterval(3),
+                status: "completed",
+                responseID: nil,
+                councilBatchID: batchID,
+                isStreaming: false
+            )
+        ]
+
+        XCTAssertEqual(CouncilResponseGroupStatusText.text(for: messages), "3 answers ready")
+    }
+
+    func testCouncilResponseStatusCountsOnlyRunningMemberModels() {
+        let batchID = "batch-status-running"
+        let baseDate = Date(timeIntervalSince1970: 1_000)
+        let messages = [
+            ChatMessage(
+                id: "glm",
+                role: .assistant,
+                text: "Answer",
+                model: "zai-org/GLM-5.1-FP8",
+                createdAt: baseDate,
+                status: "completed",
+                responseID: nil,
+                councilBatchID: batchID,
+                isStreaming: false
+            ),
+            ChatMessage(
+                id: "qwen",
+                role: .assistant,
+                text: "",
+                model: "Qwen/Qwen3.6-35B-A3B-FP8",
+                createdAt: baseDate.addingTimeInterval(1),
+                status: "streaming",
+                responseID: nil,
+                councilBatchID: batchID,
+                isStreaming: true
+            ),
+            ChatMessage(
+                id: "synthesis",
+                role: .assistant,
+                text: "Synthesis",
+                model: ModelOption.llmCouncilSynthesisModelID,
+                createdAt: baseDate.addingTimeInterval(2),
+                status: "completed",
+                responseID: nil,
+                councilBatchID: batchID,
+                isStreaming: false
+            )
+        ]
+
+        XCTAssertEqual(CouncilResponseGroupStatusText.text(for: messages), "1 ready · 1 still running")
     }
 
     func testCouncilTargetedPromptScopesSingleModel() {

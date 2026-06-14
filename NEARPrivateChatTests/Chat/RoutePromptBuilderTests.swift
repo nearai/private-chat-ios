@@ -5,6 +5,8 @@ extension PrivateChatCoreTests {
     func testHostedPromptContextIncludesUploadedExcerptAndOmitsLocalOnlyText() {
         let projectAttachment = ChatAttachment(id: "project-file", name: "roadmap.pdf", kind: "pdf_text", bytes: 512)
         let uploadedAttachment = ChatAttachment(id: "uploaded-doc", name: "services \"template\".pdf", kind: "pdf_text", bytes: 1_024)
+        let tableAttachment = ChatAttachment(id: "uploaded-table", name: "supplements.csv", kind: "table_text", bytes: 2_048)
+        let uploadedBinaryAttachment = ChatAttachment(id: "uploaded-binary", name: "diagram.png", kind: "image", bytes: 4_096)
         let localOnlyAttachment = ChatAttachment(
             id: "local-doc-hidden",
             name: "private-notes.pdf",
@@ -30,12 +32,14 @@ extension PrivateChatCoreTests {
         )
         let documentTexts = [
             uploadedAttachment.id: "Uploaded document sentinel: the services term is twelve months.",
+            tableAttachment.id: String(repeating: "TABLE_SENTINEL ", count: 220) + "SHOULD_BE_CLIPPED_AFTER_CAP",
+            uploadedBinaryAttachment.id: "BINARY_ATTACHMENT_STAGED_TEXT_MUST_NOT_REACH_HOSTED",
             localOnlyAttachment.id: "Local only sentinel that hosted routes must not receive."
         ]
 
         let context = ChatPromptContextBuilder.hostedIronclawContextSection(
             selectedProject: project,
-            promptAttachments: [uploadedAttachment, localOnlyAttachment],
+            promptAttachments: [uploadedAttachment, tableAttachment, uploadedBinaryAttachment, localOnlyAttachment],
             sourceModeDetail: "Web + Files",
             documentText: { documentTexts[$0] }
         )
@@ -47,9 +51,17 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(context.contains("https://example.com/msa"))
         XCTAssertFalse(context.contains("localhost"))
         XCTAssertTrue(context.contains(#""services \"template\".pdf""#))
+        XCTAssertTrue(context.contains(#""supplements.csv""#))
+        XCTAssertTrue(context.contains(#""diagram.png""#))
+        XCTAssertFalse(context.contains(#""private-notes.pdf""#))
         XCTAssertTrue(context.contains("Uploaded document sentinel"))
+        XCTAssertTrue(context.contains("TABLE_SENTINEL"))
+        XCTAssertFalse(context.contains("BINARY_ATTACHMENT_STAGED_TEXT_MUST_NOT_REACH_HOSTED"))
+        XCTAssertFalse(context.contains("SHOULD_BE_CLIPPED_AFTER_CAP"))
+        XCTAssertLessThanOrEqual(context.count, 3_800)
         XCTAssertFalse(context.contains("Local only sentinel"))
         XCTAssertFalse(context.contains("Local note:"))
+        XCTAssertTrue(context.contains("Local-only prompt files omitted for Hosted IronClaw: 1"))
         XCTAssertTrue(context.contains("Focus: Web + Files"))
     }
 
@@ -114,6 +126,91 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(finalPrompt.contains("Live web context supplied by the iOS app"))
         XCTAssertTrue(finalPrompt.contains("https://example.com/acme-bridge"))
         XCTAssertTrue(finalPrompt.contains("Board pack sentinel"))
+    }
+
+    @MainActor
+    func testDocumentSentinelReachesEveryRoutedPromptWithoutLeakingLocalOnlyToCloudOrHosted() {
+        let uploaded = ChatAttachment(
+            id: "uploaded-services-doc",
+            name: "services-schedule-pdf-text.txt",
+            kind: "pdf_text",
+            bytes: 2_048
+        )
+        let localOnly = ChatAttachment(
+            id: "local-only-services-doc",
+            name: "private-notes.pdf",
+            kind: ChatAttachment.localDocumentKind,
+            bytes: 512
+        )
+        let uploadedSentinel = "FOUR_ROUTE_SENTINEL uploaded schedule says magnesium at 8 PM."
+        let localOnlySentinel = "LOCAL_ONLY_SENTINEL private notes say yoga at noon."
+        let question = "Use FOUR_ROUTE_SENTINEL and LOCAL_ONLY_SENTINEL schedule details."
+        let store = AttachmentStagingStore()
+        store.stageDocumentText(uploadedSentinel, for: uploaded.id)
+        store.stageDocumentText(localOnlySentinel, for: localOnly.id)
+        let webContext = WebGroundingContext(
+            query: "services schedule tracker",
+            fetchedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            results: [
+                WebGroundingResult(
+                    title: "Tracker setup reference",
+                    urlString: "https://example.com/tracker",
+                    sourceName: "example.com",
+                    snippet: "Schedule tracker setup reference.",
+                    publishedAt: "June 1, 2026",
+                    kind: "web"
+                )
+            ]
+        )
+
+        let privatePrompt = store.documentAugmentedPrompt(
+            "Private route base prompt.",
+            question: question,
+            attachments: [uploaded, localOnly]
+        )
+        let nearCloudPrompt = store.documentAugmentedPrompt(
+            ChatPromptContextBuilder.nearCloudPrompt(
+                text: question,
+                attachments: [uploaded, localOnly],
+                webContext: nil,
+                messages: []
+            ),
+            question: question,
+            attachments: [uploaded]
+        )
+        let briefingPrompt = store.documentAugmentedPrompt(
+            ChatPromptContextBuilder.cloudBriefingPrompt(prompt: question, webContext: webContext),
+            question: question,
+            attachments: [uploaded]
+        )
+        let mobilePrompt = store.documentAugmentedPrompt(
+            AgentStore.normalizedIronclawPrompt(question),
+            question: question,
+            attachments: [uploaded]
+        )
+        let hostedContext = ChatPromptContextBuilder.hostedIronclawContextSection(
+            selectedProject: nil,
+            promptAttachments: [uploaded, localOnly],
+            sourceModeDetail: "Files",
+            documentText: { store.documentText(for: $0) }
+        )
+
+        XCTAssertTrue(privatePrompt.contains(uploadedSentinel))
+        XCTAssertTrue(privatePrompt.contains(localOnlySentinel))
+        for prompt in [nearCloudPrompt, briefingPrompt, mobilePrompt] {
+            XCTAssertTrue(prompt.contains(uploadedSentinel))
+            XCTAssertFalse(prompt.contains(localOnlySentinel))
+            XCTAssertFalse(prompt.contains(localOnly.id))
+            XCTAssertFalse(prompt.contains(localOnly.name))
+        }
+        XCTAssertTrue(briefingPrompt.contains("Live web context supplied by the iOS app"))
+        XCTAssertTrue(briefingPrompt.contains("https://example.com/tracker"))
+        XCTAssertTrue(hostedContext.contains(uploadedSentinel))
+        XCTAssertFalse(hostedContext.contains(localOnlySentinel))
+        XCTAssertFalse(hostedContext.contains(localOnly.id))
+        XCTAssertFalse(hostedContext.contains(localOnly.name))
+        XCTAssertTrue(hostedContext.contains("Local-only prompt files omitted for Hosted IronClaw: 1"))
+        XCTAssertTrue(hostedContext.contains("Prompt files attached as untrusted filename labels"))
     }
 
     func testMobileProjectContextKeepsProjectAndPromptFilesDistinct() {

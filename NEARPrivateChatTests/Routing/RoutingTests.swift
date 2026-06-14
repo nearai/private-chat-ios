@@ -319,6 +319,29 @@ extension PrivateChatCoreTests {
         }
     }
 
+    func testHostedAutoRouteDoesNotTriggerForCurrentEventsResearch() {
+        let prompts = [
+            "Using live web sources, check today's reporting on SpaceX IPO or private-market news and the latest Iran conflict developments. Separate confirmed facts from uncertainty and cite sources.",
+            "Give me the latest reporting on GitHub Copilot pricing and developer tool competition with sources.",
+            "Investigate current Apple Vision Pro release-date rumors and summarize the source-backed uncertainty.",
+            "Research repo-market pricing for a Rolex GMT Master II today and cite current sources."
+        ]
+
+        for prompt in prompts {
+            XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb(prompt), prompt)
+            XCTAssertFalse(RoutePlanner.promptNeedsRemoteWorkstation(prompt), prompt)
+            XCTAssertEqual(
+                RoutePlanner.modelAfterHostedAutoRoute(
+                    selectedModelID: ChatStore.defaultModelID,
+                    text: prompt,
+                    hostedIronclawAvailable: true
+                ),
+                ChatStore.defaultModelID,
+                prompt
+            )
+        }
+    }
+
     func testSourceRoutingSemanticsNearPrivateSeparatesLinksFromNativeWebTool() {
         let autoDefault = RoutePlanner.sourceRoutingSemantics(
             sourceMode: .auto,
@@ -353,6 +376,7 @@ extension PrivateChatCoreTests {
         )
         XCTAssertEqual(web.focus, .web)
         XCTAssertEqual(web.modelNativeWebToolPolicy, .always)
+        XCTAssertEqual(web.appWebGroundingPolicy, .always)
         XCTAssertFalse(web.attachesSavedLinkSourcePack)
         XCTAssertFalse(web.attachesProjectFileSourcePack)
         XCTAssertTrue(web.attachesPromptFiles)
@@ -413,6 +437,31 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(decision.tools.contains(.web), "Current year should read as time-sensitive.")
     }
 
+    func testPrivateLiveWebUsesAppGroundingBeforeNativeWebTool() {
+        let privateWeb = RoutePlanner.sourceRoutingSemantics(
+            sourceMode: .web,
+            researchModeEnabled: false,
+            webSearchEnabled: true,
+            route: .nearPrivate
+        )
+
+        XCTAssertTrue(ChatWebGroundingDecision.shouldUseAppGrounding(
+            route: .nearPrivate,
+            semantics: privateWeb,
+            benefitsFromSearch: true,
+            needsFreshFacts: true,
+            privacyBlocksWeb: false,
+            promptNeedsRemoteWorkstation: false
+        ))
+        XCTAssertFalse(ChatWebGroundingDecision.shouldEnableNativeWebTool(
+            semantics: privateWeb,
+            benefitsFromSearch: true,
+            needsFreshFacts: true,
+            privacyBlocksWeb: false,
+            appWebContextPresent: true
+        ))
+    }
+
     func testSourceRoutingSemanticsResearchIsSingleFocusAcrossSourceModes() {
         let research = RoutePlanner.sourceRoutingSemantics(
             sourceMode: .files,
@@ -423,6 +472,7 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(research.focus, .research)
         XCTAssertTrue(research.isResearch)
         XCTAssertEqual(research.modelNativeWebToolPolicy, .always)
+        XCTAssertEqual(research.appWebGroundingPolicy, .always)
         XCTAssertTrue(research.attachesSavedLinkSourcePack)
         XCTAssertTrue(research.attachesProjectFileSourcePack)
         XCTAssertTrue(research.attachesPromptFiles)
@@ -510,6 +560,36 @@ extension PrivateChatCoreTests {
         ))
     }
 
+    @MainActor
+    func testChatStoreNativeWebRouteDoesNotDoubleRunAppSearch() {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        store.selectedModel = ModelOption.ironclawMobileModelID
+        store.sourceMode = .auto
+        store.researchModeEnabled = true
+        let prompt = "Research the latest NEAR ecosystem news with citations."
+
+        XCTAssertFalse(
+            store.shouldUseAppWebGrounding(model: store.selectedModel, prompt: prompt),
+            "Native-web routes should not also trigger app-side web grounding."
+        )
+        XCTAssertTrue(
+            store.shouldEnableModelNativeWebTool(model: store.selectedModel, prompt: prompt),
+            "The same send decision should leave native web enabled for the model."
+        )
+        XCTAssertFalse(
+            store.shouldEnableModelNativeWebTool(
+                model: store.selectedModel,
+                prompt: prompt,
+                appWebContext: WebGroundingContext(
+                    query: "latest NEAR ecosystem news",
+                    fetchedAt: Date(timeIntervalSince1970: 1_700_000_000),
+                    results: []
+                )
+            ),
+            "If an app web context exists, native web must be disabled to avoid double search."
+        )
+    }
+
     func testLiveWebRoutingCoversDeepResearchPrompts() {
         XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("Deep research the latest Claude Code changes with citations."))
         XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("Look up source-backed pricing for Rolex GMT Master II as of today."))
@@ -517,8 +597,55 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("Apple Vision Pro vs Meta Quest 3 price"))
         XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("Apple Watch Ultra price"))
         XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("compare Apple Watch Ultra and Oura Ring prices"))
+        XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("Create an AI product release digest every weekday at 8am covering model launches, developer tools, safety updates, and pricing changes."))
         XCTAssertFalse(RoutePlanner.promptNeedsLiveWeb("Write a poem about focus."))
         XCTAssertFalse(RoutePlanner.promptNeedsLiveWeb("Write a paragraph about price elasticity."))
+        XCTAssertFalse(RoutePlanner.promptNeedsLiveWeb("Compose a release note from this diff summary."))
+    }
+
+    func testAutoSourceDisclosureShowsInferredWebForFreshPrompts() {
+        XCTAssertTrue(
+            RoutePlanner.shouldDiscloseAutoLiveWeb(
+                sourceMode: .auto,
+                researchModeEnabled: false,
+                prompt: "What is happening in Iran right now? Give a concise sourced update."
+            )
+        )
+        XCTAssertTrue(
+            RoutePlanner.shouldDiscloseAutoLiveWeb(
+                sourceMode: .auto,
+                researchModeEnabled: false,
+                prompt: "Look up source-backed pricing for Rolex GMT Master II as of today."
+            )
+        )
+        XCTAssertTrue(
+            RoutePlanner.shouldDiscloseAutoLiveWeb(
+                sourceMode: .auto,
+                researchModeEnabled: false,
+                prompt: "Create an AI product release digest every weekday at 8am covering model launches and pricing changes."
+            )
+        )
+        XCTAssertFalse(
+            RoutePlanner.shouldDiscloseAutoLiveWeb(
+                sourceMode: .auto,
+                researchModeEnabled: false,
+                prompt: "Do not use web. Summarize this from memory."
+            )
+        )
+        XCTAssertFalse(
+            RoutePlanner.shouldDiscloseAutoLiveWeb(
+                sourceMode: .web,
+                researchModeEnabled: false,
+                prompt: "What is happening in Iran right now?"
+            )
+        )
+        XCTAssertFalse(
+            RoutePlanner.shouldDiscloseAutoLiveWeb(
+                sourceMode: .auto,
+                researchModeEnabled: true,
+                prompt: "What is happening in Iran right now?"
+            )
+        )
     }
 
     func testRoutePlannerDetectsCouncilPromptsWithoutChatStore() {
@@ -551,7 +678,7 @@ extension PrivateChatCoreTests {
         let research = suggestions.first { $0.action == .research }
         let agent = suggestions.first { $0.action == .agent }
 
-        XCTAssertTrue(research?.title.localizedCaseInsensitiveContains("Web") == true)
+        XCTAssertTrue(research?.title.localizedCaseInsensitiveContains("Research") == true)
         XCTAssertTrue(agent?.title.localizedCaseInsensitiveContains("Agent") == true)
     }
 
@@ -603,10 +730,10 @@ extension PrivateChatCoreTests {
             for suggestion in testCase.suggestions {
                 switch suggestion.action {
                 case .research:
-                    XCTAssertTrue(suggestion.title.localizedCaseInsensitiveContains("Web"), "\(testCase.name): \(suggestion.title)")
+                    XCTAssertTrue(suggestion.title.localizedCaseInsensitiveContains("Research"), "\(testCase.name): \(suggestion.title)")
                 case .project:
                     XCTAssertTrue(
-                        suggestion.title.localizedCaseInsensitiveContains("Files") ||
+                        suggestion.title.localizedCaseInsensitiveContains("File") ||
                             suggestion.title.localizedCaseInsensitiveContains("Project"),
                         "\(testCase.name): \(suggestion.title)"
                     )

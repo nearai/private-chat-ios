@@ -71,6 +71,8 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(QuickIntentParser.parsePriceCondition("near over 5")?.0, .above)
         XCTAssertEqual(QuickIntentParser.parsePriceCondition("eth under 1,500")?.1, 1_500)
         XCTAssertEqual(QuickIntentParser.parsePriceCondition("eth above $1.2m")?.1, 1_200_000)
+        XCTAssertNil(QuickIntentParser.parsePriceCondition("alert me if near moves more than 5%"))
+        XCTAssertNil(QuickIntentParser.parsePriceCondition("notify me when btc has a 7% move"))
         // No comparator/number → nil.
         XCTAssertNil(QuickIntentParser.parsePriceCondition("tell me about ethereum"))
     }
@@ -94,6 +96,15 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(daily.condition?.comparator, .above)
         XCTAssertEqual(daily.condition?.threshold, 80_000)
         XCTAssertEqual(daily.schedule, .daily(hour: 8, minute: 0))
+
+        guard case let .createTracker(percentMove) = QuickIntentParser.parse("Track NEAR token price every morning at 8am and alert me if it moves more than 5% in 24 hours.") else {
+            return XCTFail("Expected a percent-move tracker.")
+        }
+        XCTAssertEqual(percentMove.kind, .customPrompt)
+        XCTAssertEqual(percentMove.title, "NEAR move alert")
+        XCTAssertNil(percentMove.condition)
+        XCTAssertTrue(percentMove.confirmation.contains("NEAR moves 5%+ in 24h"))
+        XCTAssertTrue(percentMove.prompt?.contains("absolute 24h move is at least 5%") == true)
 
         // A plain price tracker (no comparator) is NOT conditional.
         guard case let .createTracker(plain) = QuickIntentParser.parse("create an eth price tracker every morning") else {
@@ -641,6 +652,19 @@ extension PrivateChatCoreTests {
         XCTAssertNil(QuickIntentParser.parse("the USA economy is strong"))
     }
 
+    func testProductPriceTrackerDoesNotResolveNicknameAsStock() {
+        let prompt = "Track the Rolex GMT-Master II Pepsi secondary market price every Friday at 9am and tell me if it drops under $15,000."
+        guard case let .createTracker(spec) = QuickIntentParser.parse(prompt) else {
+            return XCTFail("Expected an open-ended product tracker.")
+        }
+        XCTAssertEqual(spec.kind, .customPrompt)
+        XCTAssertTrue(spec.title.localizedCaseInsensitiveContains("Rolex"))
+        XCTAssertTrue(spec.confirmation.localizedCaseInsensitiveContains("Rolex"))
+        XCTAssertFalse(spec.confirmation.contains("PEP"))
+        XCTAssertNil(spec.condition)
+        XCTAssertNil(QuickIntentParser.parseStock("rolex pepsi secondary market price", original: "Rolex Pepsi secondary market price"))
+    }
+
     func testQuickIntentIgnoresChitChat() {
         XCTAssertNil(QuickIntentParser.parse("hello how are you"))
         XCTAssertNil(QuickIntentParser.parse("write me a poem about the ocean"))
@@ -660,6 +684,8 @@ extension PrivateChatCoreTests {
             condition: nil
         )
         XCTAssertTrue(ChatLocalIntentResponseFormatter.trackerCreated(spec: plain).contains("Created a tracker"))
+        XCTAssertTrue(ChatLocalIntentResponseFormatter.trackerCreated(spec: plain).contains("lands in Watchers"))
+        XCTAssertFalse(ChatLocalIntentResponseFormatter.trackerCreated(spec: plain).contains("lands in Trackers"))
         XCTAssertTrue(ChatLocalIntentResponseFormatter.trackerCreated(spec: plain).contains("Run now, change it, or delete it"))
 
         let gated = TrackerSpec(
@@ -673,7 +699,35 @@ extension PrivateChatCoreTests {
             condition: BriefingCondition(coinID: "ethereum", symbol: "ETH", comparator: .below, threshold: 2_000)
         )
         XCTAssertTrue(ChatLocalIntentResponseFormatter.trackerCreated(spec: gated).contains("Set up an alert"))
+        XCTAssertTrue(ChatLocalIntentResponseFormatter.trackerCreated(spec: gated).contains("lives in Watchers"))
         XCTAssertTrue(ChatLocalIntentResponseFormatter.trackerCreated(spec: gated).contains("re-arm, change, or delete it"))
+    }
+
+    func testReleaseMonitorTrackerConfirmationMatchesHomeWatchersIA() throws {
+        guard case let .createTracker(spec) = QuickIntentParser.parse("Track Apple Vision Pro 2 release date, preorder timing, and price rumors every Tuesday at 6pm with current sources; alert me if the date or price changes.") else {
+            return XCTFail("Expected release monitor to create a scheduled tracker.")
+        }
+
+        XCTAssertEqual(spec.schedule, .weekly(weekday: 3, hour: 18, minute: 0))
+        XCTAssertEqual(spec.kind, .customPrompt)
+        XCTAssertTrue(try XCTUnwrap(spec.prompt).localizedCaseInsensitiveContains("Apple Vision Pro 2"))
+        let confirmation = ChatLocalIntentResponseFormatter.trackerCreated(spec: spec)
+        XCTAssertTrue(confirmation.contains("Created a tracker"))
+        XCTAssertTrue(confirmation.contains("Tue · 6:00PM"))
+        XCTAssertFalse(confirmation.contains("6:00pm"))
+        XCTAssertTrue(confirmation.contains("lands in Watchers"))
+        XCTAssertFalse(confirmation.contains("Trackers"))
+    }
+
+    func testReleaseTrackerTitleDoesNotTruncateMidWord() throws {
+        guard case let .createTracker(spec) = QuickIntentParser.parse("Track Sony A7 VI release date, preorder timing, and launch price every Saturday at 9am with current sources; alert me if the date changes.") else {
+            return XCTFail("Expected release monitor to create a scheduled tracker.")
+        }
+
+        XCTAssertEqual(spec.schedule, .weekly(weekday: 7, hour: 9, minute: 0))
+        XCTAssertEqual(spec.title, "Sony A7 VI release date, preorder timing")
+        XCTAssertFalse(spec.title.hasSuffix(" and"))
+        XCTAssertFalse(spec.title.hasSuffix(" la"))
     }
 
     func testChatLocalIntentResponseFormatterLabelsInferredMemory() {

@@ -261,11 +261,31 @@ extension PrivateChatCoreTests {
             localCache: [localUser, member, synthesis]
         )
 
-        // Council member + synthesis survive; the council user turn also
-        // survives (batch-tagged), alongside the remote user item.
+        // Council member + synthesis survive. The remote user turn already
+        // carries the prompt, so the local batch user is not duplicated.
         XCTAssertTrue(merged.contains(where: { $0.id == member.id }))
         XCTAssertTrue(merged.contains(where: { $0.id == synthesis.id }))
         XCTAssertTrue(merged.contains(where: { $0.id == remoteUser.id }))
+        XCTAssertFalse(merged.contains(where: { $0.id == localUser.id }))
+    }
+
+    func testMergeDropsOrphanedCouncilUserWhenServerHasPrompt() {
+        let remoteUser = ChatMessage(
+            id: "remote-user", role: .user, text: "What is happening in Iran", model: nil,
+            createdAt: Date(timeIntervalSince1970: 100), status: "completed", responseID: nil, isStreaming: false
+        )
+        var staleCouncilUser = ChatMessage(
+            id: "local-user-stale-council", role: .user, text: "What is happening in Iran", model: nil,
+            createdAt: Date(timeIntervalSince1970: 99), status: "completed", responseID: nil, isStreaming: false
+        )
+        staleCouncilUser.councilBatchID = "removed-council-batch"
+
+        let merged = MessageRepository.mergedMessages(
+            remoteMessages: [remoteUser],
+            localCache: [staleCouncilUser]
+        )
+
+        XCTAssertEqual(merged.map(\.id), [remoteUser.id])
     }
 
     func testMergeStillDropsCompletedPrivateNonCouncilLocalAssistant() {
@@ -279,6 +299,32 @@ extension PrivateChatCoreTests {
         )
         let merged = MessageRepository.mergedMessages(remoteMessages: [remote], localCache: [localCopy])
         XCTAssertEqual(merged.map(\.id), ["server-1"])
+    }
+
+    func testMergePreservesLocalSourcesOnRemoteAssistantWithSameResponseID() {
+        let remote = ChatMessage(
+            id: "server-1", role: .assistant, text: "Answer", model: "zai-org/GLM-5.1-FP8",
+            createdAt: Date(timeIntervalSince1970: 100), status: "completed", responseID: "resp-1", isStreaming: false
+        )
+        var localCopy = ChatMessage(
+            id: "local-assistant-dup", role: .assistant, text: "Answer", model: "zai-org/GLM-5.1-FP8",
+            createdAt: Date(timeIntervalSince1970: 100), status: "completed", responseID: "resp-1", isStreaming: false
+        )
+        let source = WebSearchSource(
+            type: "news",
+            url: "https://example.com/ai-news",
+            title: "AI news today",
+            publishedAt: "June 13, 2026",
+            snippet: nil
+        )
+        localCopy.searchQuery = "AI news today"
+        localCopy.sources = [source]
+
+        let merged = MessageRepository.mergedMessages(remoteMessages: [remote], localCache: [localCopy])
+
+        XCTAssertEqual(merged.map(\.id), ["server-1"])
+        XCTAssertEqual(merged.first?.searchQuery, "AI news today")
+        XCTAssertEqual(merged.first?.sources, [source])
     }
 
     func testMergePreservesCancelledTurnsAndDedupesUserByText() {

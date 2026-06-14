@@ -472,9 +472,9 @@ extension PrivateChatCoreTests {
         let store = ChatStore(api: PrivateChatAPI(configuration: .production))
         store.selectModel("zai-org/GLM-5.1-FP8")
         let suggestion = EmptyChatStarterSuggestion(
-            title: "Handoff to Agent",
+            title: "Agent",
             symbolName: "terminal",
-            prompt: "Agent mission: define the goal, context to inspect, tools to use, risks, and focused verification for this task: ",
+            prompt: "Draft an Agent mission for this task: ",
             action: .agent
         )
 
@@ -483,6 +483,6 @@ extension PrivateChatCoreTests {
 
         XCTAssertTrue(shouldFocusComposer)
         XCTAssertEqual(store.selectedModel, ModelOption.ironclawMobileModelID)
-        XCTAssertTrue(store.draft.hasPrefix("Agent mission: define the goal"))
+        XCTAssertTrue(store.draft.hasPrefix("Draft an Agent mission"))
     }
 }

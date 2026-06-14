@@ -7,6 +7,7 @@ import UIKit
 #endif
 @testable import NEARPrivateChat
 
+@MainActor
 final class PrivateChatCoreTests: XCTestCase {
 
     func makeMessage(

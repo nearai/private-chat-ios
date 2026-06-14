@@ -41,6 +41,15 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(AppSpacing.xl, CGFloat(20))
         XCTAssertEqual(AppSpacing.xxl, CGFloat(24))
         XCTAssertEqual(AppSpacing.xxxl, CGFloat(32))
+
+        XCTAssertEqual(AppTouchTarget.minimum, CGFloat(44))
+        XCTAssertEqual(AppTouchTarget.primaryCompact, CGFloat(44))
+        XCTAssertEqual(AppTouchTarget.primaryRegular, CGFloat(52))
+    }
+
+    func testPrimaryButtonBaseSizesMeetMinimumTouchTarget() {
+        XCTAssertGreaterThanOrEqual(PrimaryButton<EmptyView>.Size.compact.height, AppTouchTarget.minimum)
+        XCTAssertGreaterThanOrEqual(PrimaryButton<EmptyView>.Size.regular.height, AppTouchTarget.minimum)
     }
 
     func testActionPrimarySupportsWhiteButtonTextContrast() {
@@ -50,6 +59,20 @@ extension PrivateChatCoreTests {
             4.5,
             "actionPrimary/brandBlue must keep white CTA text at WCAG AA contrast."
         )
+    }
+
+    func testDisabledControlTokensMeetTextContrast() throws {
+        #if canImport(UIKit)
+        let foreground = try resolvedRGBA(from: .disabledControlText)
+        let background = try resolvedRGBA(from: .disabledControlBackground)
+        XCTAssertGreaterThanOrEqual(
+            contrastRatio(foreground, background),
+            4.5,
+            "Disabled control text should remain readable against its disabled surface."
+        )
+        #else
+        throw XCTSkip("UIKit color resolution is unavailable on this platform.")
+        #endif
     }
 
     func testProductCodeUsesSemanticColorAliasesInsteadOfRawBrandBlue() throws {

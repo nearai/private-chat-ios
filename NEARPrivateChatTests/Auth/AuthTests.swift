@@ -65,6 +65,22 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(session.sessionID, "session-id-1")
     }
 
+    func testAuthCallbackAcceptsPrivateNearUniversalLinkAfterStateValidation() throws {
+        let configuration = AppConfiguration.production
+        let api = PrivateChatAPI(configuration: configuration)
+        let codeURL = URL(string: "https://private.near.ai/auth/callback?code=auth-code-1&state=nonce-1")!
+        let tokenURL = URL(string: "https://private.near.ai/auth/callback?token=session-token&session_id=session-id-1&state=nonce-1")!
+
+        XCTAssertTrue(configuration.isAuthCallback(codeURL))
+        let callback = try authCodeCallback(from: api.parseAuthCallback(codeURL, expectedState: "nonce-1"))
+        XCTAssertEqual(callback.code, "auth-code-1")
+
+        XCTAssertTrue(configuration.isAuthCallback(tokenURL))
+        let session = try authSession(from: api.parseAuthCallback(tokenURL, expectedState: "nonce-1"))
+        XCTAssertEqual(session.token, "session-token")
+        XCTAssertEqual(session.sessionID, "session-id-1")
+    }
+
     func testAuthenticatedRequestsRejectWhitespaceSessionTokenBeforeNetwork() async {
         let api = PrivateChatAPI(configuration: AppConfiguration.production)
         api.authToken = "   \n\t"
@@ -251,10 +267,14 @@ extension PrivateChatCoreTests {
 
         XCTAssertTrue(configuration.isAuthCallback(URL(string: "nearai://auth?token=token&state=nonce-1")!))
         XCTAssertTrue(configuration.isAuthCallback(URL(string: "nearprivatechat://auth?token=token&state=nonce-1")!))
+        XCTAssertTrue(configuration.isAuthCallback(URL(string: "https://private.near.ai/auth/callback?token=token&state=nonce-1")!))
+        XCTAssertTrue(configuration.isAuthCallback(URL(string: "https://private.near.ai/auth/callback?code=code-1&state=nonce-1")!))
         XCTAssertFalse(configuration.isAuthCallback(URL(string: "privatechat://auth?token=token&state=nonce-1")!))
         XCTAssertFalse(configuration.isAuthCallback(URL(string: "nearai://auth/other?token=token&state=nonce-1")!))
         XCTAssertFalse(configuration.isAuthCallback(URL(string: "nearprivatechat://auth/other?token=token&state=nonce-1")!))
-        XCTAssertFalse(configuration.isAuthCallback(URL(string: "https://private.near.ai/auth/callback?token=token&state=nonce-1")!))
+        XCTAssertFalse(configuration.isAuthCallback(URL(string: "https://private.near.ai/auth?token=token&state=nonce-1")!))
+        XCTAssertFalse(configuration.isAuthCallback(URL(string: "https://private.near.ai/auth/callback/extra?token=token&state=nonce-1")!))
+        XCTAssertFalse(configuration.isAuthCallback(URL(string: "https://private.near.ai.evil.example/auth/callback?token=token&state=nonce-1")!))
     }
 
     func testSessionPersistenceKeepsLegacyAuthStorageKeys() {

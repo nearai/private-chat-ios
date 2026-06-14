@@ -458,6 +458,10 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(copy.badge, "Get proof")
         XCTAssertEqual(proof.state, .unknown)
         XCTAssertEqual(proof.badge, "Get proof")
+        XCTAssertEqual(ChatToolbarProofLabelFormatter.compactAttestationLabel(copy.badge), "Get proof")
+        XCTAssertEqual(ChatToolbarProofLabelFormatter.compactAttestationLabel("No model proof"), "No proof")
+        XCTAssertEqual(ChatToolbarProofLabelFormatter.compactAttestationLabel("Verified proof"), "Proof")
+        XCTAssertEqual(ChatToolbarProofLabelFormatter.compactAttestationLabel("Outside proof"), "Outside proof")
     }
 
     func testAttestationCopyExplainsExternalRoutes() {

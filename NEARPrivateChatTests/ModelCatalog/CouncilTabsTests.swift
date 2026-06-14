@@ -138,6 +138,24 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(model.defaultTabID, "model-model-a")
     }
 
+    func testCouncilAnswerTabCompactsLongModelLabelsForVisibleTabs() {
+        XCTAssertEqual(CouncilAnswerTab.compactModelLabel("zai-org/GLM-5.1-FP8"), "GLM 5.1")
+        XCTAssertEqual(CouncilAnswerTab.compactModelLabel("Qwen/Qwen3.6-35B-A3B-FP8"), "Qwen 3.6")
+        XCTAssertEqual(CouncilAnswerTab.compactModelLabel("Qwen3-VL-30B-A3B-Instruct"), "Qwen VL")
+        XCTAssertEqual(CouncilAnswerTab.compactModelLabel("Claude Sonnet 4.6"), "Sonnet 4.6")
+        XCTAssertEqual(CouncilAnswerTab.compactModelLabel("Small Model"), "Small Model")
+    }
+
+    func testCouncilAnswerTabKeepsFullModelLabelForAccessibility() {
+        let tab = CouncilAnswerTab.model(
+            messageID: "model-a",
+            label: "Qwen/Qwen3.6-35B-A3B-FP8"
+        )
+
+        XCTAssertEqual(tab.label, "Qwen/Qwen3.6-35B-A3B-FP8")
+        XCTAssertEqual(tab.displayLabel, "Qwen 3.6")
+    }
+
     private func councilMessage(
         id: String,
         text: String,

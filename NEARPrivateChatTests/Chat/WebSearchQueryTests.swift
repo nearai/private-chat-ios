@@ -46,6 +46,7 @@ extension PrivateChatCoreTests {
     func testWebSearchModeExtractsExplicitNewsAndWebIntent() {
         XCTAssertEqual(WebGroundingService.searchMode(for: "latest news on NEAR"), .newsFirst)
         XCTAssertEqual(WebGroundingService.searchMode(for: "from Google News summarize NEAR"), .newsFirst)
+        XCTAssertEqual(WebGroundingService.searchMode(for: "Using live web sources, what are the top three AI news stories today?"), .newsFirst)
         XCTAssertEqual(WebGroundingService.searchMode(for: "web only NEAR protocol updates"), .webFirst)
         XCTAssertEqual(WebGroundingService.searchMode(for: "not news, use general web for NEAR docs"), .webFirst)
         XCTAssertEqual(WebGroundingService.searchMode(for: "summarize NEAR docs"), .automatic)
@@ -54,5 +55,73 @@ extension PrivateChatCoreTests {
     func testWebSearchQueryRemovesModeDirectives() {
         XCTAssertEqual(WebGroundingService.query(from: "from Google News summarize NEAR"), "summarize NEAR")
         XCTAssertEqual(WebGroundingService.query(from: "web only NEAR protocol updates"), "NEAR protocol updates")
+    }
+
+    func testWebSearchQueryKeepsSubstanceAfterLiveWebDirective() {
+        XCTAssertEqual(
+            WebGroundingService.query(
+                from: "Using live web sources, what are the top three AI news stories today? Answer in three bullets and cite sources."
+            ),
+            "AI news today"
+        )
+    }
+
+    func testWebSearchQueryCleansHardMultiTopicCurrentEventsPrompt() {
+        let prompt = "Using live web sources, check today's reporting on SpaceX IPO or private-market news and the latest Iran conflict developments. Separate confirmed facts from uncertainty and cite sources."
+
+        XCTAssertEqual(
+            WebGroundingService.query(from: prompt),
+            "SpaceX IPO or private-market news and the latest Iran conflict developments"
+        )
+    }
+
+    func testWebSearchQueriesExpandHardMultiTopicCurrentEventsPrompt() {
+        let prompt = "Using live web sources, check today's reporting on SpaceX IPO or private-market news and the latest Iran conflict developments. Separate confirmed facts from uncertainty and cite sources."
+
+        XCTAssertEqual(
+            WebGroundingService.queries(from: prompt),
+            [
+                "SpaceX IPO or private-market news and the latest Iran conflict developments",
+                "SpaceX IPO private market news",
+                "Iran conflict developments"
+            ]
+        )
+    }
+
+    func testWebSearchQueriesStaySingleForSimpleNewsPrompt() {
+        XCTAssertEqual(
+            WebGroundingService.queries(
+                from: "Using live web sources, what are the top three AI news stories today? Answer in three bullets and cite sources."
+            ),
+            ["AI news today"]
+        )
+    }
+
+    func testSourceSearchDisplaySplitsMultiQueryProvenance() {
+        let display = SourceSearchDisplay(
+            query: "SpaceX IPO or private-market news and the latest Iran conflict developments | SpaceX IPO private market news | Iran conflict developments"
+        )
+
+        XCTAssertEqual(
+            display.queries,
+            [
+                "SpaceX IPO or private-market news and the latest Iran conflict developments",
+                "SpaceX IPO private market news",
+                "Iran conflict developments"
+            ]
+        )
+        XCTAssertEqual(
+            display.summary,
+            "SpaceX IPO or private-market news and the latest Iran conflict developments · SpaceX IPO private market news · Iran conflict developments"
+        )
+    }
+
+    func testSourceSearchDisplayRemovesAgentMissionBoilerplate() {
+        let display = SourceSearchDisplay(
+            query: "Agent Mission: Research: Mission brief from phone: latest AI news\nExecution contract: cite sources"
+        )
+
+        XCTAssertEqual(display.queries, ["latest AI news"])
+        XCTAssertEqual(display.summary, "latest AI news")
     }
 }

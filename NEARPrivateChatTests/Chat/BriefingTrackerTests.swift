@@ -186,6 +186,57 @@ extension PrivateChatCoreTests {
         }
     }
 
+    func testHardRecurringWorkflowPromptsBecomeActionableTrackers() throws {
+        guard case let .createTracker(rolex) = QuickIntentParser.parse("Track the price of a Rolex GMT-Master II every morning at 8am.") else {
+            return XCTFail("Expected a Rolex market-price watcher.")
+        }
+        XCTAssertEqual(rolex.kind, .customPrompt)
+        XCTAssertEqual(rolex.schedule, .daily(hour: 8, minute: 0))
+        XCTAssertTrue(rolex.title.localizedCaseInsensitiveContains("Rolex"))
+        XCTAssertTrue(try XCTUnwrap(rolex.prompt).localizedCaseInsensitiveContains("web search"))
+
+        guard case let .createTracker(rolexWithInstruction) = QuickIntentParser.parse("Track the price of a Rolex GMT-Master II every morning at 8am. Use web search, lead with the current market price and as-of date.") else {
+            return XCTFail("Expected an open-ended tracker with extra instructions.")
+        }
+        XCTAssertEqual(rolexWithInstruction.title, "Rolex GMT-Master II")
+        XCTAssertFalse(rolexWithInstruction.confirmation.localizedCaseInsensitiveContains("use web search"))
+
+        guard case let .createTracker(release) = QuickIntentParser.parse("Monitor Apple Vision Pro 2 release date updates every Monday at 9am.") else {
+            return XCTFail("Expected a product-release watcher.")
+        }
+        XCTAssertEqual(release.kind, .customPrompt)
+        XCTAssertEqual(release.schedule, .weekly(weekday: 2, hour: 9, minute: 0))
+        XCTAssertEqual(release.title, "Apple Vision Pro 2 release date")
+        XCTAssertTrue(try XCTUnwrap(release.prompt).localizedCaseInsensitiveContains("release date"))
+
+        guard case let .createTracker(aiDigest) = QuickIntentParser.parse("Create a daily AI news digest every morning at 8am with sources and anything that needs attention.") else {
+            return XCTFail("Expected an AI news digest briefing.")
+        }
+        XCTAssertEqual(aiDigest.kind, .customPrompt)
+        XCTAssertEqual(aiDigest.schedule, .daily(hour: 8, minute: 0))
+        XCTAssertEqual(aiDigest.title, "AI news digest")
+        XCTAssertTrue(aiDigest.confirmation.contains("Briefing"))
+        XCTAssertTrue(try XCTUnwrap(aiDigest.prompt).localizedCaseInsensitiveContains("ai news digest"))
+    }
+
+    @MainActor
+    func testSendDraftCreatesHardRecurringWorkflowWithoutPrivateRoute() throws {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        var created: Briefing?
+        store.onCreateTracker = { created = $0 }
+        store.draft = "Create a daily AI news digest every morning at 8am with sources and anything that needs attention."
+
+        store.sendDraft()
+
+        let briefing = try XCTUnwrap(created)
+        XCTAssertEqual(briefing.kind, .customPrompt)
+        XCTAssertEqual(briefing.title, "AI news digest")
+        XCTAssertEqual(briefing.schedule, .daily(hour: 8, minute: 0))
+        XCTAssertTrue(briefing.prompt.localizedCaseInsensitiveContains("ai news digest"))
+        XCTAssertFalse(store.isStreaming)
+        XCTAssertTrue(store.messages.last?.text.contains("Created a tracker") == true)
+    }
+
     func testQuickIntentParsesTrackThat() {
         XCTAssertEqual(QuickIntentParser.parse("track that"), .trackLast(schedule: .daily(hour: 8, minute: 0)))
         XCTAssertEqual(QuickIntentParser.parse("track that daily"), .trackLast(schedule: .daily(hour: 8, minute: 0)))
@@ -534,6 +585,83 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(store.messages.last?.text.contains("Created a tracker") == true)
     }
 
+    @MainActor
+    func testChatStoreCreatesEscalatingTrackersFromGeneratedActionCards() throws {
+        let store = ChatStore(api: PrivateChatAPI(configuration: .production))
+        var created: [Briefing] = []
+        store.onCreateTracker = { created.append($0) }
+
+        let actions = [
+            WidgetActionItem(
+                title: "Rolex Submariner price",
+                type: "tracker",
+                detail: "Watch secondary-market price changes and explain what moved.",
+                schedule: "every Monday at 9am",
+                command: "Create a tracker for Rolex Submariner price every Monday at 9am",
+                source: "Action card · watch market",
+                date: nil,
+                time: "9am",
+                duration: nil,
+                recurrence: "weekly",
+                timezone: nil,
+                location: nil,
+                attendees: [],
+                missingFields: [],
+                confidence: 0.88,
+                tone: nil
+            ),
+            WidgetActionItem(
+                title: "Apple Vision Pro 2 release date",
+                type: "watcher",
+                detail: "Look for credible release-date changes and pre-order timing.",
+                schedule: "every weekday at 7am",
+                command: "Watch for Apple Vision Pro 2 release date updates every weekday at 7am",
+                source: "Action card · product launch",
+                date: nil,
+                time: "7am",
+                duration: nil,
+                recurrence: "weekdays",
+                timezone: nil,
+                location: nil,
+                attendees: [],
+                missingFields: [],
+                confidence: 0.9,
+                tone: nil
+            ),
+            WidgetActionItem(
+                title: "AI news digest",
+                type: "digest",
+                detail: "Summarize AI product launches, model releases, safety updates, and funding news.",
+                schedule: "every morning at 8am",
+                command: "Create an AI news digest every morning at 8am",
+                source: "Action card · news workflow",
+                date: nil,
+                time: "8am",
+                duration: nil,
+                recurrence: "daily",
+                timezone: nil,
+                location: nil,
+                attendees: [],
+                missingFields: [],
+                confidence: 0.91,
+                tone: nil
+            )
+        ]
+
+        actions.forEach { store.createTracker(fromWidgetAction: $0) }
+
+        XCTAssertEqual(created.count, 3)
+        XCTAssertEqual(created.map(\.kind), [.customPrompt, .customPrompt, .customPrompt])
+        XCTAssertEqual(created[0].schedule, .weekly(weekday: 2, hour: 9, minute: 0))
+        XCTAssertTrue(created[0].prompt.contains("Rolex Submariner price"))
+        XCTAssertTrue(created[0].prompt.contains("Action card · watch market"))
+        XCTAssertEqual(created[1].schedule, .weekdays(hour: 7, minute: 0))
+        XCTAssertTrue(created[1].prompt.contains("Apple Vision Pro 2 release date"))
+        XCTAssertEqual(created[2].schedule, .daily(hour: 8, minute: 0))
+        XCTAssertTrue(created[2].prompt.contains("AI news digest"))
+        XCTAssertEqual(store.messages.filter { $0.text.contains("Created a tracker") }.count, 3)
+    }
+
 
     @MainActor
     func testChatStoreStagesFuzzyWidgetTrackerInsteadOfCreatingIt() {
@@ -667,6 +795,110 @@ extension PrivateChatCoreTests {
         XCTAssertNil(watchlist.draft.accountID)
         XCTAssertTrue(watchlist.draft.prompt.contains("ETH"))
         XCTAssertTrue(watchlist.draft.prompt.contains("TSLA"))
+    }
+
+    func testEscalatingGenerativeTrackerMatrixCoversPricesReleasesAndDigest() throws {
+        guard case let .createTracker(tokenPrice) = QuickIntentParser.parse("track NEAR token price every morning at 8am") else {
+            return XCTFail("Expected a NEAR token price tracker.")
+        }
+        XCTAssertEqual(tokenPrice.kind, .cryptoPrice)
+        XCTAssertEqual(tokenPrice.subject, "near")
+        XCTAssertEqual(tokenPrice.schedule, .daily(hour: 8, minute: 0))
+
+        guard case let .createTracker(watchPrice) = QuickIntentParser.parse("track the price of a Rolex Submariner every Monday at 9am") else {
+            return XCTFail("Expected an arbitrary watch-price tracker.")
+        }
+        XCTAssertEqual(watchPrice.kind, .customPrompt)
+        XCTAssertEqual(watchPrice.schedule, .weekly(weekday: 2, hour: 9, minute: 0))
+        XCTAssertTrue(try XCTUnwrap(watchPrice.prompt).contains("Rolex Submariner"))
+        XCTAssertTrue(try XCTUnwrap(watchPrice.prompt).lowercased().contains("web search"))
+
+        guard case let .createTracker(releaseMonitor) = QuickIntentParser.parse("watch for Apple Vision Pro 2 release date updates every weekday at 7am") else {
+            return XCTFail("Expected a product-release monitor.")
+        }
+        XCTAssertEqual(releaseMonitor.kind, .customPrompt)
+        XCTAssertEqual(releaseMonitor.title, "Apple Vision Pro 2 release date")
+        XCTAssertEqual(releaseMonitor.schedule, .weekdays(hour: 7, minute: 0))
+        XCTAssertTrue(try XCTUnwrap(releaseMonitor.prompt).lowercased().contains("release date"))
+        XCTAssertTrue(try XCTUnwrap(releaseMonitor.prompt).lowercased().contains("apple vision pro 2"))
+
+        guard case let .createTracker(releaseMonitorWithCondition) = QuickIntentParser.parse("Watch for Apple Vision Pro 2 release date updates every weekday at 7am and tell me if preorder timing changes.") else {
+            return XCTFail("Expected a product-release monitor with condition cue.")
+        }
+        XCTAssertEqual(releaseMonitorWithCondition.title, "Apple Vision Pro 2 release date")
+        let releasePrompt = try XCTUnwrap(releaseMonitorWithCondition.prompt)
+        XCTAssertTrue(releasePrompt.contains("Run this recurring task: Apple Vision Pro 2 release date. Watch for preorder timing changes."))
+        XCTAssertFalse(releasePrompt.contains("updates and tell me"))
+
+        guard case let .createTracker(aiDigest) = QuickIntentParser.parse("create an AI news digest daily at 8am") else {
+            return XCTFail("Expected an AI news digest tracker.")
+        }
+        XCTAssertEqual(aiDigest.kind, .customPrompt)
+        XCTAssertEqual(aiDigest.title, "AI news digest")
+        XCTAssertEqual(aiDigest.schedule, .daily(hour: 8, minute: 0))
+        let digestPrompt = try XCTUnwrap(aiDigest.prompt).lowercased()
+        XCTAssertTrue(digestPrompt.contains("ai news"))
+        XCTAssertTrue(digestPrompt.contains("digest"))
+
+        guard case let .createTracker(productReleaseDigest) = QuickIntentParser.parse("Create an AI product release digest every weekday at 8am covering model launches, developer tools, safety updates, and pricing changes.") else {
+            return XCTFail("Expected a product-release digest tracker.")
+        }
+        XCTAssertEqual(productReleaseDigest.title, "AI product release digest")
+        XCTAssertEqual(productReleaseDigest.schedule, .weekdays(hour: 8, minute: 0))
+
+        let generatedAction = WidgetActionItem(
+            title: "AI news digest",
+            type: "digest",
+            detail: "Summarize AI product launches, model releases, safety updates, and funding news.",
+            schedule: "every morning at 8 am",
+            command: "Create an AI news digest every morning at 8 am",
+            source: "Generated action card",
+            date: nil,
+            time: "8 am",
+            duration: nil,
+            recurrence: "daily",
+            timezone: nil,
+            location: nil,
+            attendees: [],
+            missingFields: [],
+            confidence: 0.91,
+            tone: nil
+        )
+        let draft = try XCTUnwrap(generatedAction.appActionDraft())
+        XCTAssertTrue(draft.isReady)
+        XCTAssertEqual(draft.kind, .tracker)
+        XCTAssertEqual(draft.schedule, .daily(hour: 8, minute: 0))
+        XCTAssertTrue(draft.prompt.contains("AI news digest"))
+        XCTAssertTrue(draft.prompt.contains("Generated action card"))
+    }
+
+    func testEscalatingCurrentEventAndRegulatoryWorkflowsStayUserGrounded() throws {
+        guard case let .createTracker(currentDigest) = QuickIntentParser.parse("Create a daily digest at 8am for SpaceX IPO, Iran war peace-talks status, and AI model releases with links.") else {
+            return XCTFail("Expected a current-event digest tracker.")
+        }
+        XCTAssertEqual(currentDigest.kind, .customPrompt)
+        XCTAssertEqual(currentDigest.schedule, .daily(hour: 8, minute: 0))
+        XCTAssertFalse(currentDigest.title.localizedCaseInsensitiveContains("daily"))
+        let currentPrompt = try XCTUnwrap(currentDigest.prompt).lowercased()
+        XCTAssertTrue(currentPrompt.contains("spacex ipo"))
+        XCTAssertTrue(currentPrompt.contains("iran war"))
+        XCTAssertTrue(currentPrompt.contains("ai model releases"))
+
+        guard case let .createTracker(governanceMonitor) = QuickIntentParser.parse("Track NEAR token unlock schedule and governance votes every Monday at noon.") else {
+            return XCTFail("Expected a token/governance monitor.")
+        }
+        XCTAssertEqual(governanceMonitor.kind, .customPrompt)
+        XCTAssertEqual(governanceMonitor.schedule, .weekly(weekday: 2, hour: 12, minute: 0))
+        XCTAssertEqual(governanceMonitor.title, "NEAR token unlock schedule and governance votes")
+        XCTAssertTrue(try XCTUnwrap(governanceMonitor.prompt).localizedCaseInsensitiveContains("web search"))
+
+        guard case let .createTracker(regulatoryWatch) = QuickIntentParser.parse("Watch for FDA GLP-1 safety label changes every weekday at 7am.") else {
+            return XCTFail("Expected a regulatory watch tracker.")
+        }
+        XCTAssertEqual(regulatoryWatch.kind, .customPrompt)
+        XCTAssertEqual(regulatoryWatch.schedule, .weekdays(hour: 7, minute: 0))
+        XCTAssertEqual(regulatoryWatch.title, "FDA GLP-1 safety label changes")
+        XCTAssertTrue(try XCTUnwrap(regulatoryWatch.prompt).localizedCaseInsensitiveContains("fda glp-1"))
     }
 
     func testQuickIntentDoesNotCreateTrackerWithoutSubject() {
@@ -835,6 +1067,37 @@ extension PrivateChatCoreTests {
         try? FileManager.default.removeItem(at: tempFile)
     }
 
+    @MainActor
+    func testProductionTrackerPersistenceDoesNotAutoRunNewTracker() async throws {
+        final class RunCounter: @unchecked Sendable {
+            var count = 0
+        }
+
+        let counter = RunCounter()
+        let tempFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("briefings-\(UUID().uuidString).json")
+        let briefingStore = BriefingStore(briefings: [], fileURL: tempFile) { _ in
+            counter.count += 1
+            return .failed("Tracker should not run immediately after creation.")
+        }
+        let chatStore = ChatStore(api: PrivateChatAPI(configuration: .production))
+        AppEnvironment.configureTrackerPersistence(chatStore: chatStore, briefingStore: briefingStore)
+
+        chatStore.draft = "Track Nintendo Switch 2 OLED release date, preorder timing, and launch price every Friday at 9am with current sources; alert me if the date changes."
+        chatStore.sendDraft()
+
+        try await Task.sleep(nanoseconds: 150_000_000)
+
+        let landed = try XCTUnwrap(briefingStore.briefings.first)
+        XCTAssertEqual(counter.count, 0)
+        XCTAssertNil(landed.lastFailureAt)
+        XCTAssertNil(landed.lastFailureMessage)
+        XCTAssertEqual(landed.status, .scheduled)
+        XCTAssertEqual(chatStore.trackersProvider?().map(\.id), [landed.id])
+
+        try? FileManager.default.removeItem(at: tempFile)
+    }
+
     func testTrackerHistoryParsesValuesAndBuildsChart() throws {
         XCTAssertEqual(TrackerHistory.numericValue(from: "$14,500"), 14_500)
         XCTAssertEqual(TrackerHistory.numericValue(from: "$2.3M"), 2_300_000)
@@ -928,9 +1191,10 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(updated.scheduleCalendar.timeZone.identifier, "America/New_York")
 
         let delivery = try XCTUnwrap(ThreadedBriefingView.deliveries(for: updated).first)
-        XCTAssertEqual(delivery.headline, "Run failed")
+        XCTAssertNil(delivery.headline)
         XCTAssertEqual(delivery.body, "Run failed before producing a result.")
-        XCTAssertTrue(delivery.title.contains("run failed"))
+        XCTAssertEqual(delivery.summary, "Run failed before producing a result.")
+        XCTAssertEqual(delivery.title, "The 9:00pm run didn't start")
         XCTAssertTrue(delivery.isFailure)
         XCTAssertNotEqual(delivery.time, "—")
     }
@@ -945,7 +1209,7 @@ extension PrivateChatCoreTests {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
             .appendingPathComponent("briefings.json")
-        let restrictedCopy = "The private route is temporarily busy. Use the privacy proxy for this turn, or retry private in a moment."
+        let restrictedCopy = "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn."
 
         final class OutcomeBox: @unchecked Sendable { var outcome: BriefingRunOutcome = .quiet }
         let box = OutcomeBox()
@@ -960,8 +1224,8 @@ extension PrivateChatCoreTests {
         let failedDelivery = try XCTUnwrap(ThreadedBriefingView.deliveries(for: updated).first)
         XCTAssertTrue(failedDelivery.isFailure)
         XCTAssertEqual(failedDelivery.body, restrictedCopy)
-        // The row renders summary (not body) under a "Run failed" headline —
-        // the reason must ride there or the user sees no error at all.
+        XCTAssertEqual(failedDelivery.title, "The 8:00am run didn't start")
+        // The reason must ride in summary for the failure card.
         XCTAssertEqual(failedDelivery.summary, restrictedCopy)
 
         // A quiet check (e.g. an alert whose condition wasn't met) is NOT a
@@ -974,5 +1238,100 @@ extension PrivateChatCoreTests {
         XCTAssertNotEqual(updated.status, .failed)
         let quietDelivery = try XCTUnwrap(ThreadedBriefingView.deliveries(for: updated).first)
         XCTAssertFalse(quietDelivery.isFailure)
+    }
+
+    func testBriefingFailureCopyDistinguishesSignInFailuresFromRouteAdvice() throws {
+        let signInFailure = Briefing(
+            title: "Research brief",
+            prompt: "Research saved topic.",
+            schedule: .daily(hour: 8, minute: 0),
+            lastFailureAt: Date(timeIntervalSince1970: 1_783_036_800),
+            lastFailureMessage: "Could not start a private conversation for this run. Check your connection or sign in again, then run it now."
+        )
+        let signInDelivery = try XCTUnwrap(ThreadedBriefingView.deliveries(for: signInFailure).first)
+        XCTAssertEqual(
+            signInDelivery.summary,
+            "The plan wasn't signed in when the brief was due. Re-run now, or check the plan's sign-in to resume the schedule."
+        )
+
+        let routeFailureText = "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn."
+        let routeFailure = Briefing(
+            title: "NEAR price",
+            prompt: "Track price.",
+            schedule: .daily(hour: 8, minute: 0),
+            lastFailureAt: Date(timeIntervalSince1970: 1_783_036_800),
+            lastFailureMessage: routeFailureText
+        )
+        let routeDelivery = try XCTUnwrap(ThreadedBriefingView.deliveries(for: routeFailure).first)
+        XCTAssertEqual(routeDelivery.summary, routeFailureText)
+    }
+
+    func testThreadedBriefingMapsNewsWidgetSourcesIntoDeliveryFooter() throws {
+        let widget = MessageWidget(
+            kind: .newsBrief,
+            title: "AI news digest",
+            newsBrief: WidgetNewsBrief(
+                heading: "Today · 2 stories",
+                stories: [
+                    WidgetNewsStory(
+                        title: "Model release shipped",
+                        tag: "AI",
+                        sources: [
+                            WidgetNewsSource(label: "T", color: "#000000", domain: "techcrunch.com"),
+                            WidgetNewsSource(label: "A", color: "#ff7e1c", domain: "axios.com")
+                        ]
+                    ),
+                    WidgetNewsStory(
+                        title: "Safety update posted",
+                        tag: "Policy",
+                        sources: [
+                            WidgetNewsSource(label: "A", color: "#ff7e1c", domain: "axios.com")
+                        ]
+                    )
+                ]
+            )
+        )
+        let briefing = Briefing(
+            title: "AI news digest",
+            prompt: "Create an AI news digest daily at 8am with links.",
+            schedule: .daily(hour: 8, minute: 0),
+            lastRunAt: Date(timeIntervalSince1970: 1_783_036_800),
+            latestResult: widget,
+            kind: .customPrompt
+        )
+
+        let delivery = try XCTUnwrap(ThreadedBriefingView.deliveries(for: briefing).first)
+
+        XCTAssertEqual(delivery.sources.map(\.letter), ["T", "A"])
+        XCTAssertEqual(delivery.sources.map(\.colorHex), ["#000000", "#ff7e1c"])
+        XCTAssertNil(delivery.sourceStatusText)
+    }
+
+    func testThreadedBriefingMarksWebGroundedChartDeliveryAsCurrentSourceRun() throws {
+        let widget = MessageWidget(
+            kind: .chart,
+            title: "Rolex GMT-Master II",
+            chart: WidgetChart(
+                label: "Steel GMT-Master II secondary market",
+                value: "~$20,200",
+                delta: "+67% over retail",
+                trend: .up,
+                points: [18_700, 19_200, 20_200],
+                caption: "Steel refs trade 60-75% above retail"
+            )
+        )
+        let briefing = Briefing(
+            title: "Rolex GMT-Master II",
+            prompt: "Using web search, find the latest Rolex GMT-Master II market price with current sources and report it concisely.",
+            schedule: .daily(hour: 8, minute: 0),
+            lastRunAt: Date(timeIntervalSince1970: 1_783_036_800),
+            latestResult: widget,
+            kind: .customPrompt
+        )
+
+        let delivery = try XCTUnwrap(ThreadedBriefingView.deliveries(for: briefing).first)
+
+        XCTAssertTrue(delivery.sources.isEmpty)
+        XCTAssertEqual(delivery.sourceStatusText, "Current-source run")
     }
 }
