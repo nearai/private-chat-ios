@@ -103,3 +103,52 @@ struct FaviconBadge: View {
         )
     }
 }
+
+// MARK: - Compact source chips
+
+/// A compact, horizontally-scrolling row of source pills (favicon + domain)
+/// shown beneath a prose answer, matching the Answer reference. Tapping a chip
+/// opens the same source sheet the carousel uses.
+struct SourceChipRow: View {
+    let sources: [WebSearchSource]
+    let onSelect: (Int) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Array(sources.prefix(6).enumerated()), id: \.element.id) { index, source in
+                    Button {
+                        onSelect(index)
+                    } label: {
+                        HStack(spacing: 6) {
+                            SourceFaviconView(
+                                domain: source.host,
+                                size: 15,
+                                fallbackText: String(source.sourceInitials.prefix(1)),
+                                cornerRadius: 4,
+                                allowsNetworkFavicon: source.allowsNetworkFavicon
+                            )
+                            Text(source.host)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(Color.textSecondary)
+                                .lineLimit(1)
+                        }
+                        .padding(.leading, 7)
+                        .padding(.trailing, 11)
+                        .padding(.vertical, 6)
+                        .background(Color.appSecondaryBackground, in: Capsule())
+                        .overlay(Capsule().stroke(Color.appBorder, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("source.chip.\(index + 1)")
+                    .accessibilityLabel("Open source \(index + 1), \(source.displayTitle), \(source.host)")
+                }
+            }
+            .padding(.vertical, 1)
+        }
+        .contentMargins(.trailing, 16, for: .scrollContent)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(sources.count) source\(sources.count == 1 ? "" : "s")")
+    }
+}

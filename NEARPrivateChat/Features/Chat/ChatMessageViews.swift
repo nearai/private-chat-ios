@@ -175,15 +175,6 @@ struct MessageBubble: View {
                     }
                 }
 
-                if message.role == .assistant, shouldShowSourceCarousel {
-                    SourceCarousel(sources: message.sources) { tappedIndex in
-                        tappedSource = SourceSheetPresentation(
-                            index: tappedIndex,
-                            source: message.sources[tappedIndex]
-                        )
-                    }
-                }
-
                 Group {
                     if message.text.isEmpty && message.isStreaming {
                         if message.isAgentRouteMessage {
@@ -386,6 +377,15 @@ struct MessageBubble: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .accessibilityIdentifier("message.regenerateStopped")
+                    }
+                }
+
+                if message.role == .assistant, shouldShowSourceCarousel {
+                    SourceChipRow(sources: message.sources) { tappedIndex in
+                        tappedSource = SourceSheetPresentation(
+                            index: tappedIndex,
+                            source: message.sources[tappedIndex]
+                        )
                     }
                 }
 
