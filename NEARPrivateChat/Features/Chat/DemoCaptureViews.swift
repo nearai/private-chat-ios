@@ -185,29 +185,46 @@ func demoFailedTrackerContext() -> (store: BriefingStore, briefing: Briefing) {
 /// sample briefings so the Live grid + Scheduled rows render for capture.
 @MainActor
 func demoDashboardStore() -> BriefingStore {
-    func delivered(_ title: String, _ kind: BriefingKind, _ summary: String, _ time: String) -> Briefing {
+    func live(_ title: String, briefingKind: BriefingKind, widget: MessageWidget, minutesAgo: Double) -> Briefing {
         var briefing = Briefing(
             title: title,
             prompt: title,
             schedule: .daily(hour: 8, minute: 0),
             createdAt: Date().addingTimeInterval(-86_400),
-            kind: kind
+            kind: briefingKind
         )
-        briefing.latestResult = MessageWidget(
-            kind: .generic,
-            title: title,
-            freshness: .fresh,
-            time: time,
-            followUp: "Ask a follow-up",
-            note: summary
-        )
-        briefing.lastRunAt = Date().addingTimeInterval(-3_600)
+        briefing.latestResult = widget
+        briefing.lastRunAt = Date().addingTimeInterval(-minutesAgo * 60)
         return briefing
     }
+    let news = MessageWidget(
+        kind: .newsBrief, title: "Daily news", freshness: .fresh, time: "8:02am",
+        followUp: "Drill into the ceasefire story…",
+        newsBrief: WidgetNewsBrief(heading: "Today · 3 stories", stories: [
+            WidgetNewsStory(title: "US–Iran ceasefire under strain", tag: "Conflict", sources: [
+                WidgetNewsSource(label: "W", color: "#ff7e1c", domain: "wsj.com"),
+                WidgetNewsSource(label: "A", color: "#000000", domain: "apnews.com")
+            ])
+        ])
+    )
+    let eth = MessageWidget(
+        kind: .metric, title: "ETH watcher", freshness: .fresh, time: "1h ago",
+        followUp: "Why did it move?",
+        metric: WidgetMetric(label: "ETH · USD", value: "$3,124", delta: "−2.3% (1h)", trend: .down, caption: "threshold $3,180 breached")
+    )
+    let council = MessageWidget(
+        kind: .generic, title: "Council debate", freshness: .fresh, time: "just now",
+        followUp: "Show the dissent.", note: "Ship Council v2 next week? — 2 agree · 1 dissent · 3 votes in."
+    )
+    let research = MessageWidget(
+        kind: .generic, title: "TEE research", freshness: .fresh, time: "just now",
+        followUp: "Summarize the new papers.", note: "3 new TEE-attestation papers added overnight, matching your saved query."
+    )
     let live = [
-        delivered("Daily news", .dailyNews, "US–Iran ceasefire under strain after overnight strikes near the Strait of Hormuz.", "8:02am"),
-        delivered("ETH watcher", .customPrompt, "ETH $3,124, down 2.3% on the hour — bid depth thinning on Binance.", "1h ago"),
-        delivered("Research brief", .customPrompt, "3 new TEE-attestation papers added overnight, matching your saved query.", "just now")
+        live("Daily news", briefingKind: .dailyNews, widget: news, minutesAgo: 58),
+        live("ETH watcher", briefingKind: .customPrompt, widget: eth, minutesAgo: 60),
+        live("Council debate", briefingKind: .customPrompt, widget: council, minutesAgo: 10),
+        live("TEE research", briefingKind: .customPrompt, widget: research, minutesAgo: 5)
     ]
     return BriefingStore(
         briefings: live + BriefingSamples.sampleBriefings,
