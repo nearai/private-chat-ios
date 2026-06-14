@@ -527,4 +527,44 @@ extension PrivateChatCoreTests {
         // A different run id must not pick up this thread's prior answer.
         XCTAssertNil(try IronclawAPI.assistantTextForTesting(timeline: data, runID: "no-such-run"))
     }
+
+    /// End-to-end check of the reborn agent route through IronclawAPI's SSE+timeline
+    /// path against a live `ironclaw-reborn serve`. Skips unless both env vars are
+    /// set, so the normal suite is unaffected.
+    func testRebornAgentRouteReturnsAnswerLive() async throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let baseURL = env["IRONCLAW_REBORN_BASE_URL"],
+              !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let token = env["IRONCLAW_REBORN_TOKEN"],
+              !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw XCTSkip("Live reborn test: set IRONCLAW_REBORN_BASE_URL + IRONCLAW_REBORN_TOKEN.")
+        }
+
+        final class Sink: @unchecked Sendable {
+            var answer = ""
+            var failure: String?
+        }
+        let sink = Sink()
+        let api = IronclawAPI()
+        let settings = IronclawSettings(isEnabled: true, baseURL: baseURL, threadID: "")
+
+        try await api.streamPrompt(
+            prompt: "Reply with exactly one short sentence: hello from the iOS reborn integration test.",
+            attachments: [],
+            settings: settings,
+            authToken: token
+        ) { event in
+            switch event {
+            case let .itemDone(text): sink.answer += text ?? ""
+            case let .failed(message): sink.failure = message
+            default: break
+            }
+        }
+
+        XCTAssertNil(sink.failure, "reborn agent send reported failure: \(sink.failure ?? "")")
+        XCTAssertFalse(
+            sink.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            "reborn agent returned no answer text"
+        )
+    }
 }
