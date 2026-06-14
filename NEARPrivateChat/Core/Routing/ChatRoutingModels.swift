@@ -249,6 +249,11 @@ struct ChatSourceRoutingSemantics: Hashable {
         case .project:
             return webSearchEnabled ? .whenHelpful : .never
         case .links:
+            // Links lean on the model's native web tool where it exists; routes
+            // without one (NEAR Cloud, hosted) fall back to app-side grounding.
+            if route == .nearPrivate || route == .ironclawMobile {
+                return .never
+            }
             return webSearchEnabled ? .whenFreshRequested : .never
         case .auto:
             if route == .nearCloud {
