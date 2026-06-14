@@ -368,12 +368,16 @@ final class IronclawAPI {
             await onEvent(.failed("IronClaw endpoint is not a valid Hosted IronClaw URL."))
             return .failed
         }
+        // One shared wall-clock budget across both phases, so a stuck run can't
+        // wait out the SSE deadline AND a fresh full timeline-poll budget on top.
+        let deadline = Date().addingTimeInterval(Self.runDeadlineSeconds)
         do {
             if let outcome = try await streamRunViaSSE(
                 baseURL: baseURL,
                 authToken: authToken,
                 threadID: threadID,
                 runID: runID,
+                deadline: deadline,
                 onEvent: onEvent
             ) {
                 return outcome
@@ -389,6 +393,7 @@ final class IronclawAPI {
             authToken: authToken,
             threadID: threadID,
             runID: runID,
+            deadline: deadline,
             onEvent: onEvent
         )
     }
@@ -402,6 +407,7 @@ final class IronclawAPI {
         authToken: String?,
         threadID: String,
         runID: String,
+        deadline: Date,
         onEvent: @escaping (ResponseStreamEvent) async -> Void
     ) async throws -> IronclawPollOutcome? {
         let url = baseURL.appending(path: "\(Self.threadsPath)/\(threadID)/events")
@@ -423,7 +429,6 @@ final class IronclawAPI {
             )
         }
 
-        let deadline = Date().addingTimeInterval(Self.runDeadlineSeconds)
         var dataBuffer = ""
 
         for try await line in bytes.lines {
@@ -528,6 +533,10 @@ final class IronclawAPI {
         return nil
     }
 
+    /// reborn is event-sourced: a `completed` run-status projection can outrace
+    /// the finalized assistant message landing in `/timeline`. Re-read briefly
+    /// before declaring "no answer" so a successful run isn't false-failed on
+    /// the primary SSE path (the timeline-poll fallback already tolerates this).
     private func completeFromTimeline(
         baseURL: URL,
         authToken: String?,
@@ -535,26 +544,33 @@ final class IronclawAPI {
         runID: String,
         onEvent: @escaping (ResponseStreamEvent) async -> Void
     ) async -> IronclawPollOutcome {
-        let text: String
-        do {
-            let timeline = try await fetchTimelineEnsuringAssistant(
-                baseURL: baseURL,
-                authToken: authToken,
-                threadID: threadID,
-                runID: runID
-            )
-            text = Self.assistantText(in: timeline, forRunID: runID) ?? ""
-        } catch {
-            await onEvent(.failed(Self.pollFailureMessage(for: error)))
-            return .failed
+        for attempt in 0..<6 {
+            if Task.isCancelled { return .failed }
+            let timeline: IronclawTimelineResponse
+            do {
+                timeline = try await fetchTimelineEnsuringAssistant(
+                    baseURL: baseURL,
+                    authToken: authToken,
+                    threadID: threadID,
+                    runID: runID
+                )
+            } catch {
+                await onEvent(.failed(Self.pollFailureMessage(for: error)))
+                return .failed
+            }
+            if let text = Self.assistantText(in: timeline, forRunID: runID) {
+                let presented = Self.presentationText(from: text)
+                if !presented.isEmpty {
+                    await onEvent(.itemDone(text: presented))
+                    return .completed
+                }
+            }
+            if attempt < 5 {
+                try? await Task.sleep(nanoseconds: 700_000_000)
+            }
         }
-        let presented = Self.presentationText(from: text)
-        if presented.isEmpty {
-            await onEvent(.failed("IronClaw finished but returned no answer text. Check the Agent connection logs, then retry."))
-            return .failed
-        }
-        await onEvent(.itemDone(text: presented))
-        return .completed
+        await onEvent(.failed("IronClaw finished but returned no answer text. Check the Agent connection logs, then retry."))
+        return .failed
     }
 
     /// Fallback when the SSE stream is unavailable: poll the timeline for the
@@ -564,12 +580,14 @@ final class IronclawAPI {
         authToken: String?,
         threadID: String,
         runID: String,
+        deadline: Date,
         onEvent: @escaping (ResponseStreamEvent) async -> Void
     ) async -> IronclawPollOutcome {
         let maxAttempts = 180
         for attempt in 0..<maxAttempts {
             try? await Task.sleep(nanoseconds: attempt == 0 ? 800_000_000 : 2_000_000_000)
             if Task.isCancelled { return .failed }
+            if Date() > deadline { break }
 
             let timeline: IronclawTimelineResponse
             do {
