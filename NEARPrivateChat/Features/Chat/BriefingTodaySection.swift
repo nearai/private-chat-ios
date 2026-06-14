@@ -79,8 +79,8 @@ struct TodaySection: View {
     private var header: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Automations")
-                    .font(.title3.weight(.semibold))
+                Text("Today")
+                    .font(.title2.weight(.bold))
                 Text(Date().formatted(.dateTime.weekday(.wide).month(.wide).day()))
                     .font(.subheadline)
                     .foregroundStyle(Color.textSecondary)

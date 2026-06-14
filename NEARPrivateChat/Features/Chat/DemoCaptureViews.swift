@@ -185,7 +185,7 @@ func demoFailedTrackerContext() -> (store: BriefingStore, briefing: Briefing) {
 /// sample briefings so the Live grid + Scheduled rows render for capture.
 @MainActor
 func demoDashboardStore() -> BriefingStore {
-    func delivered(_ title: String, _ kind: BriefingKind) -> Briefing {
+    func delivered(_ title: String, _ kind: BriefingKind, _ summary: String, _ time: String) -> Briefing {
         var briefing = Briefing(
             title: title,
             prompt: title,
@@ -193,14 +193,21 @@ func demoDashboardStore() -> BriefingStore {
             createdAt: Date().addingTimeInterval(-86_400),
             kind: kind
         )
-        briefing.latestResult = BriefingSamples.sampleWidget(title: title)
+        briefing.latestResult = MessageWidget(
+            kind: .generic,
+            title: title,
+            freshness: .fresh,
+            time: time,
+            followUp: "Ask a follow-up",
+            note: summary
+        )
         briefing.lastRunAt = Date().addingTimeInterval(-3_600)
         return briefing
     }
     let live = [
-        delivered("Daily news", .dailyNews),
-        delivered("Market watch", .customPrompt),
-        delivered("Research brief", .customPrompt)
+        delivered("Daily news", .dailyNews, "US–Iran ceasefire under strain after overnight strikes near the Strait of Hormuz.", "8:02am"),
+        delivered("ETH watcher", .customPrompt, "ETH $3,124, down 2.3% on the hour — bid depth thinning on Binance.", "1h ago"),
+        delivered("Research brief", .customPrompt, "3 new TEE-attestation papers added overnight, matching your saved query.", "just now")
     ]
     return BriefingStore(
         briefings: live + BriefingSamples.sampleBriefings,
