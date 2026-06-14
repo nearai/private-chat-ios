@@ -225,9 +225,7 @@ extension HomeScreen {
             defaultCouncilModelCount: chatStore.defaultCouncilModels.count,
             councilModelNames: chatStore.councilModelNames,
             hostedAgentAvailable: chatStore.ironclawRemoteWorkstationAvailable,
-            mobileAgentAvailable: chatStore.agentModels.contains { $0.id == ModelOption.ironclawMobileModelID },
-            setupPlan: savedSetupState?.plan,
-            includesSetupDefaultsCommand: true
+            mobileAgentAvailable: chatStore.agentModels.contains { $0.id == ModelOption.ironclawMobileModelID }
         )
     }
 

@@ -224,17 +224,6 @@ extension ChatStore {
         )
     }
 
-    private func refreshTrustMetadata(for messageID: String, modelID: String? = nil, webSearchUsed: Bool? = nil) {
-        updateMessage(messageID) { message in
-            guard message.role == .assistant else { return }
-            message.trustMetadata = assistantTrustMetadata(
-                for: modelID ?? message.model,
-                webSearchUsed: webSearchUsed ?? (!message.sources.isEmpty ? true : nil),
-                capturedAt: message.createdAt
-            )
-        }
-    }
-
     func routingSemantics(for route: ChatRouteKind) -> ChatSourceRoutingSemantics {
         modelCatalogStore.sourceRoutingSemantics(for: route)
     }
