@@ -567,4 +567,83 @@ extension PrivateChatCoreTests {
             "reborn agent returned no answer text"
         )
     }
+
+    /// Deterministic end-to-end of the reborn agent flow (createThread -> send ->
+    /// SSE projection -> timeline -> answer) against a stubbed URLProtocol — no
+    /// live server or token needed. Locks in the SSE+timeline completion path.
+    func testRebornAgentFlowEndToEndStubbed() async throws {
+        URLProtocol.registerClass(RebornStubURLProtocol.self)
+        defer { URLProtocol.unregisterClass(RebornStubURLProtocol.self) }
+
+        final class Sink: @unchecked Sendable {
+            var answer = ""
+            var failure: String?
+        }
+        let sink = Sink()
+        let api = IronclawAPI()
+        let settings = IronclawSettings(isEnabled: true, baseURL: "https://dangwalvaidy.family/reborn", threadID: "")
+
+        try await api.streamPrompt(
+            prompt: "hi",
+            attachments: [],
+            settings: settings,
+            authToken: "stub-token"
+        ) { event in
+            switch event {
+            case let .itemDone(text): sink.answer += text ?? ""
+            case let .failed(message): sink.failure = message
+            default: break
+            }
+        }
+
+        XCTAssertNil(sink.failure, "stubbed reborn flow failed: \(sink.failure ?? "")")
+        XCTAssertEqual(
+            sink.answer.trimmingCharacters(in: .whitespacesAndNewlines),
+            "Hello from the stub."
+        )
+    }
+}
+
+/// URLProtocol that stubs the reborn WebChat v2 endpoints (threads / messages /
+/// events / timeline) so the full agent flow can be exercised offline.
+private final class RebornStubURLProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.host == "dangwalvaidy.family"
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        let path = url.path
+        let method = request.httpMethod ?? "GET"
+        let contentType: String
+        let body: String
+        if method == "POST", path.hasSuffix("/threads") {
+            contentType = "application/json"
+            body = #"{"thread":{"thread_id":"t1"}}"#
+        } else if method == "POST", path.hasSuffix("/messages") {
+            contentType = "application/json"
+            body = #"{"outcome":"submitted","run_id":"r1","status":"Queued"}"#
+        } else if path.hasSuffix("/events") {
+            contentType = "text/event-stream"
+            body = "event: projection_update\ndata: {\"type\":\"projection_update\",\"state\":{\"items\":[{\"run_status\":{\"run_id\":\"r1\",\"status\":\"completed\"}}]}}\n\n"
+        } else if path.hasSuffix("/timeline") {
+            contentType = "application/json"
+            body = #"{"messages":[{"kind":"assistant","turn_run_id":"r1","content":"Hello from the stub."}]}"#
+        } else {
+            contentType = "application/json"
+            body = "{}"
+        }
+        if let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": contentType]) {
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        }
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }
