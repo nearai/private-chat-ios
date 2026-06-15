@@ -8,7 +8,13 @@ struct ChatLocalIntentTrackLastDraft: Equatable {
 
 enum ChatLocalIntentBriefingFactory {
     static func trackerBriefing(for spec: TrackerSpec, fallbackPrompt: String) -> Briefing {
-        let keepsStructuredKind = spec.condition != nil
+        // Keep the structured kind for ANY live-data tracker (price / account /
+        // watchlist), not only conditional alerts. The run path prices these from
+        // the live APIs (CoinGecko / Yahoo / NEAR RPC) — accurate current data —
+        // whereas downgrading them to .customPrompt routed them through the model,
+        // which returned stale cached prices. Open-ended trackers (.customPrompt
+        // spec kind) still become model-routed .customPrompt briefings.
+        let keepsStructuredKind = spec.condition != nil || (spec.kind.isLiveData && !spec.council)
         return Briefing(
             title: spec.title,
             prompt: prompt(for: spec, fallbackPrompt: fallbackPrompt, keepsStructuredKind: keepsStructuredKind),

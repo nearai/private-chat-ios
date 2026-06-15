@@ -61,12 +61,21 @@ extension ChatStore {
         }
 
         // The Daily Brief is a client-side digest of existing automation state.
-        // Other non-conditional briefings, including legacy live-data kinds,
-        // route through the model so facts, sources, and presentation are not
-        // hardcoded in the app.
         if briefing.kind == .dailyBrief {
             guard let digest = await briefDigestWidget() else { return .quiet }
             return .delivered(digest)
+        }
+
+        // Structured price/account kinds price from the live data APIs (CoinGecko
+        // / Yahoo / NEAR RPC) — these are LIVE sources, not hardcoded values, and
+        // they are accurate. Routing them through the model returned a STALE
+        // cached price (a 'NEAR price' tracker showed $2.12 while CoinGecko had
+        // the live $2.47, because the model's web search hit a cached page). The
+        // conditional-alert path already trusts these sources; non-conditional
+        // price trackers should too. Falls through to the model only if the live
+        // fetch fails, so open-ended (.customPrompt / news) work stays model-routed.
+        if let widget = await liveDataBriefingWidget(for: briefing) {
+            return .delivered(widget)
         }
 
         // A council briefing runs several models + a synthesis on each scheduled
@@ -75,6 +84,36 @@ extension ChatStore {
             return await runCouncilBriefing(briefing)
         }
         return await runSingleModelBriefing(briefing)
+    }
+
+    /// Live, structured market/account data for a non-conditional price tracker —
+    /// the accurate source (CoinGecko / Yahoo / NEAR RPC), not the model. Returns
+    /// nil for open-ended kinds or when the live fetch fails (so the caller falls
+    /// back to the model).
+    private func liveDataBriefingWidget(for briefing: Briefing) async -> MessageWidget? {
+        switch briefing.kind {
+        case .cryptoPrice, .ethPrice:
+            guard let coinID = briefing.accountID?.nilIfBlank else { return nil }
+            return await LiveDataService.cryptoPriceWidget(
+                coinID: coinID,
+                symbol: LiveDataService.symbol(forCoinID: coinID)
+            )
+        case .stockPrice:
+            guard let symbol = briefing.accountID?.nilIfBlank else { return nil }
+            return await LiveDataService.stockQuoteWidget(symbol: symbol, company: "")
+        case .commodityPrice:
+            guard let label = briefing.accountID?.nilIfBlank,
+                  let commodity = QuickIntentParser.matchedCommodity(in: label.lowercased()) else { return nil }
+            return await LiveDataService.stockQuoteWidget(symbol: commodity.yahooSymbol, company: commodity.label)
+        case .watchlist:
+            guard let serialized = briefing.accountID?.nilIfBlank else { return nil }
+            return await LiveDataService.watchlistWidget(serialized: serialized)
+        case .nearAccount:
+            guard let account = briefing.accountID?.nilIfBlank else { return nil }
+            return await LiveDataService.nearAccountWidget(account: account)
+        case .customPrompt, .dailyNews, .dailyBrief:
+            return nil
+        }
     }
 
     /// Evaluates a conditional tracker against live price data. The threshold

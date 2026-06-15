@@ -1059,12 +1059,12 @@ extension PrivateChatCoreTests {
 
         XCTAssertEqual(briefingStore.briefings.count, 1)
         let landed = try XCTUnwrap(briefingStore.briefings.first)
-        XCTAssertEqual(landed.kind, .customPrompt)
-        XCTAssertNil(landed.accountID)
+        // A non-council ETH price tracker keeps its structured kind + subject so
+        // the run path prices it from live data (CoinGecko), not the model.
+        XCTAssertEqual(landed.kind, .cryptoPrice)
+        XCTAssertEqual(landed.accountID, "ethereum")
         XCTAssertEqual(landed.schedule, .daily(hour: 8, minute: 0))
         XCTAssertEqual(landed.title, "ETH price")
-        XCTAssertTrue(landed.prompt.contains("Run this recurring workflow through chat"))
-        XCTAssertTrue(landed.prompt.contains("ETH"))
         XCTAssertFalse(landed.council)
 
         try? FileManager.default.removeItem(at: tempFile)

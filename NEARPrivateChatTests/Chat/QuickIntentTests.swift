@@ -900,10 +900,11 @@ extension PrivateChatCoreTests {
             condition: nil
         )
         let priceBriefing = ChatLocalIntentBriefingFactory.trackerBriefing(for: priceSpec, fallbackPrompt: "fallback")
-        XCTAssertEqual(priceBriefing.kind, .customPrompt)
-        XCTAssertNil(priceBriefing.accountID)
-        XCTAssertTrue(priceBriefing.prompt.contains("Run this recurring workflow through chat"))
-        XCTAssertTrue(priceBriefing.prompt.contains("ETH"))
+        // A non-council price tracker keeps its structured kind + subject so the
+        // run path prices it from live data (CoinGecko) — accurate — rather than
+        // routing through the model, which returned stale cached prices.
+        XCTAssertEqual(priceBriefing.kind, .cryptoPrice)
+        XCTAssertEqual(priceBriefing.accountID, "ethereum")
 
         let alertCondition = BriefingCondition(coinID: "ethereum", symbol: "ETH", comparator: .below, threshold: 2_000)
         let alertSpec = TrackerSpec(

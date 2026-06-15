@@ -574,11 +574,11 @@ extension PrivateChatCoreTests {
         store.sendDraft()
 
         let briefing = try XCTUnwrap(created)
-        XCTAssertEqual(briefing.kind, .customPrompt)
-        XCTAssertNil(briefing.accountID)
+        // A non-council ETH price tracker keeps its structured kind so the run
+        // path prices it from live data (CoinGecko), not the model.
+        XCTAssertEqual(briefing.kind, .cryptoPrice)
+        XCTAssertEqual(briefing.accountID, "ethereum")
         XCTAssertEqual(briefing.schedule, .daily(hour: 8, minute: 0))
-        XCTAssertTrue(briefing.prompt.contains("Run this recurring workflow through chat"))
-        XCTAssertTrue(briefing.prompt.contains("ETH"))
         // Tracker creation is synchronous: a confirmation turn, no streaming.
         XCTAssertFalse(store.isStreaming)
         XCTAssertEqual(store.messages.first?.role, .user)
