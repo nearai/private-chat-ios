@@ -12,7 +12,17 @@ let liveCoins: [LiveCoin] = [
     LiveCoin(id: "near", symbol: "NEAR", keywords: ["near protocol", "near"]),
     LiveCoin(id: "bitcoin", symbol: "BTC", keywords: ["bitcoin", "btc"]),
     LiveCoin(id: "solana", symbol: "SOL", keywords: ["solana", "sol"]),
-    LiveCoin(id: "dogecoin", symbol: "DOGE", keywords: ["dogecoin", "doge"])
+    LiveCoin(id: "dogecoin", symbol: "DOGE", keywords: ["dogecoin", "doge"]),
+    LiveCoin(id: "binancecoin", symbol: "BNB", keywords: ["binance coin", "binancecoin", "bnb"]),
+    LiveCoin(id: "ripple", symbol: "XRP", keywords: ["xrp", "ripple"]),
+    LiveCoin(id: "cardano", symbol: "ADA", keywords: ["cardano", "ada"]),
+    LiveCoin(id: "avalanche-2", symbol: "AVAX", keywords: ["avalanche", "avax"]),
+    LiveCoin(id: "polkadot", symbol: "DOT", keywords: ["polkadot", "dot"]),
+    LiveCoin(id: "chainlink", symbol: "LINK", keywords: ["chainlink", "link token"]),
+    LiveCoin(id: "litecoin", symbol: "LTC", keywords: ["litecoin", "ltc"]),
+    LiveCoin(id: "bitcoin-cash", symbol: "BCH", keywords: ["bitcoin cash", "bch"]),
+    LiveCoin(id: "usd-coin", symbol: "USDC", keywords: ["usd coin", "usdc"]),
+    LiveCoin(id: "tether", symbol: "USDT", keywords: ["tether", "usdt"])
 ]
 
 func liveCoin(forID id: String) -> LiveCoin? {

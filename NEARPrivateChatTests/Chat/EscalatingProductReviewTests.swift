@@ -36,6 +36,18 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(watch.subject, "crypto:ethereum|crypto:solana")
     }
 
+    func testReview_expandedCoinCoverageResolvesMidTierAlts() {
+        // Mid-tier alts (extracted from the codex livedata stream) now resolve as
+        // crypto instead of falling through — widening the long-tail-crypto gap.
+        XCTAssertEqual(QuickIntentParser.parse("XRP price"), .price(coinID: "ripple", symbol: "XRP"))
+        XCTAssertEqual(QuickIntentParser.parse("what's ADA worth"), .price(coinID: "cardano", symbol: "ADA"))
+        guard case let .createTracker(avax) = QuickIntentParser.parse("alert me when AVAX drops below $20") else {
+            return XCTFail("Expected an AVAX crypto alert.")
+        }
+        XCTAssertEqual(avax.kind, .cryptoPrice)
+        XCTAssertEqual(avax.subject, "avalanche-2")
+    }
+
     func testReview_knownEquityCashtagsAndConditionsStillWork() {
         XCTAssertEqual(QuickIntentParser.parse("$AAPL"), .stock(symbol: "AAPL", company: "Apple"))
         guard case let .createTracker(tsla) = QuickIntentParser.parse("notify me when TSLA drops below 200") else {
