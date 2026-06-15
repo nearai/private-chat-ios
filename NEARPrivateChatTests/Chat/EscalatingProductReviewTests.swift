@@ -111,4 +111,54 @@ extension PrivateChatCoreTests {
         // behaves like a real alert rather than a one-shot.
         XCTAssertEqual(spec.schedule, .everyNHours(3))
     }
+
+    func testReview_webGroundedAlertHonorsExplicitCadence() {
+        guard case let .createTracker(spec) = QuickIntentParser.parse("alert me when gold goes above $2,500 every morning at 8am") else {
+            return XCTFail("Expected a recurring tracker.")
+        }
+        // An explicit cadence must be kept, not flattened to the default cycle.
+        XCTAssertNotEqual(spec.schedule, .everyNHours(3))
+    }
+
+    // MARK: - Over-trigger guard: abstract-metric / pronoun alerts must NOT become price trackers
+
+    func testReview_abstractMetricAndPronounAlertsDoNotBecomePriceTrackers() {
+        // A comparator + bare number with no priceable asset is not a price
+        // alert — these used to (briefly) build a fake "$N price" watcher; they
+        // must fall through to the model instead.
+        let nonPriceAlerts = [
+            "alert me when my coverage drops below 80",
+            "warn me when cpu is above 90",
+            "ping me when my credit score drops below 700",
+            "let me know when occupancy is below 90",
+            "notify me when the queue is above 100",
+            "alert me when it drops below $100"
+        ]
+        for prompt in nonPriceAlerts {
+            if case .createTracker = QuickIntentParser.parse(prompt) {
+                XCTFail("Non-price alert must not become a tracker: \(prompt)")
+            }
+        }
+    }
+
+    // MARK: - Cashtag-in-alert routing (ties the two fixes together)
+
+    func testReview_knownEquityCashtagAlertStaysStructured() {
+        guard case let .createTracker(spec) = QuickIntentParser.parse("alert me when $AAPL drops below 150") else {
+            return XCTFail("Expected a structured AAPL stock alert.")
+        }
+        XCTAssertEqual(spec.kind, .stockPrice)
+        XCTAssertEqual(spec.condition?.symbol, "AAPL")
+        XCTAssertEqual(spec.condition?.comparator, .below)
+        XCTAssertEqual(spec.condition?.threshold, 150)
+    }
+
+    func testReview_unknownCashtagAlertBecomesWebGrounded() {
+        guard case let .createTracker(spec) = QuickIntentParser.parse("alert me when $WIF drops below $2") else {
+            return XCTFail("Expected a web-grounded tracker for the unknown cashtag.")
+        }
+        XCTAssertEqual(spec.kind, .customPrompt)
+        XCTAssertNil(spec.condition)
+        XCTAssertTrue((spec.prompt ?? "").lowercased().contains("wif"))
+    }
 }

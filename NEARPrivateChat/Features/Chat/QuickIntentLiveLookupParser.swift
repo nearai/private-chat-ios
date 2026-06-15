@@ -407,19 +407,18 @@ extension QuickIntentParser {
         // web-grounded recurring tracker so commodities (gold, oil), luxury
         // goods (a Rolex Daytona), retail products (iPhone 16 Pro), and
         // long-tail coins still get a real watcher on a schedule.
-        let subject = conditionalAlertSubject(from: text)
-        guard subject.count >= 2 else { return nil }
+        let subject = String(conditionalAlertSubject(from: text).prefix(80))
+        guard isPriceableAlertSubject(subject, original: original) else { return nil }
         let title = prettyTrackerTitle(from: subject)
-        let direction = comparator == .below ? "below" : "above"
-        let label = BriefingCondition(coinID: "", symbol: "", comparator: comparator, threshold: threshold).thresholdLabel
+        let label = BriefingCondition.thresholdLabel(threshold)
         return TrackerSpec(
             title: "\(title) alert",
             kind: .customPrompt,
             subject: nil,
             schedule: schedule,
             council: false,
-            confirmation: "Alerts when \(title) is \(direction) \(label) · checks \(schedule.scheduleLabel)",
-            prompt: "Using live web search, check the current price of \(subject). If it is \(direction) \(label), lead with the alert and cite a source with the price and the time checked. Otherwise return a concise no-alert status with the latest price, how far it is from \(label), and the next check time.",
+            confirmation: "Alerts when \(title) is \(comparator.phrase) \(label) · checks \(schedule.scheduleLabel)",
+            prompt: "Using live web search, check the current price of \(subject). If it is \(comparator.phrase) \(label), lead with the alert and cite a source with the price and the time checked. Otherwise return a concise no-alert status with the latest price, how far it is from \(label), and the next check time.",
             condition: nil
         )
     }
@@ -441,14 +440,59 @@ extension QuickIntentParser {
         }
         s = s.replacingOccurrences(of: #"^\s*(when|if|whenever|once|as soon as)\s+"#,
                                    with: "", options: [.regularExpression, .caseInsensitive])
-        // Drop everything from the comparator (and its optional verb-of-motion)
-        // onward — the condition clause: "goes above $2,500/oz", "drops below $30k".
+        // Drop everything from the comparator onward — the condition clause:
+        // "goes above $2,500/oz", "drops below $30k". The comparator must be
+        // followed by a number (modulo $/space) so a subject word that merely
+        // contains a comparator token ("over-the-counter price") is left intact.
         s = s.replacingOccurrences(
-            of: #"\s*\b(drops?|dips?|falls?|goes?|climbs?|rises?|breaks?|jumps?|reaches|hits|trades?|is|are|moves?|sells?|sinks?|tops?)?\s*(below|under|above|over|less than|greater than|higher than|lower than|more than|down to|up to|exceeds)\b.*$"#,
+            of: #"\s*\b(drops?|dips?|falls?|goes?|climbs?|rises?|breaks?|jumps?|reaches|hits|trades?|is|are|moves?|sells?|sinks?|tops?)?\s*(below|under|above|over|less than|greater than|higher than|lower than|more than|down to|up to|exceeds)\s+\$?\s*[0-9].*$"#,
             with: " ", options: [.regularExpression, .caseInsensitive])
         s = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,'\""))
         return s
+    }
+
+    /// Commodities/metals the model can price via web search — these mark a
+    /// subject as priceable even without a "$".
+    static let priceableCommodityKeywords: Set<String> = [
+        "gold", "silver", "platinum", "palladium", "copper", "nickel", "aluminum",
+        "aluminium", "zinc", "lithium", "uranium", "oil", "crude", "brent", "wti",
+        "gasoline", "diesel", "natgas", "wheat", "corn", "soybean", "soybeans",
+        "coffee", "sugar", "cotton", "cocoa", "lumber"
+    ]
+
+    /// Abstract metrics that take a "below/above N" but are NOT prices, so an
+    /// alert about them must never become a fake recurring price watcher.
+    static let nonPriceMetricWords: Set<String> = [
+        "coverage", "cpu", "gpu", "ram", "memory", "disk", "queue", "latency",
+        "occupancy", "attendance", "rate", "ratio", "uptime", "downtime", "sla",
+        "temperature", "humidity", "speed", "count", "level", "load", "usage",
+        "traffic", "bandwidth", "fps", "ping", "votes", "followers", "subscribers"
+    ]
+
+    /// Filler/pronoun tokens that never name a priceable asset on their own.
+    static let alertSubjectFillers: Set<String> = [
+        "the", "and", "for", "with", "current", "latest", "live", "today",
+        "tomorrow", "their", "your", "our", "his", "her", "its", "this", "that",
+        "these", "those", "mine", "ours", "yours", "them"
+    ]
+
+    /// True when the leftover alert subject is a plausibly *priceable* thing — it
+    /// names a real asset/product AND carries a price signal (a "$", a
+    /// commodity/coin keyword, a product cue, or an explicit price word).
+    /// Abstract-metric alerts ("coverage drops below 80", "cpu above 90") and
+    /// pronoun-only subjects ("it below $100") fail this gate and fall through to
+    /// the model instead of becoming a bogus recurring price tracker.
+    static func isPriceableAlertSubject(_ subject: String, original: String) -> Bool {
+        let lower = subject.lowercased()
+        let nouns = lower.split(whereSeparator: { !$0.isLetter }).map(String.init)
+            .filter { $0.count >= 3 && !alertSubjectFillers.contains($0) }
+        guard !nouns.isEmpty, !nouns.allSatisfy(nonPriceMetricWords.contains) else { return false }
+        return original.contains("$")
+            || hasProductPriceContext(lower)
+            || matchedCoin(in: lower) != nil
+            || nouns.contains(where: priceableCommodityKeywords.contains)
+            || contains(lower, ["price", "worth", "cost", "valuation", "quote", "resale", "floor", "spot"])
     }
 
     /// "alert me if NEAR moves more than 5%" is a percentage-move alert, not

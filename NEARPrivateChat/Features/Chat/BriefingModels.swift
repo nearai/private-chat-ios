@@ -56,13 +56,15 @@ struct BriefingCondition: Codable, Hashable {
 
     func isSatisfied(by value: Double) -> Bool { comparator.evaluate(value, threshold) }
 
-    var thresholdLabel: String {
+    static func thresholdLabel(_ threshold: Double, currency: String = "usd") -> String {
         let f = NumberFormatter()
         f.numberStyle = .currency
         f.currencyCode = currency.uppercased()
         f.maximumFractionDigits = threshold < 10 ? 2 : 0
         return f.string(from: NSNumber(value: threshold)) ?? "\(threshold)"
     }
+
+    var thresholdLabel: String { Self.thresholdLabel(threshold, currency: currency) }
 
     /// "ETH below $2,000"
     var summary: String { "\(symbol) \(comparator.phrase) \(thresholdLabel)" }
