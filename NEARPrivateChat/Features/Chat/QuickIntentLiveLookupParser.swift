@@ -34,14 +34,17 @@ extension QuickIntentParser {
             return nil
         }
 
-        // 1) $TICKER — explicit. But a crypto ticker ($ETH, $BTC) is not a stock:
-        // defer to the coin path unless it's a known equity ticker.
+        // 1) $TICKER — explicit, but only resolve a KNOWN equity ticker. An
+        // unknown cashtag is ambiguous and is most often a crypto cashtag
+        // ($TIA = Celestia, $JUP, $WIF, $BONK) — and $ETH/$BTC are crypto too.
+        // Claiming an unknown $cashtag as a Yahoo equity renders a wrong stock
+        // card, so defer (return nil) and let the coin/web path handle it.
         if let r = original.range(of: #"\$([A-Za-z]{1,5})\b"#, options: .regularExpression) {
             let sym = String(original[r].dropFirst()).uppercased()
-            let isKnownStock = knownStocks.contains { $0.symbol == sym }
-            if !isKnownStock, matchedCoin(in: sym.lowercased()) != nil { return nil }
-            let company = knownStocks.first { $0.symbol == sym }?.names.first?.capitalized ?? ""
-            return (sym, company)
+            guard let stock = knownStocks.first(where: { $0.symbol == sym }) else {
+                return nil
+            }
+            return (sym, stock.names.first?.capitalized ?? "")
         }
         // 2) A known all-caps ticker token (AAPL, TSLA) with any stock/price cue.
         if stockCue || priceCue,
@@ -398,7 +401,54 @@ extension QuickIntentParser {
                 prompt: nil, condition: condition
             )
         }
-        return nil
+        // No structured coin or stock resolved, but this is unmistakably a
+        // recurring price ALERT (alert intent + comparator + threshold). Rather
+        // than silently drop it to a one-off model chat, preserve it as a
+        // web-grounded recurring tracker so commodities (gold, oil), luxury
+        // goods (a Rolex Daytona), retail products (iPhone 16 Pro), and
+        // long-tail coins still get a real watcher on a schedule.
+        let subject = conditionalAlertSubject(from: text)
+        guard subject.count >= 2 else { return nil }
+        let title = prettyTrackerTitle(from: subject)
+        let direction = comparator == .below ? "below" : "above"
+        let label = BriefingCondition(coinID: "", symbol: "", comparator: comparator, threshold: threshold).thresholdLabel
+        return TrackerSpec(
+            title: "\(title) alert",
+            kind: .customPrompt,
+            subject: nil,
+            schedule: schedule,
+            council: false,
+            confirmation: "Alerts when \(title) is \(direction) \(label) · checks \(schedule.scheduleLabel)",
+            prompt: "Using live web search, check the current price of \(subject). If it is \(direction) \(label), lead with the alert and cite a source with the price and the time checked. Otherwise return a concise no-alert status with the latest price, how far it is from \(label), and the next check time.",
+            condition: nil
+        )
+    }
+
+    /// Extracts the asset/product being alerted on from a conditional-alert
+    /// sentence — "alert me when gold goes above $2,500/oz" → "gold",
+    /// "notify me if a Rolex Daytona drops below $30k" → "Rolex Daytona". Strips
+    /// the alert lead-in, a leading when/if, and the comparator+threshold clause.
+    /// Used by the web-grounded conditional fallback above.
+    static func conditionalAlertSubject(from text: String) -> String {
+        var s = trackerSubject(from: text)
+        for verb in ["alert me when", "alert me if", "notify me when", "notify me if",
+                     "let me know when", "let me know if", "tell me when", "tell me if",
+                     "ping me when", "ping me if", "warn me when", "warn me if",
+                     "message me when", "message me if", "remind me when", "remind me if",
+                     "alert me", "notify me", "let me know", "ping me", "warn me",
+                     "message me", "remind me"] {
+            s = s.replacingOccurrences(of: verb, with: " ", options: .caseInsensitive)
+        }
+        s = s.replacingOccurrences(of: #"^\s*(when|if|whenever|once|as soon as)\s+"#,
+                                   with: "", options: [.regularExpression, .caseInsensitive])
+        // Drop everything from the comparator (and its optional verb-of-motion)
+        // onward — the condition clause: "goes above $2,500/oz", "drops below $30k".
+        s = s.replacingOccurrences(
+            of: #"\s*\b(drops?|dips?|falls?|goes?|climbs?|rises?|breaks?|jumps?|reaches|hits|trades?|is|are|moves?|sells?|sinks?|tops?)?\s*(below|under|above|over|less than|greater than|higher than|lower than|more than|down to|up to|exceeds)\b.*$"#,
+            with: " ", options: [.regularExpression, .caseInsensitive])
+        s = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: " ?.!,'\""))
+        return s
     }
 
     /// "alert me if NEAR moves more than 5%" is a percentage-move alert, not

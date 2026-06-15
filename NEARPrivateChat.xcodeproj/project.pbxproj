@@ -192,6 +192,7 @@
 		BAAD4CE5579477843A3EE8F1 /* RoutePromptBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA5FE436D6609F2D9E1D0F8D /* RoutePromptBuilderTests.swift */; };
 		BA1000000000000000000006 /* ComposerAndSendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000006 /* ComposerAndSendTests.swift */; };
 		BA1000000000000000000008 /* QuickIntentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000008 /* QuickIntentTests.swift */; };
+		BA5F4E0FC880E1EDFCE8079B /* EscalatingProductReviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA1DB07C8433CFD9F5A952A9 /* EscalatingProductReviewTests.swift */; };
 		BA1000000000000000000009 /* WidgetAndActionSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2000000000000000000009 /* WidgetAndActionSurfaceTests.swift */; };
 		BA100000000000000000000A /* ExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA200000000000000000000A /* ExportTests.swift */; };
 		BA867DD5B9F1DCA2AD33683D /* ExportFidelityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE131E302D7DBE9FE873E83 /* ExportFidelityTests.swift */; };
@@ -588,6 +589,7 @@
 		BA5FE436D6609F2D9E1D0F8D /* RoutePromptBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutePromptBuilderTests.swift; sourceTree = "<group>"; };
 		BA2000000000000000000006 /* ComposerAndSendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerAndSendTests.swift; sourceTree = "<group>"; };
 		BA2000000000000000000008 /* QuickIntentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickIntentTests.swift; sourceTree = "<group>"; };
+		BA1DB07C8433CFD9F5A952A9 /* EscalatingProductReviewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscalatingProductReviewTests.swift; sourceTree = "<group>"; };
 		BA2000000000000000000009 /* WidgetAndActionSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetAndActionSurfaceTests.swift; sourceTree = "<group>"; };
 		BA200000000000000000000A /* ExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportTests.swift; sourceTree = "<group>"; };
 		BAE131E302D7DBE9FE873E83 /* ExportFidelityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportFidelityTests.swift; sourceTree = "<group>"; };
@@ -925,6 +927,7 @@
 				BA5FE436D6609F2D9E1D0F8D /* RoutePromptBuilderTests.swift */,
 				BA2000000000000000000006 /* ComposerAndSendTests.swift */,
 				BA2000000000000000000008 /* QuickIntentTests.swift */,
+				BA1DB07C8433CFD9F5A952A9 /* EscalatingProductReviewTests.swift */,
 				BA2000000000000000000009 /* WidgetAndActionSurfaceTests.swift */,
 			);
 			path = Chat;
@@ -2080,6 +2083,7 @@
 				BAAD4CE5579477843A3EE8F1 /* RoutePromptBuilderTests.swift in Sources */,
 				BA1000000000000000000006 /* ComposerAndSendTests.swift in Sources */,
 				BA1000000000000000000008 /* QuickIntentTests.swift in Sources */,
+				BA5F4E0FC880E1EDFCE8079B /* EscalatingProductReviewTests.swift in Sources */,
 				BA1000000000000000000009 /* WidgetAndActionSurfaceTests.swift in Sources */,
 				BA100000000000000000000A /* ExportTests.swift in Sources */,
 				BA867DD5B9F1DCA2AD33683D /* ExportFidelityTests.swift in Sources */,
