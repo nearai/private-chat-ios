@@ -255,6 +255,10 @@ final class AccountStore: ObservableObject {
         defer { isTestingNearCloudKey = false }
 
         do {
+            // Validate against an auth-required endpoint FIRST. The model catalog
+            // (fetchNearCloudModels) is public and 200s for any key, so a wrong
+            // key used to look "connected." A bad key throws here → not saved.
+            try await modelAPI.validateNearCloudKey(trimmedKey)
             let fetchedCloud = try await modelAPI.fetchNearCloudModels(apiKey: trimmedKey)
             try settingsPersistence.saveNearCloudAPIKey(trimmedKey)
             nearCloudKeyConfigured = true

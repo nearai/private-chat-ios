@@ -11,6 +11,38 @@ protocol ModelAPI: AnyObject {
         systemPrompt: String,
         advancedParams: AdvancedModelParams
     ) async throws -> String
+    /// Validates a pasted NEAR AI Cloud key against an AUTH-REQUIRED endpoint and
+    /// throws on an invalid/expired key.
+    func validateNearCloudKey(_ apiKey: String) async throws
+}
+
+extension ModelAPI {
+    /// Default validation. The model catalog (`/v1/model/list`) is PUBLIC — it
+    /// returns 200 for ANY key (even none), so it can't tell a valid key from a
+    /// wrong one; validating against it accepted any non-empty key. `/v1/me` runs
+    /// the auth middleware before routing, so an invalid key is rejected with
+    /// 401/403 while a valid key passes — the correct signal.
+    func validateNearCloudKey(_ apiKey: String) async throws {
+        let trimmedKey = PrivateChatAPI.normalizedNearCloudAPIKey(apiKey)
+        guard !trimmedKey.isEmpty else {
+            throw APIError.status(401, "Paste a NEAR AI Cloud key first.")
+        }
+        guard let url = URL(string: "https://cloud-api.near.ai/v1/me") else {
+            throw APIError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 20
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(trimmedKey)", forHTTPHeaderField: "Authorization")
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.emptyResponse
+        }
+        guard http.statusCode != 401, http.statusCode != 403 else {
+            throw APIError.status(http.statusCode, "That NEAR AI Cloud key is invalid or expired.")
+        }
+    }
 }
 
 final class PrivateChatModelAPI: ModelAPI {
