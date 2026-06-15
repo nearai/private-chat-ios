@@ -5,6 +5,12 @@ import SwiftUI
 @MainActor
 final class BriefingStore: ObservableObject {
     @Published private(set) var briefings: [Briefing]
+    /// Briefings with a run in flight (manual or scheduled), so every surface —
+    /// the Home card, the detail screen, the thread — can show a loading state
+    /// instead of the stale "ready"/"no delivery yet" copy while it runs.
+    @Published private(set) var runningBriefingIDs: Set<UUID> = []
+
+    func isRunning(_ id: UUID) -> Bool { runningBriefingIDs.contains(id) }
     var runner: (Briefing) async -> BriefingRunOutcome
 
     private nonisolated static let notificationAuthorizationGateKey = "briefingNotificationAuthorizationRequestsEnabled"
@@ -106,6 +112,8 @@ final class BriefingStore: ObservableObject {
 
     func run(_ briefing: Briefing, now: Date = Date()) async {
         guard let snapshot = briefings.first(where: { $0.id == briefing.id }) else { return }
+        runningBriefingIDs.insert(briefing.id)
+        defer { runningBriefingIDs.remove(briefing.id) }
         let outcome = await runner(snapshot)
         // Re-resolve after the await; the list may have changed during the call.
         guard let index = briefings.firstIndex(where: { $0.id == briefing.id }) else { return }

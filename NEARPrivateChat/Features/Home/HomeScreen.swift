@@ -413,6 +413,15 @@ struct HomeScreen: View {
                         onFollowUp: { question in
                             chatStore.draft = question
                             homeStore.openedBriefing = nil
+                        },
+                        onDelivered: {
+                            // The detail opened because the briefing had no result.
+                            // It just delivered one, so re-present to switch the
+                            // cover to the result thread. Deferred to avoid
+                            // re-presenting while the cover is mid-update.
+                            guard let updated = briefingStore.briefings.first(where: { $0.id == briefing.id }) else { return }
+                            homeStore.openedBriefing = nil
+                            DispatchQueue.main.async { homeStore.openedBriefing = updated }
                         }
                     )
                     .toolbar {

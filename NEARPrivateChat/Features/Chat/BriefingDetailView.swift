@@ -4,8 +4,10 @@ struct BriefingDetailView: View {
     @ObservedObject var store: BriefingStore
     let briefing: Briefing
     var onFollowUp: (String) -> Void = { _ in }
-
-    @State private var isRunning = false
+    /// Called after a manual run delivers a result, so the host can open the
+    /// briefing's thread (the result feed) rather than leaving the user on the
+    /// settings/detail screen.
+    var onDelivered: () -> Void = {}
 
     private var currentBriefing: Briefing {
         store.briefings.first(where: { $0.id == briefing.id }) ?? briefing
@@ -14,7 +16,9 @@ struct BriefingDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                if currentBriefing.status == .failed {
+                if store.isRunning(currentBriefing.id), currentBriefing.latestResult == nil {
+                    runningCard
+                } else if currentBriefing.status == .failed {
                     failedRunCard
                 } else if let widget = currentBriefing.latestResult {
                     MessageWidgetCard(widget: widget, onFollowUp: onFollowUp)
@@ -146,15 +150,18 @@ struct BriefingDetailView: View {
     }
 
     private var runButton: some View {
-        Button {
+        let running = store.isRunning(currentBriefing.id)
+        return Button {
             Task {
-                isRunning = true
                 await store.run(currentBriefing)
-                isRunning = false
+                // Deliver → open the result feed so the run has an obvious outcome.
+                if currentBriefing.latestResult != nil {
+                    onDelivered()
+                }
             }
         } label: {
             HStack(spacing: 8) {
-                if isRunning {
+                if running {
                     ProgressView()
                         .controlSize(.small)
                         .tint(.white)
@@ -162,7 +169,7 @@ struct BriefingDetailView: View {
                     Image(systemName: "arrow.clockwise")
                         .font(.subheadline.weight(.semibold))
                 }
-                Text(isRunning ? "Running" : runButtonTitle)
+                Text(running ? "Running" : runButtonTitle)
                     .font(.subheadline.weight(.semibold))
             }
             .foregroundStyle(.white)
@@ -171,8 +178,29 @@ struct BriefingDetailView: View {
             .background(Color.actionPrimary, in: RoundedRectangle.app(AppRadius.pill))
         }
         .buttonStyle(.plain)
-        .disabled(isRunning)
-        .accessibilityLabel(isRunning ? "Running briefing" : "\(runButtonTitle) briefing")
+        .disabled(running)
+        .accessibilityLabel(running ? "Running briefing" : "\(runButtonTitle) briefing")
+    }
+
+    private var runningCard: some View {
+        HStack(spacing: 12) {
+            ProgressView().controlSize(.regular)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Running now…")
+                    .font(.subheadline.weight(.semibold))
+                Text("Fetching the latest result — this appears here when it's ready.")
+                    .font(.caption)
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.card))
+        .overlay {
+            RoundedRectangle.app(AppRadius.card).stroke(Color.appBorder, lineWidth: 1)
+        }
     }
 
     private var pauseButton: some View {
