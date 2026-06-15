@@ -771,4 +771,80 @@ final class ReleaseGateTests: XCTestCase {
 
         return false
     }
+
+    // MARK: - Live feature showcase (screenshot capture, not assertions)
+
+    /// Council mode answering a current-events question, web-grounded.
+    func testShowcaseCouncilInterestRates() throws {
+        let app = try launchLiveApp()
+        openNewChat(app)
+        let councilChip = app.buttons["composer.chip.council"]
+        XCTAssertTrue(councilChip.waitForExistence(timeout: 10), "showcase: council chip missing")
+        councilChip.tap()
+        let councilTab = app.segmentedControls.buttons["Council"].firstMatch
+        if councilTab.waitForExistence(timeout: 5), !councilTab.isSelected { councilTab.tap() }
+        let anyCandidate = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH 'council.candidate.'")
+        )
+        let deadline = Date().addingTimeInterval(15)
+        while anyCandidate.count == 0, Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(1)) }
+        // Enable three STRONG starter-plan models for a meaningful council —
+        // selecting the first three by index grabbed weak Qwen variants that
+        // failed mid-run.
+        var enabled = 0
+        for modelID in ["zai-org/GLM-5.1-FP8", "openai/gpt-5.2", "openai/gpt-oss-120b"] {
+            let candidate = app.descendants(matching: .any)
+                .matching(identifier: "council.candidate.\(modelID)").firstMatch
+            if candidate.waitForExistence(timeout: 6), candidate.isHittable {
+                candidate.tap(); enabled += 1
+            }
+        }
+        // Top up from any remaining candidates only if the preferred set was short.
+        for index in 0..<anyCandidate.count where enabled < 3 {
+            let candidate = anyCandidate.element(boundBy: index)
+            if candidate.isHittable { candidate.tap(); enabled += 1 }
+        }
+        if app.buttons["Done"].firstMatch.exists { app.buttons["Done"].firstMatch.tap() }
+        attach(app, name: "council-lineup")
+        send(app, prompt: "Using live web sources, are interest rates going down right now? Council: compare your answers and cite sources.")
+        _ = waitForStreamingToFinish(app, timeout: 300)
+        attach(app, name: "council-interest-rates")
+    }
+
+    /// A structured NEAR price tracker created + run, surfaced on Home with the
+    /// live CoinGecko price.
+    func testShowcaseTracker() throws {
+        let app = try launchLiveApp()
+        openNewChat(app)
+        send(app, prompt: "Create a NEAR price tracker daily at 9am and run it now")
+        _ = waitForStreamingToFinish(app, timeout: 60)
+        attach(app, name: "tracker-created")
+        returnHomeFromChat(app)
+        assertHomeShowsWatcher(app, matching: "NEAR price", label: "showcase-tracker")
+        attach(app, name: "tracker-home")
+    }
+
+    /// A daily news briefing created from chat and surfaced on Home.
+    func testShowcaseNewsBriefing() throws {
+        let app = try launchLiveApp()
+        openNewChat(app)
+        send(app, prompt: "Create a daily news briefing every morning at 8am and run it now")
+        _ = waitForStreamingToFinish(app, timeout: 150)
+        attach(app, name: "news-briefing-created")
+        returnHomeFromChat(app)
+        attach(app, name: "news-briefing-home")
+    }
+
+    /// Document extraction: a PDF attached through the real extraction + upload
+    /// pipeline, then summarized by the model.
+    func testShowcaseDocumentExtraction() throws {
+        let app = try launchLiveApp(extraArguments: ["-NEARReleaseGateFixture"])
+        openNewChat(app)
+        let indicator = app.staticTexts["composer.documentContext"].firstMatch
+        _ = indicator.waitForExistence(timeout: 30)
+        attach(app, name: "doc-attached")
+        send(app, prompt: "Summarize the attached document in 3 bullets and pull out any key numbers.")
+        assertAnswerOrHonestFailure(app, timeout: 150, label: "showcase-doc")
+        attach(app, name: "doc-extracted")
+    }
 }
