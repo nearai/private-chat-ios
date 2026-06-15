@@ -161,6 +161,9 @@ struct ThreadedBriefingView: View {
                 .padding(.vertical, 6)
                 .transition(.opacity)
             }
+            if showPendingRunButton {
+                pendingRunButton
+            }
             replyComposer
         }
         .background(Color.appBackground)
@@ -306,6 +309,43 @@ struct ThreadedBriefingView: View {
             }
             isRunning = false
         }
+    }
+
+    /// A briefing that has never produced a result (and isn't paused) shows a
+    /// "Run now" action here. Without it the only way to trigger a first run was
+    /// the detail screen — so users replied "run it now" in the thread, which is
+    /// just chat to the model (it can't trigger the app's scheduler) and returns
+    /// an unhelpful answer. The thread's own runNow() drives store.run directly.
+    private var showPendingRunButton: Bool {
+        guard let briefing = liveBriefing else { return false }
+        return briefing.latestResult == nil
+            && briefing.lastFailureAt == nil
+            && !briefing.isPaused
+            && store != nil
+    }
+
+    private var pendingRunButton: some View {
+        Button(action: runNow) {
+            HStack(spacing: 8) {
+                if isRunning {
+                    ProgressView().controlSize(.small).tint(.white)
+                } else {
+                    Image(systemName: "arrow.clockwise").font(.subheadline.weight(.semibold))
+                }
+                Text(isRunning ? "Running…" : "Run now")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 46)
+            .background(Color.actionPrimary, in: RoundedRectangle.app(AppRadius.pill))
+        }
+        .buttonStyle(.plain)
+        .disabled(isRunning)
+        .minimumTouchTarget()
+        .accessibilityLabel("Run briefing now")
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
     }
 
     private func deleteBriefing() {
