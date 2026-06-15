@@ -62,6 +62,14 @@ final class ReleaseGateTests: XCTestCase {
         return app
     }
 
+    /// Resigns the composer keyboard so the answer is fully visible in showcase
+    /// screenshots. Taps the transcript area (away from the composer + buttons).
+    private func dismissKeyboardForShowcase(_ app: XCUIApplication) {
+        guard app.keyboards.firstMatch.exists else { return }
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.30)).tap()
+        RunLoop.current.run(until: Date().addingTimeInterval(1.2))
+    }
+
     private func attach(_ app: XCUIApplication, name: String) {
         let screenshot = app.screenshot()
         let attachment = XCTAttachment(screenshot: screenshot)
@@ -822,6 +830,7 @@ final class ReleaseGateTests: XCTestCase {
         attach(app, name: "council-lineup")
         send(app, prompt: "Using live web sources, are interest rates going down right now? Council: compare your answers and cite sources.")
         _ = waitForStreamingToFinish(app, timeout: 300)
+        dismissKeyboardForShowcase(app)
         attach(app, name: "council-interest-rates")
     }
 
@@ -859,6 +868,7 @@ final class ReleaseGateTests: XCTestCase {
         attach(app, name: "doc-attached")
         send(app, prompt: "Summarize the attached document in 3 bullets and pull out any key numbers.")
         assertAnswerOrHonestFailure(app, timeout: 150, label: "showcase-doc")
+        dismissKeyboardForShowcase(app)
         attach(app, name: "doc-extracted")
     }
 }

@@ -2,6 +2,15 @@
 
 Native SwiftUI client for NEAR Private Chat at `https://private.near.ai`.
 
+## Feature Showcase
+
+| **LLM Council** | **Document extraction** | **Live Streams** | **Council mode** |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/screenshots/llm-council.png" width="200"/> | <img src="docs/screenshots/document-extraction.png" width="200"/> | <img src="docs/screenshots/streams-board.png" width="200"/> | <img src="docs/screenshots/council-mode.png" width="200"/> |
+| A private, web-grounded model (GLM 5.1) and a NEAR AI Cloud frontier model (Claude) answer in parallel, then a synthesis pass reconciles them. | Attach a PDF and pull out a structured summary with the key numbers extracted — on the private route with proof. | Price/asset watchers and scheduled briefings live on the Home board, backed by real market data and cited web sources. | Spin up a council and frame the question: Compare, surface Disagreements, Validate, or Decide. |
+
+*Screenshots captured live against `private.near.ai` + NEAR AI Cloud by the in-app ReleaseGate showcase tests (`NEARPrivateChatUITests/ReleaseGateTests`).*
+
 ## Phone-First Architecture
 
 The iPhone app is standalone for normal chat: sign-in, model list, conversations, files, web search, streaming responses, attestation, and the IronClaw Mobile runtime all go over the internet to `https://private.near.ai`. It does not need a Mac or LAN gateway.
