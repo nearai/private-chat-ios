@@ -783,25 +783,39 @@ final class ReleaseGateTests: XCTestCase {
         councilChip.tap()
         let councilTab = app.segmentedControls.buttons["Council"].firstMatch
         if councilTab.waitForExistence(timeout: 5), !councilTab.isSelected { councilTab.tap() }
-        // Accept the app's default council lineup. It leads with the default
-        // private model (GLM 5.1) and the live frontier privates the catalog
-        // actually serves — driven by `defaultCouncilModelIDs`, not a brittle
-        // per-model tap that fought the default. If the picker somehow opens
-        // with nothing selected, fall back to the first two hittable members so
-        // the test still produces a council.
+        // Build a reliable MIXED council: GLM 5.1 (private, web-grounded — it
+        // provides the live answer) + a NEAR AI Cloud frontier model (Claude,
+        // routed through cloud-api). The private Qwen fillers can have upstream
+        // provider outages, so we drop them in favor of a cloud leg, which also
+        // exercises the cloud route end to end. Requires NEAR_DEBUG_CLOUD_KEY.
         let anyCandidate = app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier BEGINSWITH 'council.candidate.'")
         )
         let deadline = Date().addingTimeInterval(15)
         while anyCandidate.count == 0, Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(1)) }
-        let alreadySelected = (0..<anyCandidate.count).filter { anyCandidate.element(boundBy: $0).isSelected }.count
-        if alreadySelected < 2 {
-            var enabled = alreadySelected
-            for index in 0..<anyCandidate.count where enabled < 2 {
-                let candidate = anyCandidate.element(boundBy: index)
-                if candidate.isHittable, !candidate.isSelected { candidate.tap(); enabled += 1 }
+        func candidate(_ id: String) -> XCUIElement {
+            app.descendants(matching: .any).matching(identifier: "council.candidate.\(id)").firstMatch
+        }
+        // 1. Deselect any pre-selected member that isn't GLM (e.g. provider-down Qwen).
+        for index in 0..<anyCandidate.count {
+            let element = anyCandidate.element(boundBy: index)
+            if element.exists, element.isSelected, element.isHittable,
+               !element.identifier.localizedCaseInsensitiveContains("GLM-5.1") {
+                element.tap()
             }
         }
+        // 2. Ensure GLM 5.1 (private, web-grounded) is selected.
+        let glm = candidate("zai-org/GLM-5.1-FP8")
+        if glm.waitForExistence(timeout: 5), !glm.isSelected, glm.isHittable { glm.tap() }
+        // 3. Add a NEAR AI Cloud frontier leg, scrolling to the Cloud section.
+        let claude = candidate("near-cloud/anthropic/claude-sonnet-4-6")
+        let anyCloud = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH 'council.candidate.near-cloud/'")
+        ).firstMatch
+        var scrolls = 0
+        while !claude.isHittable, !anyCloud.isHittable, scrolls < 12 { app.swipeUp(); scrolls += 1 }
+        let cloudLeg = claude.isHittable ? claude : anyCloud
+        if cloudLeg.isHittable, !cloudLeg.isSelected { cloudLeg.tap() }
         if app.buttons["Done"].firstMatch.exists { app.buttons["Done"].firstMatch.tap() }
         attach(app, name: "council-lineup")
         send(app, prompt: "Using live web sources, are interest rates going down right now? Council: compare your answers and cite sources.")

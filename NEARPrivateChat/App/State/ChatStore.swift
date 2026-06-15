@@ -523,6 +523,19 @@ final class ChatStore: ObservableObject {
             }
         }
 
+        #if DEBUG
+        // Parallel to the debug session token: a normal launch with
+        // NEAR_DEBUG_CLOUD_KEY set connects the NEAR AI Cloud key (validated,
+        // persisted to keychain) so cloud-routed models + the Cloud council preset
+        // work without a manual paste. Always (re)connect when the env var is
+        // present so a stale/invalid keychain entry from a prior run can't leave
+        // the route "configured" but non-functional. A real run is untouched.
+        if let cloudKey = DebugBackend.cloudKey {
+            let connected = await connectNearCloudAPIKey(cloudKey)
+            NSLog("[NPC-debug] NEAR_DEBUG_CLOUD_KEY connect=\(connected) configured=\(nearCloudKeyConfigured) cloudModels=\(modelCatalogStore.nearCloudModels.count)")
+        }
+        #endif
+
         async let conversationLoad: Void = refreshConversations(showErrors: false)
         async let modelLoad: Void = refreshModels(loadCloudCatalog: nearCloudKeyConfigured)
         async let settingsLoad: Void = refreshUserSettings(showErrors: false)
