@@ -242,7 +242,19 @@ struct ChatSourceRoutingSemantics: Hashable {
         route: ChatRouteKind
     ) -> ChatWebUsePolicy {
         switch focus {
-        case .web, .research:
+        case .web:
+            // An explicit "Web" request must actually search. nearPrivate /
+            // ironclawMobile have a strong native web-search tool that searches
+            // far better than app-side grounding (which often returns a single
+            // weak source and lets the model fall back to its training). Lean on
+            // the native tool for those routes — mirroring the .links case — so
+            // disabling app-grounding here lets shouldEnableNativeWebTool turn the
+            // native tool ON. Routes without a native tool keep app-grounding.
+            if route == .nearPrivate || route == .ironclawMobile {
+                return .never
+            }
+            return .always
+        case .research:
             return .always
         case .files:
             return .never

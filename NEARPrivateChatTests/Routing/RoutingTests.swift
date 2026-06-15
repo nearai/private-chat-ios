@@ -376,7 +376,11 @@ extension PrivateChatCoreTests {
         )
         XCTAssertEqual(web.focus, .web)
         XCTAssertEqual(web.modelNativeWebToolPolicy, .always)
-        XCTAssertEqual(web.appWebGroundingPolicy, .always)
+        // An explicit "Web" request on nearPrivate leans on the strong native
+        // web-search tool, NOT app-side grounding — otherwise app-grounding's
+        // single weak source disables the native tool and the model answers from
+        // training. (App-grounding stays for routes without a native tool.)
+        XCTAssertEqual(web.appWebGroundingPolicy, .never)
         XCTAssertFalse(web.attachesSavedLinkSourcePack)
         XCTAssertFalse(web.attachesProjectFileSourcePack)
         XCTAssertTrue(web.attachesPromptFiles)
@@ -437,7 +441,7 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(decision.tools.contains(.web), "Current year should read as time-sensitive.")
     }
 
-    func testPrivateLiveWebUsesAppGroundingBeforeNativeWebTool() {
+    func testPrivateLiveWebPrefersNativeWebTool() {
         let privateWeb = RoutePlanner.sourceRoutingSemantics(
             sourceMode: .web,
             researchModeEnabled: false,
@@ -445,7 +449,12 @@ extension PrivateChatCoreTests {
             route: .nearPrivate
         )
 
-        XCTAssertTrue(ChatWebGroundingDecision.shouldUseAppGrounding(
+        // An explicit "Web" request on the private route now leans on the model's
+        // native web-search tool, NOT app-side grounding. App-grounding returned a
+        // single weak source and then suppressed the native tool, leaving the model
+        // to answer from training; the native tool searches multiple times and
+        // returns current, well-grounded facts. (.links already worked this way.)
+        XCTAssertFalse(ChatWebGroundingDecision.shouldUseAppGrounding(
             route: .nearPrivate,
             semantics: privateWeb,
             benefitsFromSearch: true,
@@ -453,12 +462,12 @@ extension PrivateChatCoreTests {
             privacyBlocksWeb: false,
             promptNeedsRemoteWorkstation: false
         ))
-        XCTAssertFalse(ChatWebGroundingDecision.shouldEnableNativeWebTool(
+        XCTAssertTrue(ChatWebGroundingDecision.shouldEnableNativeWebTool(
             semantics: privateWeb,
             benefitsFromSearch: true,
             needsFreshFacts: true,
             privacyBlocksWeb: false,
-            appWebContextPresent: true
+            appWebContextPresent: false
         ))
     }
 
