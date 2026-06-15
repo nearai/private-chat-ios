@@ -590,13 +590,12 @@ struct CloudWebSignInView: View {
         return url
     }
 
-    /// Hosts whose pages we scan for the key. OAuth provider pages (Google /
-    /// GitHub) are never scanned.
+    /// Hosts whose pages we scan for the key. Exact-match only — OAuth provider
+    /// pages (Google / GitHub) and any other origin are never scanned, so a
+    /// redirect can't trick the harvest into reading a token off the wrong page.
     nonisolated static func isCloudHarvestHost(_ url: URL?) -> Bool {
         guard let host = url?.host?.lowercased() else { return false }
-        return host == "cloud-api.near.ai"
-            || host == "agent.near.ai"
-            || host.hasSuffix(".near.ai") && host.contains("cloud")
+        return host == "cloud-api.near.ai" || host == "agent.near.ai"
     }
 
     /// Validates a candidate harvested string as a NEAR AI Cloud key.
@@ -622,7 +621,11 @@ private struct CloudAuthWebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
-        // Persistent store so the OAuth cookies survive the provider redirect hops.
+        // Persistent store so the OAuth cookies survive the provider redirect
+        // hops back to cloud-api. Trade-off: the cloud-api web storage (which may
+        // briefly hold the key the page shows) persists in the shared store. The
+        // keychain is the system of record for the connected key — the web store
+        // is never read for auth — so this is cookie continuity, not key storage.
         configuration.websiteDataStore = .default()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true

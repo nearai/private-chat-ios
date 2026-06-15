@@ -531,8 +531,7 @@ final class ChatStore: ObservableObject {
         // present so a stale/invalid keychain entry from a prior run can't leave
         // the route "configured" but non-functional. A real run is untouched.
         if let cloudKey = DebugBackend.cloudKey {
-            let connected = await connectNearCloudAPIKey(cloudKey)
-            NSLog("[NPC-debug] NEAR_DEBUG_CLOUD_KEY connect=\(connected) configured=\(nearCloudKeyConfigured) cloudModels=\(modelCatalogStore.nearCloudModels.count)")
+            _ = await connectNearCloudAPIKey(cloudKey)
         }
         #endif
 

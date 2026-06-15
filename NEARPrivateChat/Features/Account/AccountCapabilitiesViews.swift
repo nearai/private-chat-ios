@@ -579,10 +579,6 @@ struct AccountSettingsView: View {
         accountStore.showBanner("Key pasted. Tap Connect & Test.")
     }
 
-    private func connectNearCloudAccount() {
-        Task { _ = await accountStore.connectNearCloudAccount() }
-    }
-
     private func connectNearCloud() {
         Task {
             let didConnect = await accountStore.connectNearCloudAPIKey(nearCloudAPIKey)
