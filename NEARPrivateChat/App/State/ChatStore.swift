@@ -286,6 +286,10 @@ final class ChatStore: ObservableObject {
     static let maxCouncilModels = ModelCatalogStore.maxCouncilModels
     static let maxConcurrentCouncilStreams = CouncilStreamService.defaultConcurrentStreamLimit
     static let councilLegNoTokenTimeoutSeconds: TimeInterval = 120
+    /// One retry per council leg on a transient failure (rate limit / transport /
+    /// no-token timeout). Keeps "N failed" off the council card when two
+    /// concurrent web-grounded streams trip a recoverable 429.
+    static let maxCouncilLegRetries = 1
     private static let maxPinnedModels = ModelCatalogStore.maxPinnedModels
     nonisolated static let maxFileUploadBytes = APIClient.maxUploadBytes
     nonisolated static let maxAttachmentUploadBytes = maxFileUploadBytes
@@ -298,20 +302,15 @@ final class ChatStore: ObservableObject {
     private static let frontierModelUpgradeKey = "frontierModelUpgradeV2"
     private static let glmDefaultMigrationKey = "glmDefaultMigrationV1"
     private static let openWeightDefaultMigrationKey = "openWeightDefaultMigrationV1"
+    // Live open-weight fallbacks to migrate an Ironclaw default onto. Kept to
+    // currently-served IDs only; superseded Kimi-K2/DeepSeek-V3 generations were
+    // removed (they never matched the live catalog, so they only added rot).
     let ironclawOpenWeightPreferredModelIDs = [
         ModelOption.nearPrivateDefaultModelID,
         "Qwen/Qwen3.5-122B-A10B",
         "Qwen/Qwen3.6-35B-A3B-FP8",
         "Qwen/Qwen3-30B-A3B-Instruct-2507",
-        "Qwen/Qwen3-VL-30B-A3B-Instruct",
-        "moonshotai/Kimi-K2-Thinking",
-        "moonshotai/Kimi-K2-Instruct",
-        "MoonshotAI/Kimi-K2-Instruct",
-        "deepseek-ai/DeepSeek-V3.2",
-        "deepseek-ai/DeepSeek-V3.1",
-        "deepseek-ai/DeepSeek-R1",
-        "DeepSeek/DeepSeek-V3.2",
-        "DeepSeek/DeepSeek-V3.1"
+        "Qwen/Qwen3-VL-30B-A3B-Instruct"
     ]
     var streamTask: Task<Void, Never>?
     var currentAssistantMessageID: String?

@@ -783,26 +783,24 @@ final class ReleaseGateTests: XCTestCase {
         councilChip.tap()
         let councilTab = app.segmentedControls.buttons["Council"].firstMatch
         if councilTab.waitForExistence(timeout: 5), !councilTab.isSelected { councilTab.tap() }
+        // Accept the app's default council lineup. It leads with the default
+        // private model (GLM 5.1) and the live frontier privates the catalog
+        // actually serves — driven by `defaultCouncilModelIDs`, not a brittle
+        // per-model tap that fought the default. If the picker somehow opens
+        // with nothing selected, fall back to the first two hittable members so
+        // the test still produces a council.
         let anyCandidate = app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier BEGINSWITH 'council.candidate.'")
         )
         let deadline = Date().addingTimeInterval(15)
         while anyCandidate.count == 0, Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(1)) }
-        // Enable three STRONG starter-plan models for a meaningful council —
-        // selecting the first three by index grabbed weak Qwen variants that
-        // failed mid-run.
-        var enabled = 0
-        for modelID in ["zai-org/GLM-5.1-FP8", "openai/gpt-5.2", "openai/gpt-oss-120b"] {
-            let candidate = app.descendants(matching: .any)
-                .matching(identifier: "council.candidate.\(modelID)").firstMatch
-            if candidate.waitForExistence(timeout: 6), candidate.isHittable {
-                candidate.tap(); enabled += 1
+        let alreadySelected = (0..<anyCandidate.count).filter { anyCandidate.element(boundBy: $0).isSelected }.count
+        if alreadySelected < 2 {
+            var enabled = alreadySelected
+            for index in 0..<anyCandidate.count where enabled < 2 {
+                let candidate = anyCandidate.element(boundBy: index)
+                if candidate.isHittable, !candidate.isSelected { candidate.tap(); enabled += 1 }
             }
-        }
-        // Top up from any remaining candidates only if the preferred set was short.
-        for index in 0..<anyCandidate.count where enabled < 3 {
-            let candidate = anyCandidate.element(boundBy: index)
-            if candidate.isHittable { candidate.tap(); enabled += 1 }
         }
         if app.buttons["Done"].firstMatch.exists { app.buttons["Done"].firstMatch.tap() }
         attach(app, name: "council-lineup")

@@ -149,53 +149,74 @@ extension ChatStore {
                         )
                     }
 
-                    do {
-                        try Task.checkCancellation()
-                        try await self.streamCouncilLegWithNoTokenTimeout(
-                            modelID: modelID,
-                            text: routedText,
-                            attachments: attachments,
-                            conversationID: conversation.id,
-                            previousResponseID: previousResponseID,
-                            initiator: initiator,
-                            assistantMessageID: assistantID
-                        )
-                        self.finishAssistantMessage(assistantID)
-                        self.routeHealth.recordSuccess(modelID: modelID)
-                        return CouncilStreamResult(
-                            modelID: modelID,
-                            messageID: assistantID,
-                            didComplete: true,
-                            failureSummary: nil
-                        )
-                    } catch is CancellationError {
-                        await self.apply(
-                            streamEvent: .failed("Cancelled."),
-                            conversationID: conversation.id,
-                            assistantMessageID: assistantID
-                        )
-                        return CouncilStreamResult(
-                            modelID: modelID,
-                            messageID: assistantID,
-                            didComplete: false,
-                            failureSummary: "cancelled"
-                        )
-                    } catch {
-                        self.routeHealth.recordFailure(modelID: modelID, error: error)
-                        let errorKind = CouncilStreamService.errorKind(for: error)
-                        let summary = Self.modelFailureSummary(error)
-                        await self.apply(
-                            streamEvent: .failed(summary),
-                            conversationID: conversation.id,
-                            assistantMessageID: assistantID
-                        )
-                        return CouncilStreamResult(
-                            modelID: modelID,
-                            messageID: assistantID,
-                            didComplete: false,
-                            failureSummary: summary,
-                            errorKind: errorKind
-                        )
+                    // A council leg gets one retry on a transient failure
+                    // (rate limit / transport / no-token timeout). Two concurrent
+                    // web-grounded streams on a starter plan routinely trip a
+                    // transient 429 on one leg; re-attempting after a short backoff
+                    // recovers it instead of surfacing "N failed" to the user.
+                    var attempt = 0
+                    while true {
+                        do {
+                            try Task.checkCancellation()
+                            try await self.streamCouncilLegWithNoTokenTimeout(
+                                modelID: modelID,
+                                text: routedText,
+                                attachments: attachments,
+                                conversationID: conversation.id,
+                                previousResponseID: previousResponseID,
+                                initiator: initiator,
+                                assistantMessageID: assistantID
+                            )
+                            self.finishAssistantMessage(assistantID)
+                            self.routeHealth.recordSuccess(modelID: modelID)
+                            return CouncilStreamResult(
+                                modelID: modelID,
+                                messageID: assistantID,
+                                didComplete: true,
+                                failureSummary: nil
+                            )
+                        } catch is CancellationError {
+                            await self.apply(
+                                streamEvent: .failed("Cancelled."),
+                                conversationID: conversation.id,
+                                assistantMessageID: assistantID
+                            )
+                            return CouncilStreamResult(
+                                modelID: modelID,
+                                messageID: assistantID,
+                                didComplete: false,
+                                failureSummary: "cancelled"
+                            )
+                        } catch {
+                            let errorKind = CouncilStreamService.errorKind(for: error)
+                            let isTransient = errorKind == .rateLimit
+                                || errorKind == .transportError
+                                || errorKind == .timeout
+                            if attempt < Self.maxCouncilLegRetries,
+                               isTransient,
+                               !Task.isCancelled {
+                                attempt += 1
+                                self.resetCouncilLegForRetry(assistantMessageID: assistantID)
+                                try? await Task.sleep(
+                                    nanoseconds: UInt64(attempt) * 1_500_000_000
+                                )
+                                continue
+                            }
+                            self.routeHealth.recordFailure(modelID: modelID, error: error)
+                            let summary = Self.modelFailureSummary(error)
+                            await self.apply(
+                                streamEvent: .failed(summary),
+                                conversationID: conversation.id,
+                                assistantMessageID: assistantID
+                            )
+                            return CouncilStreamResult(
+                                modelID: modelID,
+                                messageID: assistantID,
+                                didComplete: false,
+                                failureSummary: summary,
+                                errorKind: errorKind
+                            )
+                        }
                     }
                 }
             }
@@ -260,6 +281,23 @@ extension ChatStore {
         // /items feed never returns them), so persist or they vanish on re-open.
         saveLocalMessages(for: conversation.id)
         scheduleConversationListRefresh()
+    }
+
+    /// Clears a single council leg's partial output back to a clean streaming
+    /// state before a retry, so the re-attempt fills an empty message instead of
+    /// appending to a half-streamed or failed one.
+    private func resetCouncilLegForRetry(assistantMessageID: String) {
+        guard let index = messages.firstIndex(where: { $0.id == assistantMessageID }) else {
+            return
+        }
+        flushPendingTextDelta(for: assistantMessageID)
+        messages[index].text = ""
+        messages[index].status = "streaming"
+        messages[index].responseID = nil
+        messages[index].isStreaming = true
+        messages[index].searchQuery = nil
+        messages[index].sources = []
+        messages[index].pendingApproval = nil
     }
 
     func runCouncilRoomFollowUp(
