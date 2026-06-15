@@ -233,7 +233,7 @@ struct BriefingEditorSheet: View {
             !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         guard hasBase else { return false }
         switch kind {
-        case .nearAccount, .cryptoPrice, .stockPrice, .watchlist:
+        case .nearAccount, .cryptoPrice, .stockPrice, .commodityPrice, .watchlist:
             return accountID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
         case .customPrompt, .ethPrice, .dailyNews, .dailyBrief:
             return true

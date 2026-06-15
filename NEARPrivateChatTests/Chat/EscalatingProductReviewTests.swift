@@ -85,10 +85,24 @@ extension PrivateChatCoreTests {
         )
     }
 
-    func testReview_commodityConditionalAlertBecomesTracker() {
-        assertWebGroundedAlert("alert me when gold goes above $2,500", mustMentionLowercased: "gold", comparator: .above)
-        assertWebGroundedAlert("notify me when silver drops below $25", mustMentionLowercased: "silver", comparator: .below)
-        assertWebGroundedAlert("let me know when oil climbs above $90", mustMentionLowercased: "oil", comparator: .above)
+    func testReview_commodityConditionalAlertBecomesStructuredTracker() {
+        // Commodities/metals resolve to a STRUCTURED condition (Yahoo futures
+        // symbol behind a "commodity:" coinID), evaluated deterministically —
+        // not a web-grounded prompt.
+        let cases: [(prompt: String, comparator: BriefingComparator, threshold: Double, coinID: String)] = [
+            ("alert me when gold goes above $2,500", .above, 2500, "commodity:GC=F"),
+            ("notify me when silver drops below $25", .below, 25, "commodity:SI=F"),
+            ("let me know when oil climbs above $90", .above, 90, "commodity:CL=F")
+        ]
+        for c in cases {
+            guard case let .createTracker(spec) = QuickIntentParser.parse(c.prompt) else {
+                return XCTFail("Expected a commodity tracker for: \(c.prompt)")
+            }
+            XCTAssertEqual(spec.kind, .commodityPrice, c.prompt)
+            XCTAssertEqual(spec.condition?.coinID, c.coinID, c.prompt)
+            XCTAssertEqual(spec.condition?.comparator, c.comparator, c.prompt)
+            XCTAssertEqual(spec.condition?.threshold, c.threshold, c.prompt)
+        }
     }
 
     func testReview_luxuryWatchConditionalAlertBecomesTracker() {

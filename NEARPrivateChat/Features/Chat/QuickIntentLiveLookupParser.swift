@@ -389,6 +389,19 @@ extension QuickIntentParser {
                 prompt: nil, condition: condition
             )
         }
+        if let commodity = matchedCommodity(in: text) {
+            // Commodity/metal conditions reuse the equity evaluation path via a
+            // "commodity:" coinID prefix holding the Yahoo futures symbol (GC=F),
+            // so the threshold check is deterministic against live data.
+            let condition = BriefingCondition(coinID: "commodity:\(commodity.yahooSymbol)", symbol: commodity.symbol,
+                                              comparator: comparator, threshold: threshold)
+            return TrackerSpec(
+                title: "\(commodity.label) alert", kind: .commodityPrice, subject: commodity.label,
+                schedule: schedule, council: false,
+                confirmation: "Alerts when \(commodity.label) is \(comparator.phrase) \(condition.thresholdLabel) · checks \(schedule.scheduleLabel)",
+                prompt: nil, condition: condition
+            )
+        }
         if let stock = alertStock(in: text, original: original) {
             // Stock conditions reuse BriefingCondition with a "stock:" coinID
             // prefix (no schema change, back-compatible with crypto conditions).

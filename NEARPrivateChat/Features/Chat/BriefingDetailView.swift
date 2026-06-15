@@ -207,7 +207,7 @@ struct BriefingDetailView: View {
             return "News sources"
         case .dailyBrief:
             return "Your trackers"
-        case .ethPrice, .cryptoPrice, .stockPrice, .watchlist:
+        case .ethPrice, .cryptoPrice, .stockPrice, .commodityPrice, .watchlist:
             return "Market data"
         case .nearAccount:
             return "NEAR account"

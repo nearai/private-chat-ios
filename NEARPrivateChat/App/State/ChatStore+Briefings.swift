@@ -82,12 +82,22 @@ extension ChatStore {
     /// the model with a value-only metric fallback so notifications are not lost.
     /// Quiet checks are intentionally not logged so the log stays meaningful.
     private func runConditionalBriefing(_ briefing: Briefing, condition: BriefingCondition) async -> BriefingRunOutcome {
-        // A "stock:" coinID prefix marks an equity alert (Yahoo); otherwise crypto.
-        let isStock = condition.coinID.hasPrefix("stock:")
-        let stockSymbol = isStock ? String(condition.coinID.dropFirst("stock:".count)) : ""
-        let price: Double? = isStock
-            ? await LiveDataService.stockUSDPrice(symbol: stockSymbol)
-            : await LiveDataService.coinUSDPrice(coinID: condition.coinID)
+        // "stock:" and "commodity:" coinIDs both price via Yahoo (commodities use
+        // a futures symbol like GC=F); a bare id prices via CoinGecko.
+        let yahooSymbol: String?
+        if condition.coinID.hasPrefix("stock:") {
+            yahooSymbol = String(condition.coinID.dropFirst("stock:".count))
+        } else if condition.coinID.hasPrefix("commodity:") {
+            yahooSymbol = String(condition.coinID.dropFirst("commodity:".count))
+        } else {
+            yahooSymbol = nil
+        }
+        let price: Double?
+        if let yahooSymbol {
+            price = await LiveDataService.stockUSDPrice(symbol: yahooSymbol)
+        } else {
+            price = await LiveDataService.coinUSDPrice(coinID: condition.coinID)
+        }
         guard let price else {
             // Couldn't fetch — don't fire on missing data, but say why.
             return .failed("Could not fetch the current \(condition.symbol) price to check this alert. It will retry on the next run.")

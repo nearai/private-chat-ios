@@ -70,7 +70,7 @@ struct BriefingTemplate: Identifiable {
         if trackers.count >= 2, !kinds.contains(.dailyBrief) {
             result.append(dailyBriefTemplate)
         }
-        let tracksMarket = !kinds.isDisjoint(with: [.cryptoPrice, .ethPrice, .stockPrice, .watchlist])
+        let tracksMarket = !kinds.isDisjoint(with: [.cryptoPrice, .ethPrice, .stockPrice, .commodityPrice, .watchlist])
         if tracksMarket, !kinds.contains(.dailyNews), let news = suggested.first(where: { $0.kind == .dailyNews }) {
             result.append(news)
         }

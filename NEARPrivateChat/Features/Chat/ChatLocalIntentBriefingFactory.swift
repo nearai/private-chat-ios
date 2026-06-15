@@ -83,6 +83,9 @@ enum ChatLocalIntentBriefingFactory {
         case .stockPrice:
             let subject = spec.subject ?? spec.title
             return modelRoutedPrompt("Track \(subject) stock price. Include the source, as-of time, and what changed.")
+        case .commodityPrice:
+            let subject = spec.subject ?? spec.title
+            return modelRoutedPrompt("Track the \(subject) price. Include the source, as-of time, and what changed.")
         case .watchlist:
             let label = spec.subject.map(watchlistPromptLabel(from:)) ?? spec.title
             return modelRoutedPrompt("Track this watchlist: \(label). Include current sources, movement, and the most important change.")

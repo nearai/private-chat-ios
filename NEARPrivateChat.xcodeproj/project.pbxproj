@@ -305,6 +305,7 @@
 		BAA4CF8D113DD52F2847D834 /* QuickIntentParserCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC568399347E24C3A347C7C /* QuickIntentParserCore.swift */; };
 		BA4914DB19E1798EBC6F60BD /* QuickIntentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA43F14FAFD0505F248287EF /* QuickIntentModels.swift */; };
 		BA06FBCB99113FDB614A798D /* LiveCoinsData.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA6F6188687CF3123E599C59 /* LiveCoinsData.swift */; };
+		BA309C70E96D3E56FD8BDFB6 /* LiveCommoditiesData.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA35FD6ED0EE83F5EB70F14F /* LiveCommoditiesData.swift */; };
 		F1A000000000000000000001 /* AccountSettingsDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A000000000000000000001 /* AccountSettingsDetailViews.swift */; };
 		F1A000000000000000000002 /* AccountCapabilityCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A000000000000000000002 /* AccountCapabilityCenterView.swift */; };
 		BA58DDFFBBBB69F7004276F8 /* ConnectionDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA1804155B3F4ADCD1E2318A /* ConnectionDiagnosticsView.swift */; };
@@ -703,6 +704,7 @@
 		BAC568399347E24C3A347C7C /* QuickIntentParserCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickIntentParserCore.swift; sourceTree = "<group>"; };
 		BA43F14FAFD0505F248287EF /* QuickIntentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickIntentModels.swift; sourceTree = "<group>"; };
 		BA6F6188687CF3123E599C59 /* LiveCoinsData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveCoinsData.swift; sourceTree = "<group>"; };
+		BA35FD6ED0EE83F5EB70F14F /* LiveCommoditiesData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveCommoditiesData.swift; sourceTree = "<group>"; };
 		F2A000000000000000000001 /* AccountSettingsDetailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSettingsDetailViews.swift; sourceTree = "<group>"; };
 		F2A000000000000000000002 /* AccountCapabilityCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountCapabilityCenterView.swift; sourceTree = "<group>"; };
 		BA1804155B3F4ADCD1E2318A /* ConnectionDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDiagnosticsView.swift; sourceTree = "<group>"; };
@@ -1259,6 +1261,7 @@
 				BAC568399347E24C3A347C7C /* QuickIntentParserCore.swift */,
 				BA43F14FAFD0505F248287EF /* QuickIntentModels.swift */,
 				BA6F6188687CF3123E599C59 /* LiveCoinsData.swift */,
+				BA35FD6ED0EE83F5EB70F14F /* LiveCommoditiesData.swift */,
 				47DF59A499534BE180D52C8B /* ChatLocalIntentDispatcher.swift */,
 				9F2C1A80E6F74E53A6D1D05B /* ChatLocalIntentWidgetService.swift */,
 				9F2C1A82E6F74E53A6D1D05B /* ChatLocalIntentTranscriptWriter.swift */,
@@ -1994,6 +1997,7 @@
 				BAA4CF8D113DD52F2847D834 /* QuickIntentParserCore.swift in Sources */,
 				BA4914DB19E1798EBC6F60BD /* QuickIntentModels.swift in Sources */,
 				BA06FBCB99113FDB614A798D /* LiveCoinsData.swift in Sources */,
+				BA309C70E96D3E56FD8BDFB6 /* LiveCommoditiesData.swift in Sources */,
 				8620D04654734D82B250546C /* ChatLocalIntentDispatcher.swift in Sources */,
 				9F2C1A81E6F74E53A6D1D05B /* ChatLocalIntentWidgetService.swift in Sources */,
 				9F2C1A83E6F74E53A6D1D05B /* ChatLocalIntentTranscriptWriter.swift in Sources */,

@@ -419,7 +419,7 @@ struct BriefingDraftPreview: View {
 
     private var requiresAccount: Bool {
         switch kind {
-        case .nearAccount, .cryptoPrice, .stockPrice, .watchlist:
+        case .nearAccount, .cryptoPrice, .stockPrice, .commodityPrice, .watchlist:
             return true
         case .customPrompt, .ethPrice, .dailyNews, .dailyBrief:
             return false
@@ -434,6 +434,8 @@ struct BriefingDraftPreview: View {
             return "Coin id"
         case .stockPrice:
             return "Ticker"
+        case .commodityPrice:
+            return "Commodity"
         case .watchlist:
             return "Watchlist"
         case .customPrompt, .ethPrice, .dailyNews, .dailyBrief:

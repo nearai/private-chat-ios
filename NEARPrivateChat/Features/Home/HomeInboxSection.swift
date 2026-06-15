@@ -423,7 +423,7 @@ struct HomeBriefingFeedPresentation {
         switch briefing.kind {
         case .dailyNews, .dailyBrief:
             return "Briefing"
-        case .ethPrice, .cryptoPrice, .stockPrice, .watchlist, .nearAccount:
+        case .ethPrice, .cryptoPrice, .stockPrice, .commodityPrice, .watchlist, .nearAccount:
             return "Watcher"
         case .customPrompt:
             return briefing.council ? "Council" : "Briefing"
@@ -605,7 +605,7 @@ private struct HomeBriefingFeedCard: View {
         switch briefing.kind {
         case .dailyNews, .dailyBrief:
             return "newspaper.fill"
-        case .ethPrice, .cryptoPrice, .stockPrice, .watchlist:
+        case .ethPrice, .cryptoPrice, .stockPrice, .commodityPrice, .watchlist:
             return "chart.line.uptrend.xyaxis"
         case .nearAccount:
             return "wallet.pass.fill"
@@ -1123,7 +1123,7 @@ extension Briefing {
             return true
         }
         switch kind {
-        case .ethPrice, .cryptoPrice, .stockPrice, .watchlist, .nearAccount:
+        case .ethPrice, .cryptoPrice, .stockPrice, .commodityPrice, .watchlist, .nearAccount:
             return true
         case .customPrompt, .dailyNews, .dailyBrief:
             return false

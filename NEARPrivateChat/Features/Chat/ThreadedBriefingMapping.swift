@@ -70,7 +70,7 @@ extension ThreadedBriefingView {
     private static func sourceStatusText(for briefing: Briefing) -> String? {
         guard briefing.latestResult != nil, briefing.status != .failed else { return nil }
         switch briefing.kind {
-        case .ethPrice, .cryptoPrice, .stockPrice, .watchlist:
+        case .ethPrice, .cryptoPrice, .stockPrice, .commodityPrice, .watchlist:
             return "Market data"
         case .nearAccount:
             return "Account data"

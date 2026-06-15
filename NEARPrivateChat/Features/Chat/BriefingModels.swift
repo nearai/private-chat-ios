@@ -6,6 +6,7 @@ enum BriefingKind: String, Codable, Hashable {
     case ethPrice
     case cryptoPrice
     case stockPrice
+    case commodityPrice
     case watchlist
     case nearAccount
     case dailyNews
