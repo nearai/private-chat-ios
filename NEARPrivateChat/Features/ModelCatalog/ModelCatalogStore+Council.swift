@@ -83,9 +83,7 @@ extension ModelCatalogStore {
                 candidateGroups: [
                     [ModelOption.nearPrivateDefaultModelID],
                     ["deepseek-ai/DeepSeek-V4-Flash"],
-                    ["Qwen/Qwen3.5-122B-A10B", "Qwen/Qwen3.6-35B-A3B-FP8", "Qwen/Qwen3-30B-A3B-Instruct-2507"],
-                    ["moonshotai/Kimi-K2-Thinking", "moonshotai/Kimi-K2-Instruct"],
-                    ["deepseek-ai/DeepSeek-V3.2", "deepseek-ai/DeepSeek-V3.1", "deepseek-ai/DeepSeek-R1"]
+                    ["Qwen/Qwen3.5-122B-A10B", "Qwen/Qwen3.6-35B-A3B-FP8", "Qwen/Qwen3-30B-A3B-Instruct-2507"]
                 ],
                 candidateModels: chatModels.filter { isCouncilEligible($0) && !$0.isExternalModel },
                 fallbackModels: chatModels.filter { isCouncilEligible($0) && !$0.isExternalModel }

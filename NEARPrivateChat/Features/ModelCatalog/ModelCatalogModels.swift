@@ -340,7 +340,6 @@ struct ModelOption: Decodable, Identifiable, Hashable {
         let ids = [
             "anthropic/claude-sonnet-4-6",
             "openai/gpt-5.4",
-            "google/gemini-3-pro",
             "openai/gpt-5.2",
             "openai/gpt-5.1",
             "openai/gpt-5",
@@ -351,11 +350,14 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             "Qwen/Qwen3.5-122B-A10B",
             "Qwen/Qwen3.6-35B-A3B-FP8"
         ]
+        // Family heuristics carry the elite tier across version churn so we
+        // never have to pin an exact (and soon-stale) "-pro"/"-opus" version.
         return ids.contains(modelID) ||
             modelID.localizedCaseInsensitiveContains("claude-opus") ||
             modelID.localizedCaseInsensitiveContains("claude-sonnet") ||
-            modelID.localizedCaseInsensitiveContains("claude-sonnet-4") ||
-            modelID.localizedCaseInsensitiveContains("gemini-pro") ||
+            modelID.localizedCaseInsensitiveContains("gemini-3") ||
+            (modelID.localizedCaseInsensitiveContains("gemini") &&
+                modelID.localizedCaseInsensitiveContains("pro")) ||
             modelID.localizedCaseInsensitiveContains("kimi") ||
             modelID.localizedCaseInsensitiveContains("deepseek")
     }
@@ -414,7 +416,6 @@ struct ModelOption: Decodable, Identifiable, Hashable {
             "openai/o3",
             "google/gemini-2.5-pro",
             "google/gemini-2.5-flash",
-            "anthropic/claude-opus-4-5",
             "anthropic/claude-sonnet-4-5",
             "anthropic/claude-haiku-4-5",
             "qwen/qwen3-30b-a3b-instruct-2507",

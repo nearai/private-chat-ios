@@ -7,23 +7,18 @@ final class ModelCatalogStore: ObservableObject {
     nonisolated static let maxCouncilModels = 3
     nonisolated static let maxPinnedModels = 12
 
+    // Only a thin pin to float the default private model and the live frontier
+    // privates to the top. Everything else (and any Kimi/DeepSeek/GLM family
+    // member) is ranked by the durable capability heuristics in `modelRank`,
+    // so this list never has to chase model-version churn. Do NOT re-introduce
+    // exact version IDs for families already covered by those heuristics.
     nonisolated static let preferredModelIDs = [
         ModelOption.nearPrivateDefaultModelID,
         "anthropic/claude-sonnet-4-6",
         "anthropic/claude-opus-4-6",
-        "deepseek-ai/DeepSeek-V4-Flash",
         "Qwen/Qwen3.6-35B-A3B-FP8",
         "Qwen/Qwen3.6-27B-FP8",
-        "zai-org/GLM-latest",
-        "Qwen/Qwen3.5-122B-A10B",
-        "Qwen/Qwen3-30B-A3B-Instruct-2507",
-        "Qwen/Qwen3-VL-30B-A3B-Instruct",
-        "moonshotai/Kimi-K2-Thinking",
-        "moonshotai/Kimi-K2-Instruct",
-        "MoonshotAI/Kimi-K2-Instruct",
-        "deepseek-ai/DeepSeek-V3.2",
-        "deepseek-ai/DeepSeek-V3.1",
-        "deepseek-ai/DeepSeek-R1"
+        "Qwen/Qwen3.5-122B-A10B"
     ]
     nonisolated static let nearCloudPreferredModelIDs: [String] = [
         "anthropic/claude-sonnet-4-6",
