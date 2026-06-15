@@ -268,6 +268,14 @@ extension ModelCatalogStore {
                 ids.append(modelID)
             }
         }
+        // When NEAR AI Cloud is connected, pair the private verifiable default
+        // with the top-ranked cloud frontier leg so the default council always
+        // has BOTH a private and a cloud member — and never depends solely on
+        // private fillers that can hit an upstream provider outage.
+        let rankedCloudIDs = rankedModels(from: cloudRouteModels.filter(isCouncilEligible)).map(\.id)
+        if let topCloud = rankedCloudIDs.first, !ids.contains(topCloud) {
+            ids.append(topCloud)
+        }
         if ids.count < 2 {
             let ranked = rankedModels(from: chatModels.filter(isCouncilEligible)).map(\.id)
             for modelID in ranked where !ids.contains(modelID) {

@@ -34,6 +34,7 @@ struct AccountSettingsView: View {
     @State private var showingSignOutConfirm = false
     @State private var showingIronclawPowerTool = false
     @State private var showingAPIKeysPowerTool = false
+    @State private var showingCloudWebSignIn = false
     @State private var hasOpenedInitialDeepLink = false
     @AppStorage("account.powerToolsExpanded") private var powerToolsExpanded = false
 
@@ -92,7 +93,7 @@ struct AccountSettingsView: View {
                 PowerToolAPIKeysView(
                     nearCloudAPIKey: $nearCloudAPIKey,
                     onPaste: pasteNearCloudKeyFromClipboard,
-                    onConnectAccount: connectNearCloudAccount,
+                    onConnectAccount: { showingCloudWebSignIn = true },
                     onConnect: connectNearCloud,
                     onOpenCloud: openNearCloudSignup
                 )
@@ -119,6 +120,15 @@ struct AccountSettingsView: View {
                 case let .failure(error):
                     accountStore.showBanner(ErrorMessageMapper.displayFailureMessage(error.localizedDescription))
                 }
+            }
+            .sheet(isPresented: $showingCloudWebSignIn) {
+                CloudWebSignInView(
+                    onHarvest: { key in
+                        showingCloudWebSignIn = false
+                        Task { _ = await accountStore.connectNearCloudAPIKey(key) }
+                    },
+                    onCancel: { showingCloudWebSignIn = false }
+                )
             }
             .sheet(isPresented: $showingShareGroups) {
                 ShareGroupsView()

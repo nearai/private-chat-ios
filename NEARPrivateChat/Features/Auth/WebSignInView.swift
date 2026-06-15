@@ -486,3 +486,334 @@ private struct AuthWebView: UIViewRepresentable {
         }
     }
 }
+
+
+// MARK: - NEAR AI Cloud web sign-in (key harvest, no manual paste)
+
+
+/// In-app web sign-in for NEAR AI Cloud. Loads cloud-api.near.ai's hosted login
+/// (Google / GitHub / NEAR), lets the user authenticate, and then harvests the
+/// `sk-` API key the authenticated cloud dashboard exposes — so the user never
+/// has to copy/paste a key.
+///
+/// Unlike `WebSignInView` (private.near.ai stores the session token in
+/// localStorage), cloud-api lands a cookie session and the key surfaces on the
+/// dashboard. We therefore scan both web storage and the visible page for an
+/// `sk-` token, on the cloud-api / agent.near.ai origins only. The scan also
+/// reports what storage keys exist when no key is found, so the harvest target
+/// can be tuned against the live flow.
+struct CloudWebSignInView: View {
+    /// Called with the harvested `sk-` key once the cloud login exposes one.
+    let onHarvest: (_ apiKey: String) -> Void
+    let onCancel: () -> Void
+
+    @State private var isLoading = true
+    @State private var didHarvest = false
+    @State private var showsHelp = false
+    @State private var reloadID = UUID()
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                CloudAuthWebView(
+                    url: Self.loginURL,
+                    onKeyHarvested: { key in
+                        guard !didHarvest else { return }
+                        didHarvest = true
+                        onHarvest(key)
+                    },
+                    onLoadingChanged: { isLoading = $0 }
+                )
+                .id(reloadID)
+                .ignoresSafeArea(edges: .bottom)
+
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.large)
+                        .accessibilityLabel("Loading NEAR AI Cloud sign-in")
+                }
+
+                if showsHelp && !didHarvest {
+                    VStack {
+                        Spacer()
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Finish signing in above. Once you reach your NEAR AI Cloud dashboard and a key is shown (create one if prompted), it connects automatically.")
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(Color.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Button {
+                                showsHelp = false
+                                isLoading = true
+                                reloadID = UUID()
+                            } label: {
+                                Label("Reload sign-in", systemImage: "arrow.clockwise")
+                                    .font(.footnote.weight(.semibold))
+                                    .frame(minHeight: 44)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Color.actionPrimary)
+                            .accessibilityIdentifier("cloudAuth.reload")
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.regularMaterial, in: RoundedRectangle.app(AppRadius.pill))
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 14)
+                    }
+                    .transition(.opacity)
+                }
+            }
+            .navigationTitle("Connect NEAR AI Cloud")
+            .platformInlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { onCancel() }
+                        .accessibilityIdentifier("cloudAuth.cancel")
+                }
+            }
+            .task {
+                try? await Task.sleep(nanoseconds: 20_000_000_000)
+                guard !Task.isCancelled, !didHarvest else { return }
+                withAnimation(.easeOut(duration: 0.2)) { showsHelp = true }
+            }
+        }
+    }
+
+    /// The hosted cloud login (provider chooser: Google / GitHub).
+    nonisolated static let loginURL = validatedURL("https://cloud-api.near.ai/v1/auth/login")
+
+    nonisolated private static func validatedURL(_ rawValue: String) -> URL {
+        guard let url = URL(string: rawValue) else {
+            assertionFailure("Invalid cloud sign-in URL: \(rawValue)")
+            return URL(fileURLWithPath: "/")
+        }
+        return url
+    }
+
+    /// Hosts whose pages we scan for the key. OAuth provider pages (Google /
+    /// GitHub) are never scanned.
+    nonisolated static func isCloudHarvestHost(_ url: URL?) -> Bool {
+        guard let host = url?.host?.lowercased() else { return false }
+        return host == "cloud-api.near.ai"
+            || host == "agent.near.ai"
+            || host.hasSuffix(".near.ai") && host.contains("cloud")
+    }
+
+    /// Validates a candidate harvested string as a NEAR AI Cloud key.
+    nonisolated static func isLikelyCloudKey(_ value: String?) -> Bool {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
+        guard value.hasPrefix("sk-"), value.count >= 16 else { return false }
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+        return value.dropFirst(3).unicodeScalars.allSatisfy { allowed.contains($0) }
+    }
+}
+
+/// UIKit bridge hosting the WKWebView for the cloud sign-in. Polls the page for
+/// an `sk-` key (web storage + visible DOM) once the user reaches a cloud-api /
+/// dashboard origin.
+private struct CloudAuthWebView: UIViewRepresentable {
+    let url: URL
+    let onKeyHarvested: (_ apiKey: String) -> Void
+    let onLoadingChanged: (Bool) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onKeyHarvested: onKeyHarvested, onLoadingChanged: onLoadingChanged)
+    }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        // Persistent store so the OAuth cookies survive the provider redirect hops.
+        configuration.websiteDataStore = .default()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
+        webView.allowsBackForwardNavigationGestures = true
+        context.coordinator.webView = webView
+        webView.load(URLRequest(url: url))
+        context.coordinator.startPolling()
+        return webView
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+
+    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
+        coordinator.dismissPopupWebView()
+        coordinator.stopPolling()
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+        private let onKeyHarvested: (_ apiKey: String) -> Void
+        private let onLoadingChanged: (Bool) -> Void
+        weak var webView: WKWebView?
+        private weak var popupWebView: WKWebView?
+        private var pollTimer: Timer?
+        private var finished = false
+
+        // Scans web storage + visible DOM for an `sk-` key. When none is found it
+        // reports the origin and storage keys so the harvest target can be tuned.
+        private static let harvestScript = """
+        (function () {
+          function scanStore(store) {
+            try {
+              for (var i = 0; i < store.length; i++) {
+                var v = store.getItem(store.key(i));
+                if (v && /^sk-[A-Za-z0-9_\\-]{16,}$/.test(v.trim())) return v.trim();
+              }
+            } catch (e) {}
+            return null;
+          }
+          var k = scanStore(window.localStorage) || scanStore(window.sessionStorage);
+          if (k) return JSON.stringify({ key: k, src: 'storage' });
+          var text = document.body ? document.body.innerText : '';
+          var m = text.match(/sk-[A-Za-z0-9_\\-]{20,}/);
+          if (m) return JSON.stringify({ key: m[0], src: 'dom' });
+          var ls = [];
+          try { for (var j = 0; j < window.localStorage.length; j++) ls.push(window.localStorage.key(j)); } catch (e) {}
+          return JSON.stringify({ key: null, host: location.host, path: location.pathname, lskeys: ls });
+        })()
+        """
+
+        init(
+            onKeyHarvested: @escaping (_ apiKey: String) -> Void,
+            onLoadingChanged: @escaping (Bool) -> Void
+        ) {
+            self.onKeyHarvested = onKeyHarvested
+            self.onLoadingChanged = onLoadingChanged
+        }
+
+        func startPolling() {
+            stopPolling()
+            let timer = Timer(timeInterval: 1.2, repeats: true) { [weak self] _ in
+                self?.harvestIfReady()
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            pollTimer = timer
+        }
+
+        func stopPolling() {
+            pollTimer?.invalidate()
+            pollTimer = nil
+        }
+
+        private func harvestIfReady() {
+            guard !finished, let webView else { return }
+            // Only scan on cloud-api / dashboard origins; provider pages are skipped.
+            guard CloudWebSignInView.isCloudHarvestHost(webView.url) else { return }
+            webView.evaluateJavaScript(Self.harvestScript) { [weak self] result, _ in
+                guard let self, !self.finished, let json = result as? String else { return }
+                self.handleHarvestResult(json)
+            }
+        }
+
+        private func handleHarvestResult(_ json: String) {
+            guard let data = json.data(using: .utf8),
+                  let parsed = try? JSONDecoder().decode(HarvestResult.self, from: data) else {
+                return
+            }
+            if CloudWebSignInView.isLikelyCloudKey(parsed.key) {
+                #if DEBUG
+                NSLog("[NPC-debug] cloud sign-in: harvested key via \(parsed.src ?? "?")")
+                #endif
+                finish(with: parsed.key!.trimmingCharacters(in: .whitespacesAndNewlines))
+                return
+            }
+            #if DEBUG
+            NSLog("[NPC-debug] cloud sign-in: no key yet host=\(parsed.host ?? "?") path=\(parsed.path ?? "?") lskeys=\(parsed.lskeys ?? [])")
+            #endif
+        }
+
+        private func finish(with key: String) {
+            guard !finished else { return }
+            finished = true
+            dismissPopupWebView()
+            stopPolling()
+            onKeyHarvested(key)
+        }
+
+        func dismissPopupWebView() {
+            popupWebView?.navigationDelegate = nil
+            popupWebView?.uiDelegate = nil
+            popupWebView?.removeFromSuperview()
+            popupWebView = nil
+        }
+
+        private struct HarvestResult: Decodable {
+            let key: String?
+            let src: String?
+            let host: String?
+            let path: String?
+            let lskeys: [String]?
+        }
+
+        // MARK: WKNavigationDelegate
+
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            onLoadingChanged(true)
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            onLoadingChanged(false)
+            harvestIfReady()
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            onLoadingChanged(false)
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            onLoadingChanged(false)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            // Hand native app deep links (some wallets) to the system.
+            if let scheme = navigationAction.request.url?.scheme?.lowercased(),
+               scheme != "http", scheme != "https", scheme != "about" {
+                if let url = navigationAction.request.url {
+                    UIApplication.shared.open(url)
+                }
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
+        }
+
+        // MARK: WKUIDelegate — OAuth providers often open a popup (window.open).
+
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            guard navigationAction.targetFrame == nil else { return nil }
+            dismissPopupWebView()
+
+            configuration.websiteDataStore = .default()
+            configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+            configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+
+            let popup = WKWebView(frame: webView.bounds, configuration: configuration)
+            popup.navigationDelegate = self
+            popup.uiDelegate = self
+            popup.allowsBackForwardNavigationGestures = true
+            popup.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            popup.backgroundColor = .systemBackground
+            webView.addSubview(popup)
+            popupWebView = popup
+            return popup
+        }
+
+        func webViewDidClose(_ webView: WKWebView) {
+            if webView === popupWebView {
+                dismissPopupWebView()
+            }
+        }
+    }
+}

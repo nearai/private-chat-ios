@@ -780,14 +780,19 @@ final class ReleaseGateTests: XCTestCase {
         openNewChat(app)
         let councilChip = app.buttons["composer.chip.council"]
         XCTAssertTrue(councilChip.waitForExistence(timeout: 10), "showcase: council chip missing")
+        // Bootstrap's NEAR AI Cloud auto-connect loads the cloud catalog
+        // asynchronously. Give it time before composing the council so the
+        // default lineup can pair the private default with a cloud leg — mirrors
+        // a real user who connects cloud and then opens the council.
+        RunLoop.current.run(until: Date().addingTimeInterval(8))
         councilChip.tap()
         let councilTab = app.segmentedControls.buttons["Council"].firstMatch
         if councilTab.waitForExistence(timeout: 5), !councilTab.isSelected { councilTab.tap() }
-        // Build a reliable MIXED council: GLM 5.1 (private, web-grounded — it
-        // provides the live answer) + a NEAR AI Cloud frontier model (Claude,
-        // routed through cloud-api). The private Qwen fillers can have upstream
-        // provider outages, so we drop them in favor of a cloud leg, which also
-        // exercises the cloud route end to end. Requires NEAR_DEBUG_CLOUD_KEY.
+        // Compose a reliable MIXED council for the screenshot: GLM 5.1 (private,
+        // web-grounded — provides the live answer) + a NEAR AI Cloud frontier leg
+        // (Claude, routed through cloud-api). Default-both composition is covered
+        // by the unit test; here we select explicitly so the demo never depends
+        // on the provider-flaky private Qwen fillers. Requires NEAR_DEBUG_CLOUD_KEY.
         let anyCandidate = app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier BEGINSWITH 'council.candidate.'")
         )
@@ -796,7 +801,6 @@ final class ReleaseGateTests: XCTestCase {
         func candidate(_ id: String) -> XCUIElement {
             app.descendants(matching: .any).matching(identifier: "council.candidate.\(id)").firstMatch
         }
-        // 1. Deselect any pre-selected member that isn't GLM (e.g. provider-down Qwen).
         for index in 0..<anyCandidate.count {
             let element = anyCandidate.element(boundBy: index)
             if element.exists, element.isSelected, element.isHittable,
@@ -804,10 +808,8 @@ final class ReleaseGateTests: XCTestCase {
                 element.tap()
             }
         }
-        // 2. Ensure GLM 5.1 (private, web-grounded) is selected.
         let glm = candidate("zai-org/GLM-5.1-FP8")
         if glm.waitForExistence(timeout: 5), !glm.isSelected, glm.isHittable { glm.tap() }
-        // 3. Add a NEAR AI Cloud frontier leg, scrolling to the Cloud section.
         let claude = candidate("near-cloud/anthropic/claude-sonnet-4-6")
         let anyCloud = app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier BEGINSWITH 'council.candidate.near-cloud/'")

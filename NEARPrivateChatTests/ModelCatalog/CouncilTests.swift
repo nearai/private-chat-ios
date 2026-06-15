@@ -112,6 +112,41 @@ extension PrivateChatCoreTests {
         XCTAssertFalse(store.activeCouncilModels.contains { $0.isNearCloudModel })
     }
 
+    func testDefaultCouncilPairsPrivateDefaultWithCloudLegWhenConnected() {
+        let cloudRoutes = ModelCatalogStore.nearCloudRouteModels(from: [
+            ModelOption(
+                modelID: "anthropic/claude-sonnet-4-6",
+                publicModel: true,
+                metadata: ModelOption.Metadata(
+                    verifiable: false,
+                    contextLength: 200_000,
+                    modelDisplayName: "Claude Sonnet 4.6",
+                    modelDescription: "Cloud frontier model.",
+                    modelIcon: nil,
+                    aliases: ["claude-sonnet-4-6"]
+                )
+            )
+        ])
+        let catalog = ModelCatalogStore(
+            models: [
+                ModelOption(modelID: "zai-org/GLM-5.1-FP8", publicModel: true, metadata: nil),
+                ModelOption(modelID: "Qwen/Qwen3.6-35B-A3B-FP8", publicModel: true, metadata: nil)
+            ],
+            nearCloudModels: cloudRoutes
+        )
+
+        let ids = catalog.defaultCouncilModelIDs()
+
+        XCTAssertTrue(
+            ids.contains(ModelOption.nearPrivateDefaultModelID),
+            "default council should keep the private verifiable default: \(ids)"
+        )
+        XCTAssertTrue(
+            ids.contains { $0.hasPrefix(ModelOption.nearCloudModelPrefix) },
+            "default council should add a cloud leg once cloud is connected: \(ids)"
+        )
+    }
+
     func testHomeOrchestrationPlannerPromotesLiveBriefingsOnlyWhenTheyExist() {
         let liveID = UUID()
         let scheduledID = UUID()
