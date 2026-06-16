@@ -546,3 +546,88 @@ struct IronclawOutboundTargetsResponse: Codable {
     let items: [IronclawOutboundTarget]?
     var all: [IronclawOutboundTarget] { targets ?? items ?? [] }
 }
+
+// MARK: - Trace Commons DTOs (webchat v2 /traces/credit, /traces/holds/{id}/authorize)
+// Mirrors the hosted IronClaw web UI Trace Commons tab: a per-account credit
+// ledger for contributed redacted traces plus manual-review holds the user
+// authorizes before submission. All fields optional — the server view is a
+// snapshot and a not-enrolled account returns a sparse object.
+
+struct IronclawTraceHold: Codable, Identifiable, Hashable {
+    let submissionID: String
+    let reason: String?
+
+    var id: String { submissionID }
+    var displayReason: String { reason?.nilIfBlank ?? "Held for review" }
+
+    enum CodingKeys: String, CodingKey {
+        case submissionID = "submission_id"
+        case reason
+    }
+}
+
+struct IronclawTraceCredits: Codable, Hashable {
+    let enrolled: Bool?
+    let pendingCredit: Double?
+    let finalCredit: Double?
+    let delayedCreditDelta: Double?
+    let submissionsSubmitted: Int?
+    let submissionsAccepted: Int?
+    let submissionsTotal: Int?
+    let lastSubmissionAt: String?
+    let lastCreditSyncAt: String?
+    let recentExplanations: [String]?
+    let holds: [IronclawTraceHold]?
+
+    enum CodingKeys: String, CodingKey {
+        case enrolled, holds
+        case pendingCredit = "pending_credit"
+        case finalCredit = "final_credit"
+        case delayedCreditDelta = "delayed_credit_delta"
+        case submissionsSubmitted = "submissions_submitted"
+        case submissionsAccepted = "submissions_accepted"
+        case submissionsTotal = "submissions_total"
+        case lastSubmissionAt = "last_submission_at"
+        case lastCreditSyncAt = "last_credit_sync_at"
+        case recentExplanations = "recent_explanations"
+    }
+
+    // Tolerant decode (mirrors the web UI's `Number(value) || 0` coercion): a
+    // single field arriving with an unexpected JSON type must NOT discard the
+    // whole ledger. Each field decodes independently; numbers accept number or
+    // numeric-string; arrays/holds drop to nil rather than throw.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enrolled = (try? c.decodeIfPresent(Bool.self, forKey: .enrolled)) ?? nil
+        pendingCredit = Self.lenientDouble(c, .pendingCredit)
+        finalCredit = Self.lenientDouble(c, .finalCredit)
+        delayedCreditDelta = Self.lenientDouble(c, .delayedCreditDelta)
+        submissionsSubmitted = Self.lenientInt(c, .submissionsSubmitted)
+        submissionsAccepted = Self.lenientInt(c, .submissionsAccepted)
+        submissionsTotal = Self.lenientInt(c, .submissionsTotal)
+        lastSubmissionAt = (try? c.decodeIfPresent(String.self, forKey: .lastSubmissionAt)) ?? nil
+        lastCreditSyncAt = (try? c.decodeIfPresent(String.self, forKey: .lastCreditSyncAt)) ?? nil
+        recentExplanations = (try? c.decodeIfPresent([String].self, forKey: .recentExplanations)) ?? nil
+        holds = (try? c.decodeIfPresent([IronclawTraceHold].self, forKey: .holds)) ?? nil
+    }
+
+    private static func lenientDouble(_ c: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) -> Double? {
+        if let value = try? c.decodeIfPresent(Double.self, forKey: key) { return value }
+        if let text = try? c.decodeIfPresent(String.self, forKey: key) { return Double(text) }
+        return nil
+    }
+
+    private static func lenientInt(_ c: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) -> Int? {
+        if let value = try? c.decodeIfPresent(Int.self, forKey: key) { return value }
+        if let value = try? c.decodeIfPresent(Double.self, forKey: key) { return Int(value) }
+        if let text = try? c.decodeIfPresent(String.self, forKey: key) { return Int(text) ?? Double(text).map(Int.init) }
+        return nil
+    }
+
+    var isEnrolled: Bool { enrolled ?? false }
+    // Desktop empty-state parity: show stats once enrolled OR any submission exists.
+    var hasActivity: Bool { isEnrolled || (submissionsTotal ?? 0) > 0 }
+    // Drop malformed holds with no submission id (cannot be authorized).
+    var activeHolds: [IronclawTraceHold] { (holds ?? []).filter { !$0.submissionID.isEmpty } }
+    var explanations: [String] { recentExplanations ?? [] }
+}

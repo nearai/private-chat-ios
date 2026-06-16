@@ -366,6 +366,33 @@ final class IronclawAPI {
         return (try? JSONDecoder().decode(IronclawChannelsResponse.self, from: data))?.all ?? []
     }
 
+    /// Trace Commons credit ledger for the authenticated account. Returns nil
+    /// when the endpoint is unavailable (non-200, e.g. the gateway has no traces
+    /// feature) or the body cannot be decoded — the caller renders that as a
+    /// load-failure distinct from a decoded but not-enrolled account.
+    func fetchTraceCredits(settings: IronclawSettings, authToken: String) async -> IronclawTraceCredits? {
+        guard let url = URL(string: settings.baseURL + "/api/webchat/v2/traces/credit") else { return nil }
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        guard let (data, response) = try? await URLSession.shared.data(for: req),
+              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return try? JSONDecoder().decode(IronclawTraceCredits.self, from: data)
+    }
+
+    /// Authorize a held (manual-review) trace for submission. No request body.
+    /// Returns true on a 2xx response.
+    func authorizeTraceHold(submissionID: String, settings: IronclawSettings, authToken: String) async -> Bool {
+        guard !submissionID.isEmpty,
+              let encoded = submissionID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+              let url = URL(string: settings.baseURL + "/api/webchat/v2/traces/holds/\(encoded)/authorize")
+        else { return false }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        guard let (_, response) = try? await URLSession.shared.data(for: req) else { return false }
+        return (200...299).contains((response as? HTTPURLResponse)?.statusCode ?? 0)
+    }
+
     // MARK: - Reborn HTTP
 
     private func createThread(baseURL: URL, authToken: String?) async throws -> String {

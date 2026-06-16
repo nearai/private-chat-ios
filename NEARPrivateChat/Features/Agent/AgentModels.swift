@@ -837,7 +837,7 @@ struct IronclawSettings: Codable, Hashable {
             return "Enter a valid Hosted IronClaw HTTPS URL."
         }
         if Self.retiredLocalDefaults.contains(trimmed) || !URLSecurity.isPublicHost(host) {
-            return "Use a Hosted IronClaw HTTPS URL. LAN gateways are for local development only."
+            return "Use a public HTTPS URL. A self-hosted gateway on a LAN must be exposed through an HTTPS tunnel (Cloudflare Tunnel or ngrok)."
         }
         guard scheme == "https" else {
             return "IronClaw on iPhone requires HTTPS, not a local HTTP gateway."

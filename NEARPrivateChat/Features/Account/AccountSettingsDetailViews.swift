@@ -236,11 +236,14 @@ struct PowerToolIronclawView: View {
             }
 
             Section("Agent connection") {
-                TextField("Hosted IronClaw URL", text: $ironclawEndpoint, prompt: Text("e.g. https://your-host/reborn"))
+                TextField("IronClaw gateway URL", text: $ironclawEndpoint, prompt: Text("e.g. https://your-ironclaw.example/reborn"))
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
-                Text("Use your reborn WebChat v2 base URL, for example https://dangwalvaidy.family/reborn. Phone runs require a public HTTPS host.")
+                Text("Point this at any IronClaw — NEAR-hosted, your own hosted instance, or self-hosted. Enter its WebChat v2 base URL.")
+                    .font(.caption)
+                    .foregroundStyle(Color.textSecondary)
+                Text("iPhone requires a public HTTPS host. A self-hosted gateway on your LAN must be exposed through an HTTPS tunnel (Cloudflare Tunnel or ngrok); raw LAN IPs, localhost, and http:// are rejected for security.")
                     .font(.caption)
                     .foregroundStyle(Color.textSecondary)
                 SecureField(agentStore.ironclawTokenConfigured ? "Token saved" : "Bearer token", text: $ironclawToken)

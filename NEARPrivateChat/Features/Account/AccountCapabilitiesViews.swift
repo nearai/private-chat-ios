@@ -419,6 +419,12 @@ struct AccountSettingsView: View {
                     } label: {
                         powerToolSubRow(icon: "arrow.up.forward.circle.fill", title: "Outbound Targets", subtitle: "Notification delivery routes")
                     }
+
+                    NavigationLink {
+                        IronclawTraceCommonsView().environmentObject(agentStore)
+                    } label: {
+                        powerToolSubRow(icon: "square.stack.3d.up", title: "Trace Commons", subtitle: "Contribution credits & review holds")
+                    }
                 } label: {
                     Label("Agent panels", systemImage: "person.crop.circle.badge.gearshape")
                         .font(.body)

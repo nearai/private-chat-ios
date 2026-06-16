@@ -359,6 +359,7 @@
 		CAFE0004A2B3C4D5E6F70002 /* IronclawLLMProvidersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAFE0004A2B3C4D5E6F70001 /* IronclawLLMProvidersView.swift */; };
 		CAFE0007A2B3C4D5E6F70002 /* IronclawChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAFE0007A2B3C4D5E6F70001 /* IronclawChannelsView.swift */; };
 		CAFE0008A2B3C4D5E6F70002 /* IronclawOutboundTargetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAFE0008A2B3C4D5E6F70001 /* IronclawOutboundTargetsView.swift */; };
+		CAFE000AA2B3C4D5E6F70002 /* IronclawTraceCommonsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAFE000AA2B3C4D5E6F70001 /* IronclawTraceCommonsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -766,6 +767,7 @@
 		CAFE0004A2B3C4D5E6F70001 /* IronclawLLMProvidersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IronclawLLMProvidersView.swift; sourceTree = "<group>"; };
 		CAFE0007A2B3C4D5E6F70001 /* IronclawChannelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IronclawChannelsView.swift; sourceTree = "<group>"; };
 		CAFE0008A2B3C4D5E6F70001 /* IronclawOutboundTargetsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IronclawOutboundTargetsView.swift; sourceTree = "<group>"; };
+		CAFE000AA2B3C4D5E6F70001 /* IronclawTraceCommonsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IronclawTraceCommonsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1452,6 +1454,7 @@
 				CAFE0006A2B3C4D5E6F70001 /* IronclawSkillsView.swift */,
 				CAFE0007A2B3C4D5E6F70001 /* IronclawChannelsView.swift */,
 				CAFE0008A2B3C4D5E6F70001 /* IronclawOutboundTargetsView.swift */,
+				CAFE000AA2B3C4D5E6F70001 /* IronclawTraceCommonsView.swift */,
 			);
 			path = Agent;
 			sourceTree = "<group>";
@@ -1921,6 +1924,7 @@
 				CAFE0004A2B3C4D5E6F70002 /* IronclawLLMProvidersView.swift in Sources */,
 				CAFE0007A2B3C4D5E6F70002 /* IronclawChannelsView.swift in Sources */,
 				CAFE0008A2B3C4D5E6F70002 /* IronclawOutboundTargetsView.swift in Sources */,
+				CAFE000AA2B3C4D5E6F70002 /* IronclawTraceCommonsView.swift in Sources */,
 				C1000000000000000000000E /* ChatInputBar.swift in Sources */,
 				AD1000000000000000000001 /* ChatInputBar+State.swift in Sources */,
 				AD1000000000000000000002 /* ChatInputBar+Routing.swift in Sources */,
