@@ -57,6 +57,7 @@
 		BA836E3847B5A2FBE7F30DC8 /* IronclawAPI+DTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAEF1DB5CBEC70665ED3BF3A /* IronclawAPI+DTOs.swift */; };
 		A1000000000000000000000C /* IronclawMobileRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* IronclawMobileRuntime.swift */; };
 		A1000000000000000000000D /* IronclawMobileStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* IronclawMobileStack.swift */; };
+		CAFE0002A2B3C4D5E6F70002 /* IronclawExtensionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAFE0002A2B3C4D5E6F70001 /* IronclawExtensionsView.swift */; };
 		A1000000000000000000000E /* WebGroundingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* WebGroundingService.swift */; };
 		A1000000000000000000000F /* ConversationExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* ConversationExport.swift */; };
 		BA07ADB76841812CE8F963A8 /* ConversationExport+RenderedFormats.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA850B4709F4632BC2CDA20F /* ConversationExport+RenderedFormats.swift */; };
@@ -236,6 +237,7 @@
 		C1000000000000000000000C /* ChatMessageViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000C /* ChatMessageViews.swift */; };
 		C1000000000000000000000D /* HostedHandoffPreflightSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */; };
 		AA000000000000000000000B /* ProjectFileChipsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000000A /* ProjectFileChipsView.swift */; };
+		CAFE0003A2B3C4D5E6F70002 /* IronclawAutomationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAFE0003A2B3C4D5E6F70001 /* IronclawAutomationsView.swift */; };
 		C1000000000000000000000E /* ChatInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000E /* ChatInputBar.swift */; };
 		C1000000000000000000000F /* MessageTimelineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000F /* MessageTimelineStore.swift */; };
 		C10000000000000000000010 /* ComposerState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000010 /* ComposerState.swift */; };
@@ -352,6 +354,7 @@
 		F1D000000000000000000002 /* AgentMissionControlPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2D000000000000000000002 /* AgentMissionControlPanel.swift */; };
 		F1D700000100000000000000 /* ProjectContextSupportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2D700000100000000000000 /* ProjectContextSupportViews.swift */; };
 		F1E000000000000000000001 /* ShareSupportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2E000000000000000000001 /* ShareSupportViews.swift */; };
+		CAFE0004A2B3C4D5E6F70002 /* IronclawLLMProvidersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAFE0004A2B3C4D5E6F70001 /* IronclawLLMProvidersView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -455,6 +458,7 @@
 		BAEF1DB5CBEC70665ED3BF3A /* IronclawAPI+DTOs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IronclawAPI+DTOs.swift"; sourceTree = "<group>"; };
 		A2000000000000000000000E /* IronclawMobileRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IronclawMobileRuntime.swift; sourceTree = "<group>"; };
 		A2000000000000000000000F /* IronclawMobileStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IronclawMobileStack.swift; sourceTree = "<group>"; };
+		CAFE0002A2B3C4D5E6F70001 /* IronclawExtensionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IronclawExtensionsView.swift; sourceTree = "<group>"; };
 		A20000000000000000000010 /* WebGroundingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebGroundingService.swift; sourceTree = "<group>"; };
 		A20000000000000000000011 /* ConversationExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationExport.swift; sourceTree = "<group>"; };
 		BA850B4709F4632BC2CDA20F /* ConversationExport+RenderedFormats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConversationExport+RenderedFormats.swift"; sourceTree = "<group>"; };
@@ -635,6 +639,7 @@
 		C2000000000000000000000C /* ChatMessageViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageViews.swift; sourceTree = "<group>"; };
 		C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostedHandoffPreflightSheet.swift; sourceTree = "<group>"; };
 		AA000000000000000000000A /* ProjectFileChipsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectFileChipsView.swift; sourceTree = "<group>"; };
+		CAFE0003A2B3C4D5E6F70001 /* IronclawAutomationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IronclawAutomationsView.swift; sourceTree = "<group>"; };
 		C2000000000000000000000E /* ChatInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatInputBar.swift; sourceTree = "<group>"; };
 		C2000000000000000000000F /* MessageTimelineStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageTimelineStore.swift; sourceTree = "<group>"; };
 		C20000000000000000000010 /* ComposerState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerState.swift; sourceTree = "<group>"; };
@@ -752,6 +757,7 @@
 		F2D000000000000000000002 /* AgentMissionControlPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentMissionControlPanel.swift; sourceTree = "<group>"; };
 		F2D700000100000000000000 /* ProjectContextSupportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectContextSupportViews.swift; sourceTree = "<group>"; };
 		F2E000000000000000000001 /* ShareSupportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSupportViews.swift; sourceTree = "<group>"; };
+		CAFE0004A2B3C4D5E6F70001 /* IronclawLLMProvidersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IronclawLLMProvidersView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1429,8 +1435,11 @@
 				F2D000000000000000000001 /* AgentWorkspaceSetupViews.swift */,
 				C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */,
 				AA000000000000000000000A /* ProjectFileChipsView.swift */,
+				CAFE0003A2B3C4D5E6F70001 /* IronclawAutomationsView.swift */,
 				A2000000000000000000000E /* IronclawMobileRuntime.swift */,
 				A2000000000000000000000F /* IronclawMobileStack.swift */,
+				CAFE0002A2B3C4D5E6F70001 /* IronclawExtensionsView.swift */,
+				CAFE0004A2B3C4D5E6F70001 /* IronclawLLMProvidersView.swift */,
 			);
 			path = Agent;
 			sourceTree = "<group>";
@@ -1810,6 +1819,7 @@
 				BA836E3847B5A2FBE7F30DC8 /* IronclawAPI+DTOs.swift in Sources */,
 				A1000000000000000000000C /* IronclawMobileRuntime.swift in Sources */,
 				A1000000000000000000000D /* IronclawMobileStack.swift in Sources */,
+				CAFE0002A2B3C4D5E6F70002 /* IronclawExtensionsView.swift in Sources */,
 				A1000000000000000000000E /* WebGroundingService.swift in Sources */,
 				A1000000000000000000000F /* ConversationExport.swift in Sources */,
 				BA07ADB76841812CE8F963A8 /* ConversationExport+RenderedFormats.swift in Sources */,
@@ -1894,6 +1904,8 @@
 				C1000000000000000000000C /* ChatMessageViews.swift in Sources */,
 				C1000000000000000000000D /* HostedHandoffPreflightSheet.swift in Sources */,
 				AA000000000000000000000B /* ProjectFileChipsView.swift in Sources */,
+				CAFE0003A2B3C4D5E6F70002 /* IronclawAutomationsView.swift in Sources */,
+				CAFE0004A2B3C4D5E6F70002 /* IronclawLLMProvidersView.swift in Sources */,
 				C1000000000000000000000E /* ChatInputBar.swift in Sources */,
 				AD1000000000000000000001 /* ChatInputBar+State.swift in Sources */,
 				AD1000000000000000000002 /* ChatInputBar+Routing.swift in Sources */,

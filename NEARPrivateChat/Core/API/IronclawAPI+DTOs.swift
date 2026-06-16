@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 // MARK: - Reborn DTOs
 
@@ -336,4 +337,100 @@ struct IronclawProjectFile: Codable, Identifiable, Hashable {
 
 struct IronclawProjectFilesResponse: Codable {
     let files: [IronclawProjectFile]
+}
+
+// MARK: - Extensions DTOs (webchat v2 /extensions)
+
+struct IronclawExtension: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let displayName: String?
+    let description: String?
+    let isActive: Bool?
+    let version: String?
+    let category: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, description, version, category
+        case displayName = "display_name"
+        case isActive = "is_active"
+    }
+
+    var title: String { displayName ?? name }
+    var isInstalled: Bool { isActive ?? false }
+}
+
+struct IronclawExtensionsResponse: Codable {
+    let extensions: [IronclawExtension]?
+    let items: [IronclawExtension]?
+    var all: [IronclawExtension] { extensions ?? items ?? [] }
+}
+
+// MARK: - Automations DTOs (webchat v2 /automations)
+
+struct IronclawAutomation: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String?
+    let description: String?
+    let trigger: String?
+    let schedule: String?
+    let status: String?
+    let lastRunAt: Date?
+    let nextRunAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, description, trigger, schedule, status
+        case lastRunAt = "last_run_at"
+        case nextRunAt = "next_run_at"
+    }
+
+    var title: String { name ?? "Automation \(id.prefix(8))" }
+    var isRunning: Bool { status == "running" }
+    var statusColor: Color {
+        switch status {
+        case "active": return .green
+        case "failed": return .red
+        default: return .orange
+        }
+    }
+}
+
+struct IronclawAutomationsResponse: Codable {
+    let automations: [IronclawAutomation]?
+    let items: [IronclawAutomation]?
+    var all: [IronclawAutomation] { automations ?? items ?? [] }
+}
+
+// MARK: - LLM Provider DTOs
+
+struct IronclawLLMProvider: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let baseURL: String?
+    let modelName: String?
+    let isActive: Bool?
+    let providerType: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case baseURL = "base_url"
+        case modelName = "model_name"
+        case isActive = "is_active"
+        case providerType = "provider_type"
+    }
+
+    var displayName: String { name.isEmpty ? (providerType ?? "Provider") : name }
+    var icon: String {
+        let t = (providerType ?? name).lowercased()
+        if t.contains("openai") { return "sparkles" }
+        if t.contains("anthropic") { return "a.circle.fill" }
+        if t.contains("nearai") || t.contains("near") { return "n.circle.fill" }
+        return "cpu.fill"
+    }
+}
+
+struct IronclawLLMProvidersResponse: Codable {
+    let providers: [IronclawLLMProvider]?
+    let items: [IronclawLLMProvider]?
+    var all: [IronclawLLMProvider] { providers ?? items ?? [] }
 }

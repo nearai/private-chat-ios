@@ -68,6 +68,14 @@ final class IronclawAPI {
         return []
     }
 
+    func fetchExtensions(settings: IronclawSettings, authToken: String) async -> [IronclawExtension] {
+        guard let url = URL(string: settings.baseURL + "/api/webchat/v2/extensions") else { return [] }
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        guard let data = try? await URLSession.shared.data(for: req).0 else { return [] }
+        return (try? JSONDecoder().decode(IronclawExtensionsResponse.self, from: data))?.all ?? []
+    }
+
     func testWorkstationCapability(settings: IronclawSettings, authToken: String?) async throws -> String {
         var probeSettings = settings
         probeSettings.threadID = ""
@@ -263,6 +271,20 @@ final class IronclawAPI {
         return Self.latestAssistantText(in: timeline, runID: nil)
     }
 
+    // MARK: - Automations (webchat v2 /automations)
+
+    /// Returns the automations registered in the connected IronClaw instance.
+    /// Returns [] on any error — callers treat absence as no automations configured.
+    func fetchAutomations(settings: IronclawSettings, authToken: String) async -> [IronclawAutomation] {
+        guard let url = URL(string: settings.baseURL + "/api/webchat/v2/automations") else { return [] }
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        var decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let data = try? await URLSession.shared.data(for: req).0 else { return [] }
+        return (try? decoder.decode(IronclawAutomationsResponse.self, from: data))?.all ?? []
+    }
+
     // MARK: - Project File Downloads (webchat v2 /files routes)
 
     /// Returns the list of files the agent created during a thread.
@@ -301,6 +323,19 @@ final class IronclawAPI {
               (200..<300).contains(http.statusCode),
               !data.isEmpty else { return nil }
         return data
+    }
+
+
+    // MARK: - LLM Providers (webchat v2 /llm/providers)
+
+    /// Returns the LLM providers configured on the connected IronClaw instance.
+    /// Returns [] on any error — callers treat absence as no providers configured.
+    func fetchLLMProviders(settings: IronclawSettings, authToken: String) async -> [IronclawLLMProvider] {
+        guard let url = URL(string: settings.baseURL + "/api/webchat/v2/llm/providers") else { return [] }
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        guard let data = try? await URLSession.shared.data(for: req).0 else { return [] }
+        return (try? JSONDecoder().decode(IronclawLLMProvidersResponse.self, from: data))?.all ?? []
     }
 
     // MARK: - Reborn HTTP

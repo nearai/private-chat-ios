@@ -376,6 +376,37 @@ struct AccountSettingsView: View {
                     .foregroundStyle(.primary)
             }
 
+            if agentStore.ironclawSettings.isEnabled {
+                DisclosureGroup {
+                    NavigationLink {
+                        IronclawExtensionsView()
+                            .environmentObject(agentStore)
+                    } label: {
+                        powerToolSubRow(icon: "puzzlepiece.extension", title: "Extensions", subtitle: "Browse and manage extensions")
+                    }
+
+                    NavigationLink {
+                        IronclawAutomationsView()
+                            .environmentObject(agentStore)
+                    } label: {
+                        powerToolSubRow(icon: "clock.arrow.2.circlepath", title: "Automations", subtitle: "Scheduled agent tasks")
+                    }
+
+                    NavigationLink {
+                        IronclawLLMProvidersView(
+                            settings: agentStore.ironclawSettings,
+                            authToken: agentStore.loadIronclawAuthToken() ?? ""
+                        )
+                    } label: {
+                        powerToolSubRow(icon: "cpu.fill", title: "LLM Providers", subtitle: "Configure agent inference")
+                    }
+                } label: {
+                    Label("Agent panels", systemImage: "person.crop.circle.badge.gearshape")
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                }
+            }
+
             DisclosureGroup(isExpanded: $powerToolsExpanded) {
                 NavigationLink {
                     PowerToolDiagnosticsView()
