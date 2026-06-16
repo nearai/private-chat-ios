@@ -351,7 +351,7 @@ struct MessageBubble: View {
                         .environmentObject(chatStore)
                 }
 
-                if message.role == .assistant, !message.projectFiles.isEmpty, !message.isStreaming {
+                if message.role == .assistant, let projectFiles = message.projectFiles, !projectFiles.isEmpty, !message.isStreaming {
                     let conversationID = chatStore.selectedConversation?.id ?? ""
                     let resolvedSettings = chatStore.ironclawSettingsForConversation(conversationID)
                     let resolvedThreadID = resolvedSettings.threadID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -359,7 +359,7 @@ struct MessageBubble: View {
                         : resolvedSettings.threadID
                     if !resolvedThreadID.isEmpty {
                         ProjectFileChipsView(
-                            files: message.projectFiles,
+                            files: projectFiles,
                             threadID: resolvedThreadID,
                             settings: resolvedSettings,
                             authToken: chatStore.loadIronclawAuthToken(),

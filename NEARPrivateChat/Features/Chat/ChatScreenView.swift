@@ -26,11 +26,31 @@ private struct ChatTranscriptView: View {
     @State private var findQuery = ""
     @State private var findScrollTarget: String? = nil
 
-    private func findMatchIDs(in messages: [ChatMessage]) -> [String] {
-        guard !findQuery.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
-        return messages
-            .filter { $0.text.localizedCaseInsensitiveContains(findQuery) }
-            .map { $0.id }
+    private var trimmedFindQuery: String {
+        findQuery.trimmingCharacters(in: .whitespaces)
+    }
+
+    private func findMatches(_ text: String) -> Bool {
+        let q = trimmedFindQuery
+        guard !q.isEmpty else { return false }
+        return text.localizedCaseInsensitiveContains(q)
+    }
+
+    private func displayItemMatchesFind(_ item: ChatDisplayItem) -> Bool {
+        switch item {
+        case let .message(message):
+            return findMatches(message.text)
+        case let .council(_, messages):
+            return messages.contains { findMatches($0.text) }
+        }
+    }
+
+    // Match against display items, not raw messages: council answers collapse
+    // into a single `.council` item keyed by batchID, so the scroll anchor for a
+    // council match is the batchID — using message.id would scroll to nothing.
+    private func findMatchIDs(in displayItems: [ChatDisplayItem]) -> [String] {
+        guard !trimmedFindQuery.isEmpty else { return [] }
+        return displayItems.filter { displayItemMatchesFind($0) }.map { $0.id }
     }
 
     private static let streamingAutoScrollIntervalNanoseconds: UInt64 = 300_000_000
@@ -67,21 +87,20 @@ private struct ChatTranscriptView: View {
             )
             .background(Color.appBackground)
             if showingFindBar {
-                let allMessages = transcriptStore.state.messages
-                let matchIDs = findMatchIDs(in: allMessages)
+                let matchIDs = findMatchIDs(in: displayItems)
                 let curIdx = matchIDs.firstIndex(of: findScrollTarget ?? "") ?? 0
                 ChatFindBar(
                     query: $findQuery,
                     matchCount: matchIDs.count,
                     matchIndex: matchIDs.isEmpty ? 0 : max(0, min(curIdx, matchIDs.count - 1)),
                     onPrev: {
-                        let ids = findMatchIDs(in: transcriptStore.state.messages)
+                        let ids = findMatchIDs(in: transcriptStore.state.displayItems)
                         guard !ids.isEmpty else { return }
                         let cur = ids.firstIndex(of: findScrollTarget ?? "") ?? 0
                         findScrollTarget = ids[(cur - 1 + ids.count) % ids.count]
                     },
                     onNext: {
-                        let ids = findMatchIDs(in: transcriptStore.state.messages)
+                        let ids = findMatchIDs(in: transcriptStore.state.displayItems)
                         guard !ids.isEmpty else { return }
                         let cur = ids.firstIndex(of: findScrollTarget ?? "") ?? 0
                         findScrollTarget = ids[(cur + 1) % ids.count]
@@ -116,7 +135,7 @@ private struct ChatTranscriptView: View {
                                         MessageBubble(message: message, chatStore: chatStore)
                                             .id(item.id)
                                             .background(
-                                                !findQuery.isEmpty && message.text.localizedCaseInsensitiveContains(findQuery)
+                                                showingFindBar && findMatches(message.text)
                                                     ? Color.orange.opacity(0.08)
                                                     : Color.clear,
                                                 in: RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -124,6 +143,12 @@ private struct ChatTranscriptView: View {
                                     case let .council(batchID: _, messages: messages):
                                         CouncilResponseGroup(messages: messages, chatStore: chatStore)
                                             .id(item.id)
+                                            .background(
+                                                showingFindBar && messages.contains(where: { findMatches($0.text) })
+                                                    ? Color.orange.opacity(0.08)
+                                                    : Color.clear,
+                                                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            )
                                     }
                                 }
                             }
@@ -181,7 +206,7 @@ private struct ChatTranscriptView: View {
                         }
                     }
                     .onChange(of: findQuery) { _, _ in
-                        let ids = findMatchIDs(in: transcriptStore.state.messages)
+                        let ids = findMatchIDs(in: transcriptStore.state.displayItems)
                         if let first = ids.first {
                             findScrollTarget = first
                             withAnimation(.easeOut(duration: 0.25)) {

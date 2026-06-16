@@ -468,7 +468,10 @@ struct ChatMessage: Identifiable, Hashable, Codable {
     var sources: [WebSearchSource] = []
     var attachments: [ChatAttachment] = []
     var pendingApproval: IronclawPendingGate? = nil
-    var projectFiles: [IronclawProjectFile] = []
+    // Optional (not `[] `default): synthesized Codable ignores defaults for
+    // non-optional fields, so a non-optional array would throw keyNotFound when
+    // decoding messages persisted by app versions before this field existed.
+    var projectFiles: [IronclawProjectFile]? = nil
     var branchVariant: MessageBranchVariant? = nil
     var metadata: MessageMetadata? = nil
     var widget: MessageWidget? = nil
