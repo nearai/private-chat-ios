@@ -25,6 +25,21 @@ private struct ChatTranscriptView: View {
     @State private var showingFindBar = false
     @State private var findQuery = ""
     @State private var findScrollTarget: String? = nil
+    // Geometry-driven tail visibility: the bottom sentinel's maxY in the scroll
+    // coordinate space vs the viewport height. LazyVStack onAppear/onDisappear
+    // tracks lazy realization, not visibility, so it cannot drive this reliably.
+    @State private var bottomSentinelMaxY: CGFloat = .greatestFiniteMagnitude
+    @State private var transcriptViewportHeight: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// True when the transcript tail is on screen (or within a small threshold).
+    /// Optimistically true until geometry reports, so a freshly opened
+    /// conversation does not flash the jump button.
+    private var isNearBottom: Bool {
+        guard transcriptViewportHeight > 0,
+              bottomSentinelMaxY != .greatestFiniteMagnitude else { return true }
+        return bottomSentinelMaxY <= transcriptViewportHeight + Self.nearBottomThreshold
+    }
 
     private var trimmedFindQuery: String {
         findQuery.trimmingCharacters(in: .whitespaces)
@@ -61,6 +76,10 @@ private struct ChatTranscriptView: View {
 
     private static let streamingAutoScrollIntervalNanoseconds: UInt64 = 300_000_000
     private static let dragAutoScrollPauseNanoseconds: UInt64 = 1_500_000_000
+    private static let bottomAnchorID = "chat-bottom-anchor"
+    private static let transcriptScrollSpace = "chatTranscriptScroll"
+    // Tail counts as "on screen" when within this much of the viewport bottom.
+    private static let nearBottomThreshold: CGFloat = 120
     private static let maxDroppedAttachments = 5
     private static let attachmentFileContentTypes: [UTType] = [
         .pdf,
@@ -156,9 +175,28 @@ private struct ChatTranscriptView: View {
                                             )
                                     }
                                 }
+
+                                // Bottom anchor: the scrollTo target for the
+                                // jump-to-latest action. Tail-visibility is NOT
+                                // measured here — a lazy child de-realizes when
+                                // scrolled away; see the LazyVStack background.
+                                Color.clear
+                                    .frame(height: 1)
+                                    .id(Self.bottomAnchorID)
                             }
                             .padding(.horizontal, 18)
                             .padding(.vertical, 18)
+                            // Measure the content bottom from the LazyVStack
+                            // CONTAINER (always realized, unlike its tail rows),
+                            // so the jump button's visibility survives scroll-up.
+                            .background(
+                                GeometryReader { geo in
+                                    Color.clear.preference(
+                                        key: ChatBottomSentinelKey.self,
+                                        value: geo.frame(in: .named(Self.transcriptScrollSpace)).maxY
+                                    )
+                                }
+                            )
                         }
                     }
                     .simultaneousGesture(
@@ -172,6 +210,63 @@ private struct ChatTranscriptView: View {
                     )
                     .scrollDismissesKeyboard(.interactively)
                     .background(Color.appBackground)
+                    .coordinateSpace(name: Self.transcriptScrollSpace)
+                    .overlay {
+                        GeometryReader { viewport in
+                            Color.clear.preference(
+                                key: ChatViewportHeightKey.self,
+                                value: viewport.size.height
+                            )
+                        }
+                        .allowsHitTesting(false)
+                    }
+                    .onPreferenceChange(ChatBottomSentinelKey.self) { bottomSentinelMaxY = $0 }
+                    .onPreferenceChange(ChatViewportHeightKey.self) { transcriptViewportHeight = $0 }
+                    .overlay(alignment: .bottomTrailing) {
+                        // Scoped animation container: animates only on the
+                        // isNearBottom/findBar flip, never sweeping transcript
+                        // content changes into the spring.
+                        Group {
+                            // Standard scroll-to-bottom semantics: shown whenever
+                            // the literal tail is off screen. Works for council
+                            // tails too — the jump targets the always-present
+                            // bottom anchor regardless of the auto-scroll anchor.
+                            // While a stream is auto-following (user has NOT
+                            // scrolled up), the tail is pinned for them, so the
+                            // button stays hidden — this also avoids flicker as
+                            // content grows past the threshold between auto-scroll
+                            // ticks. It returns the moment they scroll up.
+                            if !isNearBottom && !messages.isEmpty && !showingFindBar
+                                && !(isStreaming && !streamAutoScrollSuppressed) {
+                                JumpToLatestButton(isStreaming: isStreaming) {
+                                    AppHaptics.selection()
+                                    let jump = { proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom) }
+                                    if reduceMotion {
+                                        jump()
+                                    } else {
+                                        withAnimation(.easeOut(duration: 0.28)) { jump() }
+                                    }
+                                    // Returning to the tail re-arms stream following:
+                                    // clear the scroll-up suppression so new tokens
+                                    // auto-scroll again. Only zero the pause window
+                                    // while streaming — on the idle path the user's
+                                    // own drag-pause should stand.
+                                    streamAutoScrollSuppressed = false
+                                    if isStreaming {
+                                        autoScrollPauseUntilNanoseconds = 0
+                                    }
+                                }
+                                .transition(reduceMotion ? .opacity : .scale(scale: 0.6).combined(with: .opacity))
+                            }
+                        }
+                        .padding(.trailing, 16)
+                        .padding(.bottom, 14)
+                        .animation(
+                            reduceMotion ? .easeInOut(duration: 0.14) : .spring(response: 0.32, dampingFraction: 0.82),
+                            value: isNearBottom
+                        )
+                        .animation(.easeInOut(duration: 0.16), value: showingFindBar)
+                    }
                     .task(id: chatStore.selectedConversation?.id) {
                         resetAutoScrollState()
                         if let conversation = chatStore.selectedConversation {
@@ -429,6 +524,10 @@ private struct ChatTranscriptView: View {
         lastAutoScrollNanoseconds = 0
         autoScrollPauseUntilNanoseconds = 0
         streamAutoScrollSuppressed = false
+        // A freshly opened conversation scrolls to its tail, so assume bottom
+        // (isNearBottom is optimistically true on the sentinel marker) until the
+        // first geometry callback reports the real position.
+        bottomSentinelMaxY = .greatestFiniteMagnitude
     }
 
     private func shouldAutoScroll(now: UInt64, isStreaming: Bool) -> Bool {
@@ -436,5 +535,53 @@ private struct ChatTranscriptView: View {
         guard !(isStreaming && streamAutoScrollSuppressed) else { return false }
         let minimumInterval = isStreaming ? Self.streamingAutoScrollIntervalNanoseconds : 0
         return minimumInterval == 0 || now - lastAutoScrollNanoseconds >= minimumInterval
+    }
+}
+
+/// Floating control that scrolls the transcript back to the latest message.
+/// Shown only when the tail is off screen; carries a live indicator when a
+/// response is streaming below the fold so the user knows there is new content.
+private struct JumpToLatestButton: View {
+    let isStreaming: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "arrow.down")
+                    .font(.callout.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Color.brandAccent, in: Circle())
+                    .overlay(Circle().stroke(.white.opacity(0.55), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.25), radius: 5, x: 0, y: 2)
+
+                if isStreaming {
+                    Circle()
+                        .fill(Color.proofVerifiedText)
+                        .frame(width: 12, height: 12)
+                        .overlay(Circle().stroke(Color.appBackground, lineWidth: 2))
+                        .offset(x: 3, y: -3)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Scroll to latest")
+        .accessibilityValue(isStreaming ? "Response in progress below" : "")
+        .accessibilityIdentifier("chat.jumpToLatest")
+    }
+}
+
+private struct ChatBottomSentinelKey: PreferenceKey {
+    static var defaultValue: CGFloat = .greatestFiniteMagnitude
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = min(value, nextValue())
+    }
+}
+
+private struct ChatViewportHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
