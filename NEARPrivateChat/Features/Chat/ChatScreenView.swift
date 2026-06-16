@@ -53,6 +53,12 @@ private struct ChatTranscriptView: View {
         return displayItems.filter { displayItemMatchesFind($0) }.map { $0.id }
     }
 
+    // Active match gets a stronger tint than the other matches (Safari-style).
+    private func findHighlightColor(itemID: String, matches: Bool) -> Color {
+        guard showingFindBar, matches else { return .clear }
+        return itemID == findScrollTarget ? Color.orange.opacity(0.20) : Color.orange.opacity(0.08)
+    }
+
     private static let streamingAutoScrollIntervalNanoseconds: UInt64 = 300_000_000
     private static let dragAutoScrollPauseNanoseconds: UInt64 = 1_500_000_000
     private static let maxDroppedAttachments = 5
@@ -135,18 +141,17 @@ private struct ChatTranscriptView: View {
                                         MessageBubble(message: message, chatStore: chatStore)
                                             .id(item.id)
                                             .background(
-                                                showingFindBar && findMatches(message.text)
-                                                    ? Color.orange.opacity(0.08)
-                                                    : Color.clear,
+                                                findHighlightColor(itemID: item.id, matches: findMatches(message.text)),
                                                 in: RoundedRectangle(cornerRadius: 12, style: .continuous)
                                             )
                                     case let .council(batchID: _, messages: messages):
                                         CouncilResponseGroup(messages: messages, chatStore: chatStore)
                                             .id(item.id)
                                             .background(
-                                                showingFindBar && messages.contains(where: { findMatches($0.text) })
-                                                    ? Color.orange.opacity(0.08)
-                                                    : Color.clear,
+                                                findHighlightColor(
+                                                    itemID: item.id,
+                                                    matches: messages.contains(where: { findMatches($0.text) })
+                                                ),
                                                 in: RoundedRectangle(cornerRadius: 12, style: .continuous)
                                             )
                                     }
