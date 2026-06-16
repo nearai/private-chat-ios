@@ -5,6 +5,7 @@ enum ResponseStreamEvent: Equatable {
     case created(responseID: String)
     case reasoningStarted
     case approvalNeeded(IronclawPendingGate)
+    case gateDenied(gateRef: String?, message: String?)
     case webSearchStarted(query: String?)
     case webSearchCompleted(query: String?, sources: [WebSearchSource])
     case textDelta(String)

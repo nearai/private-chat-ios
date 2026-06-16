@@ -199,6 +199,7 @@ struct IronclawRunState: Decodable {
                 }
                 if let rawValue = try? container.decode(String.self, forKey: key) {
                     let normalized = rawValue.lowercased()
+                    if normalized.contains("oauth") { return .oauth }
                     if normalized.contains("auth") { return .authentication }
                     if normalized.contains("external") { return .external }
                     if normalized.contains("approval") { return .approval }
@@ -313,4 +314,26 @@ struct IronclawGateResolvePayload: Encodable {
 struct IronclawResolveGateResponse: Decodable {
     let outcome: String?
     let status: String?
+}
+
+// MARK: - Project File DTOs (webchat v2 /threads/{id}/files)
+
+struct IronclawProjectFile: Codable, Identifiable, Hashable {
+    let path: String
+    let size: Int?
+
+    var id: String { path }
+
+    var displayName: String {
+        URL(fileURLWithPath: path).lastPathComponent
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case path
+        case size
+    }
+}
+
+struct IronclawProjectFilesResponse: Codable {
+    let files: [IronclawProjectFile]
 }

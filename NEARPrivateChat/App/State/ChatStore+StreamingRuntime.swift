@@ -144,16 +144,28 @@ extension ChatStore {
             )
             let documentAttachments = attachments.filter { !$0.isLocalOnly }
             await attachmentStagingStore.ensureDocumentTextsAvailable(for: documentAttachments, using: fileService)
+            var resolvedHostedThreadID: String?
             try await ironclawAPI.streamPrompt(
                 prompt: ironclawPrompt(for: text, attachments: attachments, webContext: webContext),
                 attachments: attachments,
                 settings: settings,
                 authToken: loadIronclawAuthToken(),
                 onResolvedThreadID: { [weak self] threadID in
+                    resolvedHostedThreadID = threadID
                     self?.agentStore.rememberIronclawThreadID(threadID, for: conversationID)
                 }
             ) { [weak self] event in
                 await self?.apply(streamEvent: event, conversationID: conversationID, assistantMessageID: assistantMessageID)
+            }
+            if let threadID = resolvedHostedThreadID, let msgID = assistantMessageID {
+                let files = await ironclawAPI.fetchProjectFiles(
+                    threadID: threadID,
+                    settings: settings,
+                    authToken: loadIronclawAuthToken()
+                )
+                if !files.isEmpty {
+                    _ = updateMessage(msgID) { $0.projectFiles = files }
+                }
             }
             return
         }

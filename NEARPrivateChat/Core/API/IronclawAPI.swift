@@ -263,6 +263,46 @@ final class IronclawAPI {
         return Self.latestAssistantText(in: timeline, runID: nil)
     }
 
+    // MARK: - Project File Downloads (webchat v2 /files routes)
+
+    /// Returns the list of files the agent created during a thread.
+    /// Returns [] on any error — callers treat absence as no files produced.
+    func fetchProjectFiles(threadID: String, settings: IronclawSettings, authToken: String?) async -> [IronclawProjectFile] {
+        guard let baseURL = try? validatedBaseURL(settings.baseURL) else { return [] }
+        guard var components = URLComponents(
+            url: baseURL.appending(path: "\(Self.threadsPath)/\(threadID)/files"),
+            resolvingAgainstBaseURL: false
+        ) else { return [] }
+        components.queryItems = []
+        guard let url = components.url else { return [] }
+        let request = jsonRequest(url: url, method: "GET", authToken: authToken, timeout: 12)
+        let response: IronclawProjectFilesResponse? = try? await performWithBoundedRetry(request)
+        return response?.files ?? []
+    }
+
+    /// Downloads the raw bytes for one project file. Returns nil on error.
+    func downloadProjectFile(threadID: String, path: String, settings: IronclawSettings, authToken: String?) async -> Data? {
+        guard let baseURL = try? validatedBaseURL(settings.baseURL) else { return nil }
+        guard var components = URLComponents(
+            url: baseURL.appending(path: "\(Self.threadsPath)/\(threadID)/files/content"),
+            resolvingAgainstBaseURL: false
+        ) else { return nil }
+        components.queryItems = [URLQueryItem(name: "path", value: path)]
+        guard let url = components.url else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 60
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
+        if let authToken, !authToken.isEmpty {
+            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        }
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode),
+              !data.isEmpty else { return nil }
+        return data
+    }
+
     // MARK: - Reborn HTTP
 
     private func createThread(baseURL: URL, authToken: String?) async throws -> String {
@@ -512,6 +552,15 @@ final class IronclawAPI {
                 return .failed
 
             case .blocked:
+                // OAuth gates are self-resolving on the server. If the gate detail
+                // indicates oauth kind but no pending gate is attached, the server
+                // already resolved it — emit gateDenied to close out any wait chip.
+                let isOAuthKind = item.gate?.gateKind == .oauth ||
+                    (runStatus.status ?? "").lowercased().contains("oauth")
+                if isOAuthKind && item.gate == nil {
+                    await onEvent(.gateDenied(gateRef: runStatus.gateRef, message: nil))
+                    return .failed
+                }
                 if let gate = Self.makeGate(
                     detail: item.gate,
                     gateRef: runStatus.gateRef,
@@ -646,6 +695,12 @@ final class IronclawAPI {
         runID: String
     ) -> IronclawPendingGate? {
         guard let requestID = firstNonEmpty(gateRef, detail?.requestID) else { return nil }
+        // Honour an explicit oauth kind from the server. Fall back to the
+        // isAuth heuristic for legacy shapes that don't carry gate_kind.
+        let resolvedKind: IronclawGateKind = {
+            if let explicit = detail?.gateKind { return explicit }
+            return isAuth ? .authentication : .approval
+        }()
         return IronclawPendingGate(
             requestID: requestID,
             threadID: threadID,
@@ -656,7 +711,7 @@ final class IronclawAPI {
             description: gateDescription(detail: detail, isAuth: isAuth),
             parameters: detail?.parameters,
             allowsAlways: detail?.allowsAlways ?? !isAuth,
-            gateKind: isAuth ? .authentication : .approval,
+            gateKind: resolvedKind,
             credentialName: detail?.credentialName,
             authURL: detail?.authURL,
             setupURL: detail?.setupURL,

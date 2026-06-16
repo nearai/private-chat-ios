@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct ProjectContextStrip: View {
     let attachments: [ChatAttachment]
@@ -46,6 +49,7 @@ struct ProjectContextStrip: View {
 struct AttachmentStrip: View {
     let attachments: [ChatAttachment]
     var showsMetadataOnly = false
+    var thumbnailProvider: ((String) -> Data?)? = nil
     let onRemove: (ChatAttachment) -> Void
 
     var body: some View {
@@ -53,11 +57,7 @@ struct AttachmentStrip: View {
             HStack(spacing: 6) {
                 ForEach(attachments) { attachment in
                     HStack(spacing: 6) {
-                        Image(systemName: attachment.systemImageName)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.brandAccent)
-                            .frame(width: 28, height: 28)
-                            .background(Color.brandAccent.opacity(0.09), in: RoundedRectangle.app(AppRadius.pill))
+                        attachmentLeadingView(for: attachment)
                         VStack(alignment: .leading, spacing: 1) {
                             // Middle truncation keeps both the document name's start
                             // and its extension visible on narrow widths.
@@ -89,6 +89,33 @@ struct AttachmentStrip: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func attachmentLeadingView(for attachment: ChatAttachment) -> some View {
+        #if canImport(UIKit)
+        if attachment.isNativeVisionImage,
+           let data = thumbnailProvider?(attachment.id),
+           let uiImage = UIImage(data: data) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else {
+            defaultLeadingIcon(for: attachment)
+        }
+        #else
+        defaultLeadingIcon(for: attachment)
+        #endif
+    }
+
+    private func defaultLeadingIcon(for attachment: ChatAttachment) -> some View {
+        Image(systemName: attachment.systemImageName)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.brandAccent)
+            .frame(width: 28, height: 28)
+            .background(Color.brandAccent.opacity(0.09), in: RoundedRectangle.app(AppRadius.pill))
     }
 
     private func attachmentShelfTitle(for attachment: ChatAttachment) -> String {

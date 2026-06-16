@@ -315,7 +315,12 @@ struct MessageBubble: View {
                 }
 
                 if !message.attachments.isEmpty {
-                    MessageAttachmentStrip(attachments: message.attachments)
+                    MessageAttachmentStrip(
+                        attachments: message.attachments,
+                        fetchImageContent: { fileID in
+                            await chatStore.fetchAttachmentContent(fileID: fileID)
+                        }
+                    )
                 }
 
                 if message.canShowAssistantInlineActions {
@@ -337,6 +342,41 @@ struct MessageBubble: View {
                 if let pendingApproval = message.pendingApproval {
                     IronclawApprovalCard(messageID: message.id, approval: pendingApproval)
                         .environmentObject(chatStore)
+                }
+
+                if message.role == .assistant, !message.projectFiles.isEmpty, !message.isStreaming {
+                    let conversationID = chatStore.selectedConversation?.id ?? ""
+                    let resolvedSettings = chatStore.ironclawSettingsForConversation(conversationID)
+                    let resolvedThreadID = resolvedSettings.threadID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? (chatStore.agentStore.loadIronclawThreadID(for: conversationID) ?? "")
+                        : resolvedSettings.threadID
+                    if !resolvedThreadID.isEmpty {
+                        ProjectFileChipsView(
+                            files: message.projectFiles,
+                            threadID: resolvedThreadID,
+                            settings: resolvedSettings,
+                            authToken: chatStore.loadIronclawAuthToken(),
+                            ironclawAPI: chatStore.ironclawAPI
+                        )
+                    }
+                }
+
+                if message.status == "gate_denied" {
+                    HStack(spacing: 6) {
+                        Image(systemName: "xmark.shield.fill")
+                            .foregroundStyle(.red)
+                        Text("Access denied")
+                            .foregroundStyle(.red)
+                    }
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.red.opacity(0.10), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(Color.red.opacity(0.25), lineWidth: 1)
+                    }
+                    .accessibilityIdentifier("message.gateDenied")
                 }
 
                 if message.status == "failed", !message.shouldShowAgentRunStatus, !shouldUseFailureRecoveryCard {
@@ -458,6 +498,8 @@ struct MessageBubble: View {
             return "Web search"
         case "approval":
             return "Needs input"
+        case "gate_denied":
+            return "Access denied"
         case "failed":
             return "Failed"
         default:

@@ -115,6 +115,13 @@ final class MessageTimelineStore: ObservableObject {
                 message.status = "approval"
                 message.isStreaming = false
             }
+        case let .gateDenied(_, _):
+            flushPendingTextDelta(for: assistantMessageID)
+            updateMessage(assistantMessageID) { message in
+                message.pendingApproval = nil
+                message.status = "gate_denied"
+                message.isStreaming = false
+            }
         case let .webSearchStarted(query):
             updateMessage(assistantMessageID) { message in
                 message.status = "searching"
@@ -157,7 +164,7 @@ final class MessageTimelineStore: ObservableObject {
                     } else if !existingText.contains(text) {
                         message.text += "\n\n\(text)"
                     }
-                    if message.status != "approval" {
+                    if message.status != "approval", message.status != "gate_denied" {
                         message.status = "streaming"
                         message.isStreaming = true
                     }
@@ -169,7 +176,7 @@ final class MessageTimelineStore: ObservableObject {
         case let .completed(responseID):
             flushPendingTextDelta(for: assistantMessageID)
             updateMessage(assistantMessageID) { message in
-                guard message.status != "failed", message.status != "approval" else {
+                guard message.status != "failed", message.status != "approval", message.status != "gate_denied" else {
                     message.responseID = responseID ?? message.responseID
                     message.isStreaming = false
                     return

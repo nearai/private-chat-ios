@@ -75,6 +75,9 @@ struct AgentRunStatusStrip: View {
         if message.status == "failed" {
             return "Run stopped"
         }
+        if message.status == "gate_denied" {
+            return "Gate access denied"
+        }
         if isStale {
             return "No output received"
         }
@@ -91,6 +94,9 @@ struct AgentRunStatusStrip: View {
         if message.status == "failed" {
             return "Hosted IronClaw stopped before a final answer. Check the Agent connection, then retry."
         }
+        if message.status == "gate_denied" {
+            return "The gate was denied or could not be resolved. The run was stopped."
+        }
         if isStale {
             return message.isStreaming
                 ? "The hosted run may have stalled. Stop it, then retry from the phone."
@@ -106,6 +112,9 @@ struct AgentRunStatusStrip: View {
         if message.status == "failed" {
             return "exclamationmark.triangle.fill"
         }
+        if message.status == "gate_denied" {
+            return "xmark.shield.fill"
+        }
         if isStale {
             return "clock.badge.exclamationmark"
         }
@@ -117,13 +126,14 @@ struct AgentRunStatusStrip: View {
 
     private func tintColor(isStale: Bool) -> Color {
         if message.status == "failed" { return .red }
+        if message.status == "gate_denied" { return .red }
         if isStale { return .orange }
         return Color.brandAccent
     }
 
     private func elapsedText(now: Date) -> String {
         let elapsed = max(0, now.timeIntervalSince(message.createdAt))
-        if message.status == "failed" {
+        if message.status == "failed" || message.status == "gate_denied" {
             return "after \(Self.compactDuration(elapsed))"
         }
         if isStaleRun(now: now) {
@@ -137,7 +147,8 @@ struct AgentRunStatusStrip: View {
 
     private func isStaleRun(now: Date) -> Bool {
         guard message.pendingApproval == nil,
-              message.status != "failed" else {
+              message.status != "failed",
+              message.status != "gate_denied" else {
             return false
         }
         let activeStatuses = ["reasoning", "searching", "running", "queued", "in_progress"]

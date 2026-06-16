@@ -17,6 +17,7 @@ final class AttachmentStagingStore: ObservableObject {
     private(set) var pendingSharedFileURLs: [String: URL] = [:]
     private(set) var pendingDocumentTexts: [String: String] = [:]
     private var pendingDocumentTextIDs: [String] = []
+    private(set) var pendingThumbnails: [String: Data] = [:]
 
     var onDurableStateChange: (() -> Void)?
 
@@ -35,6 +36,7 @@ final class AttachmentStagingStore: ObservableObject {
         pendingLargePasteTexts.removeValue(forKey: attachment.id)
         pendingDocumentTexts.removeValue(forKey: attachment.id)
         pendingDocumentTextIDs.removeAll { $0 == attachment.id }
+        pendingThumbnails.removeValue(forKey: attachment.id)
         if let fileURL = pendingSharedFileURLs.removeValue(forKey: attachment.id) {
             try? FileManager.default.removeItem(at: fileURL)
         }
@@ -46,6 +48,7 @@ final class AttachmentStagingStore: ObservableObject {
         pendingLargePasteTexts.removeValue(forKey: id)
         pendingDocumentTexts.removeValue(forKey: id)
         pendingDocumentTextIDs.removeAll { $0 == id }
+        pendingThumbnails.removeValue(forKey: id)
         if let fileURL = pendingSharedFileURLs.removeValue(forKey: id) {
             try? FileManager.default.removeItem(at: fileURL)
         }
@@ -59,6 +62,14 @@ final class AttachmentStagingStore: ObservableObject {
     func clearPendingAttachments() {
         pendingAttachments = []
         notifyDurableStateChanged()
+    }
+
+    func stageThumbnail(_ data: Data, forAttachmentID id: String) {
+        pendingThumbnails[id] = data
+    }
+
+    func thumbnailData(forAttachmentID id: String) -> Data? {
+        pendingThumbnails[id]
     }
 
     func replacePendingLargePasteTexts(_ texts: [String: String]) {
@@ -82,6 +93,7 @@ final class AttachmentStagingStore: ObservableObject {
         pendingSharedFileURLs = [:]
         pendingDocumentTexts = [:]
         pendingDocumentTextIDs = []
+        pendingThumbnails = [:]
         notifyDurableStateChanged()
     }
 

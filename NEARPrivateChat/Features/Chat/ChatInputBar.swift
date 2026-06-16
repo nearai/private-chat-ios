@@ -67,7 +67,8 @@ struct InputBar: View {
             if !composerStore.pendingAttachments.isEmpty {
                 AttachmentStrip(
                     attachments: composerStore.pendingAttachments,
-                    showsMetadataOnly: chatStore.selectedRouteKind == .ironclawHosted
+                    showsMetadataOnly: chatStore.selectedRouteKind == .ironclawHosted,
+                    thumbnailProvider: { composerStore.attachmentStagingStore.thumbnailData(forAttachmentID: $0) }
                 ) { attachment in
                     chatStore.removePendingAttachment(attachment)
                 }

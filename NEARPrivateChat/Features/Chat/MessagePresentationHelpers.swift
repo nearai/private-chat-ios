@@ -50,7 +50,7 @@ extension ChatMessage {
         }
         return isStreaming ||
             pendingApproval != nil ||
-            ["reasoning", "searching", "approval", "failed", "running", "queued", "in_progress"].contains(status.lowercased())
+            ["reasoning", "searching", "approval", "gate_denied", "failed", "running", "queued", "in_progress"].contains(status.lowercased())
     }
 
     var modelDisplayName: String {
@@ -92,6 +92,8 @@ extension ChatMessage {
                 return "Running Hosted IronClaw"
             case "approval":
                 return "Needs your input"
+            case "gate_denied":
+                return "Gate denied"
             case "searching":
                 if let searchQuery, !searchQuery.isEmpty {
                     return "Searching \(searchQuery)"

@@ -468,6 +468,7 @@ struct ChatMessage: Identifiable, Hashable, Codable {
     var sources: [WebSearchSource] = []
     var attachments: [ChatAttachment] = []
     var pendingApproval: IronclawPendingGate? = nil
+    var projectFiles: [IronclawProjectFile] = []
     var branchVariant: MessageBranchVariant? = nil
     var metadata: MessageMetadata? = nil
     var widget: MessageWidget? = nil

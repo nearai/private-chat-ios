@@ -233,6 +233,7 @@
 		C1000000000000000000000B /* AgentWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000B /* AgentWorkspaceView.swift */; };
 		C1000000000000000000000C /* ChatMessageViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000C /* ChatMessageViews.swift */; };
 		C1000000000000000000000D /* HostedHandoffPreflightSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */; };
+		AA000000000000000000000B /* ProjectFileChipsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000000A /* ProjectFileChipsView.swift */; };
 		C1000000000000000000000E /* ChatInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000E /* ChatInputBar.swift */; };
 		C1000000000000000000000F /* MessageTimelineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2000000000000000000000F /* MessageTimelineStore.swift */; };
 		C10000000000000000000010 /* ComposerState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000010 /* ComposerState.swift */; };
@@ -629,6 +630,7 @@
 		C2000000000000000000000B /* AgentWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentWorkspaceView.swift; sourceTree = "<group>"; };
 		C2000000000000000000000C /* ChatMessageViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageViews.swift; sourceTree = "<group>"; };
 		C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostedHandoffPreflightSheet.swift; sourceTree = "<group>"; };
+		AA000000000000000000000A /* ProjectFileChipsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectFileChipsView.swift; sourceTree = "<group>"; };
 		C2000000000000000000000E /* ChatInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatInputBar.swift; sourceTree = "<group>"; };
 		C2000000000000000000000F /* MessageTimelineStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageTimelineStore.swift; sourceTree = "<group>"; };
 		C20000000000000000000010 /* ComposerState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerState.swift; sourceTree = "<group>"; };
@@ -1420,6 +1422,7 @@
 				F2D000000000000000000002 /* AgentMissionControlPanel.swift */,
 				F2D000000000000000000001 /* AgentWorkspaceSetupViews.swift */,
 				C2000000000000000000000D /* HostedHandoffPreflightSheet.swift */,
+				AA000000000000000000000A /* ProjectFileChipsView.swift */,
 				A2000000000000000000000E /* IronclawMobileRuntime.swift */,
 				A2000000000000000000000F /* IronclawMobileStack.swift */,
 			);
@@ -1883,6 +1886,7 @@
 				F1D000000000000000000002 /* AgentMissionControlPanel.swift in Sources */,
 				C1000000000000000000000C /* ChatMessageViews.swift in Sources */,
 				C1000000000000000000000D /* HostedHandoffPreflightSheet.swift in Sources */,
+				AA000000000000000000000B /* ProjectFileChipsView.swift in Sources */,
 				C1000000000000000000000E /* ChatInputBar.swift in Sources */,
 				AD1000000000000000000001 /* ChatInputBar+State.swift in Sources */,
 				AD1000000000000000000002 /* ChatInputBar+Routing.swift in Sources */,

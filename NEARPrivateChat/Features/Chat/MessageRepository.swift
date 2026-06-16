@@ -336,7 +336,7 @@ struct MessageRepository {
                     !remoteUserTexts.contains(trimmedText)
             }
             if message.model == ModelOption.llmCouncilSynthesisModelID { return true }
-            if ["failed", "approval", "cancelled"].contains(message.status) { return true }
+            if ["failed", "approval", "gate_denied", "cancelled"].contains(message.status) { return true }
             if message.role == .user {
                 // External-route chats keep their local user turns (the server
                 // never stores them). Private user turns round-trip, so only

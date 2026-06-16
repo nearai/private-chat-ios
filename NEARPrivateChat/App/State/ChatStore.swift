@@ -1036,10 +1036,31 @@ final class ChatStore: ObservableObject {
             }
             let notice = attachmentUploadNotice
             attachmentUploadNotice = nil
+            if attachment.isNativeVisionImage {
+                await stageAttachmentThumbnail(from: url, forAttachmentID: attachment.id)
+            }
             attachmentStagingStore.appendPromptAttachment(attachment)
             registerUploadedAttachment(attachment)
             showBanner(notice ?? "Attached \(attachment.name).")
         }
+    }
+
+    private func stageAttachmentThumbnail(from url: URL, forAttachmentID id: String) async {
+        #if canImport(UIKit)
+        let thumbnailData = await Task.detached(priority: .utility) {
+            guard let data = try? Data(contentsOf: url),
+                  let image = UIImage(data: data) else { return Data?.none }
+            let maxSide: CGFloat = 240
+            let scale = min(maxSide / max(image.size.width, image.size.height), 1)
+            let thumbSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+            let renderer = UIGraphicsImageRenderer(size: thumbSize)
+            let thumb = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: thumbSize)) }
+            return thumb.jpegData(compressionQuality: 0.7)
+        }.value
+        if let data = thumbnailData {
+            attachmentStagingStore.stageThumbnail(data, forAttachmentID: id)
+        }
+        #endif
     }
 
     func stageTextAttachment(_ text: String, suggestedName: String = "pasted-text.txt") {
@@ -1124,6 +1145,12 @@ final class ChatStore: ObservableObject {
 
     func refreshRemoteFiles(showErrors: Bool = true) async {
         await fileStore.refreshRemoteFiles(showErrors: showErrors)
+    }
+
+    /// Fetches raw bytes for an uploaded image file. Used by message attachment
+    /// thumbnails to load image content from the server. Returns nil on error.
+    func fetchAttachmentContent(fileID: String) async -> Data? {
+        try? await fileService.fetchFileContent(fileID)
     }
 
     func previewRemoteFile(_ file: RemoteFileInfo) async {

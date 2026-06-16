@@ -92,10 +92,30 @@ struct IronclawApprovalCard: View {
     let approval: IronclawPendingGate
 
     var body: some View {
-        if approval.isAuthenticationGate {
+        if approval.gateKind == .oauth {
+            oauthWaitBody
+        } else if approval.isAuthenticationGate {
             authenticationBody
         } else {
             approvalBody
+        }
+    }
+
+    private var oauthWaitBody: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
+            Text("Authenticating via OAuth — please wait…")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: 520, alignment: .leading)
+        .background(Color.appPanelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 1)
         }
     }
 

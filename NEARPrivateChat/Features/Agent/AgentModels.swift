@@ -414,6 +414,7 @@ enum IronclawGateKind: String, Codable, Hashable {
     case approval
     case authentication
     case external
+    case oauth
 }
 
 struct HostedIronclawHandoffPreflight: Identifiable, Hashable {

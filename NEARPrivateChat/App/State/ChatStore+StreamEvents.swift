@@ -115,10 +115,23 @@ extension ChatStore {
             guard selectedConversation?.id == conversationID else { return }
             if let resolvedIndex = messages.firstIndex(where: { $0.id == messageID }) {
                 messages[resolvedIndex].isStreaming = false
-                if messages[resolvedIndex].status != "failed", messages[resolvedIndex].status != "approval" {
+                if messages[resolvedIndex].status != "failed", messages[resolvedIndex].status != "approval", messages[resolvedIndex].status != "gate_denied" {
                     messages[resolvedIndex].status = "completed"
                 }
             }
+
+            let threadID = approval.threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !threadID.isEmpty {
+                let files = await ironclawAPI.fetchProjectFiles(
+                    threadID: threadID,
+                    settings: settings,
+                    authToken: loadIronclawAuthToken()
+                )
+                if !files.isEmpty {
+                    _ = updateMessage(messageID) { $0.projectFiles = files }
+                }
+            }
+
             saveLocalMessages(for: conversationID)
         } catch {
             let displayError = Self.displayFailureMessage(error.localizedDescription)
@@ -176,10 +189,23 @@ extension ChatStore {
             guard selectedConversation?.id == conversationID else { return }
             if let resolvedIndex = messages.firstIndex(where: { $0.id == messageID }) {
                 messages[resolvedIndex].isStreaming = false
-                if messages[resolvedIndex].status != "failed", messages[resolvedIndex].status != "approval" {
+                if messages[resolvedIndex].status != "failed", messages[resolvedIndex].status != "approval", messages[resolvedIndex].status != "gate_denied" {
                     messages[resolvedIndex].status = "completed"
                 }
             }
+
+            let credThreadID = approval.threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !credThreadID.isEmpty {
+                let files = await ironclawAPI.fetchProjectFiles(
+                    threadID: credThreadID,
+                    settings: settings,
+                    authToken: loadIronclawAuthToken()
+                )
+                if !files.isEmpty {
+                    _ = updateMessage(messageID) { $0.projectFiles = files }
+                }
+            }
+
             saveLocalMessages(for: conversationID)
         } catch {
             let displayError = Self.displayFailureMessage(error.localizedDescription)

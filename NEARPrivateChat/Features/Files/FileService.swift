@@ -71,6 +71,12 @@ final class FileService {
         return String(data: data, encoding: .utf8)
     }
 
+    /// Fetches the full raw bytes of an uploaded file. Used for image thumbnails
+    /// in sent message bubbles.
+    func fetchFileContent(_ fileID: String) async throws -> Data {
+        try await fileAPI.fetchFileContent(fileID)
+    }
+
     func uploadAttachment(from url: URL, keepDocumentsOnDevice: Bool) async throws -> FileAttachmentUploadResult {
         let hasAccess = url.startAccessingSecurityScopedResource()
         defer {

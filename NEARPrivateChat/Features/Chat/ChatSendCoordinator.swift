@@ -671,7 +671,7 @@ final class ChatSendCoordinator {
             if let currentAssistantMessageID = host.sendCurrentAssistantMessageID {
                 host.sendMessageTimelineStore.updateMessage(currentAssistantMessageID) { message in
                     message.isStreaming = false
-                    if message.status != "failed", message.status != "approval" {
+                    if message.status != "failed", message.status != "approval", message.status != "gate_denied" {
                         message.status = "completed"
                     }
                     message.trustMetadata = host.assistantTrustMetadataForSend(
@@ -716,7 +716,7 @@ final class ChatSendCoordinator {
             if let selectedConversation = host.sendSelectedConversation,
                host.sendMessages.contains(where: { message in
                    host.isExternalModelForSend(message.model ?? "") ||
-                       ["failed", "cancelled", "approval"].contains(message.status.lowercased())
+                       ["failed", "cancelled", "approval", "gate_denied"].contains(message.status.lowercased())
                }) {
                 host.saveLocalMessagesForSend(conversationID: selectedConversation.id)
             }
