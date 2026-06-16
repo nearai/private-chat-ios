@@ -350,6 +350,14 @@ final class IronclawAPI {
         return (try? JSONDecoder().decode(IronclawLLMProvidersResponse.self, from: data))?.all ?? []
     }
 
+    func fetchOutboundTargets(settings: IronclawSettings, authToken: String) async -> [IronclawOutboundTarget] {
+        guard let url = URL(string: settings.baseURL + "/api/webchat/v2/outbound/targets") else { return [] }
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        guard let data = try? await URLSession.shared.data(for: req).0 else { return [] }
+        return (try? JSONDecoder().decode(IronclawOutboundTargetsResponse.self, from: data))?.all ?? []
+    }
+
     func fetchConnectableChannels(settings: IronclawSettings, authToken: String) async -> [IronclawConnectableChannel] {
         guard let url = URL(string: settings.baseURL + "/api/webchat/v2/channels/connectable") else { return [] }
         var req = URLRequest(url: url)

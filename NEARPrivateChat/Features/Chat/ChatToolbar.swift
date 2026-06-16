@@ -9,6 +9,7 @@ struct ChatToolbar: View {
     @EnvironmentObject private var agentStore: AgentStore
     @EnvironmentObject private var conversationStore: ConversationStore
     @ObservedObject var transcriptStore: ChatTranscriptStore
+    @Binding var showingFindBar: Bool
     @State private var showingShare = false
     @State private var showingSecurity = false
     @State private var showingSharedLink = false
@@ -410,6 +411,7 @@ struct ChatToolbar: View {
             showingRename: $showingRename,
             showingProjectFiles: $showingProjectFiles,
             showingSignedExportNotice: $showingSignedExportNotice,
+            showingFindBar: $showingFindBar,
             prepareExport: prepareExport,
             copyCurrentTranscript: copyCurrentTranscript
         )

@@ -74,6 +74,23 @@ The helper starts the local IronClaw gateway, then exposes it through Cloudflare
 - Two-row mobile composer with full-width prompt entry, explicit source-mode pill, attachment control, research toggle, and active project-context strip.
 - Gateway attestation fetch through `/v1/attestation/report`, scoped to the selected model when available.
 - NEAR AI brand pass using `#0091FD`, `#EEEEEB`, and official Private Chat icon artwork, with a blue command-card home system, soft-blue selected rows, and matching preview home screen.
+- KaTeX math rendering for technical answers: simple expressions are parsed natively; complex LaTeX falls back to a WKWebView KaTeX renderer with correct block display and auto-height sizing.
+- Richer source citation cards as a horizontal carousel: each card shows the favicon, domain, and up to two lines of article title, with a tap-to-open action.
+- Blue left-accent border on completed assistant message cards for visual separation between user prompts and agent answers.
+- Inline image rendering in chat: response images render as 240×160 rounded thumbnails that tap to open full-screen, matching the project file chip experience.
+- Project file chips below assistant messages when IronClaw attaches output files: tappable to share via the system share sheet.
+- Home board 2×2 live price tracker grid for NEAR, ETH, BTC, and SOL with real CoinGecko prices, 24-hour change badges, and a pull-to-refresh control.
+- Scheduled briefing section on the Home board shows countdown-to-next-run pills and a "just ran" badge when a briefing fired within 5 minutes.
+- OAuth gate kind in IronClaw handoff sheets: shows an authenticating spinner instead of a token input for OAuth-type gates.
+- Gate-denial chip on assistant messages when IronClaw returns a denied gate event, with a red shield icon and tinted background.
+- Proof report detail view: tappable from the verified footer badge, shows route/TEE type, signing key, timestamps, response ID, educational disclosure, and raw JSON viewer.
+- IronClaw Extensions panel in Account > Agent panels: browse and manage installed IronClaw extensions.
+- IronClaw Automations panel: view scheduled agent automations with status badges and last/next run timestamps.
+- IronClaw LLM Providers panel: configure which inference providers the hosted agent can use.
+- IronClaw Skills marketplace panel: browse available skills, filter by installed/all, search, and trigger install.
+- IronClaw Channels panel: view connectable integrations (Slack, Discord, Telegram) with connection status.
+- IronClaw Outbound Targets panel: view notification delivery routes (email, webhook, Telegram, Slack) with active status.
+- Find-in-Conversation: a search bar triggered from the chat menu that highlights matching messages and navigates between results with prev/next arrows.
 
 ## Current Product Contract
 
@@ -152,10 +169,5 @@ For internal testing, the sign-in screen also has a developer token path so a kn
 
 - Add native NEP-413 signing instead of using the hosted `/near-login` bridge.
 - Add App Store privacy copy.
-- Expand remote user settings to appearance and notifications.
-- Add KaTeX/math rendering parity for technical answers.
-- Show shared author metadata inside message rows.
 - Add iPad drag/drop polish for attachments.
 - Add server-backed project sync once the API exposes shared/project metadata.
-- Add richer citation cards if the backend returns source URLs consistently for web searches.
-- Expand attestation detail screens to match the full web verifier.

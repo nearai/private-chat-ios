@@ -413,6 +413,12 @@ struct AccountSettingsView: View {
                     } label: {
                         powerToolSubRow(icon: "antenna.radiowaves.left.and.right", title: "Channels", subtitle: "Connected integrations")
                     }
+
+                    NavigationLink {
+                        IronclawOutboundTargetsView().environmentObject(agentStore)
+                    } label: {
+                        powerToolSubRow(icon: "arrow.up.forward.circle.fill", title: "Outbound Targets", subtitle: "Notification delivery routes")
+                    }
                 } label: {
                     Label("Agent panels", systemImage: "person.crop.circle.badge.gearshape")
                         .font(.body)

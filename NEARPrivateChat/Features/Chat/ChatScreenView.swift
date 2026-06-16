@@ -22,6 +22,16 @@ private struct ChatTranscriptView: View {
     @State private var showingEmptyCouncilPicker = false
     @State private var showingAccountSettings = false
     @State private var accountSettingsDeepLink: AccountSettingsDeepLink?
+    @State private var showingFindBar = false
+    @State private var findQuery = ""
+    @State private var findScrollTarget: String? = nil
+
+    private func findMatchIDs(in messages: [ChatMessage]) -> [String] {
+        guard !findQuery.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
+        return messages
+            .filter { $0.text.localizedCaseInsensitiveContains(findQuery) }
+            .map { $0.id }
+    }
 
     private static let streamingAutoScrollIntervalNanoseconds: UInt64 = 300_000_000
     private static let dragAutoScrollPauseNanoseconds: UInt64 = 1_500_000_000
@@ -51,8 +61,39 @@ private struct ChatTranscriptView: View {
         )
 
         VStack(spacing: 0) {
-            ChatToolbar(transcriptStore: transcriptStore)
-                .background(Color.appBackground)
+            ChatToolbar(
+                transcriptStore: transcriptStore,
+                showingFindBar: $showingFindBar
+            )
+            .background(Color.appBackground)
+            if showingFindBar {
+                let allMessages = transcriptStore.state.messages
+                let matchIDs = findMatchIDs(in: allMessages)
+                let curIdx = matchIDs.firstIndex(of: findScrollTarget ?? "") ?? 0
+                ChatFindBar(
+                    query: $findQuery,
+                    matchCount: matchIDs.count,
+                    matchIndex: matchIDs.isEmpty ? 0 : max(0, min(curIdx, matchIDs.count - 1)),
+                    onPrev: {
+                        let ids = findMatchIDs(in: transcriptStore.state.messages)
+                        guard !ids.isEmpty else { return }
+                        let cur = ids.firstIndex(of: findScrollTarget ?? "") ?? 0
+                        findScrollTarget = ids[(cur - 1 + ids.count) % ids.count]
+                    },
+                    onNext: {
+                        let ids = findMatchIDs(in: transcriptStore.state.messages)
+                        guard !ids.isEmpty else { return }
+                        let cur = ids.firstIndex(of: findScrollTarget ?? "") ?? 0
+                        findScrollTarget = ids[(cur + 1) % ids.count]
+                    },
+                    onDismiss: {
+                        showingFindBar = false
+                        findQuery = ""
+                        findScrollTarget = nil
+                    }
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
 
             VStack(spacing: 0) {
                 ScrollViewReader { proxy in
@@ -74,6 +115,12 @@ private struct ChatTranscriptView: View {
                                     case let .message(message):
                                         MessageBubble(message: message, chatStore: chatStore)
                                             .id(item.id)
+                                            .background(
+                                                !findQuery.isEmpty && message.text.localizedCaseInsensitiveContains(findQuery)
+                                                    ? Color.orange.opacity(0.08)
+                                                    : Color.clear,
+                                                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            )
                                     case let .council(batchID: _, messages: messages):
                                         CouncilResponseGroup(messages: messages, chatStore: chatStore)
                                             .id(item.id)
@@ -127,6 +174,23 @@ private struct ChatTranscriptView: View {
                             }
                         }
                     }
+                    .onChange(of: findScrollTarget) { _, targetID in
+                        guard let id = targetID else { return }
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            proxy.scrollTo(id, anchor: .center)
+                        }
+                    }
+                    .onChange(of: findQuery) { _, _ in
+                        let ids = findMatchIDs(in: transcriptStore.state.messages)
+                        if let first = ids.first {
+                            findScrollTarget = first
+                            withAnimation(.easeOut(duration: 0.25)) {
+                                proxy.scrollTo(first, anchor: .center)
+                            }
+                        } else {
+                            findScrollTarget = nil
+                        }
+                    }
                 }
 
                 Divider()
@@ -149,6 +213,7 @@ private struct ChatTranscriptView: View {
             }
             .animation(.easeInOut(duration: 0.16), value: isAttachmentDropTargeted)
         }
+        .animation(.easeInOut(duration: 0.18), value: showingFindBar)
         .background(Color.appBackground)
         .sheet(item: pendingProjectNoteSaveBinding) { message in
             SaveOutputToProjectSheet(message: message)

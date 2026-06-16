@@ -509,3 +509,40 @@ struct IronclawChannelsResponse: Codable {
     let items: [IronclawConnectableChannel]?
     var all: [IronclawConnectableChannel] { channels ?? items ?? [] }
 }
+
+// MARK: - Outbound Targets DTOs (webchat v2 /outbound/targets)
+
+struct IronclawOutboundTarget: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let targetType: String?
+    let address: String?
+    let isActive: Bool?
+    let triggerKind: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, address
+        case targetType = "target_type"
+        case isActive = "is_active"
+        case triggerKind = "trigger_kind"
+    }
+
+    var displayType: String { targetType?.capitalized ?? "Target" }
+    var displayAddress: String { address ?? "" }
+    var icon: String {
+        let t = (targetType ?? "").lowercased()
+        if t.contains("email") || t.contains("mail") { return "envelope.fill" }
+        if t.contains("slack") { return "number.square.fill" }
+        if t.contains("telegram") { return "paperplane.fill" }
+        if t.contains("discord") { return "gamecontroller.fill" }
+        if t.contains("webhook") { return "bolt.fill" }
+        if t.contains("sms") || t.contains("phone") { return "phone.fill" }
+        return "arrow.up.forward.circle.fill"
+    }
+}
+
+struct IronclawOutboundTargetsResponse: Codable {
+    let targets: [IronclawOutboundTarget]?
+    let items: [IronclawOutboundTarget]?
+    var all: [IronclawOutboundTarget] { targets ?? items ?? [] }
+}

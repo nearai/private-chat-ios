@@ -13,11 +13,18 @@ struct ChatToolbarMenuContent: View {
     @Binding var showingRename: Bool
     @Binding var showingProjectFiles: Bool
     @Binding var showingSignedExportNotice: Bool
+    @Binding var showingFindBar: Bool
     let prepareExport: (ConversationExportFormat) -> Void
     let copyCurrentTranscript: () -> Void
 
     var body: some View {
         Section("Navigate") {
+            Button {
+                showingFindBar = true
+            } label: {
+                Label("Find in Conversation", systemImage: "magnifyingglass")
+            }
+            .disabled(transcriptStore.messages.isEmpty)
             if shouldShowAgentWorkspaceButton {
                 Button {
                     chatStore.selectModel(chatStore.ironclawRemoteWorkstationAvailable ? ModelOption.ironclawModelID : ModelOption.ironclawMobileModelID)
