@@ -102,12 +102,24 @@ struct IronclawApprovalCard: View {
     }
 
     private var oauthWaitBody: some View {
-        HStack(spacing: 10) {
-            ProgressView()
-                .controlSize(.small)
-            Text("Authenticating via OAuth — please wait…")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Authenticating via OAuth — please wait…")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            // Escape hatch: an OAuth gate that the server never self-resolves
+            // must not strand the run on an undismissable spinner.
+            Button(role: .destructive) {
+                chatStore.resolveIronclawApproval(messageID: messageID, approval: approval, action: .deny)
+            } label: {
+                Label("Cancel", systemImage: "xmark")
+                    .font(.footnote.weight(.medium))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)

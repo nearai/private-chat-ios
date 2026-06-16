@@ -73,7 +73,6 @@
 		BA7F6CB4FAB27D2F822E38D8 /* SourceFaviconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA63A2C8627AC5F9F80D2828 /* SourceFaviconView.swift */; };
 		BA515CE85CF00C67E8423BE5 /* MathFormulaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA71D4A327D3D49D472256A7 /* MathFormulaView.swift */; };
 		BA4BCE12B0D2D63840AEB430 /* StreamingMarkdownText.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC1FEC94E3F78F74BBA99B3 /* StreamingMarkdownText.swift */; };
-		BAEC90F1D3A74B2E9F1C5D87 /* KaTeXWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAEC90F0D3A74B2E9F1C5D87 /* KaTeXWebView.swift */; };
 		A10000000000000000000017 /* DemoCaptureViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* DemoCaptureViews.swift */; };
 		BAD0CA328130BED7CBC3F536 /* DemoCaptureFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAF6E7257E8901CA56AC3258 /* DemoCaptureFixtures.swift */; };
 		BA3F0411707FA15603013FA1 /* DemoMarkdownGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAB6C55053E4ABD92CB8E619 /* DemoMarkdownGalleryView.swift */; };
@@ -479,7 +478,6 @@
 		BA63A2C8627AC5F9F80D2828 /* SourceFaviconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceFaviconView.swift; sourceTree = "<group>"; };
 		BA71D4A327D3D49D472256A7 /* MathFormulaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathFormulaView.swift; sourceTree = "<group>"; };
 		BAC1FEC94E3F78F74BBA99B3 /* StreamingMarkdownText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingMarkdownText.swift; sourceTree = "<group>"; };
-		BAEC90F0D3A74B2E9F1C5D87 /* KaTeXWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaTeXWebView.swift; sourceTree = "<group>"; };
 		A20000000000000000000019 /* DemoCaptureViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoCaptureViews.swift; sourceTree = "<group>"; };
 		BAF6E7257E8901CA56AC3258 /* DemoCaptureFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoCaptureFixtures.swift; sourceTree = "<group>"; };
 		BAB6C55053E4ABD92CB8E619 /* DemoMarkdownGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoMarkdownGalleryView.swift; sourceTree = "<group>"; };
@@ -1183,7 +1181,6 @@
 				BABF046776FB9FF2077784BA /* MarkdownBlockParser.swift */,
 				BA71D4A327D3D49D472256A7 /* MathFormulaView.swift */,
 				BAC1FEC94E3F78F74BBA99B3 /* StreamingMarkdownText.swift */,
-				BAEC90F0D3A74B2E9F1C5D87 /* KaTeXWebView.swift */,
 			);
 			path = Markdown;
 			sourceTree = "<group>";
@@ -2096,7 +2093,6 @@
 				BA7F6CB4FAB27D2F822E38D8 /* SourceFaviconView.swift in Sources */,
 				BA515CE85CF00C67E8423BE5 /* MathFormulaView.swift in Sources */,
 				BA4BCE12B0D2D63840AEB430 /* StreamingMarkdownText.swift in Sources */,
-				BAEC90F1D3A74B2E9F1C5D87 /* KaTeXWebView.swift in Sources */,
 				A10000000000000000000017 /* DemoCaptureViews.swift in Sources */,
 				BAD0CA328130BED7CBC3F536 /* DemoCaptureFixtures.swift in Sources */,
 				BA3F0411707FA15603013FA1 /* DemoMarkdownGalleryView.swift in Sources */,

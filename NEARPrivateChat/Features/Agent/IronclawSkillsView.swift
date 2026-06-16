@@ -37,25 +37,23 @@ struct IronclawSkillsView: View {
     }
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                searchBar
-                tabPicker
+        VStack(spacing: 0) {
+            searchBar
+            tabPicker
 
-                Group {
-                    if isLoading {
-                        ProgressView()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if displayedSkills.isEmpty {
-                        emptyState
-                    } else {
-                        skillsList
-                    }
+            Group {
+                if isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if displayedSkills.isEmpty {
+                    emptyState
+                } else {
+                    skillsList
                 }
             }
-            .navigationTitle("Skills")
-            .background(Color(red: 0.05, green: 0.07, blue: 0.13))
         }
+        .navigationTitle("Skills")
+        .background(Color(red: 0.05, green: 0.07, blue: 0.13))
         .task { await load() }
         .sheet(item: $selectedSkill) { skill in
             SkillDetailSheet(

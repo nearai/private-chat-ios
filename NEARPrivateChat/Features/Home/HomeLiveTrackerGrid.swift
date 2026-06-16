@@ -110,7 +110,9 @@ struct HomeLiveTrackerGrid: View {
                 }
             }
         }
-        .task { await fetchPrices() }
+        // Single source of fetch: .task(id:) runs on first appearance (trigger
+        // starts at 0) and again each time the refresh button bumps the trigger.
+        // A second plain .task would double-hit the rate-limited CoinGecko API.
         .task(id: refreshTrigger) { await fetchPrices() }
     }
 

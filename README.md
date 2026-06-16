@@ -74,7 +74,7 @@ The helper starts the local IronClaw gateway, then exposes it through Cloudflare
 - Two-row mobile composer with full-width prompt entry, explicit source-mode pill, attachment control, research toggle, and active project-context strip.
 - Gateway attestation fetch through `/v1/attestation/report`, scoped to the selected model when available.
 - NEAR AI brand pass using `#0091FD`, `#EEEEEB`, and official Private Chat icon artwork, with a blue command-card home system, soft-blue selected rows, and matching preview home screen.
-- KaTeX math rendering for technical answers: simple expressions are parsed natively; complex LaTeX falls back to a WKWebView KaTeX renderer with correct block display and auto-height sizing.
+- Native math rendering for technical answers: common expressions (fractions, exponents, subscripts, roots, Greek, operators) render as laid-out glyphs; anything the native parser does not cover degrades to legible italic-serif LaTeX source.
 - Richer source citation cards as a horizontal carousel: each card shows the favicon, domain, and up to two lines of article title, with a tap-to-open action.
 - Blue left-accent border on completed assistant message cards for visual separation between user prompts and agent answers.
 - Inline image rendering in chat: response images render as 240×160 rounded thumbnails that tap to open full-screen, matching the project file chip experience.

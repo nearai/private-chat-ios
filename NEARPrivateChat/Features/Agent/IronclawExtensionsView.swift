@@ -9,32 +9,30 @@ struct IronclawExtensionsView: View {
     private let ironclawAPI = IronclawAPI()
 
     var body: some View {
-        NavigationView {
-            Group {
-                if isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if extensions.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "puzzlepiece.extension")
-                            .font(.system(size: 48))
-                            .foregroundColor(.secondary)
-                        Text("No extensions installed.\nConnect an IronClaw agent to browse extensions.")
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 32)
-                    }
+        Group {
+            if isLoading {
+                ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    List(extensions) { ext in
-                        ExtensionRow(extension: ext)
-                    }
-                    .listStyle(.insetGrouped)
+            } else if extensions.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "puzzlepiece.extension")
+                        .font(.system(size: 48))
+                        .foregroundColor(.secondary)
+                    Text("No extensions installed.\nConnect an IronClaw agent to browse extensions.")
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 32)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(extensions) { ext in
+                    ExtensionRow(extension: ext)
+                }
+                .listStyle(.insetGrouped)
             }
-            .navigationTitle("Extensions")
-            .background(Color(red: 0.05, green: 0.07, blue: 0.13))
         }
+        .navigationTitle("Extensions")
+        .background(Color(red: 0.05, green: 0.07, blue: 0.13))
         .task { await load() }
     }
 
