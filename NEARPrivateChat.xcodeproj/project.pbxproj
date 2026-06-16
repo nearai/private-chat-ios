@@ -58,6 +58,7 @@
 		A1000000000000000000000C /* IronclawMobileRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* IronclawMobileRuntime.swift */; };
 		A1000000000000000000000D /* IronclawMobileStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* IronclawMobileStack.swift */; };
 		CAFE0002A2B3C4D5E6F70002 /* IronclawExtensionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAFE0002A2B3C4D5E6F70001 /* IronclawExtensionsView.swift */; };
+		CAFE0006A2B3C4D5E6F70002 /* IronclawSkillsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAFE0006A2B3C4D5E6F70001 /* IronclawSkillsView.swift */; };
 		A1000000000000000000000E /* WebGroundingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* WebGroundingService.swift */; };
 		A1000000000000000000000F /* ConversationExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* ConversationExport.swift */; };
 		BA07ADB76841812CE8F963A8 /* ConversationExport+RenderedFormats.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA850B4709F4632BC2CDA20F /* ConversationExport+RenderedFormats.swift */; };
@@ -143,6 +144,7 @@
 		AE1000000000000000000007 /* MessageAttachmentStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE2000000000000000000007 /* MessageAttachmentStrip.swift */; };
 		AE1000000000000000000008 /* SourceCarousel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE2000000000000000000008 /* SourceCarousel.swift */; };
 		AE1000000000000000000009 /* VerifiedFooterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE2000000000000000000009 /* VerifiedFooterView.swift */; };
+		CAFE0005A2B3C4D5E6F70002 /* ProofReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAFE0005A2B3C4D5E6F70001 /* ProofReportView.swift */; };
 		AE100000000000000000000A /* SourceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE200000000000000000000A /* SourceSheet.swift */; };
 		AE100000000000000000000B /* MessageWidgetCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE200000000000000000000B /* MessageWidgetCard.swift */; };
 		AE100000000000000000000C /* MessageWidgetBodies.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE200000000000000000000C /* MessageWidgetBodies.swift */; };
@@ -355,6 +357,7 @@
 		F1D700000100000000000000 /* ProjectContextSupportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2D700000100000000000000 /* ProjectContextSupportViews.swift */; };
 		F1E000000000000000000001 /* ShareSupportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2E000000000000000000001 /* ShareSupportViews.swift */; };
 		CAFE0004A2B3C4D5E6F70002 /* IronclawLLMProvidersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAFE0004A2B3C4D5E6F70001 /* IronclawLLMProvidersView.swift */; };
+		CAFE0007A2B3C4D5E6F70002 /* IronclawChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAFE0007A2B3C4D5E6F70001 /* IronclawChannelsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -459,6 +462,7 @@
 		A2000000000000000000000E /* IronclawMobileRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IronclawMobileRuntime.swift; sourceTree = "<group>"; };
 		A2000000000000000000000F /* IronclawMobileStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IronclawMobileStack.swift; sourceTree = "<group>"; };
 		CAFE0002A2B3C4D5E6F70001 /* IronclawExtensionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IronclawExtensionsView.swift; sourceTree = "<group>"; };
+		CAFE0006A2B3C4D5E6F70001 /* IronclawSkillsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IronclawSkillsView.swift; sourceTree = "<group>"; };
 		A20000000000000000000010 /* WebGroundingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebGroundingService.swift; sourceTree = "<group>"; };
 		A20000000000000000000011 /* ConversationExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationExport.swift; sourceTree = "<group>"; };
 		BA850B4709F4632BC2CDA20F /* ConversationExport+RenderedFormats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConversationExport+RenderedFormats.swift"; sourceTree = "<group>"; };
@@ -544,6 +548,7 @@
 		AE2000000000000000000007 /* MessageAttachmentStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageAttachmentStrip.swift; sourceTree = "<group>"; };
 		AE2000000000000000000008 /* SourceCarousel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceCarousel.swift; sourceTree = "<group>"; };
 		AE2000000000000000000009 /* VerifiedFooterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifiedFooterView.swift; sourceTree = "<group>"; };
+		CAFE0005A2B3C4D5E6F70001 /* ProofReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofReportView.swift; sourceTree = "<group>"; };
 		AE200000000000000000000A /* SourceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceSheet.swift; sourceTree = "<group>"; };
 		AE200000000000000000000B /* MessageWidgetCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageWidgetCard.swift; sourceTree = "<group>"; };
 		AE200000000000000000000C /* MessageWidgetBodies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageWidgetBodies.swift; sourceTree = "<group>"; };
@@ -758,6 +763,7 @@
 		F2D700000100000000000000 /* ProjectContextSupportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectContextSupportViews.swift; sourceTree = "<group>"; };
 		F2E000000000000000000001 /* ShareSupportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSupportViews.swift; sourceTree = "<group>"; };
 		CAFE0004A2B3C4D5E6F70001 /* IronclawLLMProvidersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IronclawLLMProvidersView.swift; sourceTree = "<group>"; };
+		CAFE0007A2B3C4D5E6F70001 /* IronclawChannelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IronclawChannelsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1311,6 +1317,7 @@
 				AE2000000000000000000007 /* MessageAttachmentStrip.swift */,
 				AE2000000000000000000008 /* SourceCarousel.swift */,
 				AE2000000000000000000009 /* VerifiedFooterView.swift */,
+				CAFE0005A2B3C4D5E6F70001 /* ProofReportView.swift */,
 				AE200000000000000000000A /* SourceSheet.swift */,
 				AE200000000000000000000B /* MessageWidgetCard.swift */,
 				AE200000000000000000000C /* MessageWidgetBodies.swift */,
@@ -1440,6 +1447,8 @@
 				A2000000000000000000000F /* IronclawMobileStack.swift */,
 				CAFE0002A2B3C4D5E6F70001 /* IronclawExtensionsView.swift */,
 				CAFE0004A2B3C4D5E6F70001 /* IronclawLLMProvidersView.swift */,
+				CAFE0006A2B3C4D5E6F70001 /* IronclawSkillsView.swift */,
+				CAFE0007A2B3C4D5E6F70001 /* IronclawChannelsView.swift */,
 			);
 			path = Agent;
 			sourceTree = "<group>";
@@ -1820,6 +1829,7 @@
 				A1000000000000000000000C /* IronclawMobileRuntime.swift in Sources */,
 				A1000000000000000000000D /* IronclawMobileStack.swift in Sources */,
 				CAFE0002A2B3C4D5E6F70002 /* IronclawExtensionsView.swift in Sources */,
+				CAFE0006A2B3C4D5E6F70002 /* IronclawSkillsView.swift in Sources */,
 				A1000000000000000000000E /* WebGroundingService.swift in Sources */,
 				A1000000000000000000000F /* ConversationExport.swift in Sources */,
 				BA07ADB76841812CE8F963A8 /* ConversationExport+RenderedFormats.swift in Sources */,
@@ -1906,6 +1916,7 @@
 				AA000000000000000000000B /* ProjectFileChipsView.swift in Sources */,
 				CAFE0003A2B3C4D5E6F70002 /* IronclawAutomationsView.swift in Sources */,
 				CAFE0004A2B3C4D5E6F70002 /* IronclawLLMProvidersView.swift in Sources */,
+				CAFE0007A2B3C4D5E6F70002 /* IronclawChannelsView.swift in Sources */,
 				C1000000000000000000000E /* ChatInputBar.swift in Sources */,
 				AD1000000000000000000001 /* ChatInputBar+State.swift in Sources */,
 				AD1000000000000000000002 /* ChatInputBar+Routing.swift in Sources */,
@@ -1932,6 +1943,7 @@
 				AE1000000000000000000007 /* MessageAttachmentStrip.swift in Sources */,
 				AE1000000000000000000008 /* SourceCarousel.swift in Sources */,
 				AE1000000000000000000009 /* VerifiedFooterView.swift in Sources */,
+				CAFE0005A2B3C4D5E6F70002 /* ProofReportView.swift in Sources */,
 				AE100000000000000000000A /* SourceSheet.swift in Sources */,
 				AE100000000000000000000B /* MessageWidgetCard.swift in Sources */,
 				AE100000000000000000000C /* MessageWidgetBodies.swift in Sources */,

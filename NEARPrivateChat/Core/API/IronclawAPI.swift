@@ -326,6 +326,18 @@ final class IronclawAPI {
     }
 
 
+    // MARK: - Skills (webchat v2 /skills)
+
+    /// Returns the skills installed on the connected IronClaw instance.
+    /// Returns [] on any error — callers treat absence as no skills configured.
+    func fetchSkills(settings: IronclawSettings, authToken: String) async -> [IronclawSkill] {
+        guard let url = URL(string: settings.baseURL + "/api/webchat/v2/skills") else { return [] }
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        guard let data = try? await URLSession.shared.data(for: req).0 else { return [] }
+        return (try? JSONDecoder().decode(IronclawSkillsResponse.self, from: data))?.all ?? []
+    }
+
     // MARK: - LLM Providers (webchat v2 /llm/providers)
 
     /// Returns the LLM providers configured on the connected IronClaw instance.
@@ -336,6 +348,14 @@ final class IronclawAPI {
         req.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         guard let data = try? await URLSession.shared.data(for: req).0 else { return [] }
         return (try? JSONDecoder().decode(IronclawLLMProvidersResponse.self, from: data))?.all ?? []
+    }
+
+    func fetchConnectableChannels(settings: IronclawSettings, authToken: String) async -> [IronclawConnectableChannel] {
+        guard let url = URL(string: settings.baseURL + "/api/webchat/v2/channels/connectable") else { return [] }
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        guard let data = try? await URLSession.shared.data(for: req).0 else { return [] }
+        return (try? JSONDecoder().decode(IronclawChannelsResponse.self, from: data))?.all ?? []
     }
 
     // MARK: - Reborn HTTP

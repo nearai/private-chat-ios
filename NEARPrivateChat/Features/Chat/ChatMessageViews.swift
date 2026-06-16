@@ -141,6 +141,7 @@ struct MessageBubble: View {
     @State private var showingArtifact = false
     @State private var showingAnswerExporter = false
     @State private var showingSecurity = false
+    @State private var showingProofReport = false
     @State private var showingSources = false
     @State private var answerExportDocument = ConversationExportDocument()
     @State private var answerExportContentType: UTType = .plainText
@@ -444,7 +445,7 @@ struct MessageBubble: View {
 
                 if let footerViewModel = verifiedFooterViewModel {
                     VerifiedFooterButton(viewModel: footerViewModel) {
-                        showingSecurity = true
+                        showingProofReport = true
                     }
                 }
             }
@@ -462,6 +463,14 @@ struct MessageBubble: View {
         .sheet(isPresented: $showingSecurity) {
             SecurityView()
                 .environmentObject(chatStore)
+        }
+        .sheet(isPresented: $showingProofReport) {
+            ProofReportView(
+                snapshot: chatStore.attestationSnapshot,
+                proofState: answerProofCapsule?.state ?? .unknown,
+                modelID: message.model,
+                responseID: message.responseID
+            )
         }
         .sheet(isPresented: $showingSources) {
             SourcesDetailView(query: message.searchQuery, sources: message.sources)

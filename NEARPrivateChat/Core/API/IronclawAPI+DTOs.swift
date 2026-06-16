@@ -434,3 +434,78 @@ struct IronclawLLMProvidersResponse: Codable {
     let items: [IronclawLLMProvider]?
     var all: [IronclawLLMProvider] { providers ?? items ?? [] }
 }
+
+// MARK: - Skills DTOs (webchat v2 /skills)
+
+struct IronclawSkill: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let description: String?
+    let version: String?
+    let isInstalled: Bool?
+    let author: String?
+    let category: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, description, version, author, category
+        case isInstalled = "is_installed"
+    }
+
+    var title: String { name }
+    var icon: String {
+        let c = (category ?? "").lowercased()
+        if c.contains("review") || c.contains("code") { return "chevron.left.forwardslash.chevron.right" }
+        if c.contains("research") || c.contains("web") { return "magnifyingglass.circle.fill" }
+        if c.contains("plan") || c.contains("design") { return "square.and.pencil" }
+        if c.contains("security") { return "lock.shield.fill" }
+        return "wand.and.stars"
+    }
+}
+
+struct IronclawSkillsResponse: Codable {
+    let skills: [IronclawSkill]?
+    let items: [IronclawSkill]?
+    var all: [IronclawSkill] { skills ?? items ?? [] }
+}
+
+// MARK: - Connectable Channels DTOs (webchat v2 /channels/connectable)
+
+struct IronclawConnectableChannel: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let displayName: String?
+    let isConnected: Bool?
+    let description: String?
+    let channelType: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, description
+        case displayName = "display_name"
+        case isConnected = "is_connected"
+        case channelType = "channel_type"
+    }
+
+    var title: String { displayName ?? name }
+    var icon: String {
+        let t = (channelType ?? name).lowercased()
+        if t.contains("slack") { return "number.square.fill" }
+        if t.contains("discord") { return "gamecontroller.fill" }
+        if t.contains("telegram") { return "paperplane.fill" }
+        if t.contains("email") || t.contains("mail") { return "envelope.fill" }
+        if t.contains("webhook") { return "bolt.fill" }
+        return "antenna.radiowaves.left.and.right"
+    }
+    var accentColor: Color {
+        let t = (channelType ?? name).lowercased()
+        if t.contains("slack") { return Color(red: 0.25, green: 0.56, blue: 0.21) }
+        if t.contains("discord") { return Color(red: 0.34, green: 0.39, blue: 0.85) }
+        if t.contains("telegram") { return Color(red: 0.0, green: 0.58, blue: 0.93) }
+        return Color.brandAccent
+    }
+}
+
+struct IronclawChannelsResponse: Codable {
+    let channels: [IronclawConnectableChannel]?
+    let items: [IronclawConnectableChannel]?
+    var all: [IronclawConnectableChannel] { channels ?? items ?? [] }
+}

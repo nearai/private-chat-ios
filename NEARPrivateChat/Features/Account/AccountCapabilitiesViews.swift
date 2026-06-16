@@ -400,6 +400,19 @@ struct AccountSettingsView: View {
                     } label: {
                         powerToolSubRow(icon: "cpu.fill", title: "LLM Providers", subtitle: "Configure agent inference")
                     }
+
+                    NavigationLink {
+                        IronclawSkillsView()
+                            .environmentObject(agentStore)
+                    } label: {
+                        powerToolSubRow(icon: "wand.and.stars", title: "Skills", subtitle: "Installed agent skills")
+                    }
+
+                    NavigationLink {
+                        IronclawChannelsView().environmentObject(agentStore)
+                    } label: {
+                        powerToolSubRow(icon: "antenna.radiowaves.left.and.right", title: "Channels", subtitle: "Connected integrations")
+                    }
                 } label: {
                     Label("Agent panels", systemImage: "person.crop.circle.badge.gearshape")
                         .font(.body)
