@@ -19,10 +19,12 @@ struct DemoAnswerStatusFooter: View {
     }
 
     private var sourceText: String {
+        // Match the real VerifiedFooterView label ("N web source(s)") so demo
+        // showcase screenshots reflect the shipped UI.
         if sourceCount == 1 {
-            return "1 source"
+            return "1 web source"
         }
-        return "\(sourceCount) sources"
+        return "\(sourceCount) web sources"
     }
 }
 
