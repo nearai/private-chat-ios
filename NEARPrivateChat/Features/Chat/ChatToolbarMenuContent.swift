@@ -90,6 +90,12 @@ struct ChatToolbarMenuContent: View {
             }
             .disabled(transcriptStore.messages.isEmpty)
             Button {
+                prepareExport(.markdown)
+            } label: {
+                Label("Export Markdown", systemImage: "text.alignleft")
+            }
+            .disabled(transcriptStore.messages.isEmpty)
+            Button {
                 prepareExport(.json)
             } label: {
                 Label("Export JSON", systemImage: "curlybraces")
@@ -105,6 +111,12 @@ struct ChatToolbarMenuContent: View {
                 prepareExport(.pdf)
             } label: {
                 Label("Export PDF", systemImage: "doc.richtext")
+            }
+            .disabled(transcriptStore.messages.isEmpty)
+            Button {
+                prepareExport(.docx)
+            } label: {
+                Label("Export Word Document", systemImage: "doc.richtext.fill")
             }
             .disabled(transcriptStore.messages.isEmpty)
         }

@@ -22,6 +22,9 @@ struct ChatFindBar: View {
                     .submitLabel(.search)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
+                    .onSubmit {
+                        if matchCount > 0 { onNext() }
+                    }
                 if !query.isEmpty {
                     Button {
                         query = ""
