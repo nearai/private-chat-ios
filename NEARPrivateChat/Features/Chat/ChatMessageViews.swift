@@ -210,7 +210,13 @@ struct MessageBubble: View {
                             )
                         } else {
                             if let visibleText = renderedAssistantMessageText {
-                                MarkdownMessageText(text: visibleText, sources: message.sources)
+                                HStack(alignment: .top, spacing: 0) {
+                                    RoundedRectangle(cornerRadius: 1.5)
+                                        .fill(Color.brandAccent.opacity(0.55))
+                                        .frame(width: 3)
+                                    MarkdownMessageText(text: visibleText, sources: message.sources)
+                                        .padding(.leading, 8)
+                                }
                             }
                         }
                     } else {

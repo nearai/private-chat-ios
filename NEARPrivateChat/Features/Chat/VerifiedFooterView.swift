@@ -83,7 +83,7 @@ struct VerifiedFooterButton: View {
         }
         pieces.append(viewModel.model)
         if viewModel.sourceCount > 0 {
-            pieces.append("\(viewModel.sourceCount) source\(viewModel.sourceCount == 1 ? "" : "s")")
+            pieces.append("\(viewModel.sourceCount) web source\(viewModel.sourceCount == 1 ? "" : "s")")
         }
         pieces.append(Self.relativeSuffix(viewModel.ago))
         return pieces.joined(separator: " · ")

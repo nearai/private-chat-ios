@@ -106,9 +106,9 @@ struct FaviconBadge: View {
 
 // MARK: - Compact source chips
 
-/// A compact, horizontally-scrolling row of source pills (favicon + domain)
-/// shown beneath a prose answer, matching the Answer reference. Tapping a chip
-/// opens the same source sheet the carousel uses.
+/// A horizontally-scrolling row of source cards (favicon + domain + title)
+/// shown beneath a prose answer. Each card is ~64pt tall, min 160pt wide.
+/// Tapping opens the same source sheet the carousel uses.
 struct SourceChipRow: View {
     let sources: [WebSearchSource]
     let onSelect: (Int) -> Void
@@ -120,24 +120,7 @@ struct SourceChipRow: View {
                     Button {
                         onSelect(index)
                     } label: {
-                        HStack(spacing: 6) {
-                            SourceFaviconView(
-                                domain: source.host,
-                                size: 15,
-                                fallbackText: String(source.sourceInitials.prefix(1)),
-                                cornerRadius: 4,
-                                allowsNetworkFavicon: source.allowsNetworkFavicon
-                            )
-                            Text(source.host)
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(Color.textSecondary)
-                                .lineLimit(1)
-                        }
-                        .padding(.leading, 7)
-                        .padding(.trailing, 11)
-                        .padding(.vertical, 6)
-                        .background(Color.appSecondaryBackground, in: Capsule())
-                        .overlay(Capsule().stroke(Color.appBorder, lineWidth: 1))
+                        SourceChipCard(source: source)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("source.chip.\(index + 1)")
@@ -149,6 +132,64 @@ struct SourceChipRow: View {
         .contentMargins(.trailing, 16, for: .scrollContent)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(sources.count) source\(sources.count == 1 ? "" : "s")")
+        .accessibilityLabel("\(sources.count) web source\(sources.count == 1 ? "" : "s")")
+    }
+}
+
+private struct SourceChipCard: View {
+    let source: WebSearchSource
+
+    /// Title shown on the chip. Uses the real article title when available;
+    /// falls back to a human-readable derivation from the URL path.
+    private var chipTitle: String {
+        let raw = source.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !raw.isEmpty { return raw }
+        // Derive from URL last path component: strip extensions, replace dashes/underscores.
+        guard let url = source.safeURL,
+              let lastComponent = url.pathComponents.filter({ $0 != "/" }).last,
+              !lastComponent.isEmpty else { return source.host }
+        let withoutExt = (lastComponent as NSString).deletingPathExtension
+        let spaced = withoutExt
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+        // Title-case: capitalize each word.
+        return spaced.split(separator: " ")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }
+            .joined(separator: " ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Top row: favicon + domain
+            HStack(spacing: 5) {
+                SourceFaviconView(
+                    domain: source.host,
+                    size: 16,
+                    fallbackText: String(source.sourceInitials.prefix(1)),
+                    cornerRadius: 3,
+                    allowsNetworkFavicon: source.allowsNetworkFavicon
+                )
+                Text(source.host)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+            }
+            // Bottom: article title, up to 2 lines
+            Text(chipTitle)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(minWidth: 160, maxWidth: 180, alignment: .topLeading)
+        .frame(minHeight: 64)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.appBorder, lineWidth: 1)
+        )
     }
 }

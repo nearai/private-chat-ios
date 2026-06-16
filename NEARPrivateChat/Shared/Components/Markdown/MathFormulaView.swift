@@ -85,28 +85,31 @@ enum MathFormulaTextStyle: Equatable {
 
 struct MathFormulaView: View {
     let formula: String
+    @State private var webViewHeight: CGFloat = 80
 
     private var model: MathFormulaRenderModel {
         MathFormulaRenderModel.build(from: formula)
     }
 
     var body: some View {
-        MathFormulaNodeView(node: model, scale: 1)
+        MathFormulaNodeView(node: model, scale: 1, webViewHeight: $webViewHeight)
             .fixedSize(horizontal: true, vertical: true)
             .padding(.vertical, 3)
     }
+
 }
 
 private struct MathFormulaNodeView: View {
     let node: MathFormulaRenderModel
     let scale: CGFloat
+    @Binding var webViewHeight: CGFloat
 
     var body: some View {
         switch node {
         case let .row(nodes):
             HStack(alignment: .firstTextBaseline, spacing: 1) {
                 ForEach(Array(nodes.enumerated()), id: \.offset) { _, node in
-                    MathFormulaNodeView(node: node, scale: scale)
+                    MathFormulaNodeView(node: node, scale: scale, webViewHeight: $webViewHeight)
                 }
             }
         case let .text(value, style):
@@ -114,24 +117,24 @@ private struct MathFormulaNodeView: View {
                 .font(style.font(scale: scale))
         case let .superscript(base, exponent):
             HStack(alignment: .firstTextBaseline, spacing: 1) {
-                MathFormulaNodeView(node: base, scale: scale)
-                MathFormulaNodeView(node: exponent, scale: scale * 0.72)
+                MathFormulaNodeView(node: base, scale: scale, webViewHeight: $webViewHeight)
+                MathFormulaNodeView(node: exponent, scale: scale * 0.72, webViewHeight: $webViewHeight)
                     .baselineOffset(7 * scale)
             }
         case let .subscripted(base, lower):
             HStack(alignment: .firstTextBaseline, spacing: 1) {
-                MathFormulaNodeView(node: base, scale: scale)
-                MathFormulaNodeView(node: lower, scale: scale * 0.72)
+                MathFormulaNodeView(node: base, scale: scale, webViewHeight: $webViewHeight)
+                MathFormulaNodeView(node: lower, scale: scale * 0.72, webViewHeight: $webViewHeight)
                     .baselineOffset(-4 * scale)
             }
         case let .fraction(numerator, denominator):
             VStack(spacing: 2) {
-                MathFormulaNodeView(node: numerator, scale: scale * 0.84)
+                MathFormulaNodeView(node: numerator, scale: scale * 0.84, webViewHeight: $webViewHeight)
                     .padding(.horizontal, 3)
                 Rectangle()
                     .fill(Color.primary.opacity(0.75))
                     .frame(height: 0.7)
-                MathFormulaNodeView(node: denominator, scale: scale * 0.84)
+                MathFormulaNodeView(node: denominator, scale: scale * 0.84, webViewHeight: $webViewHeight)
                     .padding(.horizontal, 3)
             }
             .fixedSize()
@@ -143,15 +146,13 @@ private struct MathFormulaNodeView: View {
                     Rectangle()
                         .fill(Color.primary.opacity(0.75))
                         .frame(height: 0.7)
-                    MathFormulaNodeView(node: radicand, scale: scale * 0.92)
+                    MathFormulaNodeView(node: radicand, scale: scale * 0.92, webViewHeight: $webViewHeight)
                 }
             }
             .fixedSize()
         case let .fallback(source):
-            Text(source.isEmpty ? " " : source)
-                .font(.system(.body, design: .serif).italic())
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: true, vertical: true)
+            KaTeXWebView(formula: source, displayMode: true, preferredHeight: $webViewHeight)
+                .frame(height: webViewHeight)
         }
     }
 }
