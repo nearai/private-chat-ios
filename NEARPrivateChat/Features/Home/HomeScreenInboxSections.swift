@@ -97,10 +97,13 @@ extension HomeScreen {
     @ViewBuilder
     private var homeFeedBriefings: some View {
         if !visibleHomeFeedBriefings.isEmpty {
-            HomeBriefingFeedList(
-                briefings: visibleHomeFeedBriefings,
-                onOpen: { briefing in homeStore.openedBriefing = briefing }
-            )
+            VStack(alignment: .leading, spacing: 10) {
+                HomeSectionHeader(title: "Scheduled")
+                HomeBriefingFeedList(
+                    briefings: visibleHomeFeedBriefings,
+                    onOpen: { briefing in homeStore.openedBriefing = briefing }
+                )
+            }
         }
     }
 

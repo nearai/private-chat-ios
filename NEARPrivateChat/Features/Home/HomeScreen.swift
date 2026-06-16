@@ -81,6 +81,12 @@ struct HomeScreen: View {
                         homeFilterControls
                     }
 
+                    if homeStore.selectedFeedScope != .chats && searchQuery.isEmpty {
+                        HomeLiveTrackerGrid()
+                            .padding(.horizontal, 16)
+                            .padding(.top, 4)
+                    }
+
                     if shouldShowDefaultWorkSurface {
                         homeDefaultStarterSurface
 

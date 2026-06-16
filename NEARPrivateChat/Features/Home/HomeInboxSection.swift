@@ -454,6 +454,38 @@ struct HomeBriefingFeedPresentation {
             .replacingOccurrences(of: "pm", with: "PM")
     }
 
+    /// Countdown to the next scheduled run, shown as a capsule pill on the card.
+    /// Returns nil when paused, failed, or no future run is calculable.
+    var nextRunCountdownText: String? {
+        guard statusKind == nil, !briefing.isPaused else { return nil }
+        // Don't show countdown if briefing just ran (< 5 min ago) — justRanText takes over.
+        if let lastRunAt = briefing.lastRunAt, now.timeIntervalSince(lastRunAt) < 5 * 60 { return nil }
+        let anchor = briefing.lastRunAt ?? now
+        guard let next = briefing.schedule.nextRun(after: anchor),
+              next > now else { return nil }
+        let seconds = next.timeIntervalSince(now)
+        let hours = Int(seconds / 3600)
+        let minutes = Int((seconds.truncatingRemainder(dividingBy: 3600)) / 60)
+        if seconds < 24 * 3600 {
+            if hours > 0 {
+                return "in \(hours)h \(minutes)m"
+            } else {
+                return "in \(minutes)m"
+            }
+        } else {
+            let days = Int(seconds / 86400)
+            return days == 1 ? "in 1 day" : "in \(days) days"
+        }
+    }
+
+    /// Returns a "just ran" indicator when the last run was within the past 5 minutes.
+    var justRanText: String? {
+        guard let lastRunAt = briefing.lastRunAt,
+              briefing.status != .failed,
+              now.timeIntervalSince(lastRunAt) < 5 * 60 else { return nil }
+        return "just ran"
+    }
+
     private static func relativeTime(from date: Date, relativeTo now: Date) -> String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
@@ -491,6 +523,10 @@ private struct HomeBriefingFeedCard: View {
 
                         if presentation.shouldShowStatusPill {
                             statusPill
+                        } else if let justRanText = presentation.justRanText {
+                            justRanBadge(text: justRanText)
+                        } else if let countdown = presentation.nextRunCountdownText {
+                            countdownPill(text: countdown)
                         } else if let scheduleTimeText = presentation.scheduleAccessoryText {
                             Text(scheduleTimeText)
                                 .font(.caption2.weight(.medium))
@@ -736,6 +772,36 @@ private struct HomeBriefingFeedCard: View {
         presentation.statusKind == .attention
             ? Color.proofStale.opacity(0.28)
             : tint.opacity(0.17)
+    }
+
+    @ViewBuilder
+    private func countdownPill(text: String) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "clock.fill")
+                .font(.system(size: 9, weight: .semibold))
+            Text(text)
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(Color.brandAccent)
+        .padding(.horizontal, 7)
+        .frame(height: 22)
+        .background(Color.brandAccent.opacity(0.18), in: RoundedRectangle.app(AppRadius.pill))
+    }
+
+    @ViewBuilder
+    private func justRanBadge(text: String) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 9, weight: .semibold))
+            Text(text)
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(Color.proofVerifiedText)
+        .padding(.horizontal, 7)
+        .frame(height: 22)
+        .background(Color.proofVerified.opacity(0.18), in: RoundedRectangle.app(AppRadius.pill))
     }
 }
 
