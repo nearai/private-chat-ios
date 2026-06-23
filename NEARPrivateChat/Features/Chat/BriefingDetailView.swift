@@ -133,9 +133,13 @@ struct BriefingDetailView: View {
             VStack(spacing: 0) {
                 BriefingDetailScheduleRow(symbolName: "calendar", title: "Frequency", value: currentBriefing.schedule.scheduleLabel)
                 Divider().overlay(Color.appHairline)
-                BriefingDetailScheduleRow(symbolName: "folder", title: "Plan", value: planText)
+                BriefingDetailScheduleRow(symbolName: "folder", title: "Plan", value: BriefingDetailCopy.planText(for: currentBriefing))
                 Divider().overlay(Color.appHairline)
-                BriefingDetailScheduleRow(symbolName: "clock", title: "Last delivered", value: lastDeliveredText)
+                BriefingDetailScheduleRow(
+                    symbolName: "clock",
+                    title: BriefingDetailCopy.lastRunTitle(for: currentBriefing),
+                    value: lastDeliveredText
+                )
             }
             .background(Color.appPanelBackground, in: RoundedRectangle.app(AppRadius.control))
             .overlay {
@@ -172,21 +176,21 @@ struct BriefingDetailView: View {
         }
         .buttonStyle(.plain)
         .disabled(isRunning)
-        .accessibilityLabel(isRunning ? "Running briefing" : "\(runButtonTitle) briefing")
+        .accessibilityLabel(BriefingDetailCopy.runAccessibilityLabel(for: currentBriefing, isRunning: isRunning))
     }
 
     private var pauseButton: some View {
         Button {
             store.setPaused(currentBriefing, !currentBriefing.isPaused)
         } label: {
-            Text(currentBriefing.isPaused ? "Resume briefing" : "Pause briefing")
+            Text(BriefingDetailCopy.pauseTitle(for: currentBriefing))
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(Color.textSecondary)
                 .frame(maxWidth: .infinity)
                 .frame(height: 36)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(currentBriefing.isPaused ? "Resume briefing" : "Pause briefing")
+        .accessibilityLabel(BriefingDetailCopy.pauseTitle(for: currentBriefing))
     }
 
     private var aboutText: String {
@@ -197,29 +201,8 @@ struct BriefingDetailView: View {
         BriefingPresentationText.displayTitle(currentBriefing.title)
     }
 
-    private var planText: String {
-        if currentBriefing.council { return "Council" }
-        if let accountID = currentBriefing.accountID?.nilIfBlank { return accountID }
-        switch currentBriefing.kind {
-        case .customPrompt:
-            return "Private plan"
-        case .dailyNews:
-            return "News sources"
-        case .dailyBrief:
-            return "Your trackers"
-        case .ethPrice, .cryptoPrice, .stockPrice, .watchlist:
-            return "Market data"
-        case .nearAccount:
-            return "NEAR account"
-        }
-    }
-
     private var runButtonTitle: String {
-        currentBriefing.lastRunAt == nil &&
-            currentBriefing.latestResult == nil &&
-            currentBriefing.lastFailureAt == nil
-            ? "Run now"
-            : "Re-run now"
+        BriefingDetailCopy.runButtonTitle(for: currentBriefing)
     }
 
     private var scheduledRunTimeText: String {
@@ -268,6 +251,50 @@ struct BriefingDetailView: View {
             return "Never"
         }
         return lastRunAt.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+    }
+}
+
+enum BriefingDetailCopy {
+    static func itemName(for briefing: Briefing) -> String {
+        briefing.isWatcherLike ? "watcher" : "briefing"
+    }
+
+    static func runButtonTitle(for briefing: Briefing) -> String {
+        briefing.lastRunAt == nil &&
+            briefing.latestResult == nil &&
+            briefing.lastFailureAt == nil
+            ? "Run now"
+            : "Re-run now"
+    }
+
+    static func runAccessibilityLabel(for briefing: Briefing, isRunning: Bool) -> String {
+        let item = itemName(for: briefing)
+        return isRunning ? "Running \(item)" : "\(runButtonTitle(for: briefing)) \(item)"
+    }
+
+    static func pauseTitle(for briefing: Briefing) -> String {
+        "\(briefing.isPaused ? "Resume" : "Pause") \(itemName(for: briefing))"
+    }
+
+    static func lastRunTitle(for briefing: Briefing) -> String {
+        briefing.isWatcherLike ? "Last checked" : "Last delivered"
+    }
+
+    static func planText(for briefing: Briefing) -> String {
+        if briefing.council { return "Council" }
+        if let accountID = briefing.accountID?.nilIfBlank { return accountID }
+        switch briefing.kind {
+        case .customPrompt:
+            return briefing.isWatcherLike ? "Private watcher" : "Private briefing"
+        case .dailyNews:
+            return "News sources"
+        case .dailyBrief:
+            return "Your trackers"
+        case .ethPrice, .cryptoPrice, .stockPrice, .watchlist:
+            return "Market data"
+        case .nearAccount:
+            return "NEAR account"
+        }
     }
 }
 

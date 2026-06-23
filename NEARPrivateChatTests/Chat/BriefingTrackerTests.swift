@@ -1167,6 +1167,42 @@ extension PrivateChatCoreTests {
         try? FileManager.default.removeItem(at: tempFile)
     }
 
+    func testBriefingDetailCopyIsWatcherAware() {
+        let watcher = Briefing(
+            title: "Rolex GMT-Master II Pepsi market prices Toronto",
+            prompt: "Track Rolex prices with current sources and alert me below $15,000.",
+            schedule: .weekly(weekday: 2, hour: 9, minute: 0),
+            kind: .customPrompt
+        )
+        let briefing = Briefing(
+            title: "AI news digest",
+            prompt: "Summarize the top AI news every morning.",
+            schedule: .daily(hour: 8, minute: 0),
+            kind: .customPrompt
+        )
+        let pausedWatcher = Briefing(
+            title: watcher.title,
+            prompt: watcher.prompt,
+            schedule: watcher.schedule,
+            isPaused: true,
+            kind: .customPrompt
+        )
+
+        XCTAssertEqual(BriefingDetailCopy.itemName(for: watcher), "watcher")
+        XCTAssertEqual(BriefingDetailCopy.runAccessibilityLabel(for: watcher, isRunning: false), "Run now watcher")
+        XCTAssertEqual(BriefingDetailCopy.runAccessibilityLabel(for: watcher, isRunning: true), "Running watcher")
+        XCTAssertEqual(BriefingDetailCopy.pauseTitle(for: watcher), "Pause watcher")
+        XCTAssertEqual(BriefingDetailCopy.pauseTitle(for: pausedWatcher), "Resume watcher")
+        XCTAssertEqual(BriefingDetailCopy.planText(for: watcher), "Private watcher")
+        XCTAssertEqual(BriefingDetailCopy.lastRunTitle(for: watcher), "Last checked")
+
+        XCTAssertEqual(BriefingDetailCopy.itemName(for: briefing), "briefing")
+        XCTAssertEqual(BriefingDetailCopy.runAccessibilityLabel(for: briefing, isRunning: false), "Run now briefing")
+        XCTAssertEqual(BriefingDetailCopy.pauseTitle(for: briefing), "Pause briefing")
+        XCTAssertEqual(BriefingDetailCopy.planText(for: briefing), "Private briefing")
+        XCTAssertEqual(BriefingDetailCopy.lastRunTitle(for: briefing), "Last delivered")
+    }
+
 
     @MainActor
     func testBriefingRunRecordsFailureStatusAndTimezone() async throws {
