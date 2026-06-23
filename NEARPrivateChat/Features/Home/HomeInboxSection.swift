@@ -367,6 +367,10 @@ struct HomeBriefingFeedPresentation {
         statusKind != nil
     }
 
+    var isPending: Bool {
+        briefing.latestResult == nil && !briefing.isPaused && statusKind == nil
+    }
+
     var statusKind: StatusKind? {
         if briefing.isPaused { return .paused }
         if briefing.status == .failed { return .attention }
@@ -502,15 +506,7 @@ private struct HomeBriefingFeedCard: View {
             HStack(alignment: .top, spacing: 10) {
                 accentRail
 
-                Image(systemName: symbolName)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(tint)
-                    .frame(width: 28, height: 28)
-                    .background(iconBackground, in: RoundedRectangle.app(AppRadius.control))
-                    .overlay {
-                        RoundedRectangle.app(AppRadius.control)
-                            .stroke(tint.opacity(0.14), lineWidth: 1)
-                    }
+                leadingVisual
 
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(alignment: .top, spacing: 8) {
@@ -650,6 +646,20 @@ private struct HomeBriefingFeedCard: View {
         }
     }
 
+    @ViewBuilder
+    private var leadingVisual: some View {
+        if !sourceChips.isEmpty {
+            HomeSourceClusterIcon(chips: Array(sourceChips.prefix(3)), tint: tint)
+        } else {
+            HomeBriefingVisualTile(
+                symbolName: symbolName,
+                tint: tint,
+                isPending: presentation.isPending,
+                isWatcher: presentation.categoryText == "Watcher"
+            )
+        }
+    }
+
     private var tint: Color {
         if briefing.status == .failed { return Color.proofStale }
         if briefing.condition != nil || briefing.isCustomPromptWatcherLike { return watcherAccent }
@@ -669,6 +679,24 @@ private struct HomeBriefingFeedCard: View {
 
     private var condition: BriefingCondition? {
         briefing.condition
+    }
+
+    private var sourceChips: [ConversationSourceChip] {
+        let sources = briefing.latestResult?.newsBrief?.stories.flatMap(\.sources) ?? []
+        var seen: Set<String> = []
+        var chips: [ConversationSourceChip] = []
+        for source in sources {
+            let text = source.displaySourceText
+            let key = (source.faviconIdentity ?? text).lowercased()
+            guard !key.isEmpty, seen.insert(key).inserted else { continue }
+            chips.append(ConversationSourceChip(
+                text: text,
+                faviconDomain: source.faviconIdentity,
+                fallback: source.fallbackMark,
+                allowsNetworkFavicon: source.allowsNetworkFavicon
+            ))
+        }
+        return chips
     }
 
     private var metadataChips: [HomeFeedMiniChip.Model] {
@@ -752,10 +780,6 @@ private struct HomeBriefingFeedCard: View {
             .padding(.top, 2)
     }
 
-    private var iconBackground: Color {
-        presentation.statusKind == .attention ? Color.proofStale.opacity(0.14) : tint.opacity(0.16)
-    }
-
     private var cardGradient: LinearGradient {
         LinearGradient(
             colors: [
@@ -805,11 +829,87 @@ private struct HomeBriefingFeedCard: View {
     }
 }
 
+private struct HomeBriefingVisualTile: View {
+    let symbolName: String
+    let tint: Color
+    let isPending: Bool
+    let isWatcher: Bool
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle.app(AppRadius.control)
+                .fill(backgroundGradient)
+                .overlay(alignment: .topTrailing) {
+                    if isPending {
+                        Circle()
+                            .fill(Color.appPanelBackground)
+                            .frame(width: 14, height: 14)
+                            .overlay {
+                                Circle()
+                                    .fill(tint)
+                                    .frame(width: 6, height: 6)
+                            }
+                            .offset(x: 3, y: -3)
+                    }
+                }
+                .overlay {
+                    RoundedRectangle.app(AppRadius.control)
+                        .stroke(tint.opacity(isPending ? 0.20 : 0.14), lineWidth: 1)
+                }
+
+            VStack(spacing: 5) {
+                Image(systemName: symbolName)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(isPending ? .white : tint)
+
+                HStack(spacing: 3) {
+                    Capsule()
+                        .fill(lineColor.opacity(isWatcher ? 0.86 : 0.96))
+                        .frame(width: 13, height: 3)
+                    Capsule()
+                        .fill(lineColor.opacity(0.62))
+                        .frame(width: 8, height: 3)
+                    Capsule()
+                        .fill(lineColor.opacity(0.78))
+                        .frame(width: 11, height: 3)
+                }
+            }
+            .padding(.top, 1)
+        }
+        .frame(width: 42, height: 42)
+        .accessibilityHidden(true)
+    }
+
+    private var backgroundGradient: LinearGradient {
+        if isPending {
+            return LinearGradient(
+                colors: [tint.opacity(0.90), secondaryTint.opacity(0.84)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        return LinearGradient(
+            colors: [tint.opacity(0.14), Color.appPanelBackground],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var secondaryTint: Color {
+        isWatcher ? Color.proofVerified : Color.brandSky
+    }
+
+    private var lineColor: Color {
+        isPending ? .white : tint
+    }
+}
+
 struct HomeRecentsRow: View {
     let conversations: [ConversationSummary]
     let previewTextForConversation: (ConversationSummary) -> String
     let hasSourceCueForConversation: (ConversationSummary) -> Bool
     let sourceSummaryForConversation: (ConversationSummary) -> String?
+    let sourceChipsForConversation: (ConversationSummary) -> [ConversationSourceChip]
     let projectNameForConversation: (ConversationSummary) -> String?
     let onOpenConversation: (ConversationSummary) -> Void
 
@@ -821,6 +921,7 @@ struct HomeRecentsRow: View {
                     preview: previewTextForConversation(conversation),
                     hasSourceCue: hasSourceCueForConversation(conversation),
                     sourceSummary: sourceSummaryForConversation(conversation),
+                    sourceChips: sourceChipsForConversation(conversation),
                     projectName: projectNameForConversation(conversation),
                     onOpen: { onOpenConversation(conversation) }
                 )
@@ -834,6 +935,7 @@ struct HomeRecentCard: View {
     let preview: String
     let hasSourceCue: Bool
     let sourceSummary: String?
+    let sourceChips: [ConversationSourceChip]
     let projectName: String?
     let onOpen: () -> Void
 
@@ -841,7 +943,7 @@ struct HomeRecentCard: View {
         Button(action: onOpen) {
             HStack(alignment: .top, spacing: 11) {
                 accentRail
-                recentIcon
+                leadingVisual
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .center, spacing: 8) {
@@ -920,6 +1022,15 @@ struct HomeRecentCard: View {
             .frame(width: 3, height: 56)
             .opacity(usesRecoveryTreatment ? 0.95 : 0.70)
             .padding(.top, 2)
+    }
+
+    @ViewBuilder
+    private var leadingVisual: some View {
+        if hasSourceCue, !sourceChips.isEmpty {
+            HomeSourceClusterIcon(chips: Array(sourceChips.prefix(3)), tint: cardTint)
+        } else {
+            recentIcon
+        }
     }
 
     private var recentIcon: some View {
@@ -1011,6 +1122,26 @@ struct HomeRecentCard: View {
                 foreground: Color.actionPrimary,
                 background: Color.actionFill.opacity(0.55)
             ))
+        } else if hasSourceCue, !sourceChips.isEmpty {
+            for source in sourceChips.prefix(2) {
+                chips.append(.init(
+                    text: source.text,
+                    symbolName: nil,
+                    foreground: Color.textSecondary,
+                    background: Color.appSecondaryBackground,
+                    faviconDomain: source.faviconDomain,
+                    faviconFallback: source.fallback,
+                    allowsNetworkFavicon: source.allowsNetworkFavicon
+                ))
+            }
+            if sourceChips.count > 2 {
+                chips.append(.init(
+                    text: "+\(sourceChips.count - 2)",
+                    symbolName: nil,
+                    foreground: Color.textTertiary,
+                    background: nil
+                ))
+            }
         } else {
             chips.append(.init(
                 text: primaryFooterText,
@@ -1121,6 +1252,49 @@ struct HomeRecentCard: View {
             return date.formatted(.dateTime.weekday(.abbreviated))
         }
         return date.formatted(.dateTime.month(.abbreviated).day())
+    }
+}
+
+private struct HomeSourceClusterIcon: View {
+    let chips: [ConversationSourceChip]
+    let tint: Color
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle.app(AppRadius.control)
+                .fill(tint.opacity(0.12))
+                .frame(width: 42, height: 42)
+                .overlay {
+                    RoundedRectangle.app(AppRadius.control)
+                        .stroke(tint.opacity(0.18), lineWidth: 1)
+                }
+
+            ForEach(Array(chips.prefix(3).enumerated()), id: \.offset) { index, chip in
+                SourceFaviconView(
+                    domain: chip.faviconDomain,
+                    size: index == 0 ? 24 : 19,
+                    fallbackText: chip.fallback,
+                    cornerRadius: index == 0 ? 8 : 7,
+                    borderColor: Color.appPanelBackground,
+                    borderWidth: 1.5,
+                    allowsNetworkFavicon: chip.allowsNetworkFavicon
+                )
+                .offset(offset(for: index))
+            }
+        }
+        .frame(width: 42, height: 42)
+        .accessibilityHidden(true)
+    }
+
+    private func offset(for index: Int) -> CGSize {
+        switch index {
+        case 0:
+            return CGSize(width: 6, height: 6)
+        case 1:
+            return CGSize(width: 21, height: 4)
+        default:
+            return CGSize(width: 19, height: 21)
+        }
     }
 }
 

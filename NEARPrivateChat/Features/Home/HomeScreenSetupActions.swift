@@ -23,6 +23,10 @@ extension HomeScreen {
         return hasSourceCue(for: conversation) ? "Sources" : nil
     }
 
+    func sourceChips(for conversation: ConversationSummary) -> [ConversationSourceChip] {
+        chatStore.cachedConversationSourceChips(for: conversation.id)
+    }
+
     func isRecoveryConversation(_ conversation: ConversationSummary) -> Bool {
         HomeConversationRecoveryPolicy.isRecovery(
             title: conversation.title,

@@ -115,6 +115,20 @@ struct MessageRepository {
         return Self.sourceSummary(from: sourceMessages)
     }
 
+    func cachedConversationSourceChips(
+        for conversationID: String,
+        selectedConversationID: String?,
+        currentMessages: [ChatMessage]
+    ) -> [ConversationSourceChip] {
+        let sourceMessages: [ChatMessage]
+        if selectedConversationID == conversationID, !currentMessages.isEmpty {
+            sourceMessages = currentMessages
+        } else {
+            sourceMessages = loadLocalMessages(for: conversationID) ?? []
+        }
+        return Self.sourceChips(from: sourceMessages)
+    }
+
     static func previewMessage(from messages: [ChatMessage]) -> ChatMessage? {
         func hasText(_ message: ChatMessage) -> Bool {
             !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -139,6 +153,11 @@ struct MessageRepository {
     static func sourceSummary(from messages: [ChatMessage]) -> String? {
         guard let message = previewMessage(from: messages) else { return nil }
         return sourceSummary(in: message)
+    }
+
+    static func sourceChips(from messages: [ChatMessage]) -> [ConversationSourceChip] {
+        guard let message = previewMessage(from: messages) else { return [] }
+        return sourceChips(in: message)
     }
 
     static func sourceSummary(in message: ChatMessage) -> String? {
@@ -169,6 +188,30 @@ struct MessageRepository {
             return "\(sourceCount) sources"
         }
         return textHasSourceCue(message.text) ? "Sources" : nil
+    }
+
+    static func sourceChips(in message: ChatMessage) -> [ConversationSourceChip] {
+        var chips: [ConversationSourceChip] = []
+        for source in message.sources {
+            let host = source.host.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !host.isEmpty else { continue }
+            chips.append(ConversationSourceChip(
+                text: SourceFaviconResolver.displayName(for: host, fallback: host) ?? host,
+                faviconDomain: host,
+                fallback: String(source.sourceInitials.prefix(1)),
+                allowsNetworkFavicon: source.allowsNetworkFavicon
+            ))
+        }
+
+        let widgets = [
+            message.widget,
+            MessageWidget.extract(from: message.text).widget
+        ]
+        for widget in widgets.compactMap({ $0 }) {
+            chips.append(contentsOf: widgetSourceChips(widget))
+        }
+
+        return orderedUniqueSourceChips(chips)
     }
 
     static func hasSourceCue(in message: ChatMessage) -> Bool {
@@ -247,6 +290,33 @@ struct MessageRepository {
         return (orderedUnique(labels), count)
     }
 
+    private static func widgetSourceChips(_ widget: MessageWidget) -> [ConversationSourceChip] {
+        var chips: [ConversationSourceChip] = []
+        if let newsBrief = widget.newsBrief {
+            for story in newsBrief.stories {
+                for source in story.sources {
+                    guard let text = source.displaySourceText.nilIfBlank else { continue }
+                    chips.append(ConversationSourceChip(
+                        text: text,
+                        faviconDomain: source.faviconIdentity,
+                        fallback: source.fallbackMark,
+                        allowsNetworkFavicon: source.allowsNetworkFavicon
+                    ))
+                }
+                if let url = story.url?.nilIfBlank,
+                   let host = URL(string: url)?.host(percentEncoded: false) {
+                    chips.append(ConversationSourceChip(
+                        text: SourceFaviconResolver.displayName(for: host, fallback: host) ?? host,
+                        faviconDomain: host,
+                        fallback: SourceFaviconResolver.fallbackLetter(for: host, fallback: "S"),
+                        allowsNetworkFavicon: URLSecurity.isPublicHost(host)
+                    ))
+                }
+            }
+        }
+        return chips
+    }
+
     private static func normalizedSourceLabel(_ raw: String) -> String {
         if let host = URL(string: raw)?.host(percentEncoded: false) {
             return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
@@ -266,6 +336,18 @@ struct MessageRepository {
             guard !key.isEmpty, !seen.contains(key) else { continue }
             seen.insert(key)
             result.append(trimmed)
+        }
+        return result
+    }
+
+    private static func orderedUniqueSourceChips(_ chips: [ConversationSourceChip]) -> [ConversationSourceChip] {
+        var seen: Set<String> = []
+        var result: [ConversationSourceChip] = []
+        for chip in chips {
+            let key = (chip.faviconDomain ?? chip.text).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !key.isEmpty, !seen.contains(key) else { continue }
+            seen.insert(key)
+            result.append(chip)
         }
         return result
     }

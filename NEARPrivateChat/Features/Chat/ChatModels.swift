@@ -198,6 +198,13 @@ struct SearchAction: Codable, Hashable {
     }
 }
 
+struct ConversationSourceChip: Hashable {
+    var text: String
+    var faviconDomain: String?
+    var fallback: String
+    var allowsNetworkFavicon: Bool
+}
+
 struct WebSearchSource: Codable, Hashable, Identifiable {
     let type: String?
     let url: String

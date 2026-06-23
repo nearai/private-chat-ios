@@ -153,6 +153,14 @@ extension ChatStore {
         )
     }
 
+    func cachedConversationSourceChips(for conversationID: String) -> [ConversationSourceChip] {
+        messageRepository.cachedConversationSourceChips(
+            for: conversationID,
+            selectedConversationID: selectedConversation?.id,
+            currentMessages: messages
+        )
+    }
+
     func loadLocalMessageCache() -> [String: [ChatMessage]] {
         messageRepository.loadLocalMessageCache()
     }

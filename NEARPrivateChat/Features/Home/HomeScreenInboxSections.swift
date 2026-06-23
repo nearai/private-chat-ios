@@ -111,6 +111,7 @@ extension HomeScreen {
                 previewTextForConversation: previewText(for:),
                 hasSourceCueForConversation: hasSourceCue(for:),
                 sourceSummaryForConversation: sourceSummary(for:),
+                sourceChipsForConversation: sourceChips(for:),
                 projectNameForConversation: projectName(for:),
                 onOpenConversation: openConversation
             )
@@ -132,6 +133,7 @@ extension HomeScreen {
                 previewTextForConversation: previewText(for:),
                 hasSourceCueForConversation: hasSourceCue(for:),
                 sourceSummaryForConversation: sourceSummary(for:),
+                sourceChipsForConversation: sourceChips(for:),
                 projectNameForConversation: projectName(for:),
                 onOpenConversation: openConversation
             )

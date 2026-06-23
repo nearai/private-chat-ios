@@ -440,6 +440,63 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(MessageRepository.sourceSummary(from: [message]), "Reuters + 2")
     }
 
+    func testMessageRepositoryBuildsSourceChipsFromWebSources() {
+        let message = ChatMessage(
+            id: "assistant-1",
+            role: .assistant,
+            text: "Top market stories.",
+            model: ModelOption.nearPrivateDefaultModelID,
+            createdAt: Date(),
+            status: "completed",
+            responseID: "response-1",
+            isStreaming: false,
+            sources: [
+                WebSearchSource(type: "news", url: "https://www.reuters.com/markets/spacex", title: "SpaceX market story"),
+                WebSearchSource(type: "web", url: "https://apnews.com/article/iran", title: "Iran update")
+            ]
+        )
+
+        let chips = MessageRepository.sourceChips(from: [message])
+
+        XCTAssertEqual(chips.map(\.text), ["Reuters", "AP"])
+        XCTAssertEqual(chips.map(\.faviconDomain), ["reuters.com", "apnews.com"])
+        XCTAssertEqual(chips.map(\.fallback), ["R", "A"])
+        XCTAssertEqual(chips.map(\.allowsNetworkFavicon), [true, true])
+    }
+
+    func testMessageRepositoryBuildsSourceChipsFromNewsWidgetSources() {
+        let message = ChatMessage(
+            id: "assistant-1",
+            role: .assistant,
+            text: "Three stories leading today.",
+            model: ModelOption.nearPrivateDefaultModelID,
+            createdAt: Date(),
+            status: "completed",
+            responseID: "response-1",
+            isStreaming: false,
+            widget: MessageWidget(
+                kind: .newsBrief,
+                newsBrief: WidgetNewsBrief(
+                    heading: "Today · 3 stories",
+                    stories: [
+                        WidgetNewsStory(title: "SpaceX IPO opens", tag: "Markets", sources: [
+                            WidgetNewsSource(label: "R", domain: "reuters.com"),
+                            WidgetNewsSource(label: "A", domain: "apnews.com"),
+                            WidgetNewsSource(label: "R", domain: "reuters.com")
+                        ])
+                    ]
+                )
+            )
+        )
+
+        let chips = MessageRepository.sourceChips(from: [message])
+
+        XCTAssertEqual(chips.map(\.text), ["Reuters", "AP"])
+        XCTAssertEqual(chips.map(\.faviconDomain), ["reuters.com", "apnews.com"])
+        XCTAssertEqual(chips.map(\.fallback), ["R", "A"])
+        XCTAssertEqual(chips.map(\.allowsNetworkFavicon), [true, true])
+    }
+
     func testWidgetExtractParsesActionPlanBlockAndStripsIt() throws {
         let text = """
         I found the top actions.
