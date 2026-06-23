@@ -1306,6 +1306,13 @@ struct HomeRecentCard: View {
                     foreground: Color.textTertiary,
                     background: nil
                 ))
+            } else if let collapsedSourceOverflowText {
+                chips.append(.init(
+                    text: collapsedSourceOverflowText,
+                    symbolName: nil,
+                    foreground: Color.textTertiary,
+                    background: nil
+                ))
             }
         } else {
             chips.append(.init(
@@ -1332,6 +1339,26 @@ struct HomeRecentCard: View {
         }
 
         return chips
+    }
+
+    private var collapsedSourceOverflowText: String? {
+        guard let sourceSummary = sourceSummary?.nilIfBlank,
+              !sourceChips.isEmpty,
+              sourceChips.count <= 2 else {
+            return nil
+        }
+        let visibleLabels = Set(sourceChips.prefix(2).map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
+        let normalizedSummary = sourceSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !visibleLabels.contains(normalizedSummary.lowercased()) else { return nil }
+        if let firstLabel = sourceChips.first?.text.trimmingCharacters(in: .whitespacesAndNewlines),
+           !firstLabel.isEmpty {
+            let prefix = "\(firstLabel) + "
+            if normalizedSummary.lowercased().hasPrefix(prefix.lowercased()) {
+                let count = normalizedSummary.dropFirst(prefix.count).trimmingCharacters(in: .whitespacesAndNewlines)
+                return count.isEmpty ? nil : "+\(count)"
+            }
+        }
+        return normalizedSummary
     }
 
     private var primaryFooterText: String {

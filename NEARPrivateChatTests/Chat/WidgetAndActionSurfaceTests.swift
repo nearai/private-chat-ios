@@ -464,6 +464,33 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(chips.map(\.allowsNetworkFavicon), [true, true])
     }
 
+    func testMessageRepositoryCollapsesPublisherDuplicateSourceChips() {
+        let message = ChatMessage(
+            id: "assistant-1",
+            role: .assistant,
+            text: "Sourced answer.",
+            model: ModelOption.nearPrivateDefaultModelID,
+            createdAt: Date(),
+            status: "completed",
+            responseID: "response-1",
+            isStreaming: false,
+            sources: [
+                WebSearchSource(type: "web", url: "https://www.google.com/search?q=near", title: "Google result"),
+                WebSearchSource(type: "web", url: "https://maps.google.com/place/Toronto", title: "Google Maps result"),
+                WebSearchSource(type: "web", url: "https://news.google.com/topstories", title: "Google News result"),
+                WebSearchSource(type: "news", url: "https://www.reuters.com/world", title: "Reuters story")
+            ]
+        )
+
+        let chips = MessageRepository.sourceChips(from: [message])
+
+        XCTAssertEqual(MessageRepository.sourceSummary(from: [message]), "Google + 3")
+        XCTAssertEqual(chips.map(\.text), ["Google", "Reuters"])
+        XCTAssertEqual(chips.map(\.faviconDomain), ["google.com", "reuters.com"])
+        XCTAssertEqual(chips.map(\.fallback), ["G", "R"])
+        XCTAssertEqual(chips.map(\.allowsNetworkFavicon), [true, true])
+    }
+
     func testMessageRepositoryBuildsSourceChipsFromNewsWidgetSources() {
         let message = ChatMessage(
             id: "assistant-1",

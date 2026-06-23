@@ -377,12 +377,21 @@ struct MessageRepository {
     }
 
     private static func orderedUniqueSourceChips(_ chips: [ConversationSourceChip]) -> [ConversationSourceChip] {
-        var seen: Set<String> = []
+        var seenDomains: Set<String> = []
+        var seenLabels: Set<String> = []
         var result: [ConversationSourceChip] = []
         for chip in chips {
-            let key = (chip.faviconDomain ?? chip.text).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            guard !key.isEmpty, !seen.contains(key) else { continue }
-            seen.insert(key)
+            let domainKey = chip.faviconDomain?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let labelKey = chip.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard domainKey?.isEmpty == false || !labelKey.isEmpty else { continue }
+            if let domainKey, !domainKey.isEmpty, seenDomains.contains(domainKey) { continue }
+            if !labelKey.isEmpty, seenLabels.contains(labelKey) { continue }
+            if let domainKey, !domainKey.isEmpty {
+                seenDomains.insert(domainKey)
+            }
+            if !labelKey.isEmpty {
+                seenLabels.insert(labelKey)
+            }
             result.append(chip)
         }
         return result
