@@ -208,7 +208,6 @@ struct RoutePlanner {
             "this week",
             "recent",
             "fresh",
-            "live",
             "up to date",
             "up-to-date",
             "as of",
@@ -230,6 +229,17 @@ struct RoutePlanner {
             "source links"
         ]
         if triggers.contains(where: { lowercased.contains($0) }) {
+            return true
+        }
+
+        let liveFreshCue = lowercased.contains("live") && [
+            "alert", "alerts", "auction", "breaking", "earnings", "enforcement",
+            "exchange rate", "floor", "ipo", "launch", "market", "markets",
+            "monitor", "news", "outage", "price", "prices", "quote", "rate",
+            "recall", "release", "score", "stock", "token", "trading",
+            "update", "updates", "weather"
+        ].contains { lowercased.contains($0) }
+        if liveFreshCue {
             return true
         }
 

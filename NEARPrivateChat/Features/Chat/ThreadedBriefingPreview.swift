@@ -5,6 +5,14 @@ extension ThreadedBriefingView {
     static var demoDeliveries: [BriefingDelivery] {
         [
             BriefingDelivery(
+                dayLabel: "Today",
+                time: "—",
+                title: "Scheduled briefing",
+                body: "No delivery yet. The first brief will appear here after the next scheduled run.",
+                isPending: true,
+                itemKind: .briefing
+            ),
+            BriefingDelivery(
                 dayLabel: "Yesterday",
                 time: "8:02",
                 title: "Wed 27 May · briefing",

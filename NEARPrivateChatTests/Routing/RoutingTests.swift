@@ -629,9 +629,13 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("Apple Watch Ultra price"))
         XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("compare Apple Watch Ultra and Oura Ring prices"))
         XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("Create an AI product release digest every weekday at 8am covering model launches, developer tools, safety updates, and pricing changes."))
+        XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("monitor live SEC crypto enforcement updates"))
+        XCTAssertTrue(RoutePlanner.promptNeedsLiveWeb("live token price for Canton Network"))
         XCTAssertFalse(RoutePlanner.promptNeedsLiveWeb("Write a poem about focus."))
         XCTAssertFalse(RoutePlanner.promptNeedsLiveWeb("Write a paragraph about price elasticity."))
         XCTAssertFalse(RoutePlanner.promptNeedsLiveWeb("Compose a release note from this diff summary."))
+        XCTAssertFalse(RoutePlanner.promptNeedsLiveWeb("Private route live smoke. Reply exactly: private route live ok"))
+        XCTAssertFalse(RoutePlanner.promptNeedsLiveWeb("Reply exactly: live ok"))
     }
 
     func testAutoSourceDisclosureShowsInferredWebForFreshPrompts() {
@@ -675,6 +679,13 @@ extension PrivateChatCoreTests {
                 sourceMode: .auto,
                 researchModeEnabled: true,
                 prompt: "What is happening in Iran right now?"
+            )
+        )
+        XCTAssertFalse(
+            RoutePlanner.shouldDiscloseAutoLiveWeb(
+                sourceMode: .auto,
+                researchModeEnabled: false,
+                prompt: "Private route live smoke. Reply exactly: private route live ok"
             )
         )
     }
@@ -853,7 +864,9 @@ extension PrivateChatCoreTests {
             PromptCase(id: "HW-047", prompt: "draft a response to a hostile reviewer"),
             PromptCase(id: "HW-048", prompt: "classify these local support tickets"),
             PromptCase(id: "HW-049", prompt: "make a checklist from this meeting note"),
-            PromptCase(id: "HW-050", prompt: "explain rate limiting conceptually")
+            PromptCase(id: "HW-050", prompt: "explain rate limiting conceptually"),
+            PromptCase(id: "HW-050A", prompt: "Private route live smoke. Reply exactly: private route live ok"),
+            PromptCase(id: "HW-050B", prompt: "Reply exactly: live ok")
         ]
         for testCase in liveWebFalse {
             record(testCase.id)

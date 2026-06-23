@@ -160,13 +160,13 @@ struct BotDeliveryRow: View {
 
     private var pendingCard: some View {
         let presentation = ThreadPendingDeliveryPresentation(delivery: delivery)
-        return HStack(alignment: .top, spacing: 14) {
-            ThreadPendingVisual(
+        return VStack(alignment: .leading, spacing: 12) {
+            ThreadPendingHeroVisual(
                 kind: delivery.itemKind,
                 visualLabel: presentation.visualLabel
             )
 
-            VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(presentation.title)
                         .font(.subheadline.weight(.semibold))
@@ -179,23 +179,34 @@ struct BotDeliveryRow: View {
                     }
                 }
 
-                HStack(spacing: 6) {
-                    ThreadSourceStatusPill(
-                        text: presentation.statusLabel,
-                        symbolName: "calendar.badge.clock",
-                        foreground: Color.actionPrimary,
-                        background: Color.actionFill.opacity(0.64)
-                    )
-                    ThreadSourceStatusPill(
-                        text: delivery.itemKind == .watcher ? "Watcher" : "Briefing",
-                        symbolName: delivery.itemKind == .watcher ? "bell.badge.fill" : "doc.text.magnifyingglass",
-                        foreground: Color.textSecondary,
-                        background: Color.appSecondaryBackground
-                    )
-                }
+                Spacer(minLength: 0)
             }
 
-            Spacer(minLength: 0)
+            HStack(spacing: 6) {
+                ThreadSourceStatusPill(
+                    text: presentation.statusLabel,
+                    symbolName: "calendar.badge.clock",
+                    foreground: Color.actionPrimary,
+                    background: Color.actionFill.opacity(0.64)
+                )
+                ThreadSourceStatusPill(
+                    text: delivery.itemKind == .watcher ? "Watcher" : "Briefing",
+                    symbolName: delivery.itemKind == .watcher ? "bell.badge.fill" : "doc.text.magnifyingglass",
+                    foreground: Color.textSecondary,
+                    background: Color.appSecondaryBackground
+                )
+
+                Spacer(minLength: 0)
+
+                HStack(spacing: 6) {
+                    ForEach(0..<3, id: \.self) { index in
+                        Circle()
+                            .fill(index == 0 ? Color.actionPrimary : Color.appBorder)
+                            .frame(width: 5, height: 5)
+                    }
+                    .accessibilityHidden(true)
+                }
+            }
         }
         .padding(13)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -270,12 +281,12 @@ struct ThreadPendingDeliveryPresentation: Equatable {
     }
 }
 
-private struct ThreadPendingVisual: View {
+private struct ThreadPendingHeroVisual: View {
     let kind: BriefingDeliveryKind
     let visualLabel: String
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topLeading) {
             RoundedRectangle.app(AppRadius.control)
                 .fill(
                     LinearGradient(
@@ -288,44 +299,54 @@ private struct ThreadPendingVisual: View {
                     )
                 )
                 .overlay(alignment: .topTrailing) {
-                    Circle()
-                        .fill(.white.opacity(0.20))
-                        .frame(width: 38, height: 38)
-                        .offset(x: 12, y: -14)
+                    heroOrbit
+                        .padding(.trailing, -8)
+                        .padding(.top, -10)
                 }
                 .overlay(alignment: .bottomLeading) {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 5) {
                         Text(visualLabel)
-                            .font(.system(size: 8, weight: .heavy, design: .rounded))
+                            .font(.system(size: 9, weight: .heavy, design: .rounded))
                             .foregroundStyle(.white.opacity(0.82))
                             .tracking(0.8)
-                        HStack(spacing: 3) {
-                            ForEach(0..<3, id: \.self) { index in
-                                Circle()
-                                    .fill(.white.opacity(index == 0 ? 0.95 : 0.48))
-                                    .frame(width: 4, height: 4)
-                            }
+                        Text(kind == .watcher ? "Next check queued" : "Next brief queued")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                        HStack(spacing: 4) {
+                            Capsule().fill(.white.opacity(0.92)).frame(width: 28, height: 4)
+                            Capsule().fill(.white.opacity(0.48)).frame(width: 15, height: 4)
+                            Capsule().fill(.white.opacity(0.66)).frame(width: 21, height: 4)
                         }
                     }
-                    .padding(8)
+                    .padding(12)
                 }
 
-            VStack(spacing: 7) {
+            HStack(alignment: .top, spacing: 9) {
                 Image(systemName: kind == .watcher ? "bell.badge.fill" : "doc.text.magnifyingglass")
-                    .font(.system(size: 25, weight: .bold))
+                    .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(.white.opacity(0.18), in: RoundedRectangle.app(AppRadius.control))
 
-                VStack(spacing: 4) {
-                    Capsule().fill(.white.opacity(0.9)).frame(width: 38, height: 4)
-                    HStack(spacing: 4) {
-                        Capsule().fill(.white.opacity(0.58)).frame(width: 14, height: 4)
-                        Capsule().fill(.white.opacity(0.78)).frame(width: 21, height: 4)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 5) {
+                        ForEach(sourceMarks, id: \.self) { mark in
+                            Text(mark)
+                                .font(.caption2.weight(.heavy))
+                                .foregroundStyle(accentForeground)
+                                .frame(width: 24, height: 24)
+                                .background(.white.opacity(0.92), in: RoundedRectangle.app(8))
+                        }
                     }
+                    miniChart
                 }
+                Spacer(minLength: 0)
             }
-            .padding(.bottom, 8)
+            .padding(12)
         }
-        .frame(width: 92, height: 82)
+        .frame(maxWidth: .infinity, minHeight: 102)
         .overlay(alignment: .topTrailing) {
             Circle()
                 .fill(Color.appPanelBackground)
@@ -338,6 +359,49 @@ private struct ThreadPendingVisual: View {
                 .offset(x: 4, y: -4)
         }
         .accessibilityHidden(true)
+    }
+
+    private var sourceMarks: [String] {
+        kind == .watcher ? ["$", "%", "!"] : ["1", "2", "3"]
+    }
+
+    private var accentForeground: Color {
+        kind == .watcher ? Color(red: 0.49, green: 0.36, blue: 0.86) : Color.actionPrimary
+    }
+
+    private var miniChart: some View {
+        GeometryReader { proxy in
+            Path { path in
+                let points: [CGFloat] = kind == .watcher
+                    ? [0.72, 0.54, 0.58, 0.34, 0.22]
+                    : [0.42, 0.30, 0.50, 0.26, 0.36]
+                let width = max(proxy.size.width, 1)
+                let height = max(proxy.size.height, 1)
+                let xStep = width / CGFloat(points.count - 1)
+                path.move(to: CGPoint(x: 0, y: height * points[0]))
+                for index in points.indices.dropFirst() {
+                    path.addLine(to: CGPoint(x: CGFloat(index) * xStep, y: height * points[index]))
+                }
+            }
+            .stroke(.white.opacity(0.90), style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
+        }
+        .frame(height: 26)
+        .padding(.top, 3)
+    }
+
+    private var heroOrbit: some View {
+        ZStack {
+            Circle()
+                .fill(.white.opacity(0.18))
+                .frame(width: 74, height: 74)
+            Circle()
+                .stroke(.white.opacity(0.24), lineWidth: 1)
+                .frame(width: 48, height: 48)
+            Circle()
+                .fill(.white.opacity(0.58))
+                .frame(width: 8, height: 8)
+                .offset(x: -18, y: 16)
+        }
     }
 }
 
