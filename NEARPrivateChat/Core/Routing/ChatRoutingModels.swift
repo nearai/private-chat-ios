@@ -259,6 +259,9 @@ struct ChatSourceRoutingSemantics: Hashable {
             if route == .nearCloud {
                 return webSearchEnabled ? .whenHelpful : .whenFreshRequested
             }
+            if route == .nearPrivate {
+                return webSearchEnabled ? .whenHelpful : .whenFreshRequested
+            }
             return webSearchEnabled ? .whenHelpful : .never
         }
     }

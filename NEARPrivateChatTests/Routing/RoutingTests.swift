@@ -350,7 +350,7 @@ extension PrivateChatCoreTests {
             route: .nearPrivate
         )
         XCTAssertEqual(autoDefault.modelNativeWebToolPolicy, .whenFreshRequested)
-        XCTAssertEqual(autoDefault.appWebGroundingPolicy, .never)
+        XCTAssertEqual(autoDefault.appWebGroundingPolicy, .whenFreshRequested)
         XCTAssertTrue(autoDefault.attachesSavedLinkSourcePack)
         XCTAssertTrue(autoDefault.attachesProjectFileSourcePack)
 
@@ -438,6 +438,37 @@ extension PrivateChatCoreTests {
     }
 
     func testPrivateLiveWebUsesAppGroundingBeforeNativeWebTool() {
+        let privateAuto = RoutePlanner.sourceRoutingSemantics(
+            sourceMode: .auto,
+            researchModeEnabled: false,
+            webSearchEnabled: false,
+            route: .nearPrivate
+        )
+
+        XCTAssertTrue(ChatWebGroundingDecision.shouldUseAppGrounding(
+            route: .nearPrivate,
+            semantics: privateAuto,
+            benefitsFromSearch: true,
+            needsFreshFacts: true,
+            privacyBlocksWeb: false,
+            promptNeedsRemoteWorkstation: false
+        ))
+        XCTAssertFalse(ChatWebGroundingDecision.shouldUseAppGrounding(
+            route: .nearPrivate,
+            semantics: privateAuto,
+            benefitsFromSearch: true,
+            needsFreshFacts: false,
+            privacyBlocksWeb: false,
+            promptNeedsRemoteWorkstation: false
+        ))
+        XCTAssertFalse(ChatWebGroundingDecision.shouldEnableNativeWebTool(
+            semantics: privateAuto,
+            benefitsFromSearch: true,
+            needsFreshFacts: true,
+            privacyBlocksWeb: false,
+            appWebContextPresent: true
+        ))
+
         let privateWeb = RoutePlanner.sourceRoutingSemantics(
             sourceMode: .web,
             researchModeEnabled: false,
