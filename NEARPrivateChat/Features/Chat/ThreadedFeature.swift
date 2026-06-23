@@ -39,6 +39,8 @@ struct BriefingSourceTag: Identifiable, Hashable {
     let id = UUID()
     var letter: String
     var colorHex: String
+    var faviconDomain: String? = nil
+    var allowsNetworkFavicon: Bool = false
 }
 
 struct ThreadReply: Identifiable, Hashable {

@@ -618,13 +618,16 @@ private struct ThreadVerifiedFooter: View {
 private struct FaviconChip: View {
     let source: BriefingSourceTag
     var size: CGFloat = 14
+
     var body: some View {
-        Text(source.letter.prefix(1))
-            .font(.caption2.weight(.bold))
-            .minimumScaleFactor(0.6)
-            .foregroundStyle(.white)
-            .frame(width: size, height: size)
-            .background(threadHexColor(source.colorHex), in: RoundedRectangle.app(AppRadius.pill))
+        SourceFaviconView(
+            domain: source.faviconDomain,
+            size: size,
+            fallbackText: source.letter,
+            fallbackColor: threadHexColor(source.colorHex),
+            cornerRadius: AppRadius.pill,
+            allowsNetworkFavicon: source.allowsNetworkFavicon
+        )
     }
 }
 

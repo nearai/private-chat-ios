@@ -1435,6 +1435,8 @@ extension PrivateChatCoreTests {
 
         XCTAssertEqual(delivery.sources.map(\.letter), ["T", "A"])
         XCTAssertEqual(delivery.sources.map(\.colorHex), ["#000000", "#ff7e1c"])
+        XCTAssertEqual(delivery.sources.map(\.faviconDomain), ["techcrunch.com", "axios.com"])
+        XCTAssertEqual(delivery.sources.map(\.allowsNetworkFavicon), [true, true])
         XCTAssertNil(delivery.sourceStatusText)
     }
 
@@ -1466,6 +1468,8 @@ extension PrivateChatCoreTests {
         let delivery = try XCTUnwrap(ThreadedBriefingView.deliveries(for: briefing).first)
 
         XCTAssertEqual(delivery.sources.map(\.letter), ["R"])
+        XCTAssertEqual(delivery.sources.map(\.faviconDomain), ["reuters.com"])
+        XCTAssertEqual(delivery.sources.map(\.allowsNetworkFavicon), [true])
         XCTAssertNil(delivery.sourceStatusText)
     }
 

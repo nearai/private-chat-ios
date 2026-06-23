@@ -105,7 +105,14 @@ extension ThreadedBriefingView {
             guard seen.insert(key).inserted else { continue }
             let letter = source.label.nilIfBlank
                 ?? SourceFaviconResolver.fallbackMark(for: source.faviconIdentity, fallback: source.fallbackMark)
-            tags.append(BriefingSourceTag(letter: letter, colorHex: source.color ?? "#007AFF"))
+            let faviconDomain = SourceFaviconResolver.canonicalFaviconHost(for: source.faviconIdentity)
+                ?? source.faviconIdentity
+            tags.append(BriefingSourceTag(
+                letter: letter,
+                colorHex: source.color ?? "#007AFF",
+                faviconDomain: faviconDomain,
+                allowsNetworkFavicon: source.allowsNetworkFavicon
+            ))
         }
         return tags
     }
