@@ -246,7 +246,8 @@ enum HomeConversationPreviewFormatter {
     }
 
     private static func displayPreviewText(_ text: String) -> String {
-        MessageRepository.compactPreviewText(markdownDisplayText(text))
+        let mapped = MessageRepository.displayFailureMessage(text)
+        return MessageRepository.compactPreviewText(markdownDisplayText(mapped))
     }
 
     private static func markdownDisplayText(_ text: String) -> String {

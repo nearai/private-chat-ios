@@ -406,6 +406,10 @@ extension ChatStore {
         MessageRepository.displayFailureMessage(rawValue)
     }
 
+    static func displayFailureMessage(_ error: Error) -> String {
+        MessageRepository.displayFailureMessage(error)
+    }
+
     private static func isRawToolFailureText(_ text: String) -> Bool {
         let lowercased = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !lowercased.isEmpty else { return false }

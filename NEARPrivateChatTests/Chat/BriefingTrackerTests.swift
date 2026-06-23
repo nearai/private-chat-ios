@@ -1242,6 +1242,23 @@ extension PrivateChatCoreTests {
         XCTAssertNil(delivery.widget)
     }
 
+    func testPendingDeliveryPresentationNormalizesLegacyPlainPendingBriefing() {
+        let delivery = BriefingDelivery(
+            dayLabel: "Today",
+            time: "pending",
+            title: "Tue 23 Jun · briefing",
+            body: "No delivery yet — it will appear here after the next scheduled run.",
+            itemKind: .briefing
+        )
+
+        let presentation = ThreadPendingDeliveryPresentation(delivery: delivery)
+
+        XCTAssertEqual(presentation.title, "Scheduled briefing")
+        XCTAssertEqual(presentation.body, "First brief scheduled. Delivery appears here after the next run.")
+        XCTAssertEqual(presentation.statusLabel, "Pending")
+        XCTAssertEqual(presentation.visualLabel, "BRIEF")
+    }
+
 
     @MainActor
     func testBriefingRunRecordsFailureStatusAndTimezone() async throws {

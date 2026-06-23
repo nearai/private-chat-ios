@@ -46,6 +46,10 @@ enum ErrorMessageMapper {
             lowercased.contains("private route is busy") {
             return "Private route is busy right now. Retry private in a moment, or use the privacy proxy only for this turn."
         }
+        if lowercased.contains("error sending request for url") &&
+            (lowercased.contains("cloud-api.near.ai") || lowercased.contains("/v1/responses")) {
+            return "Can't reach the private backend right now — retry in a moment."
+        }
         if lowercased.contains("-1005") || lowercased.contains("network connection was lost") {
             return "Connection dropped mid-answer — retry. Your prompt is kept."
         }

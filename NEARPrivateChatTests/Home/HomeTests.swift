@@ -263,6 +263,19 @@ extension PrivateChatCoreTests {
         XCTAssertLessThanOrEqual(presentation.detailText.count, 140)
     }
 
+    func testHomeConversationPreviewMapsPrivateTransportFailure() {
+        let raw = "OpenAI API error: API error: error sending request for url (https://cloud-api.near.ai/v1/responses)"
+
+        let preview = HomeConversationPreviewFormatter.preview(
+            cachedPreview: raw,
+            title: "Private route smoke test"
+        )
+
+        XCTAssertEqual(preview, "Can't reach the private backend right now — retry in a moment.")
+        XCTAssertFalse(preview.localizedCaseInsensitiveContains("OpenAI API error"))
+        XCTAssertFalse(preview.localizedCaseInsensitiveContains("cloud-api.near.ai"))
+    }
+
     func testHomeBriefingFeedPresentationCarriesPrivateRouteFailureReason() {
         let failureText = "Private route is rate-limited for this session. Wait for the cooldown, or use the privacy proxy only for this turn. If it keeps failing after cooldown, sign out and back in."
         let watcher = Briefing(

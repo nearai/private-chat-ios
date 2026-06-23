@@ -159,15 +159,19 @@ struct BotDeliveryRow: View {
     }
 
     private var pendingCard: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ThreadPendingVisual(kind: delivery.itemKind)
+        let presentation = ThreadPendingDeliveryPresentation(delivery: delivery)
+        return HStack(alignment: .top, spacing: 12) {
+            ThreadPendingVisual(
+                kind: delivery.itemKind,
+                visualLabel: presentation.visualLabel
+            )
 
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(delivery.title)
+                    Text(presentation.title)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.textPrimary)
-                    if let body = delivery.body {
+                    if let body = presentation.body {
                         Text(body)
                             .font(.subheadline)
                             .foregroundStyle(Color.textSecondary)
@@ -177,7 +181,7 @@ struct BotDeliveryRow: View {
 
                 HStack(spacing: 6) {
                     ThreadSourceStatusPill(
-                        text: "Pending",
+                        text: presentation.statusLabel,
                         symbolName: "clock",
                         foreground: Color.actionPrimary,
                         background: Color.actionFill.opacity(0.64)
@@ -223,8 +227,52 @@ struct BotDeliveryRow: View {
     }
 }
 
+struct ThreadPendingDeliveryPresentation: Equatable {
+    let title: String
+    let body: String?
+    let statusLabel: String
+    let visualLabel: String
+
+    init(delivery: BriefingDelivery) {
+        let isWatcher = delivery.itemKind == .watcher
+        let rawTitle = delivery.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawBody = delivery.body?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shouldNormalize = delivery.isPending || delivery.looksLikePendingPlaceholder
+
+        if shouldNormalize {
+            title = isWatcher ? "Scheduled watcher" : "Scheduled briefing"
+            body = Self.normalizedPendingBody(rawBody, isWatcher: isWatcher)
+            statusLabel = "Pending"
+        } else {
+            title = rawTitle.isEmpty ? (isWatcher ? "Watcher" : "Briefing") : rawTitle
+            body = rawBody?.nilIfEmpty
+            statusLabel = delivery.timeLabel
+        }
+        visualLabel = isWatcher ? "WATCH" : "BRIEF"
+    }
+
+    private static func normalizedPendingBody(_ body: String?, isWatcher: Bool) -> String {
+        guard let body, !body.isEmpty else {
+            return isWatcher
+                ? "First check scheduled. Results appear here after the next run."
+                : "First brief scheduled. Delivery appears here after the next run."
+        }
+        let lowercased = body.lowercased()
+        if lowercased.contains("no delivery yet") ||
+            lowercased.contains("no check yet") ||
+            lowercased.contains("will appear here after the next scheduled run") ||
+            lowercased.contains("next scheduled run") {
+            return isWatcher
+                ? "First check scheduled. Results appear here after the next run."
+                : "First brief scheduled. Delivery appears here after the next run."
+        }
+        return body
+    }
+}
+
 private struct ThreadPendingVisual: View {
     let kind: BriefingDeliveryKind
+    let visualLabel: String
 
     var body: some View {
         ZStack {
@@ -239,20 +287,39 @@ private struct ThreadPendingVisual: View {
                         endPoint: .bottomTrailing
                     )
                 )
+                .overlay(alignment: .bottomLeading) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(visualLabel)
+                            .font(.system(size: 8, weight: .heavy, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.82))
+                            .tracking(0.8)
+                        HStack(spacing: 3) {
+                            ForEach(0..<3, id: \.self) { index in
+                                Circle()
+                                    .fill(.white.opacity(index == 0 ? 0.95 : 0.48))
+                                    .frame(width: 4, height: 4)
+                            }
+                        }
+                    }
+                    .padding(8)
+                }
 
-            VStack(spacing: 6) {
+            VStack(spacing: 7) {
                 Image(systemName: kind == .watcher ? "bell.badge.fill" : "doc.text.magnifyingglass")
-                    .font(.system(size: 19, weight: .bold))
+                    .font(.system(size: 23, weight: .bold))
                     .foregroundStyle(.white)
 
-                HStack(spacing: 3) {
-                    Capsule().fill(.white.opacity(0.9)).frame(width: 14, height: 3)
-                    Capsule().fill(.white.opacity(0.58)).frame(width: 8, height: 3)
-                    Capsule().fill(.white.opacity(0.78)).frame(width: 11, height: 3)
+                VStack(spacing: 4) {
+                    Capsule().fill(.white.opacity(0.9)).frame(width: 34, height: 4)
+                    HStack(spacing: 4) {
+                        Capsule().fill(.white.opacity(0.58)).frame(width: 14, height: 4)
+                        Capsule().fill(.white.opacity(0.78)).frame(width: 21, height: 4)
+                    }
                 }
             }
+            .padding(.bottom, 8)
         }
-        .frame(width: 56, height: 56)
+        .frame(width: 84, height: 78)
         .overlay(alignment: .topTrailing) {
             Circle()
                 .fill(Color.appPanelBackground)

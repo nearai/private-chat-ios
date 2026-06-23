@@ -835,6 +835,11 @@ struct AssistantFailurePresentation: Equatable {
             lowercased.contains("sign in") ||
             lowercased.contains("authenticated") ||
             lowercased.contains("session token")
+        let isTransport = lowercased.contains("can't reach the private backend") ||
+            lowercased.contains("connection dropped") ||
+            lowercased.contains("took too long") ||
+            lowercased.contains("stream was interrupted") ||
+            lowercased.contains("error sending request")
 
         if isPrivate && isRateLimited {
             title = "Private route needs a moment"
@@ -848,6 +853,14 @@ struct AssistantFailurePresentation: Equatable {
             routeLabel = message.modelDisplayName
             secondaryActionTitle = nil
             secondaryActionSymbolName = "key"
+        } else if isPrivate && isTransport {
+            title = "Private route did not answer"
+            detail = compact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "The private backend failed before an answer arrived. Retry private in a moment."
+                : compact
+            routeLabel = message.modelDisplayName
+            secondaryActionTitle = nearCloudKeyConfigured ? "Use Cloud once" : "Add Cloud key"
+            secondaryActionSymbolName = nearCloudKeyConfigured ? "eye.slash" : "key"
         } else {
             title = "Answer stopped"
             detail = compact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

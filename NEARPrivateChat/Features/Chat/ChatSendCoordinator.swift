@@ -78,6 +78,13 @@ protocol ChatSendCoordinatorHost: AnyObject {
 }
 
 @MainActor
+extension ChatSendCoordinatorHost {
+    func displayFailureMessageForSend(_ error: Error) -> String {
+        MessageRepository.displayFailureMessage(error)
+    }
+}
+
+@MainActor
 final class ChatSendCoordinator {
     private weak var host: ChatSendCoordinatorHost?
     private var pendingHostedHandoffContinuation: HostedHandoffContinuation?
@@ -441,7 +448,7 @@ final class ChatSendCoordinator {
                 pendingLargePasteTextsSnapshot: pendingLargePasteTextsSnapshot,
                 pendingSharedFileURLsSnapshot: pendingSharedFileURLsSnapshot
             )
-            host.showBannerForSend(host.displayFailureMessageForSend(error.localizedDescription))
+            host.showBannerForSend(host.displayFailureMessageForSend(error))
         }
     }
 
@@ -694,7 +701,7 @@ final class ChatSendCoordinator {
             cancelStream()
             return true
         } catch {
-            let displayError = host.displayFailureMessageForSend(error.localizedDescription)
+            let displayError = host.displayFailureMessageForSend(error)
             markVisibleFailureTurnIfNeeded(
                 host: host,
                 text: text,

@@ -889,6 +889,27 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(withCloud.secondaryActionSymbolName, "eye.slash")
     }
 
+    func testAssistantFailurePresentationSummarizesPrivateTransportFailure() {
+        let message = ChatMessage(
+            id: "failed-transport",
+            role: .assistant,
+            text: "OpenAI API error: API error: error sending request for url (https://cloud-api.near.ai/v1/responses)",
+            model: ModelOption.nearPrivateDefaultModelID,
+            createdAt: Date(),
+            status: "failed",
+            responseID: nil,
+            isStreaming: false
+        )
+
+        let presentation = AssistantFailurePresentation(message: message, nearCloudKeyConfigured: true)
+
+        XCTAssertEqual(presentation.title, "Private route did not answer")
+        XCTAssertEqual(presentation.detail, "Can't reach the private backend right now — retry in a moment.")
+        XCTAssertEqual(presentation.secondaryActionTitle, "Use Cloud once")
+        XCTAssertFalse(presentation.detail.localizedCaseInsensitiveContains("OpenAI API error"))
+        XCTAssertFalse(presentation.detail.localizedCaseInsensitiveContains("cloud-api.near.ai"))
+    }
+
     func testRelativeFooterSuffixNeverReadsNowAgo() {
         XCTAssertEqual(VerifiedFooterButton.relativeSuffix("now"), "just now")
         XCTAssertEqual(VerifiedFooterButton.relativeSuffix("5m"), "5m ago")
@@ -1406,6 +1427,10 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(
             store.displayFailureMessageForSend("The private route is temporarily busy — retrying automatically in about 109s. Use the privacy proxy for this turn, or try private again from the route chip."),
             "Private route is rate-limited for this session. Wait for the cooldown, or use the privacy proxy only for this turn. If it keeps failing after cooldown, sign out and back in."
+        )
+        XCTAssertEqual(
+            store.displayFailureMessageForSend(URLError(.cannotConnectToHost)),
+            "Can't reach the private backend right now — retry in a moment."
         )
     }
 

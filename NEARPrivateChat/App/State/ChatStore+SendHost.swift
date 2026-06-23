@@ -192,6 +192,10 @@ extension ChatStore: ChatSendCoordinatorHost {
         Self.displayFailureMessage(rawValue)
     }
 
+    func displayFailureMessageForSend(_ error: Error) -> String {
+        Self.displayFailureMessage(error)
+    }
+
     func localFailureMessageForSend(from text: String) -> String? {
         Self.localFailureMessage(from: text)
     }

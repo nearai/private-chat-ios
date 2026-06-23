@@ -266,6 +266,15 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(MessageRepository.displayFailureMessage(raw), display)
     }
 
+    func testCloudAPIRequestSendFailureMapsToPrivateBackendCopy() {
+        let raw = "OpenAI API error: API error: error sending request for url (https://cloud-api.near.ai/v1/responses)"
+        let display = MessageRepository.displayFailureMessage(raw)
+
+        XCTAssertEqual(display, "Can't reach the private backend right now — retry in a moment.")
+        XCTAssertFalse(display.localizedCaseInsensitiveContains("OpenAI API error"))
+        XCTAssertFalse(display.localizedCaseInsensitiveContains("cloud-api.near.ai"))
+    }
+
     func testMergePreservesCouncilBatchWithoutExternalTurn() {
         let remoteUser = ChatMessage(
             id: "remote-user", role: .user, text: "compare the models", model: nil,

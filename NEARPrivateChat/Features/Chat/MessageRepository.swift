@@ -743,6 +743,14 @@ struct MessageRepository {
         ErrorMessageMapper.displayFailureMessage(rawValue)
     }
 
+    static func displayFailureMessage(_ error: Error) -> String {
+        if let urlError = error as? URLError,
+           let message = transportFailureMessage(urlError) {
+            return message
+        }
+        return displayFailureMessage(error.localizedDescription)
+    }
+
     private static func isRawToolFailureText(_ text: String) -> Bool {
         let lowercased = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !lowercased.isEmpty else { return false }
