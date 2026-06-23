@@ -41,6 +41,8 @@ struct BotDeliveryRow: View {
 
                 if delivery.isFailure {
                     failureCard
+                } else if delivery.isPending {
+                    pendingCard
                 } else if let widget = delivery.widget {
                     MessageWidgetCard(widget: widget)
                         .padding(.top, 2)
@@ -64,7 +66,7 @@ struct BotDeliveryRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if delivery.headline == nil && delivery.widget == nil {
+                if delivery.headline == nil && delivery.widget == nil && !delivery.isPending {
                     deliveryMetadata
                 }
             }
@@ -156,8 +158,109 @@ struct BotDeliveryRow: View {
         .shadow(color: Color.brandBlack.opacity(0.035), radius: 8, y: 3)
     }
 
+    private var pendingCard: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ThreadPendingVisual(kind: delivery.itemKind)
+
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(delivery.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.textPrimary)
+                    if let body = delivery.body {
+                        Text(body)
+                            .font(.subheadline)
+                            .foregroundStyle(Color.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                HStack(spacing: 6) {
+                    ThreadSourceStatusPill(
+                        text: "Pending",
+                        symbolName: "clock",
+                        foreground: Color.actionPrimary,
+                        background: Color.actionFill.opacity(0.64)
+                    )
+                    ThreadSourceStatusPill(
+                        text: delivery.itemKind == .watcher ? "Watcher" : "Briefing",
+                        symbolName: delivery.itemKind == .watcher ? "bell.badge.fill" : "doc.text.magnifyingglass",
+                        foreground: Color.textSecondary,
+                        background: Color.appSecondaryBackground
+                    )
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color.appPanelBackground,
+                    Color.actionFill.opacity(0.42)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle.app(AppRadius.control)
+        )
+        .overlay {
+            RoundedRectangle.app(AppRadius.control)
+                .stroke(Color.actionPrimary.opacity(0.16), lineWidth: 1)
+        }
+        .shadow(color: Color.brandBlack.opacity(0.04), radius: 10, y: 4)
+        .accessibilityElement(children: .combine)
+    }
+
     private var statusAccent: Color {
         delivery.isFailure ? .proofStale : .proofVerified
+    }
+}
+
+private struct ThreadPendingVisual: View {
+    let kind: BriefingDeliveryKind
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle.app(AppRadius.control)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.actionPrimary,
+                            kind == .watcher ? Color.proofVerified : Color.brandSky
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+
+            VStack(spacing: 6) {
+                Image(systemName: kind == .watcher ? "bell.badge.fill" : "doc.text.magnifyingglass")
+                    .font(.system(size: 19, weight: .bold))
+                    .foregroundStyle(.white)
+
+                HStack(spacing: 3) {
+                    Capsule().fill(.white.opacity(0.9)).frame(width: 14, height: 3)
+                    Capsule().fill(.white.opacity(0.58)).frame(width: 8, height: 3)
+                    Capsule().fill(.white.opacity(0.78)).frame(width: 11, height: 3)
+                }
+            }
+        }
+        .frame(width: 56, height: 56)
+        .overlay(alignment: .topTrailing) {
+            Circle()
+                .fill(Color.appPanelBackground)
+                .frame(width: 16, height: 16)
+                .overlay {
+                    Circle()
+                        .fill(Color.proofVerified)
+                        .frame(width: 7, height: 7)
+                }
+                .offset(x: 4, y: -4)
+        }
+        .accessibilityHidden(true)
     }
 }
 

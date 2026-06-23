@@ -1203,6 +1203,45 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(BriefingDetailCopy.lastRunTitle(for: briefing), "Last delivered")
     }
 
+    func testThreadedBriefingMapsPendingWatcherAsVisualState() throws {
+        let watcher = Briefing(
+            title: "Rolex tracker",
+            prompt: "Watch Rolex GMT-Master II Pepsi market prices and alert me when prices move.",
+            schedule: .daily(hour: 8, minute: 0),
+            kind: .customPrompt
+        )
+
+        let delivery = try XCTUnwrap(ThreadedBriefingView.deliveries(for: watcher).first)
+
+        XCTAssertTrue(delivery.isPending)
+        XCTAssertEqual(delivery.itemKind, .watcher)
+        XCTAssertEqual(delivery.title, "Scheduled watcher")
+        XCTAssertEqual(delivery.time, "—")
+        XCTAssertEqual(delivery.body, "No check yet. The first result will appear here after the next scheduled run.")
+        XCTAssertFalse(delivery.unread)
+        XCTAssertNil(delivery.sourceStatusText)
+        XCTAssertNil(delivery.widget)
+    }
+
+    func testThreadedBriefingMapsPendingBriefingAsVisualState() throws {
+        let briefing = Briefing(
+            title: "AI news digest",
+            prompt: "Create an AI news digest every morning.",
+            schedule: .daily(hour: 8, minute: 0),
+            kind: .dailyNews
+        )
+
+        let delivery = try XCTUnwrap(ThreadedBriefingView.deliveries(for: briefing).first)
+
+        XCTAssertTrue(delivery.isPending)
+        XCTAssertEqual(delivery.itemKind, .briefing)
+        XCTAssertEqual(delivery.title, "Scheduled briefing")
+        XCTAssertEqual(delivery.body, "No delivery yet. The first brief will appear here after the next scheduled run.")
+        XCTAssertFalse(delivery.unread)
+        XCTAssertNil(delivery.sourceStatusText)
+        XCTAssertNil(delivery.widget)
+    }
+
 
     @MainActor
     func testBriefingRunRecordsFailureStatusAndTimezone() async throws {

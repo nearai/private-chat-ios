@@ -65,6 +65,11 @@ struct DeliveryThread: Identifiable, Hashable {
     var replies: [ThreadReply]
 }
 
+enum BriefingDeliveryKind: String, Hashable {
+    case briefing
+    case watcher
+}
+
 struct BriefingDelivery: Identifiable, Hashable {
     let id = UUID()
     var dayLabel: String          // "Yesterday" / "Today"
@@ -81,6 +86,8 @@ struct BriefingDelivery: Identifiable, Hashable {
     var unread: Bool = false
     var collapsed: Bool = false
     var isFailure: Bool = false   // failed run — render error styling + retry
+    var isPending: Bool = false
+    var itemKind: BriefingDeliveryKind = .briefing
     var widget: MessageWidget? = nil
     var thread: DeliveryThread? = nil
 }

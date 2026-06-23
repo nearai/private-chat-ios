@@ -27,29 +27,54 @@ extension ThreadedBriefingView {
         let timeFormatter = DateFormatter()
         timeFormatter.dateFormat = "h:mma"
         let isFailed = briefing.status == .failed
+        let isPending = briefing.latestResult == nil && !isFailed
+        let itemKind: BriefingDeliveryKind = briefing.isWatcherLike ? .watcher : .briefing
         let scheduledRunLabel = scheduledRunTimeLabel(for: briefing.schedule)
         let failureTitle = "The \(scheduledRunLabel) run didn't start"
         let body = briefing.latestResult.map(summary(for:))
             ?? (isFailed
                 ? failureSummary(for: briefing)
-                : "No delivery yet — it will appear here after the next scheduled run.")
+                : pendingSummary(for: itemKind))
         let deliveryDate = briefing.lastRunAt ?? briefing.lastFailureAt ?? runDate
         let sourceTags = briefing.latestResult.map(sourceTags(for:)) ?? []
         return [
             BriefingDelivery(
                 dayLabel: Calendar.current.isDateInToday(deliveryDate) ? "Today" : formatter.string(from: deliveryDate),
                 time: briefing.lastRunAt == nil && !isFailed ? "—" : timeFormatter.string(from: deliveryDate).lowercased(),
-                title: isFailed ? failureTitle : "\(formatter.string(from: deliveryDate)) · briefing",
+                title: isFailed ? failureTitle : deliveryTitle(for: deliveryDate, kind: itemKind, isPending: isPending, formatter: formatter),
                 headline: nil,
                 summary: isFailed ? body : nil,
                 body: body,
                 sources: sourceTags,
-                sourceStatusText: sourceTags.isEmpty ? sourceStatusText(for: briefing) : nil,
+                sourceStatusText: isPending ? nil : (sourceTags.isEmpty ? sourceStatusText(for: briefing) : nil),
                 unread: briefing.lastRunAt != nil || isFailed,
                 isFailure: isFailed,
+                isPending: isPending,
+                itemKind: itemKind,
                 widget: briefing.latestResult
             )
         ]
+    }
+
+    private static func deliveryTitle(
+        for date: Date,
+        kind: BriefingDeliveryKind,
+        isPending: Bool,
+        formatter: DateFormatter
+    ) -> String {
+        if isPending {
+            return kind == .watcher ? "Scheduled watcher" : "Scheduled briefing"
+        }
+        return "\(formatter.string(from: date)) · \(kind.rawValue)"
+    }
+
+    private static func pendingSummary(for kind: BriefingDeliveryKind) -> String {
+        switch kind {
+        case .watcher:
+            return "No check yet. The first result will appear here after the next scheduled run."
+        case .briefing:
+            return "No delivery yet. The first brief will appear here after the next scheduled run."
+        }
     }
 
     private static func sourceTags(for widget: MessageWidget) -> [BriefingSourceTag] {
