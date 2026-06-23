@@ -97,14 +97,20 @@ extension ChatStore {
     /// Manual "Try private now" — clears the private route's cooldown so the
     /// next send probes it immediately.
     func retryPrivateRouteNow() {
-        routeHealth.resetRoute(.nearPrivate)
+        guard routeHealth.resetRoute(.nearPrivate) else {
+            showBanner("Private route is still rate-limited. Wait for cooldown or use the privacy proxy once.")
+            return
+        }
         showBanner("Private route re-enabled — the next message will try it.")
     }
 
     /// Retry a failed private answer immediately instead of waiting for the
     /// local route breaker window. Used only from disclosed failed-turn actions.
     func retryFailedPrivateResponseNow(for message: ChatMessage) {
-        routeHealth.resetRoute(.nearPrivate)
+        guard routeHealth.resetRoute(.nearPrivate) else {
+            showBanner("Private route is still rate-limited. Wait for cooldown or use the privacy proxy once.")
+            return
+        }
         sendCoordinator.regenerateResponse(for: message)
     }
 
@@ -137,7 +143,10 @@ extension ChatStore {
         }
         guard councilRoutesAreReady([modelID]) else { return }
         if Self.routeKind(forModelID: modelID) == .nearPrivate {
-            routeHealth.resetRoute(.nearPrivate)
+            guard routeHealth.resetRoute(.nearPrivate) else {
+                showBanner("Private route is still rate-limited. Wait for cooldown or use the privacy proxy once.")
+                return
+            }
         }
 
         let previousResponseID = Self.latestResponseID(in: batchMessages, modelID: modelID)

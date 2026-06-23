@@ -585,7 +585,9 @@ extension ChatStore {
         }
         if case let APIError.status(code, message) = error {
             if [408, 502, 503, 504].contains(code) { return true }
-            return message.lowercased().contains("response stream ended early")
+            let lowercased = message.lowercased()
+            return lowercased.contains("response stream ended early") ||
+                lowercased.contains("response stream ended before the server sent response.completed")
         }
         return false
     }

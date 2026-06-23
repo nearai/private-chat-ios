@@ -50,15 +50,45 @@ extension PrivateChatCoreTests {
     func testExplicitRateLimitFailureDetectsQuotaSignals() {
         XCTAssertTrue(RouteHealthMonitor.isExplicitRateLimitFailure(APIError.status(403, "Access temporarily restricted. Please try again later.")))
         XCTAssertTrue(RouteHealthMonitor.isExplicitRateLimitFailure(APIError.status(429, "")))
-        XCTAssertTrue(RouteHealthMonitor.isExplicitRateLimitFailure(APIError.status(403, "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn.")))
+        XCTAssertTrue(RouteHealthMonitor.isExplicitRateLimitFailure(APIError.status(403, "Private route is rate-limited for this session. Wait for the cooldown, or use the privacy proxy only for this turn. If it keeps failing after cooldown, sign out and back in.")))
         XCTAssertFalse(RouteHealthMonitor.isExplicitRateLimitFailure(APIError.status(403, "The private route is busy right now. Retry private, or use the privacy proxy for this turn.")))
         XCTAssertFalse(RouteHealthMonitor.isExplicitRateLimitFailure(APIError.status(403, "Missing authorization header")))
+    }
+
+    @MainActor
+    func testManualResetDoesNotBypassActiveExplicitRateLimit() {
+        let monitor = RouteHealthMonitor()
+        var nowValue = Date(timeIntervalSince1970: 1_800_000_000)
+        monitor.now = { nowValue }
+
+        monitor.recordFailure(modelID: "zai-org/GLM-5.1-FP8", error: APIError.status(429, "Too many requests"))
+
+        XCTAssertTrue(monitor.isTripped(.nearPrivate))
+        XCTAssertFalse(monitor.resetRoute(.nearPrivate))
+        XCTAssertTrue(monitor.isTripped(.nearPrivate))
+
+        nowValue = nowValue.addingTimeInterval(RouteHealthMonitor.baseCooldown + 1)
+        XCTAssertTrue(monitor.resetRoute(.nearPrivate))
+        XCTAssertFalse(monitor.isTripped(.nearPrivate))
+    }
+
+    @MainActor
+    func testConnectionDiagnosticsTreatsHTTP429AsPrivateRateLimited() {
+        let diagnostics = ConnectionDiagnostics()
+
+        diagnostics.record(
+            route: .nearPrivate,
+            modelID: "zai-org/GLM-5.1-FP8",
+            error: APIError.status(429, "Too many requests")
+        )
+
+        XCTAssertTrue(diagnostics.privateLooksSessionRateLimited)
     }
 
     func testTransientBusyFailureExcludesAuthAccessAndExplicitRateLimits() {
         XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(403, "Access temporarily restricted. Please try again later.")))
         XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(429, "Too many requests")))
-        XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(403, "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn.")))
+        XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(403, "Private route is rate-limited for this session. Wait for the cooldown, or use the privacy proxy only for this turn. If it keeps failing after cooldown, sign out and back in.")))
         XCTAssertTrue(RouteHealthMonitor.isTransientBusyFailure(APIError.status(403, "The private route is busy right now. Retry private, or use the privacy proxy for this turn.")))
         XCTAssertTrue(RouteHealthMonitor.isTransientBusyFailure(APIError.status(503, "The private route is temporarily busy.")))
         XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(503, "Private route is rate-limited for this session.")))
@@ -106,7 +136,7 @@ extension PrivateChatCoreTests {
     }
 
     @MainActor
-    func testSuccessAndManualResetClearRestriction() {
+    func testSuccessClearsRestrictionAndManualResetCannotBypassExplicitRateLimit() {
         let monitor = RouteHealthMonitor()
         monitor.recordFailure(modelID: "zai-org/GLM-5.1-FP8", error: Self.restrictedError)
         XCTAssertTrue(monitor.isTripped(.nearPrivate))
@@ -117,8 +147,8 @@ extension PrivateChatCoreTests {
 
         monitor.recordFailure(modelID: "zai-org/GLM-5.1-FP8", error: Self.restrictedError)
         XCTAssertTrue(monitor.isTripped(.nearPrivate))
-        monitor.resetRoute(.nearPrivate)
-        XCTAssertFalse(monitor.isTripped(.nearPrivate))
+        XCTAssertFalse(monitor.resetRoute(.nearPrivate))
+        XCTAssertTrue(monitor.isTripped(.nearPrivate))
     }
 
     @MainActor
@@ -127,7 +157,8 @@ extension PrivateChatCoreTests {
         monitor.recordFailure(modelID: "zai-org/GLM-5.1-FP8", error: Self.restrictedError)
         let notice = try XCTUnwrap(monitor.restrictionNotice(for: .nearPrivate))
         XCTAssertTrue(notice.localizedCaseInsensitiveContains("privacy proxy"))
-        XCTAssertTrue(notice.localizedCaseInsensitiveContains("retry private"))
+        XCTAssertTrue(notice.localizedCaseInsensitiveContains("cooldown"))
+        XCTAssertFalse(notice.localizedCaseInsensitiveContains("retry private"))
         XCTAssertTrue(notice.localizedCaseInsensitiveContains("sign out"))
         XCTAssertFalse(notice.localizedCaseInsensitiveContains("retrying automatically"))
         XCTAssertNil(monitor.restrictionNotice(for: .nearCloud))

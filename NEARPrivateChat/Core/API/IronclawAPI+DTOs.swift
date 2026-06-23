@@ -16,12 +16,34 @@ struct IronclawCreateThreadResponse: Decodable {
     let thread: Thread
 }
 
+struct IronclawMessageAttachmentPayload: Encodable, Hashable {
+    let sourceAttachmentID: String?
+    let filename: String
+    let mimeType: String
+    let dataBase64: String
+
+    enum CodingKeys: String, CodingKey {
+        case filename
+        case mimeType = "mime_type"
+        case dataBase64 = "data_base64"
+    }
+
+    init(sourceAttachmentID: String? = nil, filename: String, mimeType: String, data: Data) {
+        self.sourceAttachmentID = sourceAttachmentID
+        self.filename = filename
+        self.mimeType = mimeType
+        dataBase64 = data.base64EncodedString()
+    }
+}
+
 struct IronclawSendPayload: Encodable {
     let clientActionID: String
     let content: String
+    let attachments: [IronclawMessageAttachmentPayload]?
     enum CodingKeys: String, CodingKey {
         case clientActionID = "client_action_id"
         case content
+        case attachments
     }
 }
 
@@ -32,16 +54,29 @@ struct IronclawSubmitResponse: Decodable {
     let status: String?
     let runID: String?
     let activeRunID: String?
+    let notice: String?
 
     enum CodingKeys: String, CodingKey {
         case outcome
         case status
         case runID = "run_id"
         case activeRunID = "active_run_id"
+        case notice
     }
 
     var resolvedRunID: String? {
         runID ?? activeRunID
+    }
+
+    var isRejectedBusy: Bool {
+        outcome == "rejected_busy"
+    }
+
+    var rejectedBusyMessage: String {
+        let trimmedNotice = notice?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedNotice?.isEmpty == false
+            ? trimmedNotice!
+            : "Hosted IronClaw is busy with another run. Wait for it to finish, then retry."
     }
 }
 
@@ -339,9 +374,73 @@ struct IronclawProjectFilesResponse: Codable {
     let files: [IronclawProjectFile]
 }
 
+private extension KeyedDecodingContainer {
+    func firstString(_ keys: [Key]) -> String? {
+        for key in keys {
+            if let value = try? decode(String.self, forKey: key),
+               !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return value
+            }
+        }
+        return nil
+    }
+
+    func firstBool(_ keys: [Key]) -> Bool? {
+        for key in keys {
+            if let value = try? decode(Bool.self, forKey: key) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    func firstDate(_ keys: [Key]) -> Date? {
+        for key in keys {
+            if let value = try? decode(Date.self, forKey: key) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    func firstDecoded<T: Decodable>(_ type: T.Type, _ keys: [Key]) -> T? {
+        for key in keys {
+            if let value = try? decode(T.self, forKey: key) {
+                return value
+            }
+        }
+        return nil
+    }
+}
+
+private struct IronclawNestedIdentity: Decodable {
+    let id: String?
+    let name: String?
+    let displayName: String?
+    let kind: String?
+    let address: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, kind, address
+        case displayName = "display_name"
+        case type
+        case targetType = "target_type"
+        case channelType = "channel_type"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = container.firstString([.id])
+        name = container.firstString([.name])
+        displayName = container.firstString([.displayName])
+        kind = container.firstString([.kind, .type, .targetType, .channelType])
+        address = container.firstString([.address])
+    }
+}
+
 // MARK: - Extensions DTOs (webchat v2 /extensions)
 
-struct IronclawExtension: Codable, Identifiable, Hashable {
+struct IronclawExtension: Decodable, Identifiable, Hashable {
     let id: String
     let name: String
     let displayName: String?
@@ -352,23 +451,40 @@ struct IronclawExtension: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, description, version, category
+        case packageRef = "package_ref"
+        case active
+        case installed
         case displayName = "display_name"
         case isActive = "is_active"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let package = container.firstDecoded(IronclawNestedIdentity.self, [.packageRef])
+        let packageRef = container.firstString([.packageRef])
+        id = container.firstString([.id]) ?? package?.id ?? packageRef ?? package?.name ?? UUID().uuidString
+        name = container.firstString([.name]) ?? package?.name ?? package?.displayName ?? packageRef ?? id
+        displayName = container.firstString([.displayName]) ?? package?.displayName
+        description = container.firstString([.description])
+        isActive = container.firstBool([.isActive, .active, .installed])
+        version = container.firstString([.version])
+        category = container.firstString([.category]) ?? package?.kind
     }
 
     var title: String { displayName ?? name }
     var isInstalled: Bool { isActive ?? false }
 }
 
-struct IronclawExtensionsResponse: Codable {
+struct IronclawExtensionsResponse: Decodable {
     let extensions: [IronclawExtension]?
     let items: [IronclawExtension]?
-    var all: [IronclawExtension] { extensions ?? items ?? [] }
+    let data: [IronclawExtension]?
+    var all: [IronclawExtension] { extensions ?? items ?? data ?? [] }
 }
 
 // MARK: - Automations DTOs (webchat v2 /automations)
 
-struct IronclawAutomation: Codable, Identifiable, Hashable {
+struct IronclawAutomation: Decodable, Identifiable, Hashable {
     let id: String
     let name: String?
     let description: String?
@@ -379,9 +495,24 @@ struct IronclawAutomation: Codable, Identifiable, Hashable {
     let nextRunAt: Date?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, description, trigger, schedule, status
+        case id, name, title, description, trigger, schedule, status, state
+        case automationID = "automation_id"
         case lastRunAt = "last_run_at"
         case nextRunAt = "next_run_at"
+        case lastRun = "last_run"
+        case nextRun = "next_run"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = container.firstString([.id, .automationID]) ?? UUID().uuidString
+        name = container.firstString([.name, .title])
+        description = container.firstString([.description])
+        trigger = container.firstString([.trigger])
+        schedule = container.firstString([.schedule])
+        status = container.firstString([.status, .state])
+        lastRunAt = container.firstDate([.lastRunAt, .lastRun])
+        nextRunAt = container.firstDate([.nextRunAt, .nextRun])
     }
 
     var title: String { name ?? "Automation \(id.prefix(8))" }
@@ -395,15 +526,16 @@ struct IronclawAutomation: Codable, Identifiable, Hashable {
     }
 }
 
-struct IronclawAutomationsResponse: Codable {
+struct IronclawAutomationsResponse: Decodable {
     let automations: [IronclawAutomation]?
     let items: [IronclawAutomation]?
-    var all: [IronclawAutomation] { automations ?? items ?? [] }
+    let data: [IronclawAutomation]?
+    var all: [IronclawAutomation] { automations ?? items ?? data ?? [] }
 }
 
 // MARK: - LLM Provider DTOs
 
-struct IronclawLLMProvider: Codable, Identifiable, Hashable {
+struct IronclawLLMProvider: Decodable, Identifiable, Hashable {
     let id: String
     let name: String
     let baseURL: String?
@@ -413,10 +545,26 @@ struct IronclawLLMProvider: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, name
+        case providerID = "provider_id"
+        case displayName = "display_name"
+        case adapter
+        case active
+        case enabled
         case baseURL = "base_url"
         case modelName = "model_name"
+        case defaultModel = "default_model"
         case isActive = "is_active"
         case providerType = "provider_type"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        providerType = container.firstString([.providerType, .adapter])
+        id = container.firstString([.id, .providerID, .name, .adapter]) ?? UUID().uuidString
+        name = container.firstString([.name, .displayName]) ?? providerType ?? id
+        baseURL = container.firstString([.baseURL])
+        modelName = container.firstString([.modelName, .defaultModel])
+        isActive = container.firstBool([.isActive, .active, .enabled])
     }
 
     var displayName: String { name.isEmpty ? (providerType ?? "Provider") : name }
@@ -429,15 +577,16 @@ struct IronclawLLMProvider: Codable, Identifiable, Hashable {
     }
 }
 
-struct IronclawLLMProvidersResponse: Codable {
+struct IronclawLLMProvidersResponse: Decodable {
     let providers: [IronclawLLMProvider]?
     let items: [IronclawLLMProvider]?
-    var all: [IronclawLLMProvider] { providers ?? items ?? [] }
+    let data: [IronclawLLMProvider]?
+    var all: [IronclawLLMProvider] { providers ?? items ?? data ?? [] }
 }
 
 // MARK: - Skills DTOs (webchat v2 /skills)
 
-struct IronclawSkill: Codable, Identifiable, Hashable {
+struct IronclawSkill: Decodable, Identifiable, Hashable {
     let id: String
     let name: String
     let description: String?
@@ -448,7 +597,21 @@ struct IronclawSkill: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, description, version, author, category
+        case displayName = "display_name"
+        case active
+        case installed
         case isInstalled = "is_installed"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = container.firstString([.id, .name]) ?? UUID().uuidString
+        name = container.firstString([.name, .displayName]) ?? id
+        description = container.firstString([.description])
+        version = container.firstString([.version])
+        isInstalled = container.firstBool([.isInstalled, .installed, .active])
+        author = container.firstString([.author])
+        category = container.firstString([.category])
     }
 
     var title: String { name }
@@ -462,15 +625,16 @@ struct IronclawSkill: Codable, Identifiable, Hashable {
     }
 }
 
-struct IronclawSkillsResponse: Codable {
+struct IronclawSkillsResponse: Decodable {
     let skills: [IronclawSkill]?
     let items: [IronclawSkill]?
-    var all: [IronclawSkill] { skills ?? items ?? [] }
+    let data: [IronclawSkill]?
+    var all: [IronclawSkill] { skills ?? items ?? data ?? [] }
 }
 
 // MARK: - Connectable Channels DTOs (webchat v2 /channels/connectable)
 
-struct IronclawConnectableChannel: Codable, Identifiable, Hashable {
+struct IronclawConnectableChannel: Decodable, Identifiable, Hashable {
     let id: String
     let name: String
     let displayName: String?
@@ -480,9 +644,24 @@ struct IronclawConnectableChannel: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, description
+        case channel
+        case adapter
+        case active
+        case connected
         case displayName = "display_name"
         case isConnected = "is_connected"
         case channelType = "channel_type"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let channel = container.firstDecoded(IronclawNestedIdentity.self, [.channel])
+        id = container.firstString([.id, .name, .channel]) ?? channel?.id ?? channel?.name ?? UUID().uuidString
+        name = container.firstString([.name, .displayName]) ?? channel?.name ?? channel?.displayName ?? id
+        displayName = container.firstString([.displayName]) ?? channel?.displayName
+        isConnected = container.firstBool([.isConnected, .connected, .active])
+        description = container.firstString([.description])
+        channelType = container.firstString([.channelType, .adapter]) ?? channel?.kind
     }
 
     var title: String { displayName ?? name }
@@ -504,15 +683,16 @@ struct IronclawConnectableChannel: Codable, Identifiable, Hashable {
     }
 }
 
-struct IronclawChannelsResponse: Codable {
+struct IronclawChannelsResponse: Decodable {
     let channels: [IronclawConnectableChannel]?
     let items: [IronclawConnectableChannel]?
-    var all: [IronclawConnectableChannel] { channels ?? items ?? [] }
+    let data: [IronclawConnectableChannel]?
+    var all: [IronclawConnectableChannel] { channels ?? items ?? data ?? [] }
 }
 
 // MARK: - Outbound Targets DTOs (webchat v2 /outbound/targets)
 
-struct IronclawOutboundTarget: Codable, Identifiable, Hashable {
+struct IronclawOutboundTarget: Decodable, Identifiable, Hashable {
     let id: String
     let name: String
     let targetType: String?
@@ -521,10 +701,24 @@ struct IronclawOutboundTarget: Codable, Identifiable, Hashable {
     let triggerKind: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, address
+        case id, name, address, target, active
+        case displayName = "display_name"
+        case enabled
         case targetType = "target_type"
         case isActive = "is_active"
         case triggerKind = "trigger_kind"
+        case kind
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let target = container.firstDecoded(IronclawNestedIdentity.self, [.target])
+        id = container.firstString([.id, .name]) ?? target?.id ?? target?.name ?? UUID().uuidString
+        name = container.firstString([.name, .displayName]) ?? target?.name ?? target?.displayName ?? id
+        targetType = container.firstString([.targetType, .kind]) ?? target?.kind
+        address = container.firstString([.address]) ?? target?.address
+        isActive = container.firstBool([.isActive, .active, .enabled])
+        triggerKind = container.firstString([.triggerKind])
     }
 
     var displayType: String { targetType?.capitalized ?? "Target" }
@@ -541,10 +735,11 @@ struct IronclawOutboundTarget: Codable, Identifiable, Hashable {
     }
 }
 
-struct IronclawOutboundTargetsResponse: Codable {
+struct IronclawOutboundTargetsResponse: Decodable {
     let targets: [IronclawOutboundTarget]?
     let items: [IronclawOutboundTarget]?
-    var all: [IronclawOutboundTarget] { targets ?? items ?? [] }
+    let data: [IronclawOutboundTarget]?
+    var all: [IronclawOutboundTarget] { targets ?? items ?? data ?? [] }
 }
 
 // MARK: - Trace Commons DTOs (webchat v2 /traces/credit, /traces/holds/{id}/authorize)

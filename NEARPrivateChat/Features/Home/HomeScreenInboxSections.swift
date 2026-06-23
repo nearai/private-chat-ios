@@ -62,13 +62,9 @@ extension HomeScreen {
     private var homeFeedStarterScopes: [HomeFeedScope] {
         switch homeStore.selectedFeedScope {
         case .all:
-            return [.all, .briefings, .watchers]
-        case .chats:
-            return [.chats]
-        case .briefings:
-            return [.briefings]
-        case .watchers:
-            return [.watchers]
+            return [.briefings, .watchers]
+        case .chats, .briefings, .watchers:
+            return []
         }
     }
 

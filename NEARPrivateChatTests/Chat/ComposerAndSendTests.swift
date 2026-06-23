@@ -871,7 +871,7 @@ extension PrivateChatCoreTests {
         let message = ChatMessage(
             id: "failed-rate-limit",
             role: .assistant,
-            text: "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn.",
+            text: "Private route is rate-limited for this session. Wait for the cooldown, or use the privacy proxy only for this turn. If it keeps failing after cooldown, sign out and back in.",
             model: ModelOption.nearPrivateDefaultModelID,
             createdAt: Date(),
             status: "failed",
@@ -1401,11 +1401,11 @@ extension PrivateChatCoreTests {
         )
         XCTAssertEqual(
             store.displayFailureMessageForSend("Access temporarily restricted. Please try again later."),
-            "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn."
+            "Private route is rate-limited for this session. Wait for the cooldown, or use the privacy proxy only for this turn. If it keeps failing after cooldown, sign out and back in."
         )
         XCTAssertEqual(
             store.displayFailureMessageForSend("The private route is temporarily busy — retrying automatically in about 109s. Use the privacy proxy for this turn, or try private again from the route chip."),
-            "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn."
+            "Private route is rate-limited for this session. Wait for the cooldown, or use the privacy proxy only for this turn. If it keeps failing after cooldown, sign out and back in."
         )
     }
 

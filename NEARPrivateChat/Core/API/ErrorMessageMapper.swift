@@ -39,7 +39,7 @@ enum ErrorMessageMapper {
             lowercased.contains("rate limit") ||
             lowercased.contains("too many requests") ||
             lowercased.contains("retrying automatically") {
-            return "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn."
+            return "Private route is rate-limited for this session. Wait for the cooldown, or use the privacy proxy only for this turn. If it keeps failing after cooldown, sign out and back in."
         }
         if lowercased.contains("the private route is temporarily busy") ||
             lowercased.contains("the private route is busy") ||
@@ -55,7 +55,8 @@ enum ErrorMessageMapper {
         if lowercased.contains("-1009") || lowercased.contains("not connected to the internet") || lowercased.contains("appears to be offline") {
             return "You're offline. Reconnect, then retry."
         }
-        if lowercased.contains("response stream ended early") {
+        if lowercased.contains("response stream ended early") ||
+            lowercased.contains("response stream ended before the server sent response.completed") {
             return "The answer stream was interrupted — retry to continue."
         }
         if lowercased.contains("402") ||

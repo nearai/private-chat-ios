@@ -109,7 +109,7 @@ final class PrivateChatMessageAPI: MessageAPI {
                         break
                     }
                 }
-                throw APIError.status(502, "The response stream ended early.")
+                throw APIError.status(502, "The response stream ended before the server sent response.completed.")
             }
 
             if let visibleOutputTimeout {

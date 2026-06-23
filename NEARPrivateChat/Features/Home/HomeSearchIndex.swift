@@ -115,7 +115,7 @@ enum HomeStreamsCopy {
 
     static func liveCountText(for counts: [HomeFeedScope: Int]) -> String {
         let count = counts[.all, default: 0]
-        return count == 0 ? "Ready" : "\(count) live"
+        return count == 0 ? "Ready" : "\(count) item\(count == 1 ? "" : "s")"
     }
 
     private static func countSegment(_ count: Int, singular: String, plural: String) -> String? {

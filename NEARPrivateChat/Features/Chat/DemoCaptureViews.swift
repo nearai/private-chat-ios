@@ -165,7 +165,7 @@ struct LiveDataDemoView: View {
 /// affordance renders and behaves like the real screen.
 @MainActor
 func demoFailedTrackerContext() -> (store: BriefingStore, briefing: Briefing) {
-    let failureCopy = "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn."
+    let failureCopy = "Private route is rate-limited for this session. Wait for the cooldown, or use the privacy proxy only for this turn. If it keeps failing after cooldown, sign out and back in."
     let briefing = Briefing(
         title: "NEAR price",
         prompt: "Track the NEAR price and summarize the move.",

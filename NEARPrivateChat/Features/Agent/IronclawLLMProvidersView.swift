@@ -302,7 +302,7 @@ struct AddLLMProviderView: View {
         }
 
         var req = URLRequest(url: url)
-        req.httpMethod = "PUT"
+        req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         req.httpBody = body

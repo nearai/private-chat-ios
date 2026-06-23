@@ -237,7 +237,7 @@ extension PrivateChatCoreTests {
     }
 
     func testHomeBriefingFeedPresentationCarriesPrivateRouteFailureReason() {
-        let failureText = "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn."
+        let failureText = "Private route is rate-limited for this session. Wait for the cooldown, or use the privacy proxy only for this turn. If it keeps failing after cooldown, sign out and back in."
         let watcher = Briefing(
             title: "Apple Vision Pro 2 release date, preorder timing",
             prompt: "Track Apple Vision Pro 2 release date, preorder timing, and price rumors with current sources.",
@@ -335,7 +335,7 @@ extension PrivateChatCoreTests {
             HomeStreamsCopy.subtitle(for: [.all: 0, .briefings: 0, .watchers: 0, .chats: 0]),
             "Ask privately, then turn useful work into streams."
         )
-        XCTAssertEqual(HomeStreamsCopy.liveCountText(for: [.all: 17]), "17 live")
+        XCTAssertEqual(HomeStreamsCopy.liveCountText(for: [.all: 17]), "17 items")
         XCTAssertEqual(HomeStreamsCopy.liveCountText(for: [:]), "Ready")
     }
 
@@ -406,7 +406,7 @@ extension PrivateChatCoreTests {
 
         XCTAssertEqual(
             HomeConversationPreviewFormatter.preview(
-                cachedPreview: "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn.",
+                cachedPreview: "Private route is rate-limited for this session. Wait for the cooldown, or use the privacy proxy only for this turn. If it keeps failing after cooldown, sign out and back in.",
                 title: "Ignored title"
             ),
             "Private route limited. Retry private or add Cloud key."

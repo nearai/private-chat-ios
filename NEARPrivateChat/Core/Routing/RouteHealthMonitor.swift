@@ -123,7 +123,7 @@ final class RouteHealthMonitor: ObservableObject {
         switch route {
         case .nearPrivate:
             if statusByRoute[route]?.lastWasExplicitRateLimitFailure == true {
-                return "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn."
+                return "Private route is rate-limited for this session. Wait for the cooldown, or use the privacy proxy only for this turn. If it keeps failing after cooldown, sign out and back in."
             }
             return "Private route is busy right now. Retry private in a moment, or use the privacy proxy only for this turn."
         default:
@@ -131,9 +131,16 @@ final class RouteHealthMonitor: ObservableObject {
         }
     }
 
-    /// Manual "Try private now" — clears the cooldown so the next send probes.
-    func resetRoute(_ route: ChatRouteKind) {
+    /// Manual "Try private now" — clears busy cooldowns so the next send probes.
+    /// Explicit rate limits cannot be bypassed while active; hammering them
+    /// can extend the backend bucket.
+    @discardableResult
+    func resetRoute(_ route: ChatRouteKind) -> Bool {
+        if isTripped(route), statusByRoute[route]?.lastWasExplicitRateLimitFailure == true {
+            return false
+        }
         statusByRoute[route] = RouteStatus()
+        return true
     }
 
     func resetAll() {

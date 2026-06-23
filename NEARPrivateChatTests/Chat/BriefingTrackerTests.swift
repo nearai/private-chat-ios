@@ -1212,7 +1212,7 @@ extension PrivateChatCoreTests {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
             .appendingPathComponent("briefings.json")
-        let restrictedCopy = "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn."
+        let restrictedCopy = "Private route is rate-limited for this session. Wait for the cooldown, or use the privacy proxy only for this turn. If it keeps failing after cooldown, sign out and back in."
 
         final class OutcomeBox: @unchecked Sendable { var outcome: BriefingRunOutcome = .quiet }
         let box = OutcomeBox()
@@ -1257,7 +1257,7 @@ extension PrivateChatCoreTests {
             "The plan wasn't signed in when the brief was due. Re-run now, or check the plan's sign-in to resume the schedule."
         )
 
-        let routeFailureText = "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn."
+        let routeFailureText = "Private route is rate-limited for this session. Wait for the cooldown, or use the privacy proxy only for this turn. If it keeps failing after cooldown, sign out and back in."
         let routeFailure = Briefing(
             title: "NEAR price",
             prompt: "Track price.",

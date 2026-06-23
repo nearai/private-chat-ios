@@ -121,10 +121,12 @@ final class ConnectionDiagnostics: ObservableObject {
             return false
         }
         let message = lastPrivateOutcome.message.lowercased()
-        return lastPrivateOutcome.statusCode == 403 &&
+        return [403, 429].contains(lastPrivateOutcome.statusCode) &&
             (
                 message.contains("temporarily restricted") ||
                 message.contains("access temporarily restricted") ||
+                message.contains("too many requests") ||
+                message.contains("rate limit") ||
                 message.contains("private route is rate-limited") ||
                 message.contains("rate-limited for this session")
             )

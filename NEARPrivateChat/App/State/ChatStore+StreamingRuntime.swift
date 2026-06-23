@@ -144,10 +144,12 @@ extension ChatStore {
             )
             let documentAttachments = attachments.filter { !$0.isLocalOnly }
             await attachmentStagingStore.ensureDocumentTextsAvailable(for: documentAttachments, using: fileService)
+            let hostedAttachmentPayloads = await hostedIronclawAttachmentPayloads(for: documentAttachments)
             var resolvedHostedThreadID: String?
             try await ironclawAPI.streamPrompt(
                 prompt: ironclawPrompt(for: text, attachments: attachments, webContext: webContext),
                 attachments: attachments,
+                attachmentPayloads: hostedAttachmentPayloads,
                 settings: settings,
                 authToken: loadIronclawAuthToken(),
                 onResolvedThreadID: { [weak self] threadID in
@@ -358,7 +360,7 @@ extension ChatStore {
             // fails fast instead of walking every open-weight model.
             guard routeHealth.shouldAttempt(modelID: baseModel) else {
                 let notice = routeHealth.restrictionNotice(for: Self.routeKind(forModelID: baseModel))
-                    ?? "Private route is rate-limited for this session. Retry private; if it keeps failing, sign out and back in. Use the privacy proxy only for this turn."
+                    ?? "Private route is rate-limited for this session. Wait for the cooldown, or use the privacy proxy only for this turn. If it keeps failing after cooldown, sign out and back in."
                 throw APIError.status(403, notice)
             }
             do {
@@ -583,6 +585,45 @@ extension ChatStore {
                 attachmentStagingStore.documentText(for: attachmentID)
             }
         )
+    }
+
+    private func hostedIronclawAttachmentPayloads(for attachments: [ChatAttachment]) async -> [IronclawMessageAttachmentPayload] {
+        var payloads: [IronclawMessageAttachmentPayload] = []
+        for attachment in attachments where !attachment.isLocalOnly {
+            guard let payload = await hostedIronclawAttachmentPayload(for: attachment) else {
+                continue
+            }
+            payloads.append(payload)
+        }
+        return payloads
+    }
+
+    private func hostedIronclawAttachmentPayload(for attachment: ChatAttachment) async -> IronclawMessageAttachmentPayload? {
+        do {
+            let data = try await fileService.fetchFileContent(attachment.id)
+            guard !data.isEmpty, data.count <= APIClient.maxUploadBytes else {
+                return nil
+            }
+            return IronclawMessageAttachmentPayload(
+                sourceAttachmentID: attachment.id,
+                filename: attachment.name,
+                mimeType: hostedIronclawMimeType(for: attachment),
+                data: data
+            )
+        } catch {
+            return nil
+        }
+    }
+
+    private func hostedIronclawMimeType(for attachment: ChatAttachment) -> String {
+        let kind = attachment.kind.trimmingCharacters(in: .whitespacesAndNewlines)
+        if kind.contains("/") {
+            return kind
+        }
+        if kind == "pdf_text" || kind == "table_text" {
+            return "text/plain"
+        }
+        return PrivateChatFileAPI.mimeType(for: URL(fileURLWithPath: attachment.name))
     }
 
     private static func ironclawWorkstationInstructions(for prompt: String) -> String {

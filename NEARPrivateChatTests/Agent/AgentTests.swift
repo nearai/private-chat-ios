@@ -55,6 +55,77 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(try IronclawAPI.resolvedSubmitRunIDForTesting(from: data), "run_active_123")
     }
 
+    func testIronclawSubmitResponseSurfacesRejectedBusyWithoutRunID() throws {
+        let data = Data("""
+        {
+          "outcome": "rejected_busy",
+          "status": "busy",
+          "notice": "Another run is active."
+        }
+        """.utf8)
+
+        XCTAssertEqual(try IronclawAPI.rejectedBusyMessageForTesting(from: data), "Another run is active.")
+    }
+
+    func testIronclawSendPayloadEncodesInlineAttachments() throws {
+        let payload = IronclawMessageAttachmentPayload(
+            sourceAttachmentID: "file_1",
+            filename: "brief.pdf",
+            mimeType: "application/pdf",
+            data: Data("hello".utf8)
+        )
+        let data = try IronclawAPI.encodedSendPayloadForTesting(content: "Read this.", attachmentPayloads: [payload])
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let attachments = try XCTUnwrap(object["attachments"] as? [[String: Any]])
+
+        XCTAssertEqual(attachments.first?["filename"] as? String, "brief.pdf")
+        XCTAssertEqual(attachments.first?["mime_type"] as? String, "application/pdf")
+        XCTAssertEqual(attachments.first?["data_base64"] as? String, Data("hello".utf8).base64EncodedString())
+        XCTAssertNil(attachments.first?["sourceAttachmentID"])
+    }
+
+    func testIronclawRebornListDTOsDecodeCurrentShapes() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let extensions = try decoder.decode(IronclawExtensionsResponse.self, from: Data("""
+        {"data":[{"package_ref":{"id":"pkg.code-review","display_name":"Code Review","kind":"review"},"installed":true}]}
+        """.utf8)).all
+        XCTAssertEqual(extensions.first?.id, "pkg.code-review")
+        XCTAssertEqual(extensions.first?.title, "Code Review")
+        XCTAssertTrue(extensions.first?.isInstalled == true)
+
+        let automations = try decoder.decode(IronclawAutomationsResponse.self, from: Data("""
+        {"items":[{"automation_id":"auto_1","title":"Daily AI digest","state":"active","next_run_at":"2026-06-24T12:00:00Z"}]}
+        """.utf8)).all
+        XCTAssertEqual(automations.first?.id, "auto_1")
+        XCTAssertEqual(automations.first?.title, "Daily AI digest")
+        XCTAssertEqual(automations.first?.status, "active")
+        XCTAssertNotNil(automations.first?.nextRunAt)
+
+        let providers = try decoder.decode(IronclawLLMProvidersResponse.self, from: Data("""
+        {"data":[{"provider_id":"nearai","display_name":"NEAR AI Cloud","adapter":"nearai","default_model":"zai-org/GLM-5.1-FP8","enabled":true}]}
+        """.utf8)).all
+        XCTAssertEqual(providers.first?.id, "nearai")
+        XCTAssertEqual(providers.first?.displayName, "NEAR AI Cloud")
+        XCTAssertEqual(providers.first?.modelName, "zai-org/GLM-5.1-FP8")
+
+        let channels = try decoder.decode(IronclawChannelsResponse.self, from: Data("""
+        {"channels":[{"channel":{"id":"slack","display_name":"Slack","type":"slack"},"connected":true}]}
+        """.utf8)).all
+        XCTAssertEqual(channels.first?.id, "slack")
+        XCTAssertEqual(channels.first?.title, "Slack")
+        XCTAssertTrue(channels.first?.isConnected == true)
+
+        let targets = try decoder.decode(IronclawOutboundTargetsResponse.self, from: Data("""
+        {"data":[{"target":{"id":"email_1","display_name":"Ops email","target_type":"email","address":"ops@example.com"},"active":true}]}
+        """.utf8)).all
+        XCTAssertEqual(targets.first?.id, "email_1")
+        XCTAssertEqual(targets.first?.name, "Ops email")
+        XCTAssertEqual(targets.first?.displayAddress, "ops@example.com")
+        XCTAssertTrue(targets.first?.isActive == true)
+    }
+
     func testAgentThreadPersistenceStoresTrimmedThreadMappingAndMigrationFlag() throws {
         let defaults = try makeIsolatedDefaults()
         let accountID = "agent-thread-\(UUID().uuidString)"

@@ -189,7 +189,7 @@ extension HomeScreen {
 
     var resumeConversations: [ConversationSummary] {
         guard homeStore.selectedHomeFilter == .all, searchQuery.isEmpty else { return [] }
-        return Array(filteredConversations.prefix(3))
+        return Array(recentConversationReadModels.prefix(3))
     }
 
     var conversationsForDateGroups: [ConversationSummary] {
@@ -244,6 +244,10 @@ extension HomeScreen {
 
     var visibleConversationReadModels: [ConversationSummary] {
         projectStore.selectedProject == nil ? conversationStore.visibleConversations : projectStore.visibleConversations
+    }
+
+    var recentConversationReadModels: [ConversationSummary] {
+        projectStore.selectedProject == nil ? conversationStore.allVisibleConversations : projectStore.allVisibleConversations
     }
 
     var shouldShowDefaultWorkSurface: Bool {
