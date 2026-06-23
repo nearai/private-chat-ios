@@ -108,6 +108,7 @@ extension HomeScreen {
         if !visibleHomeFeedChats.isEmpty {
             HomeRecentsRow(
                 conversations: visibleHomeFeedChats,
+                headlineTextForConversation: headlineText(for:),
                 previewTextForConversation: previewText(for:),
                 hasSourceCueForConversation: hasSourceCue(for:),
                 sourceSummaryForConversation: sourceSummary(for:),
@@ -130,6 +131,7 @@ extension HomeScreen {
             HomeSectionHeader(title: "Continue")
             HomeRecentsRow(
                 conversations: resumeConversations,
+                headlineTextForConversation: headlineText(for:),
                 previewTextForConversation: previewText(for:),
                 hasSourceCueForConversation: hasSourceCue(for:),
                 sourceSummaryForConversation: sourceSummary(for:),

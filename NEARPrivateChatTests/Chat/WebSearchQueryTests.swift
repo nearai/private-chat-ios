@@ -97,6 +97,47 @@ extension PrivateChatCoreTests {
         )
     }
 
+    func testWebSearchFreshNewsQueryUsesRecencyOperator() {
+        XCTAssertEqual(
+            WebGroundingService.googleNewsQuery(from: "market or geopolitical news today"),
+            "market or geopolitical news today when:1d"
+        )
+        XCTAssertEqual(
+            WebGroundingService.googleNewsQuery(from: "AI news today when:1d"),
+            "AI news today when:1d"
+        )
+        XCTAssertEqual(
+            WebGroundingService.googleNewsQuery(from: "NEAR protocol docs"),
+            "NEAR protocol docs"
+        )
+    }
+
+    func testWebSearchFreshRankingPrefersDatedNewsOverGenericPreferredPages() {
+        let genericReutersPage = WebGroundingResult(
+            title: "Global Market Headlines / Breaking Stock Market News / Reuters",
+            urlString: "https://www.reuters.com/markets/",
+            sourceName: "reuters.com",
+            snippet: "Global market headlines and breaking stock market news.",
+            publishedAt: nil,
+            kind: "web"
+        )
+        let datedNewsResult = WebGroundingResult(
+            title: "Markets react to current geopolitical tensions",
+            urlString: "https://www.cbsnews.com/news/markets-geopolitics-today/",
+            sourceName: "CBS News",
+            snippet: "Markets are reacting to today's geopolitical developments.",
+            publishedAt: "Tue, 23 Jun 2026 14:00:00 GMT",
+            kind: "news"
+        )
+
+        let ranked = WebGroundingService.rankedForTesting(
+            [genericReutersPage, datedNewsResult],
+            query: "market or geopolitical news today"
+        )
+
+        XCTAssertEqual(ranked.first?.urlString, datedNewsResult.urlString)
+    }
+
     func testSourceSearchDisplaySplitsMultiQueryProvenance() {
         let display = SourceSearchDisplay(
             query: "SpaceX IPO or private-market news and the latest Iran conflict developments | SpaceX IPO private market news | Iran conflict developments"

@@ -137,6 +137,14 @@ extension ChatStore {
         )
     }
 
+    func cachedConversationHeadline(for conversationID: String) -> String? {
+        messageRepository.cachedConversationHeadline(
+            for: conversationID,
+            selectedConversationID: selectedConversation?.id,
+            currentMessages: messages
+        )
+    }
+
     func cachedConversationHasSourceCue(for conversationID: String) -> Bool {
         messageRepository.cachedConversationHasSourceCue(
             for: conversationID,

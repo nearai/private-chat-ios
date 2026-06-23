@@ -87,6 +87,21 @@ struct MessageRepository {
             .map { Self.compactPreviewText($0.text) }
     }
 
+    func cachedConversationHeadline(
+        for conversationID: String,
+        selectedConversationID: String?,
+        currentMessages: [ChatMessage]
+    ) -> String? {
+        let sourceMessages: [ChatMessage]
+        if selectedConversationID == conversationID, !currentMessages.isEmpty {
+            sourceMessages = currentMessages
+        } else {
+            sourceMessages = loadLocalMessages(for: conversationID) ?? []
+        }
+        return Self.headlineMessage(from: sourceMessages)
+            .map { Self.compactPreviewText($0.text) }
+    }
+
     func cachedConversationHasSourceCue(
         for conversationID: String,
         selectedConversationID: String?,
@@ -143,6 +158,27 @@ struct MessageRepository {
             return answer
         }
         return messages.reversed().first(where: hasText)
+    }
+
+    static func headlineMessage(from messages: [ChatMessage]) -> ChatMessage? {
+        func hasText(_ message: ChatMessage) -> Bool {
+            !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
+        guard let preview = previewMessage(from: messages),
+              let previewIndex = messages.lastIndex(where: { $0.id == preview.id }) else {
+            return messages.reversed().first { hasText($0) && $0.role == .user }
+        }
+        if preview.role == .assistant {
+            let previousMessages = messages[..<previewIndex]
+            if let userPrompt = previousMessages.reversed().first(where: { hasText($0) && $0.role == .user }) {
+                return userPrompt
+            }
+        }
+        if preview.role == .user {
+            return preview
+        }
+        return messages.reversed().first { hasText($0) && $0.role == .user }
     }
 
     static func hasSourceCue(from messages: [ChatMessage]) -> Bool {

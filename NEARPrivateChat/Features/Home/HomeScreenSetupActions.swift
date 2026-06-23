@@ -1,6 +1,12 @@
 import SwiftUI
 
 extension HomeScreen {
+    func headlineText(for conversation: ConversationSummary) -> String {
+        HomeConversationPreviewFormatter.displayTitle(
+            chatStore.cachedConversationHeadline(for: conversation.id) ?? conversation.title
+        )
+    }
+
     func previewText(for conversation: ConversationSummary) -> String {
         HomeConversationPreviewFormatter.preview(
             cachedPreview: chatStore.cachedConversationPreview(for: conversation.id),

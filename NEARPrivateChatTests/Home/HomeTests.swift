@@ -236,6 +236,33 @@ extension PrivateChatCoreTests {
         XCTAssertFalse(presentation.detailText.localizedCaseInsensitiveContains("Using web search"))
     }
 
+    func testHomeBriefingFeedPresentationCompactsMarkdownResultForCardPreview() {
+        let watcher = Briefing(
+            title: "Rolex GMT-Master II Pepsi market prices Toronto",
+            prompt: "Track current Rolex GMT-Master II Pepsi prices in Toronto.",
+            schedule: .weekly(weekday: 3, hour: 18, minute: 0),
+            lastRunAt: Date(timeIntervalSince1970: 1_781_280_120),
+            latestResult: MessageWidget(
+                kind: .chart,
+                title: "Rolex market",
+                chart: WidgetChart(
+                    label: "Rolex GMT-Master II",
+                    value: "$22,500",
+                    delta: "+12%",
+                    trend: .up,
+                    caption: "**USD ~$22,500 / CAD ~C$30,800** — as of June 2026 (Toronto / ET). The steel Rolex GMT-Master II Pepsi Ref. 126710BLRO is trading around **$22,500 USD** on the secondary market after a supply shock."
+                )
+            ),
+            kind: .customPrompt
+        )
+
+        let presentation = HomeBriefingFeedPresentation(briefing: watcher)
+
+        XCTAssertTrue(presentation.detailText.contains("USD ~$22,500 / CAD ~C$30,800"))
+        XCTAssertFalse(presentation.detailText.contains("**"))
+        XCTAssertLessThanOrEqual(presentation.detailText.count, 140)
+    }
+
     func testHomeBriefingFeedPresentationCarriesPrivateRouteFailureReason() {
         let failureText = "Private route is rate-limited for this session. Wait for the cooldown, or use the privacy proxy only for this turn. If it keeps failing after cooldown, sign out and back in."
         let watcher = Briefing(

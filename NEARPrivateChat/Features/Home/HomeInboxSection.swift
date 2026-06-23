@@ -393,6 +393,13 @@ struct HomeBriefingFeedPresentation {
 
     var detailText: String {
         if briefing.status == .failed {
+            return rawDetailText
+        }
+        return Self.compactDisplayText(rawDetailText)
+    }
+
+    private var rawDetailText: String {
+        if briefing.status == .failed {
             return ThreadedBriefingView.deliveries(for: briefing).first?.summary?.nilIfBlank
                 ?? "The last scheduled run didn't produce a result. Re-run now, or check the plan's route and sign-in."
         }
@@ -420,6 +427,20 @@ struct HomeBriefingFeedPresentation {
             return result
         }
         return briefing.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Ready to run." : briefing.prompt
+    }
+
+    static func compactDisplayText(_ text: String) -> String {
+        var value = text
+            .replacingOccurrences(of: #"\[([^\]]+)\]\([^)]+\)"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #"(?m)^\s{0,3}#{1,6}\s*"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"(?m)^\s*[-*]\s+"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"`([^`]+)`"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #"\*\*([^*]+)\*\*"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #"__([^_]+)__"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #"\*([^*]+)\*"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #"_([^_]+)_"#, with: "$1", options: .regularExpression)
+        value = value.replacingOccurrences(of: #"(?m)\s+"#, with: " ", options: .regularExpression)
+        return MessageRepository.compactPreviewText(value)
     }
 
     var categoryText: String {
@@ -906,6 +927,7 @@ private struct HomeBriefingVisualTile: View {
 
 struct HomeRecentsRow: View {
     let conversations: [ConversationSummary]
+    let headlineTextForConversation: (ConversationSummary) -> String
     let previewTextForConversation: (ConversationSummary) -> String
     let hasSourceCueForConversation: (ConversationSummary) -> Bool
     let sourceSummaryForConversation: (ConversationSummary) -> String?
@@ -918,6 +940,7 @@ struct HomeRecentsRow: View {
             ForEach(conversations) { conversation in
                 HomeRecentCard(
                     conversation: conversation,
+                    headline: headlineTextForConversation(conversation),
                     preview: previewTextForConversation(conversation),
                     hasSourceCue: hasSourceCueForConversation(conversation),
                     sourceSummary: sourceSummaryForConversation(conversation),
@@ -932,6 +955,7 @@ struct HomeRecentsRow: View {
 
 struct HomeRecentCard: View {
     let conversation: ConversationSummary
+    let headline: String
     let preview: String
     let hasSourceCue: Bool
     let sourceSummary: String?
@@ -965,7 +989,7 @@ struct HomeRecentCard: View {
                         }
                     }
 
-                    Text(HomeConversationPreviewFormatter.displayTitle(conversation.title))
+                    Text(headline)
                         .font(.callout.weight(.bold))
                         .foregroundStyle(Color.textPrimary)
                         .lineLimit(2)
@@ -1228,11 +1252,11 @@ struct HomeRecentCard: View {
     }
 
     private var normalizedText: String {
-        "\(conversation.title) \(preview)".lowercased()
+        "\(headline) \(preview)".lowercased()
     }
 
     private var normalizedTitle: String {
-        conversation.title.lowercased()
+        headline.lowercased()
     }
 
     private var timestampText: String {

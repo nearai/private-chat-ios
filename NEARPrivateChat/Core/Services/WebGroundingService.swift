@@ -509,8 +509,9 @@ final class WebGroundingService {
         guard var components = URLComponents(string: "https://news.google.com/rss/search") else {
             throw APIError.invalidURL
         }
+        let newsQuery = Self.googleNewsQuery(from: query)
         components.queryItems = [
-            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "q", value: newsQuery),
             URLQueryItem(name: "hl", value: "en-US"),
             URLQueryItem(name: "gl", value: "US"),
             URLQueryItem(name: "ceid", value: "US:en")
@@ -684,7 +685,12 @@ final class WebGroundingService {
         let host = normalizedHost(URL(string: result.urlString)?.host ?? result.sourceName)
         let sourceName = result.sourceName.lowercased()
         let haystack = "\(result.title) \(result.snippet) \(sourceName) \(host)".lowercased()
+        let freshQuery = queryNeedsFreshResults(query)
         var score = result.kind == "news" ? 8.0 : 0.0
+
+        if freshQuery {
+            score += result.kind == "news" ? 24 : -8
+        }
 
         if preferredSourceHosts.contains(where: { host == $0 || host.hasSuffix(".\($0)") }) {
             score += 36
@@ -696,7 +702,7 @@ final class WebGroundingService {
             score -= 34
         }
         if result.publishedAt?.isEmpty == false {
-            score += 4
+            score += freshQuery ? 14 : 4
         }
 
         let queryTerms = query
@@ -706,6 +712,28 @@ final class WebGroundingService {
         let matchedTerms = Set(queryTerms.filter { haystack.contains($0) })
         score += Double(min(matchedTerms.count, 6)) * 2.0
         return score
+    }
+
+    static func googleNewsQuery(from query: String) -> String {
+        let cleaned = cleanedQuery(query)
+        guard queryNeedsFreshResults(cleaned),
+              cleaned.range(of: #"\bwhen:\d+[hdm]\b"#, options: .regularExpression) == nil else {
+            return cleaned
+        }
+        return "\(cleaned) when:1d"
+    }
+
+#if DEBUG
+    static func rankedForTesting(_ results: [WebGroundingResult], query: String) -> [WebGroundingResult] {
+        ranked(results, query: query)
+    }
+#endif
+
+    private static func queryNeedsFreshResults(_ query: String) -> Bool {
+        query.lowercased().range(
+            of: #"\b(today|latest|current|recent|breaking|this\s+(morning|afternoon|evening|week)|news|headlines?|stories|reporting|developments|updates)\b"#,
+            options: .regularExpression
+        ) != nil
     }
 
     private static func normalizedHost(_ host: String) -> String {

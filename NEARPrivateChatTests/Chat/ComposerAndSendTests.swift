@@ -1541,6 +1541,84 @@ extension PrivateChatCoreTests {
         )
     }
 
+    func testConversationHeadlinePairsLatestAnswerWithLatestUserPrompt() {
+        let base = Date(timeIntervalSince1970: 1_000)
+        let firstPrompt = makeMessage(
+            id: "first-prompt",
+            role: .user,
+            text: "Private route smoke test: reply with exactly READY and no other words.",
+            createdAt: base
+        )
+        let firstAnswer = makeMessage(
+            id: "first-answer",
+            role: .assistant,
+            text: "READY",
+            model: ChatStore.defaultModelID,
+            createdAt: base.addingTimeInterval(1)
+        )
+        let latestPrompt = makeMessage(
+            id: "latest-prompt",
+            role: .user,
+            text: "Use web sources. What are two major market or geopolitical stories today?",
+            createdAt: base.addingTimeInterval(2)
+        )
+        let latestAnswer = makeMessage(
+            id: "latest-answer",
+            role: .assistant,
+            text: "Based on the available search results, markets are focused on current geopolitical risk.",
+            model: ChatStore.defaultModelID,
+            createdAt: base.addingTimeInterval(3)
+        )
+        let messages = [firstPrompt, firstAnswer, latestPrompt, latestAnswer]
+
+        XCTAssertEqual(MessageRepository.previewMessage(from: messages)?.id, "latest-answer")
+        XCTAssertEqual(MessageRepository.headlineMessage(from: messages)?.id, "latest-prompt")
+    }
+
+    func testCachedConversationHeadlinePrefersCurrentSelectedConversationMessages() throws {
+        let defaults = try makeIsolatedDefaults()
+        let accountID = "headline-account-\(UUID().uuidString)"
+        let cache = MessageCache(accountID: accountID, defaults: defaults)
+        defer {
+            FileCache(accountID: accountID, defaults: defaults).remove(
+                filename: MessageCache.cacheFilename,
+                legacyDefaultsKey: MessageCache.legacyDefaultsKey
+            )
+        }
+
+        let cached = makeMessage(
+            id: "cached-headline",
+            role: .user,
+            text: "Cached conversation prompt",
+            createdAt: Date(timeIntervalSince1970: 1_000)
+        )
+        let current = makeMessage(
+            id: "current-headline",
+            role: .user,
+            text: "Current selected conversation prompt",
+            createdAt: Date(timeIntervalSince1970: 1_001)
+        )
+        XCTAssertTrue(cache.save([cached], for: "conv-headline"))
+        let repository = MessageRepository(conversationAPI: ConversationRepositoryAPIFake(), cache: cache)
+
+        XCTAssertEqual(
+            repository.cachedConversationHeadline(
+                for: "conv-headline",
+                selectedConversationID: "conv-headline",
+                currentMessages: [current]
+            ),
+            "Current selected conversation prompt"
+        )
+        XCTAssertEqual(
+            repository.cachedConversationHeadline(
+                for: "conv-headline",
+                selectedConversationID: "other-conversation",
+                currentMessages: [current]
+            ),
+            "Cached conversation prompt"
+        )
+    }
+
     func testConversationIDParserAcceptsSafeRawIDsAndLinks() {
         XCTAssertEqual(ShareStore.conversationID(from: "conv_abc123"), "conv_abc123")
         XCTAssertEqual(ShareStore.conversationID(from: "chatcmpl-abc123"), "chatcmpl-abc123")
