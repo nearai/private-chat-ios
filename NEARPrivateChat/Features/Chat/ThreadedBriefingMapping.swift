@@ -27,21 +27,25 @@ extension ThreadedBriefingView {
         let timeFormatter = DateFormatter()
         timeFormatter.dateFormat = "h:mma"
         let isFailed = briefing.status == .failed
-        let isPending = briefing.latestResult == nil && !isFailed
+        let isPausedWithoutResult = briefing.isPaused && briefing.latestResult == nil
+        let isPending = briefing.latestResult == nil && !isFailed && !isPausedWithoutResult
         let itemKind: BriefingDeliveryKind = briefing.isWatcherLike ? .watcher : .briefing
         let scheduledRunLabel = scheduledRunTimeLabel(for: briefing.schedule)
         let failureTitle = "The \(scheduledRunLabel) run didn't start"
         let body = briefing.latestResult.map(summary(for:))
             ?? (isFailed
                 ? failureSummary(for: briefing)
-                : pendingSummary(for: itemKind))
+                : (isPausedWithoutResult ? pausedSummary(for: itemKind) : pendingSummary(for: itemKind)))
         let deliveryDate = briefing.lastRunAt ?? briefing.lastFailureAt ?? runDate
         let sourceTags = briefing.latestResult.map(sourceTags(for:)) ?? []
+        let title = isFailed
+            ? failureTitle
+            : (isPausedWithoutResult ? pausedTitle(for: itemKind) : deliveryTitle(for: deliveryDate, kind: itemKind, isPending: isPending, formatter: formatter))
         return [
             BriefingDelivery(
                 dayLabel: Calendar.current.isDateInToday(deliveryDate) ? "Today" : formatter.string(from: deliveryDate),
                 time: briefing.lastRunAt == nil && !isFailed ? "—" : timeFormatter.string(from: deliveryDate).lowercased(),
-                title: isFailed ? failureTitle : deliveryTitle(for: deliveryDate, kind: itemKind, isPending: isPending, formatter: formatter),
+                title: title,
                 headline: nil,
                 summary: isFailed ? body : nil,
                 body: body,
@@ -77,19 +81,39 @@ extension ThreadedBriefingView {
         }
     }
 
+    private static func pausedTitle(for kind: BriefingDeliveryKind) -> String {
+        kind == .watcher ? "Paused watcher" : "Paused briefing"
+    }
+
+    private static func pausedSummary(for kind: BriefingDeliveryKind) -> String {
+        switch kind {
+        case .watcher:
+            return "Paused. Resume this watcher when you want scheduled checks to continue."
+        case .briefing:
+            return "Paused. Resume this briefing when you want scheduled deliveries to continue."
+        }
+    }
+
     private static func sourceTags(for widget: MessageWidget) -> [BriefingSourceTag] {
         guard let stories = widget.newsBrief?.stories else { return [] }
         var seen: Set<String> = []
         var tags: [BriefingSourceTag] = []
-        for source in stories.flatMap(\.sources) {
-            let label = source.domain?.nilIfBlank ?? source.label.nilIfBlank
+        for source in stories.flatMap(effectiveSources(for:)) {
+            let label = source.faviconIdentity ?? source.domain?.nilIfBlank ?? source.label.nilIfBlank
             guard let label else { continue }
             let key = label.lowercased()
             guard seen.insert(key).inserted else { continue }
-            let letter = source.label.nilIfBlank ?? String(label.prefix(1)).uppercased()
+            let letter = source.label.nilIfBlank
+                ?? SourceFaviconResolver.fallbackMark(for: source.faviconIdentity, fallback: source.fallbackMark)
             tags.append(BriefingSourceTag(letter: letter, colorHex: source.color ?? "#007AFF"))
         }
         return tags
+    }
+
+    private static func effectiveSources(for story: WidgetNewsStory) -> [WidgetNewsSource] {
+        if !story.sources.isEmpty { return story.sources }
+        guard let url = story.url?.nilIfBlank else { return [] }
+        return [WidgetNewsSource(domain: url)]
     }
 
     private static func sourceStatusText(for briefing: Briefing) -> String? {
@@ -127,11 +151,12 @@ extension ThreadedBriefingView {
 
     private static func failureSummary(for briefing: Briefing) -> String {
         let failure = briefing.lastFailureMessage?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if looksLikeSignInFailure(failure) {
+        let displayFailure = MessageRepository.displayFailureMessage(failure)
+        if looksLikeSignInFailure(failure) || looksLikeSignInFailure(displayFailure) {
             return "The plan wasn't signed in when the brief was due. Re-run now, or check the plan's sign-in to resume the schedule."
         }
-        if !failure.isEmpty {
-            return failure
+        if !displayFailure.isEmpty {
+            return displayFailure
         }
         return "The last scheduled run didn't produce a result. Re-run now, or check the plan's route and sign-in."
     }

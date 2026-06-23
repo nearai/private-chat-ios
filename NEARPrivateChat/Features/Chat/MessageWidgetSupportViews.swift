@@ -97,11 +97,21 @@ struct WidgetGenericBody: View {
     let note: String
 
     var body: some View {
-        // Render the note as Markdown (bold, lists, etc.) instead of raw text —
-        // briefing results and other generic widgets carry **bold**/numbered
-        // lists that must not show literal asterisks.
-        MarkdownMessageText(text: note)
+        // Generic widgets are compact presentation cards. Strip inline markdown
+        // markers before rendering so generated briefing notes never show raw
+        // **bold** or *italic* punctuation inside the card.
+        MarkdownMessageText(text: Self.displayNote(note))
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    static func displayNote(_ rawValue: String) -> String {
+        rawValue
+            .replacingOccurrences(of: #"\[([^\]]+)\]\([^)]+\)"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #"`([^`]+)`"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #"\*\*([^*]+)\*\*"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #"__([^_]+)__"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #"(?<!\*)\*([^*\n]+)\*(?!\*)"#, with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: #"(?<!_)_([^_\n]+)_(?!_)"#, with: "$1", options: .regularExpression)
     }
 }
 

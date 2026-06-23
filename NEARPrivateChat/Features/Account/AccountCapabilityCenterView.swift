@@ -161,7 +161,8 @@ struct CapabilitiesView: View {
     }
 
     private var connectionDiagnosticsRow: some View {
-        let needsAttention = connectionDiagnostics.privateLooksUnauthenticated
+        let needsAttention = connectionDiagnostics.privateLooksUnauthenticated ||
+            connectionDiagnostics.privateLooksTransportUnreachable
         return HStack(spacing: 12) {
             Image(systemName: needsAttention ? "exclamationmark.triangle.fill" : "waveform.path.ecg")
                 .font(.body.weight(.semibold))
@@ -171,9 +172,7 @@ struct CapabilitiesView: View {
                 Text("Connection diagnostics")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
-                Text(needsAttention
-                     ? "Private session isn't authenticating — tap to see details."
-                     : "See the real status of the last request on each route.")
+                Text(connectionDiagnosticsRowSubtitle)
                     .font(.caption)
                     .foregroundStyle(Color.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -190,6 +189,16 @@ struct CapabilitiesView: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(needsAttention ? Color.proofStale.opacity(0.4) : Color.appBorder, lineWidth: 1)
         }
+    }
+
+    private var connectionDiagnosticsRowSubtitle: String {
+        if connectionDiagnostics.privateLooksUnauthenticated {
+            return "Private session isn't authenticating — tap to see details."
+        }
+        if connectionDiagnostics.privateLooksTransportUnreachable {
+            return "Private backend did not answer — tap to see details."
+        }
+        return "See the real status of the last request on each route."
     }
 
     private var capabilityHeader: some View {

@@ -17,6 +17,9 @@ struct ConnectionDiagnosticsView: View {
                 if diagnostics.privateLooksUnauthenticated {
                     unauthenticatedBanner
                 }
+                if diagnostics.privateLooksTransportUnreachable {
+                    transportBanner
+                }
 
                 routeCard(
                     title: "Private route",
@@ -65,6 +68,25 @@ struct ConnectionDiagnosticsView: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.proofStale)
             Text(unauthenticatedBannerMessage)
+                .font(.footnote)
+                .foregroundStyle(Color.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.proofStale.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.proofStale.opacity(0.4), lineWidth: 1)
+        }
+    }
+
+    private var transportBanner: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Private backend did not answer", systemImage: "antenna.radiowaves.left.and.right.slash")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.proofStale)
+            Text("The session reached the private route path, but inference did not return a usable response. Retry private once; if this repeats, capture diagnostics for the backend/proxy route.")
                 .font(.footnote)
                 .foregroundStyle(Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

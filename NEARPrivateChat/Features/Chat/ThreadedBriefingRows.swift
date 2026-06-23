@@ -160,14 +160,14 @@ struct BotDeliveryRow: View {
 
     private var pendingCard: some View {
         let presentation = ThreadPendingDeliveryPresentation(delivery: delivery)
-        return HStack(alignment: .top, spacing: 12) {
+        return HStack(alignment: .top, spacing: 14) {
             ThreadPendingVisual(
                 kind: delivery.itemKind,
                 visualLabel: presentation.visualLabel
             )
 
-            VStack(alignment: .leading, spacing: 8) {
-                VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(presentation.title)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.textPrimary)
@@ -182,7 +182,7 @@ struct BotDeliveryRow: View {
                 HStack(spacing: 6) {
                     ThreadSourceStatusPill(
                         text: presentation.statusLabel,
-                        symbolName: "clock",
+                        symbolName: "calendar.badge.clock",
                         foreground: Color.actionPrimary,
                         background: Color.actionFill.opacity(0.64)
                     )
@@ -197,7 +197,7 @@ struct BotDeliveryRow: View {
 
             Spacer(minLength: 0)
         }
-        .padding(12)
+        .padding(13)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             LinearGradient(
@@ -214,7 +214,7 @@ struct BotDeliveryRow: View {
             RoundedRectangle.app(AppRadius.control)
                 .stroke(Color.actionPrimary.opacity(0.16), lineWidth: 1)
         }
-        .shadow(color: Color.brandBlack.opacity(0.04), radius: 10, y: 4)
+        .shadow(color: Color.brandBlack.opacity(0.055), radius: 13, y: 5)
         .accessibilityElement(children: .combine)
     }
 
@@ -242,7 +242,7 @@ struct ThreadPendingDeliveryPresentation: Equatable {
         if shouldNormalize {
             title = isWatcher ? "Scheduled watcher" : "Scheduled briefing"
             body = Self.normalizedPendingBody(rawBody, isWatcher: isWatcher)
-            statusLabel = "Pending"
+            statusLabel = "Scheduled"
         } else {
             title = rawTitle.isEmpty ? (isWatcher ? "Watcher" : "Briefing") : rawTitle
             body = rawBody?.nilIfEmpty
@@ -280,13 +280,19 @@ private struct ThreadPendingVisual: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color.actionPrimary,
-                            kind == .watcher ? Color.proofVerified : Color.brandSky
+                            kind == .watcher ? Color(red: 0.48, green: 0.33, blue: 0.88) : Color.actionPrimary,
+                            kind == .watcher ? Color.proofVerified : Color(red: 0.04, green: 0.63, blue: 0.82)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
+                .overlay(alignment: .topTrailing) {
+                    Circle()
+                        .fill(.white.opacity(0.20))
+                        .frame(width: 38, height: 38)
+                        .offset(x: 12, y: -14)
+                }
                 .overlay(alignment: .bottomLeading) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(visualLabel)
@@ -306,11 +312,11 @@ private struct ThreadPendingVisual: View {
 
             VStack(spacing: 7) {
                 Image(systemName: kind == .watcher ? "bell.badge.fill" : "doc.text.magnifyingglass")
-                    .font(.system(size: 23, weight: .bold))
+                    .font(.system(size: 25, weight: .bold))
                     .foregroundStyle(.white)
 
                 VStack(spacing: 4) {
-                    Capsule().fill(.white.opacity(0.9)).frame(width: 34, height: 4)
+                    Capsule().fill(.white.opacity(0.9)).frame(width: 38, height: 4)
                     HStack(spacing: 4) {
                         Capsule().fill(.white.opacity(0.58)).frame(width: 14, height: 4)
                         Capsule().fill(.white.opacity(0.78)).frame(width: 21, height: 4)
@@ -319,7 +325,7 @@ private struct ThreadPendingVisual: View {
             }
             .padding(.bottom, 8)
         }
-        .frame(width: 84, height: 78)
+        .frame(width: 92, height: 82)
         .overlay(alignment: .topTrailing) {
             Circle()
                 .fill(Color.appPanelBackground)
@@ -575,7 +581,7 @@ private struct ThreadSourceAvatar: View {
 
 private extension BriefingDelivery {
     var timeLabel: String {
-        time == "—" ? "pending" : time
+        time == "—" ? "scheduled" : time
     }
 
     var looksLikePendingPlaceholder: Bool {

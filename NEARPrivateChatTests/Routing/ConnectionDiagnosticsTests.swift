@@ -53,6 +53,20 @@ extension PrivateChatCoreTests {
     }
 
     @MainActor
+    func testDiagnosticsPrivateTransportFailureIsSeparateFromAuthAndRateLimit() {
+        let diagnostics = ConnectionDiagnostics()
+        diagnostics.record(
+            route: .nearPrivate,
+            modelID: "glm",
+            error: APIError.status(403, "OpenAI API error: API error: error sending request for url (https://cloud-api.near.ai/v1/responses)")
+        )
+
+        XCTAssertTrue(diagnostics.privateLooksTransportUnreachable)
+        XCTAssertFalse(diagnostics.privateLooksUnauthenticated)
+        XCTAssertFalse(diagnostics.privateLooksSessionRateLimited)
+    }
+
+    @MainActor
     func testDiagnosticsOutcomeCarriesAuthFailureClassification() {
         let diagnostics = ConnectionDiagnostics()
         diagnostics.record(route: .nearPrivate, modelID: "session-probe", error: APIError.status(401, "no token"))

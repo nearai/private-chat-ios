@@ -173,9 +173,24 @@ final class RouteHealthMonitor: ObservableObject {
         return !isAuthFailure(error) && !isExplicitRateLimitFailure(error) && isBusyFailureMessage(errorMessage(error))
     }
 
+    nonisolated static func isTransientPrivateTransportFailure(_ error: Error) -> Bool {
+        !isAuthFailure(error) &&
+            !isExplicitRateLimitFailure(error) &&
+            isPrivateTransportFailureMessage(errorMessage(error))
+    }
+
     nonisolated static func isExplicitRateLimitFailure(_ error: Error) -> Bool {
         if case APIError.status(429, _) = error { return true }
         return isExplicitRateLimitMessage(errorMessage(error))
+    }
+
+    nonisolated static func isPrivateTransportFailureMessage(_ message: String) -> Bool {
+        let lowercased = message.lowercased()
+        return lowercased.contains("can't reach the private backend") ||
+            (
+                lowercased.contains("error sending request for url") &&
+                (lowercased.contains("cloud-api.near.ai") || lowercased.contains("/v1/responses"))
+            )
     }
 
     private nonisolated static func isRestrictedFailureMessage(_ message: String) -> Bool {

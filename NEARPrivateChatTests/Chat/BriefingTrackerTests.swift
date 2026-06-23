@@ -1255,8 +1255,26 @@ extension PrivateChatCoreTests {
 
         XCTAssertEqual(presentation.title, "Scheduled briefing")
         XCTAssertEqual(presentation.body, "First brief scheduled. Delivery appears here after the next run.")
-        XCTAssertEqual(presentation.statusLabel, "Pending")
+        XCTAssertEqual(presentation.statusLabel, "Scheduled")
         XCTAssertEqual(presentation.visualLabel, "BRIEF")
+    }
+
+    func testThreadedBriefingMapsPausedNeverRunAsPausedNotPending() throws {
+        let briefing = Briefing(
+            title: "AI news digest",
+            prompt: "Create an AI news digest every morning.",
+            schedule: .daily(hour: 8, minute: 0),
+            isPaused: true,
+            kind: .dailyNews
+        )
+
+        let delivery = try XCTUnwrap(ThreadedBriefingView.deliveries(for: briefing).first)
+
+        XCTAssertFalse(delivery.isPending)
+        XCTAssertEqual(delivery.title, "Paused briefing")
+        XCTAssertEqual(delivery.body, "Paused. Resume this briefing when you want scheduled deliveries to continue.")
+        XCTAssertFalse(delivery.unread)
+        XCTAssertNil(delivery.widget)
     }
 
 
@@ -1361,6 +1379,24 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(routeDelivery.summary, routeFailureText)
     }
 
+    func testThreadedBriefingFailureDeliveryMapsRawBackendFailure() throws {
+        let rawFailure = "OpenAI API error: API error: error sending request for url (https://cloud-api.near.ai/v1/responses)"
+        let briefing = Briefing(
+            title: "Private route smoke test",
+            prompt: "Check whether the private route works.",
+            schedule: .daily(hour: 8, minute: 0),
+            lastFailureAt: Date(timeIntervalSince1970: 1_783_036_800),
+            lastFailureMessage: rawFailure
+        )
+
+        let delivery = try XCTUnwrap(ThreadedBriefingView.deliveries(for: briefing).first)
+
+        XCTAssertTrue(delivery.isFailure)
+        XCTAssertEqual(delivery.summary, "Can't reach the private backend right now — retry in a moment.")
+        XCTAssertFalse((delivery.summary ?? "").contains("OpenAI API error"))
+        XCTAssertFalse((delivery.summary ?? "").contains("cloud-api.near.ai"))
+    }
+
     func testThreadedBriefingMapsNewsWidgetSourcesIntoDeliveryFooter() throws {
         let widget = MessageWidget(
             kind: .newsBrief,
@@ -1399,6 +1435,37 @@ extension PrivateChatCoreTests {
 
         XCTAssertEqual(delivery.sources.map(\.letter), ["T", "A"])
         XCTAssertEqual(delivery.sources.map(\.colorHex), ["#000000", "#ff7e1c"])
+        XCTAssertNil(delivery.sourceStatusText)
+    }
+
+    func testThreadedBriefingMapsNewsStoryURLAsSourceEvidence() throws {
+        let widget = MessageWidget(
+            kind: .newsBrief,
+            title: "Daily briefing",
+            newsBrief: WidgetNewsBrief(
+                heading: "Today · 1 story",
+                stories: [
+                    WidgetNewsStory(
+                        title: "Iran talks resume",
+                        tag: "World",
+                        sources: [],
+                        url: "https://www.reuters.com/world/middle-east/iran-talks-resume/"
+                    )
+                ]
+            )
+        )
+        let briefing = Briefing(
+            title: "AI news digest",
+            prompt: "Create a daily news digest with links.",
+            schedule: .daily(hour: 8, minute: 0),
+            lastRunAt: Date(timeIntervalSince1970: 1_783_036_800),
+            latestResult: widget,
+            kind: .dailyNews
+        )
+
+        let delivery = try XCTUnwrap(ThreadedBriefingView.deliveries(for: briefing).first)
+
+        XCTAssertEqual(delivery.sources.map(\.letter), ["R"])
         XCTAssertNil(delivery.sourceStatusText)
     }
 

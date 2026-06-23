@@ -56,10 +56,10 @@ extension ChatStore {
                 let currentRoute = Self.routeKind(forModelID: currentModel)
                 if currentRoute == .nearPrivate,
                    transientPrivateRouteRetries < 1,
-                   RouteHealthMonitor.isTransientBusyFailure(error) {
+                   Self.shouldRetryPrivateRouteOnce(error) {
                     transientPrivateRouteRetries += 1
                     resetCurrentAssistantForRetry()
-                    showBanner("Private route is busy. Retrying once privately.")
+                    showBanner(Self.privateRouteRetryMessage(for: error))
                     try Task.checkCancellation()
                     try await Task.sleep(nanoseconds: Self.transientPrivateRouteRetryDelayNanoseconds)
                     continue
@@ -89,6 +89,17 @@ extension ChatStore {
     }
 
     nonisolated static let transientPrivateRouteRetryDelayNanoseconds: UInt64 = 750_000_000
+
+    nonisolated static func shouldRetryPrivateRouteOnce(_ error: Error) -> Bool {
+        RouteHealthMonitor.isTransientBusyFailure(error) ||
+            RouteHealthMonitor.isTransientPrivateTransportFailure(error)
+    }
+
+    nonisolated static func privateRouteRetryMessage(for error: Error) -> String {
+        RouteHealthMonitor.isTransientPrivateTransportFailure(error)
+            ? "Private backend did not answer. Retrying once privately."
+            : "Private route is busy. Retrying once privately."
+    }
 
     func streamResponse(
         model: String,

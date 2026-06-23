@@ -131,4 +131,18 @@ final class ConnectionDiagnostics: ObservableObject {
                 message.contains("rate-limited for this session")
             )
     }
+
+    /// The private route request reached neither a useful model response nor a
+    /// clear quota/auth decision. Treat this separately from sign-in and rate
+    /// limits so testers know to look at backend/proxy reachability.
+    var privateLooksTransportUnreachable: Bool {
+        guard let lastPrivateOutcome,
+              !lastPrivateOutcome.succeeded,
+              lastPrivateOutcome.route == .nearPrivate,
+              !lastPrivateOutcome.wasAuthFailure,
+              !privateLooksSessionRateLimited else {
+            return false
+        }
+        return RouteHealthMonitor.isPrivateTransportFailureMessage(lastPrivateOutcome.message)
+    }
 }

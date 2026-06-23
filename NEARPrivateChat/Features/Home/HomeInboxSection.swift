@@ -407,7 +407,9 @@ struct HomeBriefingFeedPresentation {
             if let condition = briefing.condition {
                 return "Watching for \(condition.summary)."
             }
-            return "Runs on schedule. Open to Run now or change cadence."
+            return briefing.isWatcherLike
+                ? "First check is scheduled. Results will appear here with a chart or source trail after the next run."
+                : "First brief is scheduled. Delivery will appear here with sources or a summary after the next run."
         }
         if let chart = briefing.latestResult?.chart {
             if let caption = chart.caption?.nilIfBlank { return caption }
@@ -709,7 +711,7 @@ private struct HomeBriefingFeedCard: View {
     }
 
     private var sourceChips: [ConversationSourceChip] {
-        let sources = briefing.latestResult?.newsBrief?.stories.flatMap(\.sources) ?? []
+        let sources = newsSources
         var seen: Set<String> = []
         var chips: [ConversationSourceChip] = []
         for source in sources {
@@ -726,6 +728,14 @@ private struct HomeBriefingFeedCard: View {
         return chips
     }
 
+    private var newsSources: [WidgetNewsSource] {
+        briefing.latestResult?.newsBrief?.stories.flatMap { story in
+            if !story.sources.isEmpty { return story.sources }
+            guard let url = story.url?.nilIfBlank else { return [] }
+            return [WidgetNewsSource(domain: url)]
+        } ?? []
+    }
+
     private var metadataChips: [HomeFeedMiniChip.Model] {
         var chips: [HomeFeedMiniChip.Model] = []
         if let contextText {
@@ -734,7 +744,8 @@ private struct HomeBriefingFeedCard: View {
         if let condition {
             chips.append(.init(text: condition.summary, symbolName: "bell", foreground: Color.proofStaleText, background: Color.proofStale.opacity(0.10)))
         }
-        if let sources = briefing.latestResult?.newsBrief?.stories.flatMap(\.sources), !sources.isEmpty {
+        if !newsSources.isEmpty {
+            let sources = newsSources
             let visibleSources = sources.prefix(2).map { source in
                 source
             }

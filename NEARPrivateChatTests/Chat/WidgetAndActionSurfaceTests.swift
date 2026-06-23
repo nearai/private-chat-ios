@@ -497,6 +497,23 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(chips.map(\.allowsNetworkFavicon), [true, true])
     }
 
+    func testGenericWidgetDisplayNoteStripsInlineMarkdownMarkers() {
+        let note = """
+        **USD ~22,500 / CAD ~C30,800** — as of June 2026.
+
+        What changed: Discontinuation triggered a *sharp supply-shock rally* with [source](https://example.com).
+        """
+
+        let display = WidgetGenericBody.displayNote(note)
+
+        XCTAssertTrue(display.contains("USD ~22,500 / CAD ~C30,800"))
+        XCTAssertTrue(display.contains("sharp supply-shock rally"))
+        XCTAssertTrue(display.contains("source"))
+        XCTAssertFalse(display.contains("**"))
+        XCTAssertFalse(display.contains("*sharp"))
+        XCTAssertFalse(display.contains("](https://example.com)"))
+    }
+
     func testWidgetExtractParsesActionPlanBlockAndStripsIt() throws {
         let text = """
         I found the top actions.

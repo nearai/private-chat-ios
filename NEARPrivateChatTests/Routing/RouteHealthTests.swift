@@ -98,6 +98,14 @@ extension PrivateChatCoreTests {
         XCTAssertFalse(RouteHealthMonitor.isTransientBusyFailure(APIError.status(403, "Access denied")))
     }
 
+    func testPrivateBackendRequestFailureIsTransientButNotRestricted() {
+        let error = APIError.status(403, "OpenAI API error: API error: error sending request for url (https://cloud-api.near.ai/v1/responses)")
+
+        XCTAssertTrue(RouteHealthMonitor.isTransientPrivateTransportFailure(error))
+        XCTAssertFalse(RouteHealthMonitor.isRestrictedClassError(error))
+        XCTAssertFalse(RouteHealthMonitor.isExplicitRateLimitFailure(error))
+    }
+
     func testDisplayFailureMessageDistinguishesPrivateBusyFromRateLimit() {
         let busy = ErrorMessageMapper.displayFailureMessage("The private route is busy right now. Retry private, or use the privacy proxy for this turn.")
         XCTAssertTrue(busy.localizedCaseInsensitiveContains("busy"))

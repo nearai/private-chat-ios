@@ -374,6 +374,82 @@ extension PrivateChatCoreTests {
     }
 
     @MainActor
+    func testPrivateRouteTransportFailureRetriesSameRouteOnce() async throws {
+        PrivateRouteRetryURLProtocol.install(responses: [
+            (
+                statusCode: 200,
+                body: """
+                data: {"type":"response.failed","response":{"error":{"message":"OpenAI API error: API error: error sending request for url (https://cloud-api.near.ai/v1/responses)"}}}
+                data: [DONE]
+
+                """
+            ),
+            (
+                statusCode: 200,
+                body: """
+                data: {"type":"response.created","response":{"id":"resp_retry_transport"}}
+                data: {"type":"response.output_text.delta","delta":"Recovered after transport miss."}
+                data: {"type":"response.completed","response":{"id":"resp_retry_transport"}}
+                data: [DONE]
+
+                """
+            )
+        ])
+        defer { PrivateRouteRetryURLProtocol.uninstall() }
+
+        let api = PrivateChatAPI(configuration: .production)
+        api.authToken = "test-session-token"
+        let routeHealth = RouteHealthMonitor()
+        let diagnostics = ConnectionDiagnostics()
+        let conversationStore = ConversationStore(
+            repository: ConversationRepository(api: PrivateChatAPI(configuration: .production))
+        )
+        let timelineStore = MessageTimelineStore()
+        let store = ChatStore(
+            api: api,
+            conversationStore: conversationStore,
+            messageTimelineStore: timelineStore,
+            routeHealth: routeHealth,
+            diagnostics: diagnostics
+        )
+        let conversation = ConversationSummary(
+            id: "conv-transport-retry",
+            createdAt: 1_700_000_000,
+            metadata: ConversationMetadata(title: "Transport retry")
+        )
+        store.selectedConversation = conversation
+        store.sendCurrentAssistantMessageID = "assistant-transport-retry"
+        store.messages = [
+            ChatMessage(
+                id: "assistant-transport-retry",
+                role: .assistant,
+                text: "",
+                model: ModelOption.nearPrivateDefaultModelID,
+                createdAt: Date(timeIntervalSince1970: 1_000),
+                status: "streaming",
+                responseID: nil,
+                isStreaming: true
+            )
+        ]
+
+        let finalModel = try await store.streamResponseWithFallback(
+            initialModel: ModelOption.nearPrivateDefaultModelID,
+            text: "health check",
+            attachments: [],
+            conversationID: conversation.id,
+            previousResponseID: nil,
+            initiator: "test"
+        )
+        store.flushPendingTextDelta(for: "assistant-transport-retry")
+
+        XCTAssertEqual(finalModel, ModelOption.nearPrivateDefaultModelID)
+        XCTAssertEqual(PrivateRouteRetryURLProtocol.requestPaths, ["/v1/responses", "/v1/responses"])
+        XCTAssertFalse(routeHealth.isTripped(.nearPrivate))
+        XCTAssertEqual(diagnostics.lastPrivateOutcome?.succeeded, true)
+        XCTAssertEqual(store.messages.first?.text, "Recovered after transport miss.")
+    }
+
+    @MainActor
     func testPrivateRouteRateLimitDoesNotAutoRetrySameRoute() async throws {
         PrivateRouteRetryURLProtocol.install(responses: [
             (

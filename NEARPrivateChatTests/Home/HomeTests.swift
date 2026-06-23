@@ -230,7 +230,7 @@ extension PrivateChatCoreTests {
         XCTAssertNil(presentation.statusKind)
         XCTAssertFalse(presentation.shouldShowStatusPill)
         XCTAssertNil(presentation.scheduleAccessoryText)
-        XCTAssertEqual(presentation.detailText, "Runs on schedule. Open to Run now or change cadence.")
+        XCTAssertEqual(presentation.detailText, "First check is scheduled. Results will appear here with a chart or source trail after the next run.")
         XCTAssertFalse(presentation.detailText.localizedCaseInsensitiveContains("Last run didn't start"))
         XCTAssertFalse(presentation.detailText.localizedCaseInsensitiveContains("Needs attention"))
         XCTAssertFalse(presentation.detailText.localizedCaseInsensitiveContains("Using web search"))
@@ -317,6 +317,24 @@ extension PrivateChatCoreTests {
             presentation.detailText,
             "The plan wasn't signed in when the brief was due. Re-run now, or check the plan's sign-in to resume the schedule."
         )
+    }
+
+    func testHomeBriefingFeedPresentationMapsRawBackendFailure() {
+        let rawFailure = "OpenAI API error: API error: error sending request for url (https://cloud-api.near.ai/v1/responses)"
+        let watcher = Briefing(
+            title: "Private route smoke test",
+            prompt: "Check whether private routing works.",
+            schedule: .daily(hour: 8, minute: 0),
+            lastFailureAt: Date(timeIntervalSince1970: 1_781_280_120),
+            lastFailureMessage: rawFailure
+        )
+
+        let presentation = HomeBriefingFeedPresentation(briefing: watcher)
+
+        XCTAssertEqual(presentation.statusKind, .attention)
+        XCTAssertEqual(presentation.detailText, "Can't reach the private backend right now — retry in a moment.")
+        XCTAssertFalse(presentation.detailText.contains("OpenAI API error"))
+        XCTAssertFalse(presentation.detailText.contains("cloud-api.near.ai"))
     }
 
     func testHomeFeedScopesKeepBriefingsAndWatchersSeparate() {
