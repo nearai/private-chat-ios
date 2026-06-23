@@ -41,7 +41,7 @@ struct BotDeliveryRow: View {
 
                 if delivery.isFailure {
                     failureCard
-                } else if delivery.isPending {
+                } else if showsPendingCard {
                     pendingCard
                 } else if let widget = delivery.widget {
                     MessageWidgetCard(widget: widget)
@@ -66,7 +66,7 @@ struct BotDeliveryRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if delivery.headline == nil && delivery.widget == nil && !delivery.isPending {
+                if delivery.headline == nil && delivery.widget == nil && !showsPendingCard {
                     deliveryMetadata
                 }
             }
@@ -216,6 +216,10 @@ struct BotDeliveryRow: View {
 
     private var statusAccent: Color {
         delivery.isFailure ? .proofStale : .proofVerified
+    }
+
+    private var showsPendingCard: Bool {
+        delivery.isPending || delivery.looksLikePendingPlaceholder
     }
 }
 
@@ -505,6 +509,17 @@ private struct ThreadSourceAvatar: View {
 private extension BriefingDelivery {
     var timeLabel: String {
         time == "—" ? "pending" : time
+    }
+
+    var looksLikePendingPlaceholder: Bool {
+        guard !isFailure, widget == nil, headline == nil else { return false }
+        let text = [title, body, summary]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .lowercased()
+        return text.contains("no delivery yet") ||
+            text.contains("no check yet") ||
+            text.contains("next scheduled run")
     }
 }
 

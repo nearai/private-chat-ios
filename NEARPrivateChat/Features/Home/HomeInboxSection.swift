@@ -669,7 +669,13 @@ private struct HomeBriefingFeedCard: View {
 
     @ViewBuilder
     private var leadingVisual: some View {
-        if !sourceChips.isEmpty {
+        if metricValue != nil {
+            HomeBriefingMetricVisualTile(
+                trend: metricTrend,
+                points: metricSparklinePoints,
+                tint: metricVisualTint
+            )
+        } else if !sourceChips.isEmpty {
             HomeSourceClusterIcon(chips: Array(sourceChips.prefix(3)), tint: tint)
         } else {
             HomeBriefingVisualTile(
@@ -765,15 +771,45 @@ private struct HomeBriefingFeedCard: View {
         briefing.latestResult?.chart?.delta?.nilIfBlank ?? briefing.latestResult?.metric?.delta?.nilIfBlank
     }
 
+    private var metricTrend: WidgetTrend? {
+        briefing.latestResult?.chart?.trend ?? briefing.latestResult?.metric?.trend
+    }
+
+    private var metricSparklinePoints: [Double] {
+        if let points = briefing.latestResult?.chart?.points, points.count >= 2 {
+            return points
+        }
+        let historyPoints = briefing.history.map(\.value)
+        if historyPoints.count >= 2 {
+            return historyPoints
+        }
+        switch metricTrend {
+        case .up:
+            return [0.20, 0.34, 0.30, 0.58, 0.76]
+        case .down:
+            return [0.78, 0.66, 0.70, 0.42, 0.26]
+        case .flat, .none:
+            return [0.48, 0.50, 0.47, 0.51, 0.49]
+        }
+    }
+
     private var metricTone: Color {
-        let trend = briefing.latestResult?.chart?.trend ?? briefing.latestResult?.metric?.trend
-        switch trend {
+        switch metricTrend {
         case .up:
             return Color.proofVerifiedText
         case .down:
             return Color.proofMismatch
         case .flat, .none:
             return Color.textSecondary
+        }
+    }
+
+    private var metricVisualTint: Color {
+        switch metricTrend {
+        case .up, .down:
+            return metricTone
+        case .flat, .none:
+            return tint
         }
     }
 
@@ -850,6 +886,100 @@ private struct HomeBriefingFeedCard: View {
     }
 }
 
+private struct HomeBriefingMetricVisualTile: View {
+    let trend: WidgetTrend?
+    let points: [Double]
+    let tint: Color
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle.app(AppRadius.control)
+                .fill(backgroundGradient)
+                .overlay {
+                    RoundedRectangle.app(AppRadius.control)
+                        .stroke(tint.opacity(0.18), lineWidth: 1)
+                }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 0) {
+                    Image(systemName: trendSymbolName)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(tint)
+
+                    Spacer(minLength: 0)
+
+                    Circle()
+                        .fill(tint.opacity(0.78))
+                        .frame(width: 5, height: 5)
+                }
+
+                sparkline
+
+                HStack(spacing: 3) {
+                    Capsule().fill(tint.opacity(0.72)).frame(width: 10, height: 3)
+                    Capsule().fill(tint.opacity(0.34)).frame(width: 6, height: 3)
+                    Capsule().fill(tint.opacity(0.56)).frame(width: 8, height: 3)
+                }
+            }
+            .padding(7)
+        }
+        .frame(width: 48, height: 48)
+        .accessibilityHidden(true)
+    }
+
+    private var sparkline: some View {
+        GeometryReader { proxy in
+            let normalized = normalizedPoints
+            Path { path in
+                guard let first = normalized.first else { return }
+                let width = max(proxy.size.width, 1)
+                let height = max(proxy.size.height, 1)
+                let xStep = normalized.count > 1 ? width / CGFloat(normalized.count - 1) : width
+                path.move(to: CGPoint(x: 0, y: height * (1 - first)))
+                for pointIndex in normalized.indices.dropFirst() {
+                    path.addLine(to: CGPoint(
+                        x: CGFloat(pointIndex) * xStep,
+                        y: height * (1 - normalized[pointIndex])
+                    ))
+                }
+            }
+            .stroke(tint, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+        }
+        .frame(height: 15)
+    }
+
+    private var normalizedPoints: [CGFloat] {
+        let safePoints = points.isEmpty ? [0.48, 0.50, 0.47, 0.51, 0.49] : points
+        guard let minimum = safePoints.min(),
+              let maximum = safePoints.max(),
+              maximum > minimum else {
+            return Array(repeating: 0.50, count: max(safePoints.count, 2))
+        }
+        return safePoints.map { point in
+            CGFloat((point - minimum) / (maximum - minimum)) * 0.74 + 0.13
+        }
+    }
+
+    private var trendSymbolName: String {
+        switch trend {
+        case .up:
+            return "arrow.up.right"
+        case .down:
+            return "arrow.down.right"
+        case .flat, .none:
+            return "minus"
+        }
+    }
+
+    private var backgroundGradient: LinearGradient {
+        LinearGradient(
+            colors: [tint.opacity(0.18), Color.appPanelBackground.opacity(0.96)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
 private struct HomeBriefingVisualTile: View {
     let symbolName: String
     let tint: Color
@@ -864,11 +994,11 @@ private struct HomeBriefingVisualTile: View {
                     if isPending {
                         Circle()
                             .fill(Color.appPanelBackground)
-                            .frame(width: 14, height: 14)
+                            .frame(width: 16, height: 16)
                             .overlay {
                                 Circle()
                                     .fill(tint)
-                                    .frame(width: 6, height: 6)
+                                    .frame(width: 7, height: 7)
                             }
                             .offset(x: 3, y: -3)
                     }
@@ -880,7 +1010,7 @@ private struct HomeBriefingVisualTile: View {
 
             VStack(spacing: 5) {
                 Image(systemName: symbolName)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(isPending ? .white : tint)
 
                 HStack(spacing: 3) {
@@ -897,7 +1027,7 @@ private struct HomeBriefingVisualTile: View {
             }
             .padding(.top, 1)
         }
-        .frame(width: 42, height: 42)
+        .frame(width: 48, height: 48)
         .accessibilityHidden(true)
     }
 
@@ -1287,7 +1417,7 @@ private struct HomeSourceClusterIcon: View {
         ZStack(alignment: .topLeading) {
             RoundedRectangle.app(AppRadius.control)
                 .fill(tint.opacity(0.12))
-                .frame(width: 42, height: 42)
+                .frame(width: 48, height: 48)
                 .overlay {
                     RoundedRectangle.app(AppRadius.control)
                         .stroke(tint.opacity(0.18), lineWidth: 1)
@@ -1296,9 +1426,9 @@ private struct HomeSourceClusterIcon: View {
             ForEach(Array(chips.prefix(3).enumerated()), id: \.offset) { index, chip in
                 SourceFaviconView(
                     domain: chip.faviconDomain,
-                    size: index == 0 ? 24 : 19,
+                    size: index == 0 ? 27 : 21,
                     fallbackText: chip.fallback,
-                    cornerRadius: index == 0 ? 8 : 7,
+                    cornerRadius: index == 0 ? 9 : 7,
                     borderColor: Color.appPanelBackground,
                     borderWidth: 1.5,
                     allowsNetworkFavicon: chip.allowsNetworkFavicon
@@ -1306,18 +1436,18 @@ private struct HomeSourceClusterIcon: View {
                 .offset(offset(for: index))
             }
         }
-        .frame(width: 42, height: 42)
+        .frame(width: 48, height: 48)
         .accessibilityHidden(true)
     }
 
     private func offset(for index: Int) -> CGSize {
         switch index {
         case 0:
-            return CGSize(width: 6, height: 6)
+            return CGSize(width: 6, height: 7)
         case 1:
-            return CGSize(width: 21, height: 4)
+            return CGSize(width: 24, height: 5)
         default:
-            return CGSize(width: 19, height: 21)
+            return CGSize(width: 21, height: 24)
         }
     }
 }
