@@ -400,6 +400,21 @@ extension PrivateChatCoreTests {
         )
     }
 
+    func testLiveWebSearchQueryStillShowsSourceActionWhenLinksAreMissing() {
+        XCTAssertTrue(
+            AssistantMessagePresentationPolicy.shouldShowSourceAction(
+                sources: [],
+                searchQuery: "SpaceX IPO private market news | Iran conflict developments"
+            )
+        )
+        XCTAssertFalse(
+            AssistantMessagePresentationPolicy.shouldShowSourceAction(
+                sources: [],
+                searchQuery: "   "
+            )
+        )
+    }
+
     func testMessageRepositoryDetectsSourcesFromStoredNewsWidget() {
         let message = ChatMessage(
             id: "assistant-1",

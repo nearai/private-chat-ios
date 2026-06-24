@@ -25,6 +25,11 @@ struct AssistantMessagePresentationPolicy {
         return !widgetHasInlineStorySources(widget)
     }
 
+    static func shouldShowSourceAction(sources: [WebSearchSource], searchQuery: String?) -> Bool {
+        if !sources.isEmpty { return true }
+        return searchQuery?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
     private static func widgetHasInlineStorySources(_ widget: MessageWidget?) -> Bool {
         widget?.newsBrief?.stories.contains { story in
             story.sources.contains { source in
@@ -335,6 +340,7 @@ struct MessageBubble: View {
                         canSaveToProject: chatStore.selectedProject != nil,
                         isSavedToProject: chatStore.isMessageSavedToSelectedProject(message),
                         canOpen: message.isArtifactCandidate,
+                        showsSourceAction: shouldShowSourceAction,
                         sourceCount: message.sources.count,
                         onCopy: { Clipboard.copy(message.text) },
                         onCopySigned: { chatStore.copySignedSnippet(for: message) },
@@ -585,6 +591,13 @@ struct MessageBubble: View {
         AssistantMessagePresentationPolicy.shouldShowSourceCarousel(
             sources: message.sources,
             widget: displayWidget
+        )
+    }
+
+    private var shouldShowSourceAction: Bool {
+        AssistantMessagePresentationPolicy.shouldShowSourceAction(
+            sources: message.sources,
+            searchQuery: message.searchQuery
         )
     }
 

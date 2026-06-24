@@ -57,6 +57,14 @@ else
   export RELEASE_GATE_FAIL_ON_SKIP="${RELEASE_GATE_FAIL_ON_SKIP:-0}"
 fi
 
+RETRY_ARGS=()
+if [[ "${RELEASE_GATE_RETRY_TESTS:-1}" != "0" ]]; then
+  TEST_ITERATIONS="${RELEASE_GATE_TEST_ITERATIONS:-2}"
+  if [[ "$TEST_ITERATIONS" -gt 1 ]]; then
+    RETRY_ARGS=(-retry-tests-on-failure -test-iterations "$TEST_ITERATIONS")
+  fi
+fi
+
 set +e
 xcodebuild \
   -project "$ROOT_DIR/NEARPrivateChat.xcodeproj" \
@@ -68,7 +76,7 @@ xcodebuild \
   "-only-testing:$ONLY_TESTING" \
   -test-timeouts-enabled YES \
   -default-test-execution-time-allowance 360 \
-  -retry-tests-on-failure -test-iterations 2 \
+  ${RETRY_ARGS[@]+"${RETRY_ARGS[@]}"} \
   -parallel-testing-enabled NO \
   CODE_SIGNING_ALLOWED=NO \
   test

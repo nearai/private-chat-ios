@@ -420,8 +420,8 @@ struct HomeBriefingFeedPresentation {
                 return "Watching for \(condition.summary). The next match will land as a sourced stream with a follow-up."
             }
             return briefing.isWatcherLike
-                ? "Scheduled. First result will land here as a chart with source evidence and a follow-up."
-                : "Scheduled. First delivery will land here with sources, a summary, and a follow-up."
+                ? "Queued for first run. It will return a live chart, source trail, and follow-up."
+                : "Queued for first run. It will return a sourced stream, summary, and follow-up."
         }
         if let chart = briefing.latestResult?.chart {
             if let caption = chart.caption?.nilIfBlank { return caption }
@@ -897,11 +897,16 @@ private struct HomeBriefingFeedCard: View {
             )
         } else if !sourceChips.isEmpty {
             HomeSourceClusterIcon(chips: Array(sourceChips.prefix(3)), tint: tint)
+        } else if presentation.isPending {
+            HomePendingStreamVisualTile(
+                symbolName: symbolName,
+                tint: tint,
+                isWatcher: presentation.categoryText == "Watcher"
+            )
         } else {
             HomeBriefingVisualTile(
                 symbolName: symbolName,
                 tint: tint,
-                isPending: presentation.isPending,
                 isWatcher: presentation.categoryText == "Watcher"
             )
         }
@@ -964,6 +969,7 @@ private struct HomeBriefingFeedCard: View {
             if let pendingPromiseText = presentation.pendingPromiseText {
                 chips.append(.init(text: pendingPromiseText, symbolName: presentation.pendingPromiseSymbolName, foreground: Color.textSecondary, background: Color.appSecondaryBackground))
             }
+            chips.append(.init(text: "Open thread", symbolName: "arrow.up.right", foreground: Color.actionPrimary, background: Color.actionFill.opacity(0.42)))
         }
         if let contextText {
             chips.append(.init(text: contextText, symbolName: "folder", foreground: Color.textTertiary, background: Color.appSecondaryBackground))
@@ -1228,45 +1234,31 @@ private struct HomeBriefingMetricVisualTile: View {
 private struct HomeBriefingVisualTile: View {
     let symbolName: String
     let tint: Color
-    let isPending: Bool
     let isWatcher: Bool
 
     var body: some View {
         ZStack {
             RoundedRectangle.app(AppRadius.control)
                 .fill(backgroundGradient)
-                .overlay(alignment: .topTrailing) {
-                    if isPending {
-                        Circle()
-                            .fill(Color.appPanelBackground)
-                            .frame(width: 16, height: 16)
-                            .overlay {
-                                Circle()
-                                    .fill(tint)
-                                    .frame(width: 7, height: 7)
-                            }
-                            .offset(x: 3, y: -3)
-                    }
-                }
                 .overlay {
                     RoundedRectangle.app(AppRadius.control)
-                        .stroke(tint.opacity(isPending ? 0.20 : 0.14), lineWidth: 1)
+                        .stroke(tint.opacity(0.14), lineWidth: 1)
                 }
 
             VStack(spacing: 5) {
                 Image(systemName: symbolName)
                     .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(isPending ? .white : tint)
+                    .foregroundStyle(tint)
 
                 HStack(spacing: 3) {
                     Capsule()
-                        .fill(lineColor.opacity(isWatcher ? 0.86 : 0.96))
+                        .fill(tint.opacity(isWatcher ? 0.86 : 0.96))
                         .frame(width: 13, height: 3)
                     Capsule()
-                        .fill(lineColor.opacity(0.62))
+                        .fill(tint.opacity(0.62))
                         .frame(width: 8, height: 3)
                     Capsule()
-                        .fill(lineColor.opacity(0.78))
+                        .fill(tint.opacity(0.78))
                         .frame(width: 11, height: 3)
                 }
             }
@@ -1277,26 +1269,64 @@ private struct HomeBriefingVisualTile: View {
     }
 
     private var backgroundGradient: LinearGradient {
-        if isPending {
-            return LinearGradient(
-                colors: [tint.opacity(0.90), secondaryTint.opacity(0.84)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-        return LinearGradient(
+        LinearGradient(
             colors: [tint.opacity(0.14), Color.appPanelBackground],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
+    }
+}
+
+private struct HomePendingStreamVisualTile: View {
+    let symbolName: String
+    let tint: Color
+    let isWatcher: Bool
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle.app(AppRadius.control)
+                .fill(
+                    LinearGradient(
+                        colors: [tint.opacity(0.92), secondaryTint.opacity(0.82)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay {
+                    RoundedRectangle.app(AppRadius.control)
+                        .stroke(Color.white.opacity(0.24), lineWidth: 1)
+                }
+
+            VStack(spacing: 4) {
+                HStack(spacing: 3) {
+                    MiniStreamTile(symbolName: symbolName, opacity: 0.96)
+                    MiniStreamTile(symbolName: "link", opacity: 0.76)
+                }
+                HStack(spacing: 3) {
+                    MiniStreamTile(symbolName: isWatcher ? "chart.line.uptrend.xyaxis" : "text.justify.left", opacity: 0.70)
+                    MiniStreamTile(symbolName: "arrow.up.right", opacity: 0.88)
+                }
+            }
+        }
+        .frame(width: 52, height: 52)
+        .accessibilityHidden(true)
     }
 
     private var secondaryTint: Color {
         isWatcher ? Color.proofVerified : Color.brandSky
     }
 
-    private var lineColor: Color {
-        isPending ? .white : tint
+    private struct MiniStreamTile: View {
+        let symbolName: String
+        let opacity: Double
+
+        var body: some View {
+            Image(systemName: symbolName)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 18, height: 18)
+                .background(Color.white.opacity(opacity * 0.20), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+        }
     }
 }
 

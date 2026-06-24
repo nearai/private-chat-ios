@@ -585,6 +585,34 @@ extension PrivateChatCoreTests {
     }
 
     @MainActor
+    func testMessageTimelineStoreDoesNotMarkEmptyPrivateCompletionAsSuccess() {
+        let store = MessageTimelineStore()
+        store.messages = [
+            ChatMessage(
+                id: "assistant-empty",
+                role: .assistant,
+                text: "",
+                model: ModelOption.nearPrivateDefaultModelID,
+                createdAt: Date(timeIntervalSince1970: 1_000),
+                status: "streaming",
+                responseID: nil,
+                isStreaming: true
+            )
+        ]
+
+        store.apply(
+            streamEvent: .completed(responseID: "resp-empty"),
+            conversationID: "conv-1",
+            assistantMessageID: "assistant-empty"
+        )
+
+        let message = store.messages.first
+        XCTAssertEqual(message?.status, "failed")
+        XCTAssertEqual(message?.isStreaming, false)
+        XCTAssertTrue(message?.text.localizedCaseInsensitiveContains("private route completed without returning a visible answer") ?? false)
+    }
+
+    @MainActor
     func testMessageTimelineStoreCancelsAndFlushesStreamingMessages() {
         let store = MessageTimelineStore()
         store.messages = [

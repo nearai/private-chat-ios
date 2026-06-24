@@ -230,7 +230,7 @@ extension PrivateChatCoreTests {
         XCTAssertNil(presentation.statusKind)
         XCTAssertFalse(presentation.shouldShowStatusPill)
         XCTAssertNil(presentation.scheduleAccessoryText)
-        XCTAssertEqual(presentation.detailText, "Scheduled. First result will land here as a chart with source evidence and a follow-up.")
+        XCTAssertEqual(presentation.detailText, "Queued for first run. It will return a live chart, source trail, and follow-up.")
         XCTAssertEqual(presentation.pendingPromiseText, "Chart + sources")
         XCTAssertEqual(presentation.pendingPromiseSymbolName, "chart.line.uptrend.xyaxis")
         XCTAssertFalse(presentation.detailText.localizedCaseInsensitiveContains("Last run didn't start"))
@@ -255,7 +255,7 @@ extension PrivateChatCoreTests {
 
         XCTAssertEqual(presentation.categoryText, "Briefing")
         XCTAssertTrue(presentation.isPending)
-        XCTAssertEqual(presentation.detailText, "Scheduled. First delivery will land here with sources, a summary, and a follow-up.")
+        XCTAssertEqual(presentation.detailText, "Queued for first run. It will return a sourced stream, summary, and follow-up.")
         XCTAssertEqual(presentation.pendingPromiseText, "Summary + sources")
         XCTAssertEqual(presentation.pendingPromiseSymbolName, "link")
         XCTAssertFalse(presentation.detailText.localizedCaseInsensitiveContains("No delivery yet"))

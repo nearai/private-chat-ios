@@ -763,27 +763,41 @@ struct SourcesDetailView: View {
                 }
 
                 Section {
-                    ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
-                        if let url = source.safeURL {
-                            Link(destination: url) {
-                                HStack(spacing: 11) {
-                                    SourceLogo(source: source, fallbackText: "\(index + 1)")
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(source.displayTitle)
-                                            .font(.subheadline.weight(.semibold))
-                                            .foregroundStyle(.primary)
-                                            .lineLimit(2)
-                                        Text(source.displaySubtitle)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                    if sources.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("No linked sources returned", systemImage: "exclamationmark.triangle")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Color.proofStaleText)
+                            Text("This turn requested live web search, but the backend did not return citation links. Ask again or retry private route before relying on the answer.")
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(Color.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.vertical, 4)
+                        .accessibilityIdentifier("sources.detail.empty")
+                    } else {
+                        ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
+                            if let url = source.safeURL {
+                                Link(destination: url) {
+                                    HStack(spacing: 11) {
+                                        SourceLogo(source: source, fallbackText: "\(index + 1)")
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(source.displayTitle)
+                                                .font(.subheadline.weight(.semibold))
+                                                .foregroundStyle(.primary)
+                                                .lineLimit(2)
+                                            Text(source.displaySubtitle)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        Spacer(minLength: 8)
+                                        Image(systemName: "arrow.up.right")
+                                            .font(.caption.weight(.bold))
+                                            .foregroundStyle(Color.actionPrimary)
                                     }
-                                    Spacer(minLength: 8)
-                                    Image(systemName: "arrow.up.right")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(Color.actionPrimary)
                                 }
+                                .accessibilityIdentifier("sources.detail.row.\(index + 1)")
                             }
-                            .accessibilityIdentifier("sources.detail.row.\(index + 1)")
                         }
                     }
                 } header: {

@@ -4,6 +4,7 @@ struct AssistantInlineActions: View {
     let canSaveToProject: Bool
     let isSavedToProject: Bool
     let canOpen: Bool
+    let showsSourceAction: Bool
     let sourceCount: Int
     let onCopy: () -> Void
     let onCopySigned: () -> Void
@@ -24,7 +25,7 @@ struct AssistantInlineActions: View {
                     action: onCopy
                 )
 
-                if sourceCount > 0 {
+                if showsSourceAction {
                     compactActionButton(
                         symbolName: "link",
                         title: sourceButtonLabel,
@@ -120,11 +121,13 @@ struct AssistantInlineActions: View {
     }
 
     private var sourceButtonLabel: String {
-        sourceCount > 99 ? "99+" : "\(sourceCount)"
+        guard sourceCount > 0 else { return "Search" }
+        return sourceCount > 99 ? "99+" : "\(sourceCount)"
     }
 
     private var sourceAccessibilityLabel: String {
-        "\(sourceCount) source\(sourceCount == 1 ? "" : "s")"
+        guard sourceCount > 0 else { return "Searches requested; no linked sources returned yet" }
+        return "\(sourceCount) source\(sourceCount == 1 ? "" : "s")"
     }
 
     private var saveLabel: String {

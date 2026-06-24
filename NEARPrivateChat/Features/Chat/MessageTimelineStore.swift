@@ -115,7 +115,7 @@ final class MessageTimelineStore: ObservableObject {
                 message.status = "approval"
                 message.isStreaming = false
             }
-        case let .gateDenied(_, _):
+        case .gateDenied(_, _):
             flushPendingTextDelta(for: assistantMessageID)
             updateMessage(assistantMessageID) { message in
                 message.pendingApproval = nil
@@ -184,6 +184,9 @@ final class MessageTimelineStore: ObservableObject {
                 message.responseID = responseID ?? message.responseID
                 if message.sources.isEmpty {
                     message.sources = MessageRepository.inferredSources(from: message.text)
+                }
+                if Self.markEmptyCompletedResponseAsFailedIfNeeded(&message) {
+                    return
                 }
                 message.status = "completed"
                 message.isStreaming = false
@@ -262,8 +265,33 @@ final class MessageTimelineStore: ObservableObject {
             if message.sources.isEmpty {
                 message.sources = MessageRepository.inferredSources(from: message.text)
             }
+            if Self.markEmptyCompletedResponseAsFailedIfNeeded(&message) {
+                message.trustMetadata = trustMetadata(message)
+                return
+            }
             message.trustMetadata = trustMetadata(message)
         }
+    }
+
+    @discardableResult
+    private static func markEmptyCompletedResponseAsFailedIfNeeded(_ message: inout ChatMessage) -> Bool {
+        guard message.role == .assistant,
+              message.status != "failed",
+              message.status != "approval",
+              message.status != "gate_denied",
+              message.widget == nil,
+              message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+        let isCloudRoute = message.model?.hasPrefix(ModelOption.nearCloudModelPrefix) == true
+        if isCloudRoute {
+            message.text = "The Cloud route completed without returning a visible answer. Retry the request before relying on it."
+        } else {
+            message.text = "The private route completed without returning a visible answer. Retry private before relying on it."
+        }
+        message.status = "failed"
+        message.isStreaming = false
+        return true
     }
 
     func markStreamingMessagesCancelled(
