@@ -377,6 +377,12 @@ struct HomeBriefingFeedPresentation {
         return briefing.isWatcherLike ? "Chart + sources" : "Summary + sources"
     }
 
+    var pendingPromiseChipText: String? {
+        guard isPending else { return nil }
+        if briefing.condition != nil { return "Trigger" }
+        return briefing.isWatcherLike ? "Chart" : "Summary"
+    }
+
     var pendingPromiseSymbolName: String? {
         guard isPending else { return nil }
         if briefing.condition != nil { return "bell.badge" }
@@ -966,10 +972,10 @@ private struct HomeBriefingFeedCard: View {
         var chips: [HomeFeedMiniChip.Model] = []
         if presentation.isPending {
             chips.append(.init(text: "Scheduled", symbolName: "calendar.badge.clock", foreground: Color.actionPrimary, background: Color.actionFill.opacity(0.55)))
-            if let pendingPromiseText = presentation.pendingPromiseText {
-                chips.append(.init(text: pendingPromiseText, symbolName: presentation.pendingPromiseSymbolName, foreground: Color.textSecondary, background: Color.appSecondaryBackground))
+            if let pendingPromiseChipText = presentation.pendingPromiseChipText {
+                chips.append(.init(text: pendingPromiseChipText, symbolName: presentation.pendingPromiseSymbolName, foreground: Color.textSecondary, background: Color.appSecondaryBackground))
             }
-            chips.append(.init(text: "Open thread", symbolName: "arrow.up.right", foreground: Color.actionPrimary, background: Color.actionFill.opacity(0.42)))
+            chips.append(.init(text: "Open", symbolName: "arrow.up.right", foreground: Color.actionPrimary, background: Color.actionFill.opacity(0.42)))
         }
         if let contextText {
             chips.append(.init(text: contextText, symbolName: "folder", foreground: Color.textTertiary, background: Color.appSecondaryBackground))
