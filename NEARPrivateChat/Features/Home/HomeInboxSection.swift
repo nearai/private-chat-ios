@@ -325,8 +325,8 @@ struct HomeBriefingFeedList: View {
 
     var body: some View {
         VStack(spacing: 9) {
-            ForEach(briefings) { briefing in
-                HomeBriefingFeedCard(briefing: briefing) {
+            ForEach(Array(briefings.enumerated()), id: \.element.id) { index, briefing in
+                HomeBriefingFeedCard(briefing: briefing, isFeatured: index == 0) {
                     onOpen(briefing)
                 }
             }
@@ -522,56 +522,262 @@ struct HomeBriefingFeedPresentation {
 
 private struct HomeBriefingFeedCard: View {
     let briefing: Briefing
+    var isFeatured = false
     let onOpen: () -> Void
 
     var body: some View {
         Button(action: onOpen) {
-            HStack(alignment: .top, spacing: 10) {
-                accentRail
-
-                leadingVisual
-
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack(alignment: .top, spacing: 8) {
-                        Text(presentation.metaText)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(Color.textTertiary)
-                            .lineLimit(1)
-
-                        Spacer(minLength: 8)
-
-                        if presentation.shouldShowStatusPill {
-                            statusPill
-                        } else if let justRanText = presentation.justRanText {
-                            justRanBadge(text: justRanText)
-                        } else if let countdown = presentation.nextRunCountdownText {
-                            countdownPill(text: countdown)
-                        } else if let scheduleTimeText = presentation.scheduleAccessoryText {
-                            Text(scheduleTimeText)
-                                .font(.caption2.weight(.medium))
-                                .foregroundStyle(Color.textTertiary)
-                                .lineLimit(1)
-                        }
-                    }
-
-                    headlineBlock
-
-                    bottomMetadata
-                }
+            if isFeatured {
+                featuredCardBody
+            } else {
+                compactCardBody
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, minHeight: 118, alignment: .topLeading)
-            .background {
-                RoundedRectangle.app(AppRadius.control)
-                    .fill(cardGradient)
-            }
-            .overlay {
-                RoundedRectangle.app(AppRadius.control)
-                    .stroke(cardBorder, lineWidth: 1)
-            }
-            .shadow(color: Color.brandBlack.opacity(0.032), radius: 13, y: 5)
         }
         .buttonStyle(.plain)
+    }
+
+    private var compactCardBody: some View {
+        HStack(alignment: .top, spacing: 10) {
+            accentRail
+
+            leadingVisual
+
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(alignment: .top, spacing: 8) {
+                    Text(presentation.metaText)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color.textTertiary)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 8)
+
+                    headerAccessory
+                }
+
+                headlineBlock
+
+                bottomMetadata
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 118, alignment: .topLeading)
+        .background {
+            RoundedRectangle.app(AppRadius.control)
+                .fill(cardGradient)
+        }
+        .overlay {
+            RoundedRectangle.app(AppRadius.control)
+                .stroke(cardBorder, lineWidth: 1)
+        }
+        .shadow(color: Color.brandBlack.opacity(0.032), radius: 13, y: 5)
+    }
+
+    private var featuredCardBody: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(presentation.metaText)
+                    .font(.caption2.weight(.bold))
+                    .tracking(0.4)
+                    .textCase(.uppercase)
+                    .foregroundStyle(tint)
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                headerAccessory
+            }
+
+            if let metricValue {
+                HStack(alignment: .top, spacing: 12) {
+                    leadingVisual
+                        .padding(.top, 1)
+
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(displayTitle)
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(Color.textPrimary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        HStack(alignment: .lastTextBaseline, spacing: 8) {
+                            Text(metricValue)
+                                .font(.title2.weight(.bold))
+                                .monospacedDigit()
+                                .foregroundStyle(Color.textPrimary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.74)
+
+                            if let metricDelta {
+                                Text(metricDelta)
+                                    .font(.caption.weight(.bold))
+                                    .monospacedDigit()
+                                    .foregroundStyle(metricTone)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.72)
+                            }
+
+                            Spacer(minLength: 0)
+                        }
+
+                        Text(presentation.detailText)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Color.textSecondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .layoutPriority(1)
+                }
+            } else {
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(displayTitle)
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(Color.textPrimary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text(presentation.detailText)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Color.textSecondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .layoutPriority(1)
+
+                    Spacer(minLength: 10)
+
+                    leadingVisual
+                }
+            }
+
+            if let metricHeroSparklinePoints {
+                HomeBriefingHeroTrendPanel(
+                    trend: metricTrend,
+                    points: metricHeroSparklinePoints,
+                    tint: metricVisualTint
+                )
+            }
+
+            bottomMetadata
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: metricValue == nil ? 150 : 178, alignment: .topLeading)
+        .background {
+            RoundedRectangle.app(AppRadius.control)
+                .fill(featuredCardGradient)
+        }
+        .overlay {
+            RoundedRectangle.app(AppRadius.control)
+                .stroke(cardBorder, lineWidth: 1)
+        }
+        .shadow(color: tint.opacity(0.11), radius: 18, y: 8)
+    }
+
+    @ViewBuilder
+    private var headerAccessory: some View {
+        if presentation.shouldShowStatusPill {
+            statusPill
+        } else if let justRanText = presentation.justRanText {
+            justRanBadge(text: justRanText)
+        } else if let countdown = presentation.nextRunCountdownText {
+            countdownPill(text: countdown)
+        } else if let scheduleTimeText = presentation.scheduleAccessoryText {
+            Text(scheduleTimeText)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(Color.textTertiary)
+                .lineLimit(1)
+        }
+    }
+
+    private var featuredCardGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                tint.opacity(presentation.isPending ? 0.19 : 0.14),
+                Color.appPanelBackground.opacity(0.99),
+                Color.brandSky.opacity(0.10)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private struct HomeBriefingHeroTrendPanel: View {
+        let trend: WidgetTrend?
+        let points: [Double]
+        let tint: Color
+
+        var body: some View {
+            HStack(spacing: 10) {
+                Image(systemName: trendSymbolName)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 26, height: 26)
+                    .background(tint.opacity(0.15), in: RoundedRectangle.app(AppRadius.pill))
+
+                sparkline
+
+                VStack(alignment: .trailing, spacing: 3) {
+                    Capsule()
+                        .fill(tint.opacity(0.74))
+                        .frame(width: 24, height: 4)
+                    Capsule()
+                        .fill(tint.opacity(0.34))
+                        .frame(width: 15, height: 4)
+                }
+                .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 46)
+            .background(Color.appPanelBackground.opacity(0.74), in: RoundedRectangle.app(AppRadius.control))
+            .overlay {
+                RoundedRectangle.app(AppRadius.control)
+                    .stroke(tint.opacity(0.16), lineWidth: 1)
+            }
+        }
+
+        private var sparkline: some View {
+            GeometryReader { proxy in
+                let normalized = normalizedPoints
+                Path { path in
+                    guard let first = normalized.first else { return }
+                    let width = max(proxy.size.width, 1)
+                    let height = max(proxy.size.height, 1)
+                    let xStep = normalized.count > 1 ? width / CGFloat(normalized.count - 1) : width
+                    path.move(to: CGPoint(x: 0, y: height * (1 - first)))
+                    for pointIndex in normalized.indices.dropFirst() {
+                        path.addLine(to: CGPoint(
+                            x: CGFloat(pointIndex) * xStep,
+                            y: height * (1 - normalized[pointIndex])
+                        ))
+                    }
+                }
+                .stroke(tint, style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+            }
+            .frame(height: 24)
+        }
+
+        private var normalizedPoints: [CGFloat] {
+            let safePoints = points.isEmpty ? [0.48, 0.50, 0.47, 0.51, 0.49] : points
+            guard let minimum = safePoints.min(),
+                  let maximum = safePoints.max(),
+                  maximum > minimum else {
+                return Array(repeating: 0.50, count: max(safePoints.count, 2))
+            }
+            return safePoints.map { point in
+                CGFloat((point - minimum) / (maximum - minimum)) * 0.74 + 0.13
+            }
+        }
+
+        private var trendSymbolName: String {
+            switch trend {
+            case .up:
+                return "arrow.up.right"
+            case .down:
+                return "arrow.down.right"
+            case .flat, .none:
+                return "minus"
+            }
+        }
     }
 
     @ViewBuilder
@@ -787,12 +993,8 @@ private struct HomeBriefingFeedCard: View {
     }
 
     private var metricSparklinePoints: [Double] {
-        if let points = briefing.latestResult?.chart?.points, points.count >= 2 {
-            return points
-        }
-        let historyPoints = briefing.history.map(\.value)
-        if historyPoints.count >= 2 {
-            return historyPoints
+        if let metricHeroSparklinePoints {
+            return metricHeroSparklinePoints
         }
         switch metricTrend {
         case .up:
@@ -802,6 +1004,17 @@ private struct HomeBriefingFeedCard: View {
         case .flat, .none:
             return [0.48, 0.50, 0.47, 0.51, 0.49]
         }
+    }
+
+    private var metricHeroSparklinePoints: [Double]? {
+        if let points = briefing.latestResult?.chart?.points, points.count >= 2 {
+            return points
+        }
+        let historyPoints = briefing.history.map(\.value)
+        if historyPoints.count >= 2 {
+            return historyPoints
+        }
+        return nil
     }
 
     private var metricTone: Color {
