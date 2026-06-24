@@ -34,6 +34,23 @@ extension PrivateChatCoreTests {
         XCTAssertFalse(result.cleanedText.contains("near-widget"))
     }
 
+    func testWidgetExtractPreservesTopLevelSourcesForCurrentMetricCards() throws {
+        let text = """
+        The latest watch-market snapshot is sourced.
+
+        ```near-widget
+        {"kind":"metric","title":"Rolex tracker","time":"now","sources":[{"label":"WatchCharts","domain":"watchcharts.com"},{"label":"Reuters","domain":"reuters.com"}],"metric":{"label":"GMT-Master II market price","value":"$15,240","delta":"+1.8%","trend":"up","caption":"Asking prices moved higher this week."}}
+        ```
+        """
+
+        let widget = try XCTUnwrap(MessageWidget.extract(from: text).widget)
+
+        XCTAssertEqual(widget.kind, .metric)
+        XCTAssertEqual(widget.metric?.value, "$15,240")
+        XCTAssertEqual(widget.sources.map(\.displaySourceText), ["WatchCharts", "Reuters"])
+        XCTAssertEqual(widget.sources.map(\.faviconIdentity), ["watchcharts.com", "reuters.com"])
+    }
+
     func testWidgetExtractReturnsNilWhenNoFence() {
         let text = "Just a normal answer with no widget."
         let result = MessageWidget.extract(from: text)
@@ -524,6 +541,37 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(chips.map(\.allowsNetworkFavicon), [true, true])
     }
 
+    func testMessageRepositoryBuildsSourceChipsFromMetricWidgetTopLevelSources() {
+        let message = ChatMessage(
+            id: "assistant-1",
+            role: .assistant,
+            text: "Rolex tracker updated.",
+            model: ModelOption.nearPrivateDefaultModelID,
+            createdAt: Date(),
+            status: "completed",
+            responseID: "response-1",
+            isStreaming: false,
+            widget: MessageWidget(
+                kind: .metric,
+                title: "Rolex tracker",
+                sources: [
+                    WidgetNewsSource(label: "WatchCharts", domain: "watchcharts.com"),
+                    WidgetNewsSource(label: "R", domain: "reuters.com")
+                ],
+                metric: WidgetMetric(label: "GMT-Master II market price", value: "$15,240")
+            )
+        )
+
+        let chips = MessageRepository.sourceChips(from: [message])
+
+        XCTAssertTrue(MessageRepository.hasSourceCue(from: [message]))
+        XCTAssertEqual(MessageRepository.sourceSummary(from: [message]), "WatchCharts + 1")
+        XCTAssertEqual(chips.map(\.text), ["WatchCharts", "Reuters"])
+        XCTAssertEqual(chips.map(\.faviconDomain), ["watchcharts.com", "reuters.com"])
+        XCTAssertEqual(chips.map(\.fallback), ["WatchCharts", "R"])
+        XCTAssertEqual(chips.map(\.allowsNetworkFavicon), [true, true])
+    }
+
     func testGenericWidgetDisplayNoteStripsInlineMarkdownMarkers() {
         let note = """
         **USD ~22,500 / CAD ~C30,800** — as of June 2026.
@@ -576,6 +624,7 @@ extension PrivateChatCoreTests {
             XCTAssertFalse(instructions.contains("Markets"), instructions)
             XCTAssertTrue(instructions.contains("Project progress"), instructions)
             XCTAssertTrue(instructions.contains("Open risks"), instructions)
+            XCTAssertTrue(instructions.contains("\"sources\":[{\"label\":\"Source\",\"domain\":\"example.com\"}]"), instructions)
         }
         XCTAssertTrue(webInstructions.contains("GitHub-flavored tables"))
         XCTAssertTrue(privateInstructions.contains("fenced code blocks with language tags"))

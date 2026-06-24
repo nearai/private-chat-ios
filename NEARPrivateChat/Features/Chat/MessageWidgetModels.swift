@@ -182,7 +182,12 @@ extension WidgetNewsSource {
     }
 
     var displaySourceText: String {
-        SourceFaviconResolver.displayName(for: faviconIdentity, fallback: label.nilIfBlank) ?? "Source"
+        if let label = label.nilIfBlank,
+           label.count > 1,
+           label.localizedCaseInsensitiveCompare("source") != .orderedSame {
+            return label
+        }
+        return SourceFaviconResolver.displayName(for: faviconIdentity, fallback: label.nilIfBlank) ?? "Source"
     }
 
     var fallbackMark: String {

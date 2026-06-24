@@ -438,6 +438,7 @@ struct MessageWidget: Codable, Hashable, Identifiable {
     var time: String? = nil        // "8:02am", "1h ago"
     var followUp: String? = nil    // micro-composer placeholder, "Why is it dropping?"
     var note: String? = nil        // generic body / fallback prose
+    var sources: [WidgetNewsSource] = []
     var chart: WidgetChart? = nil
     var metric: WidgetMetric? = nil
     var comparison: WidgetComparison? = nil
@@ -447,7 +448,7 @@ struct MessageWidget: Codable, Hashable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, kind, title, freshness, time
         case followUp = "follow_up"
-        case note, chart, metric, comparison
+        case note, sources, chart, metric, comparison
         case newsBrief = "news_brief"
         case actionPlan = "action_plan"
         case heading, stories, summary, actions
@@ -497,6 +498,7 @@ extension MessageWidget {
             time: try? c.decode(String.self, forKey: .time),
             followUp: try? c.decode(String.self, forKey: .followUp),
             note: try? c.decode(String.self, forKey: .note),
+            sources: (try? c.decode([WidgetNewsSource].self, forKey: .sources)) ?? [],
             chart: chart,
             metric: metric,
             comparison: comparison,
@@ -514,6 +516,9 @@ extension MessageWidget {
         try c.encodeIfPresent(time, forKey: .time)
         try c.encodeIfPresent(followUp, forKey: .followUp)
         try c.encodeIfPresent(note, forKey: .note)
+        if !sources.isEmpty {
+            try c.encode(sources, forKey: .sources)
+        }
         try c.encodeIfPresent(chart, forKey: .chart)
         try c.encodeIfPresent(metric, forKey: .metric)
         try c.encodeIfPresent(comparison, forKey: .comparison)

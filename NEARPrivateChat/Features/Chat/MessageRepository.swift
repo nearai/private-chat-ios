@@ -283,6 +283,7 @@ struct MessageRepository {
 
     private static func widgetHasSourceCue(_ widget: MessageWidget?) -> Bool {
         guard let widget else { return false }
+        if !widget.sources.isEmpty { return true }
         if let newsBrief = widget.newsBrief {
             return newsBrief.stories.contains { story in
                 !story.sources.isEmpty || story.url?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
@@ -299,6 +300,12 @@ struct MessageRepository {
     private static func widgetSourceEvidence(_ widget: MessageWidget) -> (labels: [String], count: Int) {
         var labels: [String] = []
         var count = 0
+        for source in widget.sources {
+            count += 1
+            if let label = source.displaySourceText.nilIfBlank {
+                labels.append(label)
+            }
+        }
         if let newsBrief = widget.newsBrief {
             for story in newsBrief.stories {
                 for source in story.sources {
@@ -328,6 +335,15 @@ struct MessageRepository {
 
     private static func widgetSourceChips(_ widget: MessageWidget) -> [ConversationSourceChip] {
         var chips: [ConversationSourceChip] = []
+        for source in widget.sources {
+            guard let text = source.displaySourceText.nilIfBlank else { continue }
+            chips.append(ConversationSourceChip(
+                text: text,
+                faviconDomain: source.faviconIdentity,
+                fallback: source.fallbackMark,
+                allowsNetworkFavicon: source.allowsNetworkFavicon
+            ))
+        }
         if let newsBrief = widget.newsBrief {
             for story in newsBrief.stories {
                 for source in story.sources {

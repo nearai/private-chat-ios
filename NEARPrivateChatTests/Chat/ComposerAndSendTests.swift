@@ -889,6 +889,29 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(withCloud.secondaryActionSymbolName, "eye.slash")
     }
 
+    func testAssistantFailurePresentationDistinguishesPrivateRouteBusyFromRateLimit() {
+        let message = ChatMessage(
+            id: "failed-busy",
+            role: .assistant,
+            text: "The private route is temporarily busy. Try again in a moment.",
+            model: ModelOption.nearPrivateDefaultModelID,
+            createdAt: Date(),
+            status: "failed",
+            responseID: nil,
+            isStreaming: false
+        )
+
+        let presentation = AssistantFailurePresentation(message: message, nearCloudKeyConfigured: true)
+
+        XCTAssertEqual(presentation.title, "Private route is busy")
+        XCTAssertTrue(presentation.detail.localizedCaseInsensitiveContains("capacity"))
+        XCTAssertTrue(presentation.detail.localizedCaseInsensitiveContains("Retry private"))
+        XCTAssertEqual(presentation.secondaryActionTitle, "Use Cloud once")
+        XCTAssertFalse(presentation.detail.localizedCaseInsensitiveContains("rate-limited"))
+        XCTAssertFalse(presentation.detail.localizedCaseInsensitiveContains("current session"))
+        XCTAssertFalse(presentation.detail.localizedCaseInsensitiveContains("sign out"))
+    }
+
     func testAssistantFailurePresentationSummarizesPrivateTransportFailure() {
         let message = ChatMessage(
             id: "failed-transport",

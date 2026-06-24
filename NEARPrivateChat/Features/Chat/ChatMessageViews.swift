@@ -826,9 +826,11 @@ struct AssistantFailurePresentation: Equatable {
         let compact = MessageRepository.displayFailureMessage(message.text)
         let lowercased = "\(message.text) \(compact)".lowercased()
         let isPrivate = FailedMessageRecoveryPolicy.isFailedPrivateRouteMessage(message)
+        let isBusy = lowercased.contains("temporarily busy") ||
+            lowercased.contains("private route is busy") ||
+            lowercased.contains("route is busy")
         let isRateLimited = lowercased.contains("rate-limited") ||
             lowercased.contains("temporarily restricted") ||
-            lowercased.contains("temporarily busy") ||
             lowercased.contains("private route limited") ||
             lowercased.contains("failed to check rate limit")
         let isAuth = lowercased.contains("authorization") ||
@@ -841,7 +843,13 @@ struct AssistantFailurePresentation: Equatable {
             lowercased.contains("stream was interrupted") ||
             lowercased.contains("error sending request")
 
-        if isPrivate && isRateLimited {
+        if isPrivate && isBusy {
+            title = "Private route is busy"
+            detail = "The private backend did not have capacity for this turn. Retry private in a moment, or use Cloud once only if you need the answer now."
+            routeLabel = message.modelDisplayName
+            secondaryActionTitle = nearCloudKeyConfigured ? "Use Cloud once" : "Add Cloud key"
+            secondaryActionSymbolName = nearCloudKeyConfigured ? "eye.slash" : "key"
+        } else if isPrivate && isRateLimited {
             title = "Private route needs a moment"
             detail = "The private route rejected this turn for the current session. Retry private when the route cools down, or use Cloud once for this answer."
             routeLabel = message.modelDisplayName

@@ -935,11 +935,14 @@ private struct HomeBriefingFeedCard: View {
     }
 
     private var newsSources: [WidgetNewsSource] {
-        briefing.latestResult?.newsBrief?.stories.flatMap { story in
+        guard let latestResult = briefing.latestResult else { return [] }
+        let topLevelSources = latestResult.sources
+        let storySources = latestResult.newsBrief?.stories.flatMap { story in
             if !story.sources.isEmpty { return story.sources }
             guard let url = story.url?.nilIfBlank else { return [] }
             return [WidgetNewsSource(domain: url)]
         } ?? []
+        return topLevelSources + storySources
     }
 
     private var metadataChips: [HomeFeedMiniChip.Model] {
@@ -963,7 +966,7 @@ private struct HomeBriefingFeedCard: View {
                     background: Color.appSecondaryBackground,
                     faviconDomain: source.faviconIdentity,
                     faviconFallback: source.fallbackMark,
-                    allowsNetworkFavicon: true
+                    allowsNetworkFavicon: source.allowsNetworkFavicon
                 ))
             }
             chips.append(.init(text: "\(sources.count) source\(sources.count == 1 ? "" : "s")", symbolName: nil, foreground: Color.textTertiary, background: nil))
