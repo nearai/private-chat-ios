@@ -8,7 +8,7 @@ extension ThreadedBriefingView {
                 dayLabel: "Today",
                 time: "—",
                 title: "Scheduled briefing",
-                body: "No delivery yet. The first brief will appear here after the next scheduled run.",
+                body: "First brief is queued. It will return a sourced summary and follow-up thread.",
                 isPending: true,
                 itemKind: .briefing
             ),

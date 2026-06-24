@@ -470,7 +470,7 @@ struct HomeScreen: View {
 
     private func shouldOpenBriefingManagementDetail(_ briefing: Briefing) -> Bool {
         let current = briefingStore.briefings.first(where: { $0.id == briefing.id }) ?? briefing
-        return current.status == .failed || current.latestResult == nil
+        return current.status == .failed
     }
 
 }

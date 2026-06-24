@@ -230,10 +230,35 @@ extension PrivateChatCoreTests {
         XCTAssertNil(presentation.statusKind)
         XCTAssertFalse(presentation.shouldShowStatusPill)
         XCTAssertNil(presentation.scheduleAccessoryText)
-        XCTAssertEqual(presentation.detailText, "First check is scheduled. Results will appear here with a chart or source trail after the next run.")
+        XCTAssertEqual(presentation.detailText, "Scheduled. First result will land here as a chart with source evidence and a follow-up.")
+        XCTAssertEqual(presentation.pendingPromiseText, "Chart + sources")
+        XCTAssertEqual(presentation.pendingPromiseSymbolName, "chart.line.uptrend.xyaxis")
         XCTAssertFalse(presentation.detailText.localizedCaseInsensitiveContains("Last run didn't start"))
         XCTAssertFalse(presentation.detailText.localizedCaseInsensitiveContains("Needs attention"))
         XCTAssertFalse(presentation.detailText.localizedCaseInsensitiveContains("Using web search"))
+        XCTAssertFalse(presentation.detailText.localizedCaseInsensitiveContains("No delivery yet"))
+    }
+
+    func testHomeBriefingFeedPresentationShowsPendingBriefingAsSourcedDelivery() {
+        let briefing = Briefing(
+            title: "Daily AI product release digest",
+            prompt: "Summarize major AI product launches each morning with current sources.",
+            schedule: .daily(hour: 8, minute: 0),
+            createdAt: Date(timeIntervalSince1970: 1_781_280_000),
+            kind: .dailyNews
+        )
+
+        let presentation = HomeBriefingFeedPresentation(
+            briefing: briefing,
+            now: Date(timeIntervalSince1970: 1_781_280_300)
+        )
+
+        XCTAssertEqual(presentation.categoryText, "Briefing")
+        XCTAssertTrue(presentation.isPending)
+        XCTAssertEqual(presentation.detailText, "Scheduled. First delivery will land here with sources, a summary, and a follow-up.")
+        XCTAssertEqual(presentation.pendingPromiseText, "Summary + sources")
+        XCTAssertEqual(presentation.pendingPromiseSymbolName, "link")
+        XCTAssertFalse(presentation.detailText.localizedCaseInsensitiveContains("No delivery yet"))
     }
 
     func testHomeBriefingFeedPresentationCompactsMarkdownResultForCardPreview() {

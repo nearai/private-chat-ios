@@ -205,6 +205,13 @@ struct ThreadedBriefingView: View {
     private func reArm() {
         guard let store, let briefing = liveBriefing else { return }
         store.setPaused(briefing, false)
+        refreshDeliveries()
+    }
+
+    private func togglePaused(_ briefing: Briefing) {
+        guard let store else { return }
+        store.setPaused(briefing, !briefing.isPaused)
+        refreshDeliveries()
     }
 
     private var header: some View {
@@ -256,6 +263,11 @@ struct ThreadedBriefingView: View {
             // A one-shot alert auto-pauses after firing; let the user re-arm it.
             if let briefing = liveBriefing, briefing.isConditional, briefing.isPaused {
                 Button("Re-arm alert") { reArm() }
+            }
+            if let briefing = liveBriefing {
+                Button(briefing.isPaused ? "Resume \(briefing.isWatcherLike ? "watcher" : "briefing")" : "Pause \(briefing.isWatcherLike ? "watcher" : "briefing")") {
+                    togglePaused(briefing)
+                }
             }
             if liveBriefing?.kind == .nearAccount {
                 Button("Change account") {
@@ -310,11 +322,14 @@ struct ThreadedBriefingView: View {
         isRunning = true
         Task {
             await store.run(briefing)
-            if let updated = store.briefings.first(where: { $0.id == briefingID }) {
-                deliveries = ThreadedBriefingView.deliveries(for: updated)
-            }
+            refreshDeliveries()
             isRunning = false
         }
+    }
+
+    private func refreshDeliveries() {
+        guard let updated = liveBriefing else { return }
+        deliveries = ThreadedBriefingView.deliveries(for: updated)
     }
 
     private func deleteBriefing() {

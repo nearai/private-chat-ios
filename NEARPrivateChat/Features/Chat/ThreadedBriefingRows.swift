@@ -265,8 +265,8 @@ struct ThreadPendingDeliveryPresentation: Equatable {
     private static func normalizedPendingBody(_ body: String?, isWatcher: Bool) -> String {
         guard let body, !body.isEmpty else {
             return isWatcher
-                ? "First check scheduled. Results appear here after the next run."
-                : "First brief scheduled. Delivery appears here after the next run."
+                ? "First check is queued. It will return a chart, source trail, and follow-up thread."
+                : "First brief is queued. It will return a sourced summary and follow-up thread."
         }
         let lowercased = body.lowercased()
         if lowercased.contains("no delivery yet") ||
@@ -274,8 +274,8 @@ struct ThreadPendingDeliveryPresentation: Equatable {
             lowercased.contains("will appear here after the next scheduled run") ||
             lowercased.contains("next scheduled run") {
             return isWatcher
-                ? "First check scheduled. Results appear here after the next run."
-                : "First brief scheduled. Delivery appears here after the next run."
+                ? "First check is queued. It will return a chart, source trail, and follow-up thread."
+                : "First brief is queued. It will return a sourced summary and follow-up thread."
         }
         return body
     }
@@ -362,7 +362,7 @@ private struct ThreadPendingHeroVisual: View {
     }
 
     private var sourceMarks: [String] {
-        kind == .watcher ? ["$", "%", "!"] : ["1", "2", "3"]
+        kind == .watcher ? ["$", "%", "!"] : ["S", "R", "N"]
     }
 
     private var accentForeground: Color {

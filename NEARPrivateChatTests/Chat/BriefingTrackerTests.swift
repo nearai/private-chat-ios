@@ -1217,7 +1217,8 @@ extension PrivateChatCoreTests {
         XCTAssertEqual(delivery.itemKind, .watcher)
         XCTAssertEqual(delivery.title, "Scheduled watcher")
         XCTAssertEqual(delivery.time, "—")
-        XCTAssertEqual(delivery.body, "No check yet. The first result will appear here after the next scheduled run.")
+        XCTAssertEqual(delivery.body, "First check is queued. It will return a chart, source trail, and follow-up thread.")
+        XCTAssertFalse(delivery.body?.localizedCaseInsensitiveContains("No check yet") ?? true)
         XCTAssertFalse(delivery.unread)
         XCTAssertNil(delivery.sourceStatusText)
         XCTAssertNil(delivery.widget)
@@ -1236,7 +1237,8 @@ extension PrivateChatCoreTests {
         XCTAssertTrue(delivery.isPending)
         XCTAssertEqual(delivery.itemKind, .briefing)
         XCTAssertEqual(delivery.title, "Scheduled briefing")
-        XCTAssertEqual(delivery.body, "No delivery yet. The first brief will appear here after the next scheduled run.")
+        XCTAssertEqual(delivery.body, "First brief is queued. It will return a sourced summary and follow-up thread.")
+        XCTAssertFalse(delivery.body?.localizedCaseInsensitiveContains("No delivery yet") ?? true)
         XCTAssertFalse(delivery.unread)
         XCTAssertNil(delivery.sourceStatusText)
         XCTAssertNil(delivery.widget)
@@ -1254,7 +1256,7 @@ extension PrivateChatCoreTests {
         let presentation = ThreadPendingDeliveryPresentation(delivery: delivery)
 
         XCTAssertEqual(presentation.title, "Scheduled briefing")
-        XCTAssertEqual(presentation.body, "First brief scheduled. Delivery appears here after the next run.")
+        XCTAssertEqual(presentation.body, "First brief is queued. It will return a sourced summary and follow-up thread.")
         XCTAssertEqual(presentation.statusLabel, "Scheduled")
         XCTAssertEqual(presentation.visualLabel, "BRIEF")
     }

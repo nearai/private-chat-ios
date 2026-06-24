@@ -371,6 +371,18 @@ struct HomeBriefingFeedPresentation {
         briefing.latestResult == nil && !briefing.isPaused && statusKind == nil
     }
 
+    var pendingPromiseText: String? {
+        guard isPending else { return nil }
+        if briefing.condition != nil { return "Trigger + sources" }
+        return briefing.isWatcherLike ? "Chart + sources" : "Summary + sources"
+    }
+
+    var pendingPromiseSymbolName: String? {
+        guard isPending else { return nil }
+        if briefing.condition != nil { return "bell.badge" }
+        return briefing.isWatcherLike ? "chart.line.uptrend.xyaxis" : "link"
+    }
+
     var statusKind: StatusKind? {
         if briefing.isPaused { return .paused }
         if briefing.status == .failed { return .attention }
@@ -405,11 +417,11 @@ struct HomeBriefingFeedPresentation {
         }
         if briefing.latestResult == nil, briefing.lastRunAt == nil, !briefing.isPaused {
             if let condition = briefing.condition {
-                return "Watching for \(condition.summary)."
+                return "Watching for \(condition.summary). The next match will land as a sourced stream with a follow-up."
             }
             return briefing.isWatcherLike
-                ? "First check is scheduled. Results will appear here with a chart or source trail after the next run."
-                : "First brief is scheduled. Delivery will appear here with sources or a summary after the next run."
+                ? "Scheduled. First result will land here as a chart with source evidence and a follow-up."
+                : "Scheduled. First delivery will land here with sources, a summary, and a follow-up."
         }
         if let chart = briefing.latestResult?.chart {
             if let caption = chart.caption?.nilIfBlank { return caption }
@@ -947,6 +959,12 @@ private struct HomeBriefingFeedCard: View {
 
     private var metadataChips: [HomeFeedMiniChip.Model] {
         var chips: [HomeFeedMiniChip.Model] = []
+        if presentation.isPending {
+            chips.append(.init(text: "Scheduled", symbolName: "calendar.badge.clock", foreground: Color.actionPrimary, background: Color.actionFill.opacity(0.55)))
+            if let pendingPromiseText = presentation.pendingPromiseText {
+                chips.append(.init(text: pendingPromiseText, symbolName: presentation.pendingPromiseSymbolName, foreground: Color.textSecondary, background: Color.appSecondaryBackground))
+            }
+        }
         if let contextText {
             chips.append(.init(text: contextText, symbolName: "folder", foreground: Color.textTertiary, background: Color.appSecondaryBackground))
         }

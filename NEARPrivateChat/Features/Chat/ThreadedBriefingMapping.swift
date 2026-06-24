@@ -75,9 +75,9 @@ extension ThreadedBriefingView {
     private static func pendingSummary(for kind: BriefingDeliveryKind) -> String {
         switch kind {
         case .watcher:
-            return "No check yet. The first result will appear here after the next scheduled run."
+            return "First check is queued. It will return a chart, source trail, and follow-up thread."
         case .briefing:
-            return "No delivery yet. The first brief will appear here after the next scheduled run."
+            return "First brief is queued. It will return a sourced summary and follow-up thread."
         }
     }
 

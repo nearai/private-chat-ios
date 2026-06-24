@@ -402,6 +402,14 @@ final class ReleaseGateTests: XCTestCase {
             )
         }
 
+        for staleCopy in ["No delivery yet", "No check yet"] {
+            let predicate = NSPredicate(format: "label CONTAINS[c] %@", staleCopy)
+            XCTAssertFalse(
+                app.staticTexts.matching(predicate).firstMatch.exists,
+                "\(label): Home exposes dead pending copy '\(staleCopy)' instead of a queued stream state."
+            )
+        }
+
         assertHomeScopeStripFits(app, label: label)
     }
 
